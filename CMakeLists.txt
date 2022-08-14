@@ -6,3 +6,11 @@ project(RTRT
 
 add_subdirectory(Source)
 add_subdirectory(Dependencies)
+
+target_include_directories(RTRT
+  PUBLIC Dependencies/glfw/include
+)
+
+target_link_libraries(RTRT
+ glfw
+)
