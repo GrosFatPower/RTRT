@@ -5,3 +5,4 @@ project(RTRT
 )
 
 add_subdirectory(Source)
+add_subdirectory(Dependencies)
