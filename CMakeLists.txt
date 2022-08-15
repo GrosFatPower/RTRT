@@ -11,21 +11,26 @@ set(RTRT_IMGUI_SOURCE_DIR ${CMAKE_SOURCE_DIR}/Dependencies/imgui CACHE STRING "S
 add_subdirectory(Source)
 add_subdirectory(Dependencies)
 
+set(GLEW_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/Dependencies/glew-2.1.0/include")
+set(GLEW_LIBRARIES "glew32s.lib")
+
+find_package(OpenGL REQUIRED)
+
 target_include_directories(RTRT
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glfw/include
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/imgui
-  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies
+  PUBLIC ${GLEW_INCLUDE_DIRS}
 )
 
 target_link_directories(RTRT
-  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/lib/Release/x64
+  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glew-2.1.0/lib/Release/x64/
 )
 
 target_link_libraries(RTRT
- glfw
- imgui
- opengl32
- glew32s
+  glfw
+  imgui
+  ${GLEW_LIBRARIES}
+  ${OPENGL_LIBRARIES}
 )
 
 target_compile_definitions(RTRT

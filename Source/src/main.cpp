@@ -11,11 +11,13 @@
 #include <fstream>
 #include <sstream>
 
-#define DISPLAY_GUI
+//#define RTRT_DISPLAY_GUI
+#define RTRT_RENDER_TO_TEXTURE
 
 int g_ScreenWidth  = 1920;
 int g_ScreenHeight = 1080;
 
+#ifdef RTRT_RENDER_TO_TEXTURE
 GLuint g_ShaderProgramID;
 
 const GLfloat g_QuadVtx[] =
@@ -37,12 +39,14 @@ const GLfloat g_QuadUVs[] =
   0.0f, 1.0f,
   0.0f, 0.0f,
 };
+#endif
 
 static void glfw_error_callback(int error, const char* description)
 {
   fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
+#ifdef RTRT_DISPLAY_GUI
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
   if (action == GLFW_PRESS)
@@ -67,7 +71,9 @@ void framebufferSizeCallback(GLFWwindow* window, int width, int height)
 {
   std::cout << "EVENT : FRAME BUFFER RESIZED" << std::endl;
 }
+#endif
 
+#ifdef RTRT_RENDER_TO_TEXTURE
 GLuint CreateShaderProgram(const char * vertexShaderPath, const char * fragmentShaderPath)
 {
   // Create the shaders
@@ -179,6 +185,7 @@ int RecompileShaders()
 
   return 1;
 }
+#endif
 
 int main(int, char**)
 {
@@ -212,7 +219,7 @@ int main(int, char**)
   glfwMakeContextCurrent(mainWindow);
   glfwSwapInterval(1); // Enable vsync
 
-#ifdef DISPLAY_GUI
+#ifdef RTRT_DISPLAY_GUI
   // Setup Dear ImGui context
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
@@ -234,6 +241,7 @@ int main(int, char**)
 
   // Init openGL scene
 
+#ifdef RTRT_RENDER_TO_TEXTURE
   if ( glewInit() != GLEW_OK )
   {
     std::cout << "Failed to initialize GLEW!" << std::endl;
@@ -291,6 +299,7 @@ int main(int, char**)
   //}
 
   //glUniform1i(glGetUniformLocation(shaderProgram, "u_screenTexture"), 0);
+#endif
 
   glViewport(0, 0, g_ScreenWidth, g_ScreenHeight);
   glDisable(GL_DEPTH_TEST);
@@ -311,7 +320,7 @@ int main(int, char**)
     // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
     glfwPollEvents();
 
-#ifdef DISPLAY_GUI
+#ifdef RTRT_DISPLAY_GUI
     // Start the Dear ImGui frame
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -356,7 +365,7 @@ int main(int, char**)
 #endif
 
     // Rendering
-#ifdef DISPLAY_GUI
+#ifdef RTRT_DISPLAY_GUI
     ImGui::Render();
 #endif
 
@@ -365,10 +374,12 @@ int main(int, char**)
     glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
 
+#ifdef RTRT_RENDER_TO_TEXTURE
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glDrawArrays(GL_TRIANGLES, 0, 6);
+#endif
 
-#ifdef DISPLAY_GUI
+#ifdef RTRT_DISPLAY_GUI
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 #endif
 
@@ -376,17 +387,19 @@ int main(int, char**)
   }
 
   // Cleanup
-#ifdef DISPLAY_GUI
+#ifdef RTRT_DISPLAY_GUI
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplGlfw_Shutdown();
   ImGui::DestroyContext();
 #endif
 
+#ifdef RTRT_RENDER_TO_TEXTURE
   glDeleteBuffers(1, &vertexBufferID);
   glDeleteBuffers(1, &uvBufferID);
   glDeleteVertexArrays(1, &vertexArrayID);
   glDeleteProgram(g_ShaderProgramID);
   //glDeleteFramebuffers(1, &frameBufferID);
+#endif
 
   glfwDestroyWindow(mainWindow);
   glfwTerminate();
