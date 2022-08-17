@@ -14,11 +14,16 @@
 #define RTRT_DISPLAY_GUI
 #define RTRT_RENDER_TO_TEXTURE
 
+// ----------------------------------------------------------------------------
+// Global variables
+// ----------------------------------------------------------------------------
 int g_ScreenWidth  = 1920;
 int g_ScreenHeight = 1080;
 
 #ifdef RTRT_RENDER_TO_TEXTURE
-GLuint g_ShaderProgramID;
+GLuint g_ShaderProgramID = 0;
+GLuint g_ScreenTextureID = 0;
+GLuint g_u_DirectOutPassID = 0;
 
 const GLfloat g_QuadVtx[] =
 {
@@ -41,13 +46,16 @@ const GLfloat g_QuadUVs[] =
 };
 #endif
 
+// ----------------------------------------------------------------------------
+// Global functions
+// ----------------------------------------------------------------------------
 static void glfw_error_callback(int error, const char* description)
 {
   fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
 #ifdef RTRT_DISPLAY_GUI
-void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
+void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
   if (action == GLFW_PRESS)
     std::cout << "EVENT : KEY PRESSED" << std::endl;
@@ -55,7 +63,7 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
   ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
 }
 
-void mousebuttonCallback(GLFWwindow* window, int button, int action, int mods)
+void MousebuttonCallback(GLFWwindow* window, int button, int action, int mods)
 {
   if ( ( ( button == GLFW_MOUSE_BUTTON_1 ) || ( button == GLFW_MOUSE_BUTTON_2 ) ) && ( action == GLFW_PRESS ) && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow))
   {
@@ -67,9 +75,17 @@ void mousebuttonCallback(GLFWwindow* window, int button, int action, int mods)
   ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
 }
 
-void framebufferSizeCallback(GLFWwindow* window, int width, int height)
+void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 {
   std::cout << "EVENT : FRAME BUFFER RESIZED" << std::endl;
+
+  g_ScreenWidth  = width;
+  g_ScreenHeight = height;
+
+  glViewport(0, 0, g_ScreenWidth, g_ScreenHeight);
+
+  glBindTexture(GL_TEXTURE_2D, g_ScreenTextureID);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, g_ScreenWidth, g_ScreenHeight, 0, GL_RGBA, GL_FLOAT, NULL);
 }
 #endif
 
@@ -183,10 +199,16 @@ int RecompileShaders()
 
   glUseProgram(g_ShaderProgramID);
 
+  g_u_DirectOutPassID = glGetUniformLocation(g_ShaderProgramID, "u_DirectOutputPass");
+  glUniform1i(glGetUniformLocation(g_ShaderProgramID, "u_ScreenTexture"), 0);
+
   return 1;
 }
 #endif
 
+// ----------------------------------------------------------------------------
+// main
+// ----------------------------------------------------------------------------
 int main(int, char**)
 {
   // Setup window
@@ -212,7 +234,7 @@ int main(int, char**)
     exit(EXIT_FAILURE);
   }
 
-  //glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
+  glfwSetFramebufferSizeCallback(mainWindow, FramebufferSizeCallback);
   //glfwSetMouseButtonCallback(mainWindow, mousebuttonCallback);
   //glfwSetKeyCallback(mainWindow, keyCallback);
 
@@ -268,7 +290,6 @@ int main(int, char**)
   glBufferData(GL_ARRAY_BUFFER, sizeof(g_QuadVtx), g_QuadVtx, GL_STATIC_DRAW);
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
   glEnableVertexAttribArray(0);
-  //glBindBuffer(GL_ARRAY_BUFFER, 0);
 
   GLuint uvBufferID;
   glGenBuffers(1, &uvBufferID);
@@ -276,30 +297,30 @@ int main(int, char**)
   glBufferData(GL_ARRAY_BUFFER, sizeof(g_QuadUVs), g_QuadUVs, GL_STATIC_DRAW);
   glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
   glEnableVertexAttribArray(1);
-  //glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-	glBindVertexArray(vertexArrayID);
+  glBindVertexArray(vertexArrayID);
 
-  GLuint screenTextureID;
-  glGenTextures(1, &screenTextureID);
+  // Screen texture
+  glGenTextures(1, &g_ScreenTextureID);
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, screenTextureID);
+  glBindTexture(GL_TEXTURE_2D, g_ScreenTextureID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, g_ScreenWidth, g_ScreenHeight, 0, GL_RGBA, GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-  //GLuint frameBufferID;
-  //glGenFramebuffers(1, &frameBufferID);
-  //glBindFramebuffer(GL_FRAMEBUFFER, frameBufferID);
-  //glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, screenTextureID, 0);
-  //if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
-  //{
-  //  std::cout << "ERROR: Framebuffer is not complete!" << std::endl;
-  //  glfwTerminate();
-  //  exit(EXIT_FAILURE);
-  //}
+  // FrameBuffer
+  GLuint frameBufferID;
+  glGenFramebuffers(1, &frameBufferID);
+  glBindFramebuffer(GL_FRAMEBUFFER, frameBufferID);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, g_ScreenTextureID, 0);
+  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+  {
+    std::cout << "ERROR: Framebuffer is not complete!" << std::endl;
+    glfwTerminate();
+    exit(EXIT_FAILURE);
+  }
 
-  //glUniform1i(glGetUniformLocation(shaderProgram, "u_screenTexture"), 0);
+  glUniform1i(glGetUniformLocation(g_ShaderProgramID, "u_ScreenTexture"), 0);
 #endif
 
   glViewport(0, 0, g_ScreenWidth, g_ScreenHeight);
@@ -376,7 +397,13 @@ int main(int, char**)
     glClear(GL_COLOR_BUFFER_BIT);
 
 #ifdef RTRT_RENDER_TO_TEXTURE
+    // Render to frame buffer
+   glBindFramebuffer(GL_FRAMEBUFFER, frameBufferID);
+   glUniform1i(g_u_DirectOutPassID, 0);
+   glDrawArrays(GL_TRIANGLES, 0, 6);
+
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glUniform1i(g_u_DirectOutPassID, 1);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 #endif
 
@@ -399,7 +426,8 @@ int main(int, char**)
   glDeleteBuffers(1, &uvBufferID);
   glDeleteVertexArrays(1, &vertexArrayID);
   glDeleteProgram(g_ShaderProgramID);
-  //glDeleteFramebuffers(1, &frameBufferID);
+  glDeleteFramebuffers(1, &frameBufferID);
+  glDeleteTextures(1, &g_ScreenTextureID);
 #endif
 
   glfwDestroyWindow(mainWindow);
