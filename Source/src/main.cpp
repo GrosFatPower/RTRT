@@ -11,7 +11,7 @@
 #include <fstream>
 #include <sstream>
 
-//#define RTRT_DISPLAY_GUI
+#define RTRT_DISPLAY_GUI
 #define RTRT_RENDER_TO_TEXTURE
 
 int g_ScreenWidth  = 1920;
@@ -242,6 +242,7 @@ int main(int, char**)
   // Init openGL scene
 
 #ifdef RTRT_RENDER_TO_TEXTURE
+  glewExperimental = GL_TRUE;
   if ( glewInit() != GLEW_OK )
   {
     std::cout << "Failed to initialize GLEW!" << std::endl;
