@@ -216,7 +216,7 @@ int main(int, char**)
 {
   // Setup window
   glfwSetErrorCallback(glfw_error_callback);
-  if (!glfwInit())
+  if ( !glfwInit() )
   {
     std::cout << "Failed to initialize GLFW!" << std::endl;
     exit(EXIT_FAILURE);
@@ -230,7 +230,7 @@ int main(int, char**)
 
   // Create window with graphics context
   GLFWwindow * mainWindow = glfwCreateWindow(g_ScreenWidth, g_ScreenHeight, "RTRT Hello world", NULL, NULL);
-  if (!mainWindow)
+  if ( !mainWindow )
   {
     std::cout << "Failed to create a window!" << std::endl;
     glfwTerminate();
@@ -283,11 +283,13 @@ int main(int, char**)
   }
 
   int textWidth = 0, textHeight = 0, textNbChan = 0;
-  float * textData = stbi_loadf("..\\..\\Resources\\Img\\nature.png", &textWidth, &textHeight, &textNbChan, 0);
-  if ( !textData )
+  float * textureData = stbi_loadf("..\\..\\Resources\\Img\\nature.png", &textWidth, &textHeight, &textNbChan, 0);
+  if ( !textureData || ( ( textNbChan != 3 ) && ( textNbChan != 4 ) ) )
   {
     std::cout << "unable to load image!" << std::endl;
     glfwTerminate();
+    if ( textureData )
+      stbi_image_free(textureData);
     exit(EXIT_FAILURE);
   }
 
@@ -317,11 +319,14 @@ int main(int, char**)
   glGenTextures(1, &textureID);
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, textureID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, textWidth, textHeight, 0, GL_RGBA, GL_FLOAT, textData);
+  if ( 4 == textNbChan )
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, textWidth, textHeight, 0, GL_RGBA, GL_FLOAT, textureData);
+  else
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, textWidth, textHeight, 0, GL_RGB, GL_FLOAT, textureData);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-  stbi_image_free(textData);
+  stbi_image_free(textureData);
 
   // Screen texture
   glGenTextures(1, &g_ScreenTextureID);
