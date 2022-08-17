@@ -5,11 +5,13 @@ out vec4 fragColor;
 
 uniform sampler2D u_ScreenTexture;
 uniform sampler2D u_Texture;
-uniform bool u_DirectOutputPass;
+uniform vec3      u_Resolution;
+uniform bool      u_DirectOutputPass;
+uniform float     u_Time;
+uniform float     u_TimeDelta;
 
 void RenderToTexture()
 {
-  //fragColor = vec4(fragUV.x, fragUV.y, 0.0, 1.0);
   vec2 textUV;
   textUV.x = fragUV.x;
   textUV.y = 1.0 - fragUV.y;

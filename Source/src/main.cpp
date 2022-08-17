@@ -23,9 +23,12 @@ int g_ScreenWidth  = 1920;
 int g_ScreenHeight = 1080;
 
 #ifdef RTRT_RENDER_TO_TEXTURE
-GLuint g_ShaderProgramID = 0;
-GLuint g_ScreenTextureID = 0;
+GLuint g_ShaderProgramID   = 0;
+GLuint g_ScreenTextureID   = 0;
 GLuint g_u_DirectOutPassID = 0;
+GLuint g_u_ResolutionID    = 0;
+GLuint g_u_TimeID          = 0;
+GLuint g_u_TimeDeltaID     = 0;
 
 const GLfloat g_QuadVtx[] =
 {
@@ -202,6 +205,9 @@ int RecompileShaders()
   glUseProgram(g_ShaderProgramID);
 
   g_u_DirectOutPassID = glGetUniformLocation(g_ShaderProgramID, "u_DirectOutputPass");
+  g_u_ResolutionID    = glGetUniformLocation(g_ShaderProgramID, "u_Resolution");
+  g_u_TimeID          = glGetUniformLocation(g_ShaderProgramID, "u_Time");
+  g_u_TimeDeltaID     = glGetUniformLocation(g_ShaderProgramID, "u_TimeDelta");
   glUniform1i(glGetUniformLocation(g_ShaderProgramID, "u_ScreenTexture"), 0);
   glUniform1i(glGetUniformLocation(g_ShaderProgramID, "u_Texture"), 1);
 
@@ -362,8 +368,11 @@ int main(int, char**)
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   // Main loop
+  double timeDelta = 0.001;
   while (!glfwWindowShouldClose(mainWindow))
   {
+    double curLoopTime = glfwGetTime();
+
     // Poll and handle events (inputs, window resize, etc.)
     // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
     // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
@@ -429,11 +438,15 @@ int main(int, char**)
     // Render to frame buffer
    glBindFramebuffer(GL_FRAMEBUFFER, frameBufferID);
    glUniform1i(g_u_DirectOutPassID, 0);
+   glUniform3f(g_u_ResolutionID, g_ScreenWidth, g_ScreenHeight, 0.f);
+   glUniform1f(g_u_TimeID, (float)curLoopTime);
+   glUniform1f(g_u_TimeDeltaID, (float)timeDelta);
    glDrawArrays(GL_TRIANGLES, 0, 6);
+   timeDelta = glfwGetTime() - curLoopTime;
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glUniform1i(g_u_DirectOutPassID, 1);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+   glUniform1i(g_u_DirectOutPassID, 1);
+   glDrawArrays(GL_TRIANGLES, 0, 6);
 #endif
 
 #ifdef RTRT_DISPLAY_GUI
