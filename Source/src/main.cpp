@@ -3,6 +3,8 @@
 #include "backends/imgui_impl_opengl3.h"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 #include <vector>
 #include <string>
@@ -201,6 +203,7 @@ int RecompileShaders()
 
   g_u_DirectOutPassID = glGetUniformLocation(g_ShaderProgramID, "u_DirectOutputPass");
   glUniform1i(glGetUniformLocation(g_ShaderProgramID, "u_ScreenTexture"), 0);
+  glUniform1i(glGetUniformLocation(g_ShaderProgramID, "u_Texture"), 1);
 
   return 1;
 }
@@ -279,6 +282,15 @@ int main(int, char**)
     exit(EXIT_FAILURE);
   }
 
+  int textWidth = 0, textHeight = 0, textNbChan = 0;
+  float * textData = stbi_loadf("..\\..\\Resources\\Img\\nature.png", &textWidth, &textHeight, &textNbChan, 0);
+  if ( !textData )
+  {
+    std::cout << "unable to load image!" << std::endl;
+    glfwTerminate();
+    exit(EXIT_FAILURE);
+  }
+
   // Quad
   GLuint vertexArrayID;
   glGenVertexArrays(1, &vertexArrayID);
@@ -299,6 +311,17 @@ int main(int, char**)
   glEnableVertexAttribArray(1);
 
   glBindVertexArray(vertexArrayID);
+
+  // Texture
+  GLuint textureID;
+  glGenTextures(1, &textureID);
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D, textureID);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, textWidth, textHeight, 0, GL_RGBA, GL_FLOAT, textData);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+  stbi_image_free(textData);
 
   // Screen texture
   glGenTextures(1, &g_ScreenTextureID);
@@ -321,6 +344,7 @@ int main(int, char**)
   }
 
   glUniform1i(glGetUniformLocation(g_ShaderProgramID, "u_ScreenTexture"), 0);
+  glUniform1i(glGetUniformLocation(g_ShaderProgramID, "u_Texture"), 1);
 #endif
 
   glViewport(0, 0, g_ScreenWidth, g_ScreenHeight);

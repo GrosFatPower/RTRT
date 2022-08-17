@@ -19,6 +19,7 @@ find_package(OpenGL REQUIRED)
 target_include_directories(RTRT
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glfw/include
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/imgui
+  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/stb
   PUBLIC ${GLEW_INCLUDE_DIRS}
 )
 
