@@ -218,6 +218,7 @@ void RenderToTexture()
   currentZoom = coordinates[centerIndex].z;
 
   o_fragColor = vec4(0.0);
+  vec2 fragCoord = i_fragUV * u_Resolution.xy;
 
   // Antialiasing
   const float fraction = 1.0 / float(AA);
@@ -231,7 +232,7 @@ void RenderToTexture()
         float(i) * fraction + float(AA - j - 1) * fraction2,
         float(j) * fraction + float(i) * fraction2
       );
-      renderMandelbrot(color, i_fragUV + shift);
+      renderMandelbrot(color, fragCoord + shift);
       o_fragColor += clamp(color, 0.0, 1.0);
     }
   }

@@ -10,6 +10,7 @@ set(RTRT_IMGUI_SOURCE_DIR ${CMAKE_SOURCE_DIR}/Dependencies/imgui CACHE STRING "S
 
 add_subdirectory(Source)
 add_subdirectory(Dependencies)
+add_subdirectory(Shaders)
 
 set(GLEW_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/Dependencies/glew-2.1.0/include")
 set(GLEW_LIBRARIES "glew32s.lib")
