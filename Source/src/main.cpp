@@ -22,13 +22,24 @@
 int g_ScreenWidth  = 1920;
 int g_ScreenHeight = 1080;
 
+double g_MouseX     = 0.;
+double g_MouseY     = 0.;
+bool   g_LeftClick  = false;
+bool   g_RightClick = false;
+
+long  g_Frame     = 0;
+float g_FrameRate = 60.;
+
 #ifdef RTRT_RENDER_TO_TEXTURE
 GLuint g_ShaderProgramID   = 0;
 GLuint g_ScreenTextureID   = 0;
 GLuint g_u_DirectOutPassID = 0;
 GLuint g_u_ResolutionID    = 0;
+GLuint g_u_MouseID         = 0;
 GLuint g_u_TimeID          = 0;
 GLuint g_u_TimeDeltaID     = 0;
+GLuint g_u_FrameID         = 0;
+GLuint g_u_FrameRateID     = 0;
 
 const GLfloat g_QuadVtx[] =
 {
@@ -64,20 +75,30 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 {
   if (action == GLFW_PRESS)
     std::cout << "EVENT : KEY PRESSED" << std::endl;
-
-  ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
 }
 
 void MousebuttonCallback(GLFWwindow* window, int button, int action, int mods)
 {
-  if ( ( ( button == GLFW_MOUSE_BUTTON_1 ) || ( button == GLFW_MOUSE_BUTTON_2 ) ) && ( action == GLFW_PRESS ) && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow))
+  if ( !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) )
   {
-    double mouseX, mouseY;
-    glfwGetCursorPos(window, &mouseX, &mouseY);
-    std::cout << "EVENT : MOUSE CLICK (" << mouseX << "," << mouseY << ")" << std::endl;
-  }
+    glfwGetCursorPos(window, &g_MouseX, &g_MouseY);
 
-  ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
+    if ( ( GLFW_MOUSE_BUTTON_1 == button ) && ( GLFW_PRESS == action ) )
+    {
+      std::cout << "EVENT : LEFT CLICK (" << g_MouseX << "," << g_MouseY << ")" << std::endl;
+      g_LeftClick = true;
+    }
+    else
+      g_LeftClick = false;
+
+    if ( ( GLFW_MOUSE_BUTTON_2 == button ) && ( GLFW_PRESS == action ) )
+    {
+      std::cout << "EVENT : RIGHT CLICK (" << g_MouseX << "," << g_MouseY << ")" << std::endl;
+      g_RightClick = true;
+    }
+    else
+      g_RightClick = false;
+  }
 }
 
 void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
@@ -198,7 +219,12 @@ int RecompileShaders()
   if ( g_ShaderProgramID )
     glDeleteProgram(g_ShaderProgramID);
 
-  g_ShaderProgramID = CreateShaderProgram("..\\..\\shaders\\vertex.glsl", "..\\..\\shaders\\fragment.glsl");
+  const char * vertexShaderFileName   = "..\\..\\shaders\\vertex.glsl";
+  //const char * fragmentShaderFileName = "..\\..\\shaders\\fragment.glsl";
+  //const char * fragmentShaderFileName = "..\\..\\shaders\\fragment_RayMarching.glsl";
+  const char * fragmentShaderFileName = "..\\..\\shaders\\fragment_ScreenSaver.glsl";
+
+  g_ShaderProgramID = CreateShaderProgram(vertexShaderFileName, fragmentShaderFileName);
   if ( !g_ShaderProgramID )
     return 0;
 
@@ -206,8 +232,11 @@ int RecompileShaders()
 
   g_u_DirectOutPassID = glGetUniformLocation(g_ShaderProgramID, "u_DirectOutputPass");
   g_u_ResolutionID    = glGetUniformLocation(g_ShaderProgramID, "u_Resolution");
+  g_u_MouseID         = glGetUniformLocation(g_ShaderProgramID, "u_Mouse");
   g_u_TimeID          = glGetUniformLocation(g_ShaderProgramID, "u_Time");
   g_u_TimeDeltaID     = glGetUniformLocation(g_ShaderProgramID, "u_TimeDelta");
+  g_u_FrameID         = glGetUniformLocation(g_ShaderProgramID, "u_Frame");
+  g_u_FrameRateID     = glGetUniformLocation(g_ShaderProgramID, "u_FrameRate");
   glUniform1i(glGetUniformLocation(g_ShaderProgramID, "u_ScreenTexture"), 0);
   glUniform1i(glGetUniformLocation(g_ShaderProgramID, "u_Texture"), 1);
 
@@ -244,7 +273,7 @@ int main(int, char**)
   }
 
   glfwSetFramebufferSizeCallback(mainWindow, FramebufferSizeCallback);
-  //glfwSetMouseButtonCallback(mainWindow, mousebuttonCallback);
+  glfwSetMouseButtonCallback(mainWindow, MousebuttonCallback);
   //glfwSetKeyCallback(mainWindow, keyCallback);
 
   glfwMakeContextCurrent(mainWindow);
@@ -371,6 +400,8 @@ int main(int, char**)
   double timeDelta = 0.001;
   while (!glfwWindowShouldClose(mainWindow))
   {
+    g_Frame++;
+
     double curLoopTime = glfwGetTime();
 
     // Poll and handle events (inputs, window resize, etc.)
@@ -439,10 +470,15 @@ int main(int, char**)
    glBindFramebuffer(GL_FRAMEBUFFER, frameBufferID);
    glUniform1i(g_u_DirectOutPassID, 0);
    glUniform3f(g_u_ResolutionID, g_ScreenWidth, g_ScreenHeight, 0.f);
+   glUniform4f(g_u_MouseID, g_MouseX, g_MouseY, (float) g_LeftClick, (float) g_RightClick);
    glUniform1f(g_u_TimeID, (float)curLoopTime);
    glUniform1f(g_u_TimeDeltaID, (float)timeDelta);
+   glUniform1i(g_u_FrameID, (int)g_Frame);
+   glUniform1f(g_u_FrameRateID, g_FrameRate);
    glDrawArrays(GL_TRIANGLES, 0, 6);
    timeDelta = glfwGetTime() - curLoopTime;
+
+   g_FrameRate = 1. / timeDelta;
 
    glBindFramebuffer(GL_FRAMEBUFFER, 0);
    glUniform1i(g_u_DirectOutPassID, 1);

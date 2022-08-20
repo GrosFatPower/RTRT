@@ -1,243 +1,111 @@
 #version 430 core
 
-in vec2  i_fragUV;
-out vec4 o_fragColor;
+in vec2 fragUV;
+out vec4 fragColor;
 
 uniform sampler2D u_ScreenTexture;
 uniform sampler2D u_Texture;
 uniform vec3      u_Resolution;
 uniform bool      u_DirectOutputPass;
 uniform float     u_Time;
-//uniform float     u_TimeDelta;
+uniform float     u_TimeDelta;
 
-#define COLORSCHEME 1
+// Created by inigo quilez - iq/2013
+//   https://www.youtube.com/c/InigoQuilez
+//   https://iquilezles.org
+// I share this piece (art and code) here in Shadertoy and through its Public API, only for educational purposes. 
+// You cannot use, sell, share or host this piece or modifications of it as part of your own commercial or non-commercial product, website or project.
+// You can share a link to it or an unmodified screenshot of it provided you attribute "by Inigo Quilez, @iquilezles and iquilezles.org". 
+// If you are a teacher, lecturer, educator or similar and these conditions are too restrictive for your needs, please contact me and we'll work it out.
 
-#if HW_PERFORMANCE==1
+
+// See here for more information on smooth iteration count:
+//
+// https://iquilezles.org/articles/msetsmooth
+
+
+// increase this if you have a very fast GPU
 #define AA 2
-#else
-#define AA 1
-#endif
 
-// Color schemes
-#if COLORSCHEME==1
-#define INVERTED_GRADIENT
-#define MAXITER_POT 300
-#define MAXITER_NORMAL 500
-#else
-#define MAXITER_POT 180
-#define MAXITER_NORMAL 300
-#endif
-
-// Interation end conditions
-#define ER_POT 100000.0
-#define ER_NORMAL 100.0
-
-// Constants
-#define M_PI 3.1415926535897932384626433832795
-
-// Number of points
-#define NUMBER_OF_POINTS 8
-
-// Coordinates with awesome places and zoom values
-const vec3 coordinates[NUMBER_OF_POINTS] = vec3[NUMBER_OF_POINTS](
-  vec3(-0.774693, 0.1242263647, 14.0),
-  vec3(-0.58013, 0.48874, 14.0),
-  vec3(-1.77, 0.0, 5.0),
-  vec3(-0.744166858, 0.13150536, 13.0),
-  vec3(0.41646, -0.210156433, 16.0),
-  vec3(-0.7455, 0.1126, 10.0),
-  vec3(-1.1604872, 0.2706806, 12.0),
-  vec3(-0.735805, 0.196726496, 15.0)
-);
-const float centerDuration = 31.0;
-const float rotationDuration = 53.0;
-const vec2 defaultCenter = vec2(-0.6, 0.0);
-
-#if COLORSCHEME==1
-const vec4 insideColor = vec4(0.0, 0.0, 0.0, 1.0);
-#else
-const vec4 insideColor = vec4(0.1, 0.12, 0.15, 1.0);
-#endif
-
-float time = 0.0;
-int centerIndex = 0;
-vec2 currentCenter;
-float currentZoom;
-
-vec3 palette(in float t, in vec3 a, in vec3 b, in vec3 c, in vec3 d)
+float mandelbrot( in vec2 c )
 {
-  return a + b*cos(2.0*M_PI*(c*t+d));
-}
-
-vec3 awesomePalette(in float t)
-{
-  return palette(t, vec3(0.5,0.5,0.5), vec3(0.5,0.5,0.5), vec3(1.0,1.0,1.0), vec3(0.0,0.1,0.2));
-}
-
-vec3 rainbow(in float t)
-{
-  return palette(t, vec3(0.5,0.5,0.5), vec3(0.5,0.5,0.5), vec3(1.0,1.0,1.0), vec3(0.0,0.33,0.67));
-}
-
-// Complex multiplication
-vec2 cmul(vec2 a, vec2 b)
-{
-  return vec2(a.x * b.x - a.y * b.y, a.x * b.y + b.x * a.y);
-}
-
-// Complex c^2
-vec2 cpow2(in vec2 c)
-{
-  return vec2(c.x * c.x - c.y * c.y, 2.0 * c.x * c.y);
-}
-
-// Complex division
-vec2 cdiv(in vec2 a, in vec2 b)
-{
-  return vec2(((a.x*b.x+a.y*b.y)/(b.x*b.x+b.y*b.y)),((a.y*b.x-a.x*b.y)/(b.x*b.x+b.y*b.y)));
-}
-
-// Get rotation matrix
-mat2 rotate(float theta)
-{
-  float s = sin(theta);
-  float c = cos(theta);
-  return mat2(c, -s, s, c);
-}
-
-// Potential formula
-float potential(in vec2 c)
-{
-  vec2 z = vec2(0.0, 0.0); // z0
-  int iter = 0;
-  
-  for (iter = 0; iter < MAXITER_POT; ++iter)
+  #if 1
   {
-    z = cpow2(z) + c; // z_n+1 = z_n^2 + c
-    float absZ = length(z); // |z|
-    if (absZ > ER_POT)
-    {
-      return abs(log(log2(absZ)) - (float(iter) + 1.0) * log(2.0));
-    }
+      float c2 = dot(c, c);
+      // skip computation inside M1 - https://iquilezles.org/articles/mset1bulb
+      if( 256.0*c2*c2 - 96.0*c2 + 32.0*c.x - 3.0 < 0.0 ) return 0.0;
+      // skip computation inside M2 - https://iquilezles.org/articles/mset2bulb
+      if( 16.0*(c2+2.0*c.x+1.0) - 1.0 < 0.0 ) return 0.0;
+  }
+  #endif
+  
+  const float B = 256.0;
+  float l = 0.0;
+  vec2 z  = vec2(0.0);
+  for( int i=0; i<512; i++ )
+  {
+    z = vec2( z.x*z.x - z.y*z.y, 2.0*z.x*z.y ) + c;
+    if( dot(z,z)>(B*B) ) break;
+    l += 1.0;
   }
   
-  return -1.0;
+  if( l>511.0 ) return 0.0;
+  
+  // ------------------------------------------------------
+  // smooth interation count
+  //float sl = l - log(log(length(z))/log(B))/log(2.0);
+  
+  // equivalent optimized smooth interation count
+  float sl = l - log2(log2(dot(z,z))) + 4.0;
+  
+  float al = smoothstep( -0.1, 0.0, sin(0.5*6.2831*u_Time ) );
+  l = mix( l, sl, al );
+  
+  return l;
 }
 
-// Reflection formula
-float reflection(in vec2 c)
+void renderMandelbrot( out vec4 oFragColor, in vec2 iFragCoord )
 {
-  vec2 z = vec2(0.0, 0.0); // z0
-  vec2 dc = vec2(0.0, 0.0); // Derivate of c
-
-  const float h2 = 1.5; // Height of light
-  vec2 angle = normalize(vec2(-1.0, 1.0)) * rotate(time / rotationDuration); // Light always from top left
-
-  for (int i = 0; i < MAXITER_NORMAL; i++)
+  vec3 col = vec3(0.0);
+  
+#if AA>1
+  for( int m=0; m<AA; m++ )
+  for( int n=0; n<AA; n++ )
   {
-    dc = 2.0 * cmul(dc, z) + vec2(1.0, 0.0);
-    z = cpow2(z) + c;
-
-    if (length(z) > ER_NORMAL)
-    { // Outside lighting calculation formula
-      vec2 slope = normalize(cdiv(z, dc));
-      float reflection = dot(slope, angle) + h2;
-      reflection = reflection / (1.0 + h2); // Lower value to max 1.0
-      if (reflection < 0.0)
-      {
-        reflection = 0.0;
-      }
-      return reflection;
-    }
+      vec2 p = (-u_Resolution.xy + 2.0*(iFragCoord.xy+vec2(float(m),float(n))/float(AA)))/u_Resolution.y;
+      float w = float(AA*m+n);
+      float time = u_Time + 0.5*(1.0/24.0)*w/float(AA*AA);
+#else    
+      vec2 p = (-u_Resolution.xy + 2.0*iFragCoord.xy)/u_Resolution.y;
+      float time = iTime;
+#endif
+    
+      float zoo = 0.62 + 0.38*cos(.07*time);
+      float coa = cos( 0.15*(1.0-zoo)*time );
+      float sia = sin( 0.15*(1.0-zoo)*time );
+      zoo = pow( zoo,8.0);
+      vec2 xy = vec2( p.x*coa-p.y*sia, p.x*sia+p.y*coa);
+      vec2 c = vec2(-.745,.186) + xy*zoo;
+      
+      float l = mandelbrot(c);
+      
+      col += 0.5 + 0.5*cos( 3.0 + l*0.15 + vec3(0.0,0.6,1.0));
+#if AA>1
   }
-
-  return -1.0;
-}
-
-void renderMandelbrot(out vec4 fragColor, in vec2 fragCoord)
-{
-  // Coordinates [-1, 1]
-  vec2 uv = (fragCoord.xy - u_Resolution.xy * 0.5) / min(u_Resolution.x, u_Resolution.y) * 2.0;
-
-  // Mix between base poistion and target position
-  float mixFactor = 1.0 - (0.5 + 0.5 * cos(time / centerDuration * 2.0 * M_PI));
-
-  // Zoom and position calculation
-  float zoom = exp2(-currentZoom * mixFactor);
-  float maxZoom = exp2(-currentZoom);
-  vec2 c = mix(currentCenter, defaultCenter, zoom / (1.0 - maxZoom) - maxZoom) + uv * zoom * rotate(time / rotationDuration);
-
-  float pot = potential(c);
-  float ref = reflection(c);
-
-#ifdef INVERTED_GRADIENT
-  float intensity = 1.0 - sqrt(fract(pot));
-  intensity = mix(intensity, ref, 0.5);
-  // intensity = 0.8 * (intensity * ref) + 0.2; // Alternative shadows
-#else
-  float intensity = 0.7 * (fract(pot) * ref) + 0.3;
+  col /= float(AA*AA);
 #endif
 
-#if COLORSCHEME==1
-  vec3 color = awesomePalette(time / 50.0 + pot / 40.0);
-  if (ref < 0.0) { // Inner color
-    fragColor = insideColor;
-  }
-  else { // Outer color
-    //fragColor = vec4(color * intensity, 1.0);
-    //fragColor = mix(fragColor, vec4(1.0), intensity * 0.3 + clamp(ref - 0.5, 0.0, 1.0) * pow((1.0 - fract(pot)), 30.0));
-    fragColor = vec4(
-      color * intensity + // Base color
-      vec3(intensity) * 0.3 + // Matte white
-      clamp(ref - 0.5, 0.0, 1.0) * pow((1.0 - fract(pot)), 30.0), // Specular
-    1.0);
-    fragColor = clamp(fragColor, 0.0, 1.0);
-  }
-#else
-  vec3 color = rainbow(pot / 20.0);
-  if (pot < 0.0) { // Inner color
-    color = insideColor.rgb * min((ref + 0.5), 1.0);
-  }
-  else { // Outer color
-    color = color * intensity;
-  }
-  fragColor = vec4(color, 1.0);
-#endif
-}
-
-void RenderImage()
-{
-  o_fragColor = texture(u_ScreenTexture, i_fragUV);
+  oFragColor = vec4( col, 1.0 );
 }
 
 void RenderToTexture()
 {
-  time = u_Time + centerDuration / 2.0 - 7.0; // Start with zoom
-  centerIndex = int(time / centerDuration) % NUMBER_OF_POINTS; // Seleect current target
-  currentCenter = coordinates[centerIndex].xy;
-  currentZoom = coordinates[centerIndex].z;
+  renderMandelbrot(fragColor, gl_FragCoord .xy);
+}
 
-  o_fragColor = vec4(0.0);
-  vec2 fragCoord = i_fragUV * u_Resolution.xy;
-
-  // Antialiasing
-  const float fraction = 1.0 / float(AA);
-  const float fraction2 = fraction / float(AA);
-  for (int i = 0; i < AA; i++)
-  {
-    for (int j = 0; j < AA; j++)
-    {
-      vec4 color = vec4(0.0);
-      vec2 shift = vec2(
-        float(i) * fraction + float(AA - j - 1) * fraction2,
-        float(j) * fraction + float(i) * fraction2
-      );
-      renderMandelbrot(color, fragCoord + shift);
-      o_fragColor += clamp(color, 0.0, 1.0);
-    }
-  }
-
-  o_fragColor = o_fragColor / float(AA * AA);
+void RenderImage()
+{
+  fragColor = texture(u_ScreenTexture, fragUV);
 }
 
 void main()

@@ -6,9 +6,33 @@ out vec4 fragColor;
 uniform sampler2D u_ScreenTexture;
 uniform sampler2D u_Texture;
 uniform vec3      u_Resolution;
+uniform vec4      u_Mouse;
 uniform bool      u_DirectOutputPass;
 uniform float     u_Time;
 uniform float     u_TimeDelta;
+uniform int       u_Frame;
+
+// Copyright Inigo Quilez, 2016 - https://iquilezles.org/
+// I am the sole copyright owner of this Work.
+// You cannot host, display, distribute or share this Work in any form,
+// including physical and digital. You cannot use this Work in any
+// commercial or non-commercial product, website or project. You cannot
+// sell this Work and you cannot mint an NFTs of it.
+// I share this Work for educational purposes, and you can link to it,
+// through an URL, proper attribution and unmodified screenshot, as part
+// of your educational material. If these conditions are too restrictive
+// please contact me and we'll definitely work it out.
+
+// A list of useful distance function to simple primitives. All
+// these functions (except for ellipsoid) return an exact
+// euclidean distance, meaning they produce a better SDF than
+// what you'd get if you were constructing them from boolean
+// operations (such as cutting an infinite cylinder with two planes).
+
+// List of other 3D SDFs:
+//    https://www.shadertoy.com/playlist/43cXRl
+// and
+//    https://iquilezles.org/articles/distfunctions
 
 #if HW_PERFORMANCE==1
 #define AA 1
@@ -603,9 +627,9 @@ mat3 setCamera( in vec3 ro, in vec3 ta, float cr )
     return mat3( cu, cv, cw );
 }
 
-void mainImage( out vec4 color, in vec2 coord )
+void RenderScene( out vec4 color, in vec2 coord )
 {
-    vec2 mo;// = iMouse.xy/u_Resolution.xy;
+    vec2 mo = u_Mouse.xy/u_Resolution.xy;
     mo.x = 0.2;
     mo.y = 0.2;
 	float time = 32.0 + u_Time*1.5;
@@ -660,8 +684,7 @@ void mainImage( out vec4 color, in vec2 coord )
 
 void RenderToTexture()
 {
-  vec2 coord = fragUV * u_Resolution.xy;
-   mainImage(fragColor, coord);
+  RenderScene(fragColor, gl_FragCoord .xy);
 }
 
 void RenderImage()
