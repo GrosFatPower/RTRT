@@ -248,6 +248,9 @@ int RecompileShaders()
   case 5 :
     fragmentShaderFileName = "..\\..\\shaders\\fragment_Whitenoise.glsl";
     break;
+  case 6 :
+    fragmentShaderFileName = "..\\..\\shaders\\fragment_Octagrams.glsl";
+    break;
   default :
     fragmentShaderFileName = "..\\..\\shaders\\fragment_Default.glsl";
   }
@@ -474,7 +477,7 @@ int main(int, char**)
       if (ImGui::Button("Next Fragment Shader >"))
       {
         g_FragShaderNum++;
-        if ( g_FragShaderNum > 5 )
+        if ( g_FragShaderNum > 6 )
           g_FragShaderNum = 0;
 #ifdef RTRT_DISPLAY_GUI
         RecompileShaders();
