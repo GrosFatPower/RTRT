@@ -423,12 +423,37 @@ int main(int, char**)
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   // Main loop
-  double timeDelta = 0.001;
+  double averageDelta = 0.;
+  double LastDeltas[30] = { 0. };
+  int nbStoredDeltas = 0;
+
+  double oldCpuTime = glfwGetTime();
   while (!glfwWindowShouldClose(mainWindow))
   {
     g_Frame++;
 
     double curLoopTime = glfwGetTime();
+
+    double timeDelta = curLoopTime - oldCpuTime;
+    oldCpuTime = curLoopTime;
+
+    if ( 30 == nbStoredDeltas )
+    {
+      double totalDelta = 0.;
+      for ( int i = 0; i < 30; ++i )
+        totalDelta += LastDeltas[i];
+      averageDelta = totalDelta / 30;
+      nbStoredDeltas = 0;
+    }
+    else if ( nbStoredDeltas < 30 )
+      LastDeltas[nbStoredDeltas++] = timeDelta;
+    else
+      nbStoredDeltas = 0;
+
+    if ( averageDelta > 0. )
+      g_FrameRate = 1. / averageDelta;
+    else if ( timeDelta > 0. )
+      g_FrameRate = 1. / timeDelta;
 
     // Poll and handle events (inputs, window resize, etc.)
     // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
@@ -459,6 +484,8 @@ int main(int, char**)
       ImGui::Text("Shader num = %d", g_FragShaderNum);
 
       ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+      ImGui::Text("RenderToTexture average %.3f ms/frame (%.1f FPS)", averageDelta * 1000.f, g_FrameRate);
+
       ImGui::End();
     }
 #endif
@@ -484,9 +511,6 @@ int main(int, char**)
    glUniform1i(g_u_FrameID, (int)g_Frame);
    glUniform1f(g_u_FrameRateID, g_FrameRate);
    glDrawArrays(GL_TRIANGLES, 0, 6);
-   timeDelta = glfwGetTime() - curLoopTime;
-
-   g_FrameRate = 1. / timeDelta;
 
    glBindFramebuffer(GL_FRAMEBUFFER, 0);
    glUniform1i(g_u_DirectOutPassID, 1);
