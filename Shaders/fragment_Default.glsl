@@ -13,10 +13,7 @@ uniform float     u_TimeDelta;
 
 void RenderToTexture()
 {
-  vec2 textUV;
-  textUV.x = fragUV.x;
-  textUV.y = 1.0 - fragUV.y;
-  fragColor = texture(u_Texture, textUV) * cos(u_Time + fragUV.x) * cos(u_Time + fragUV.y);
+  fragColor = vec4((cos(u_Time + fragUV.x) + 1.) * 0.5, (sin(u_Time + fragUV.y) + 1.) * 0.5, (cos(u_Time + fragUV.x + fragUV.y) + 1.) * 0.5, 1.);
 }
 
 void RenderImage()

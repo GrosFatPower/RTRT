@@ -30,6 +30,9 @@ bool   g_RightClick = false;
 long  g_Frame     = 0;
 float g_FrameRate = 60.;
 
+short g_VtxShaderNum  = 0;
+short g_FragShaderNum = 0;
+
 #ifdef RTRT_RENDER_TO_TEXTURE
 GLuint g_ShaderProgramID   = 0;
 GLuint g_ScreenTextureID   = 0;
@@ -219,10 +222,35 @@ int RecompileShaders()
   if ( g_ShaderProgramID )
     glDeleteProgram(g_ShaderProgramID);
 
-  const char * vertexShaderFileName   = "..\\..\\shaders\\vertex.glsl";
-  //const char * fragmentShaderFileName = "..\\..\\shaders\\fragment.glsl";
-  //const char * fragmentShaderFileName = "..\\..\\shaders\\fragment_RayMarching.glsl";
-  const char * fragmentShaderFileName = "..\\..\\shaders\\fragment_ScreenSaver.glsl";
+  const char * vertexShaderFileName = NULL;
+  switch ( g_VtxShaderNum )
+  {
+  case 0 :
+  default :
+    vertexShaderFileName = "..\\..\\shaders\\vertex_Default.glsl";
+  }
+
+  const char * fragmentShaderFileName = NULL;
+  switch ( g_FragShaderNum )
+  {
+  case 1 :
+    fragmentShaderFileName = "..\\..\\shaders\\fragment_Drawtexture.glsl";
+    break;
+  case 2 :
+    fragmentShaderFileName = "..\\..\\shaders\\fragment_RayMarching.glsl";
+    break;
+  case 3 :
+    fragmentShaderFileName = "..\\..\\shaders\\fragment_ScreenSaver.glsl";
+    break;
+  case 4 :
+    fragmentShaderFileName = "..\\..\\shaders\\fragment_Mandelbrot.glsl";
+    break;
+  case 5 :
+    fragmentShaderFileName = "..\\..\\shaders\\fragment_Whitenoise.glsl";
+    break;
+  default :
+    fragmentShaderFileName = "..\\..\\shaders\\fragment_Default.glsl";
+  }
 
   g_ShaderProgramID = CreateShaderProgram(vertexShaderFileName, fragmentShaderFileName);
   if ( !g_ShaderProgramID )
@@ -392,8 +420,6 @@ int main(int, char**)
 
 
   // Our state
-  bool show_demo_window = true;
-  bool show_another_window = true;
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   // Main loop
@@ -417,40 +443,22 @@ int main(int, char**)
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-    if (show_demo_window)
-      ImGui::ShowDemoWindow(&show_demo_window);
-
-    // 2. Show a simple window that we create ourselves. We use a Begin/End pair to created a named window.
     {
-      static float f = 0.0f;
-      static int counter = 0;
+      ImGui::Begin("Shader selection");
 
-      ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
-
-      ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-      ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
-      ImGui::Checkbox("Another Window", &show_another_window);
-
-      ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-      ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
-
-      if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-        counter++;
+      if (ImGui::Button("Next Fragment Shader >"))
+      {
+        g_FragShaderNum++;
+        if ( g_FragShaderNum > 5 )
+          g_FragShaderNum = 0;
+#ifdef RTRT_DISPLAY_GUI
+        RecompileShaders();
+#endif
+      }
       ImGui::SameLine();
-      ImGui::Text("counter = %d", counter);
+      ImGui::Text("Shader num = %d", g_FragShaderNum);
 
       ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-      ImGui::End();
-    }
-
-    // 3. Show another simple window.
-    if (show_another_window)
-    {
-      ImGui::Begin("Another Window", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
-      ImGui::Text("Hello from another window!");
-      if (ImGui::Button("Close Me"))
-        show_another_window = false;
       ImGui::End();
     }
 #endif

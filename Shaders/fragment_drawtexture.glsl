@@ -15,7 +15,7 @@ void RenderToTexture()
   vec2 textUV;
   textUV.x = fragUV.x;
   textUV.y = 1.0 - fragUV.y;
-  fragColor = texture(u_Texture, textUV) * cos(u_Time + fragUV.x) * cos(u_Time + fragUV.y);
+  fragColor = texture(u_Texture, textUV);
 }
 
 void RenderImage()
