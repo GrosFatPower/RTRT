@@ -6,6 +6,9 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+#include "Shader.h"
+#include "ShaderProgram.h"
+
 #include <vector>
 #include <string>
 #include <stdio.h>
@@ -15,6 +18,8 @@
 
 #define RTRT_DISPLAY_GUI
 #define RTRT_RENDER_TO_TEXTURE
+
+using namespace RTRT;
 
 // ----------------------------------------------------------------------------
 // Global variables
@@ -34,7 +39,7 @@ short g_VtxShaderNum  = 0;
 short g_FragShaderNum = 0;
 
 #ifdef RTRT_RENDER_TO_TEXTURE
-GLuint g_ShaderProgramID   = 0;
+ShaderProgram * g_ShaderProgram = NULL;
 GLuint g_ScreenTextureID   = 0;
 GLuint g_u_DirectOutPassID = 0;
 GLuint g_u_ResolutionID    = 0;
@@ -119,160 +124,70 @@ void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 #endif
 
 #ifdef RTRT_RENDER_TO_TEXTURE
-GLuint CreateShaderProgram(const char * vertexShaderPath, const char * fragmentShaderPath)
-{
-  // Create the shaders
-  GLuint vertexShaderID = glCreateShader(GL_VERTEX_SHADER);
-  GLuint fragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
-
-  // Read the Vertex Shader code from the file
-  std::string vertexShaderCode;
-  std::ifstream vertexShaderStream(vertexShaderPath, std::ios::in);
-  if ( vertexShaderStream.is_open() )
-  {
-    std::stringstream sstr;
-    sstr << vertexShaderStream.rdbuf();
-    vertexShaderCode = sstr.str();
-    vertexShaderStream.close();
-  }
-  else
-  {
-    printf("Unable to open %s.\n", vertexShaderPath);
-    return 0;
-  }
-
-  // Read the Fragment Shader code from the file
-  std::string fragmentShaderCode;
-  std::ifstream fragmentShaderStream(fragmentShaderPath, std::ios::in);
-  if ( fragmentShaderStream.is_open() ) {
-    std::stringstream sstr;
-    sstr << fragmentShaderStream.rdbuf();
-    fragmentShaderCode = sstr.str();
-    fragmentShaderStream.close();
-  }
-  else
-  {
-    printf("Unable to open %s.\n", fragmentShaderPath);
-    return 0;
-  }
-
-  GLint glResult = GL_FALSE;
-  int glInfoLogLength = 0;
-
-  // Compile Vertex Shader
-  printf("Compiling shader : %s\n", vertexShaderPath);
-  char const * vertexSourcePointer = vertexShaderCode.c_str();
-  glShaderSource(vertexShaderID, 1, &vertexSourcePointer, NULL);
-  glCompileShader(vertexShaderID);
-
-  // Check Vertex Shader
-  glGetShaderiv(vertexShaderID, GL_COMPILE_STATUS, &glResult);
-  glGetShaderiv(vertexShaderID, GL_INFO_LOG_LENGTH, &glInfoLogLength);
-  if ( glInfoLogLength > 0 )
-  {
-    std::vector<char> vertexShaderErrorMessage(glInfoLogLength + 1);
-    glGetShaderInfoLog(vertexShaderID, glInfoLogLength, NULL, &vertexShaderErrorMessage[0]);
-    printf("%s\n", &vertexShaderErrorMessage[0]);
-  }
-
-  // Compile Fragment Shader
-  printf("Compiling shader : %s\n", fragmentShaderPath);
-  char const* FragmentSourcePointer = fragmentShaderCode.c_str();
-  glShaderSource(fragmentShaderID, 1, &FragmentSourcePointer, NULL);
-  glCompileShader(fragmentShaderID);
-
-  // Check Fragment Shader
-  glGetShaderiv(fragmentShaderID, GL_COMPILE_STATUS, &glResult);
-  glGetShaderiv(fragmentShaderID, GL_INFO_LOG_LENGTH, &glInfoLogLength);
-  if ( glInfoLogLength > 0 )
-  {
-    std::vector<char> fragmentShaderErrorMessage(glInfoLogLength + 1);
-    glGetShaderInfoLog(fragmentShaderID, glInfoLogLength, NULL, &fragmentShaderErrorMessage[0]);
-    printf("%s\n", &fragmentShaderErrorMessage[0]);
-  }
-
-  // Link the program
-  printf("Linking program\n");
-  GLuint programID = glCreateProgram();
-  glAttachShader(programID, vertexShaderID);
-  glAttachShader(programID, fragmentShaderID);
-  glLinkProgram(programID);
-
-  // Check the program
-  glGetProgramiv(programID, GL_LINK_STATUS, &glResult);
-  glGetProgramiv(programID, GL_INFO_LOG_LENGTH, &glInfoLogLength);
-  if ( glInfoLogLength > 0)
-  {
-    std::vector<char> programErrorMessage(glInfoLogLength + 1);
-    glGetProgramInfoLog(programID, glInfoLogLength, NULL, &programErrorMessage[0]);
-    printf("%s\n", &programErrorMessage[0]);
-  }
-
-  glDetachShader(programID, vertexShaderID);
-  glDetachShader(programID, fragmentShaderID);
-
-  glDeleteShader(vertexShaderID);
-  glDeleteShader(fragmentShaderID);
-
-  return programID;
-}
-
 int RecompileShaders()
 {
-  if ( g_ShaderProgramID )
-    glDeleteProgram(g_ShaderProgramID);
+  if ( g_ShaderProgram )
+  {
+    g_ShaderProgram -> StopUsing();
+    delete g_ShaderProgram;
+  }
+  g_ShaderProgram = NULL;
 
-  const char * vertexShaderFileName = NULL;
+  ShaderSource vertexShaderSrc;
   switch ( g_VtxShaderNum )
   {
   case 0 :
   default :
-    vertexShaderFileName = "..\\..\\shaders\\vertex_Default.glsl";
+    vertexShaderSrc = Shader::LoadShader("..\\..\\shaders\\vertex_Default.glsl");
   }
 
-  const char * fragmentShaderFileName = NULL;
+  ShaderSource fragmentShaderSrc;
   switch ( g_FragShaderNum )
   {
   case 1 :
-    fragmentShaderFileName = "..\\..\\shaders\\fragment_Drawtexture.glsl";
+    fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Drawtexture.glsl");
     break;
   case 2 :
-    fragmentShaderFileName = "..\\..\\shaders\\fragment_RayMarching.glsl";
+    fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_RayMarching.glsl");
     break;
   case 3 :
-    fragmentShaderFileName = "..\\..\\shaders\\fragment_ScreenSaver.glsl";
+    fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_ScreenSaver.glsl");
     break;
   case 4 :
-    fragmentShaderFileName = "..\\..\\shaders\\fragment_Mandelbrot.glsl";
+    fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Mandelbrot.glsl");
     break;
   case 5 :
-    fragmentShaderFileName = "..\\..\\shaders\\fragment_Whitenoise.glsl";
+    fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Whitenoise.glsl");
     break;
   case 6 :
-    fragmentShaderFileName = "..\\..\\shaders\\fragment_Octagrams.glsl";
+    fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Octagrams.glsl");
     break;
   case 7 :
-    fragmentShaderFileName = "..\\..\\shaders\\fragment_FantasyEscape.glsl";
+    fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_FantasyEscape.glsl");
     break;
   default :
-    fragmentShaderFileName = "..\\..\\shaders\\fragment_Default.glsl";
+    fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Default.glsl");
   }
 
-  g_ShaderProgramID = CreateShaderProgram(vertexShaderFileName, fragmentShaderFileName);
-  if ( !g_ShaderProgramID )
+  g_ShaderProgram = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
+  if ( !g_ShaderProgram )
     return 0;
 
-  glUseProgram(g_ShaderProgramID);
+  GLuint shaderProgramID = g_ShaderProgram -> GetShaderProgramID();
+  if ( !shaderProgramID )
+    return 0;
 
-  g_u_DirectOutPassID = glGetUniformLocation(g_ShaderProgramID, "u_DirectOutputPass");
-  g_u_ResolutionID    = glGetUniformLocation(g_ShaderProgramID, "u_Resolution");
-  g_u_MouseID         = glGetUniformLocation(g_ShaderProgramID, "u_Mouse");
-  g_u_TimeID          = glGetUniformLocation(g_ShaderProgramID, "u_Time");
-  g_u_TimeDeltaID     = glGetUniformLocation(g_ShaderProgramID, "u_TimeDelta");
-  g_u_FrameID         = glGetUniformLocation(g_ShaderProgramID, "u_Frame");
-  g_u_FrameRateID     = glGetUniformLocation(g_ShaderProgramID, "u_FrameRate");
-  glUniform1i(glGetUniformLocation(g_ShaderProgramID, "u_ScreenTexture"), 0);
-  glUniform1i(glGetUniformLocation(g_ShaderProgramID, "u_Texture"), 1);
+  g_ShaderProgram -> Use();
+
+  g_u_DirectOutPassID = glGetUniformLocation(shaderProgramID, "u_DirectOutputPass");
+  g_u_ResolutionID    = glGetUniformLocation(shaderProgramID, "u_Resolution");
+  g_u_MouseID         = glGetUniformLocation(shaderProgramID, "u_Mouse");
+  g_u_TimeID          = glGetUniformLocation(shaderProgramID, "u_Time");
+  g_u_TimeDeltaID     = glGetUniformLocation(shaderProgramID, "u_TimeDelta");
+  g_u_FrameID         = glGetUniformLocation(shaderProgramID, "u_Frame");
+  g_u_FrameRateID     = glGetUniformLocation(shaderProgramID, "u_FrameRate");
+  glUniform1i(glGetUniformLocation(shaderProgramID, "u_ScreenTexture"), 0);
+  glUniform1i(glGetUniformLocation(shaderProgramID, "u_Texture"), 1);
 
   return 1;
 }
@@ -344,12 +259,14 @@ int main(int, char**)
     exit(EXIT_FAILURE);
   }
 
-  if ( !RecompileShaders() )
+  if ( !RecompileShaders() || !g_ShaderProgram )
   {
     std::cout << "Shader compilation failed!" << std::endl;
     glfwTerminate();
     exit(EXIT_FAILURE);
   }
+
+  GLuint shaderProgramID = g_ShaderProgram -> GetShaderProgramID();
 
   int textWidth = 0, textHeight = 0, textNbChan = 0;
   float * textureData = stbi_loadf("..\\..\\Resources\\Img\\nature.png", &textWidth, &textHeight, &textNbChan, 0);
@@ -417,8 +334,8 @@ int main(int, char**)
     exit(EXIT_FAILURE);
   }
 
-  glUniform1i(glGetUniformLocation(g_ShaderProgramID, "u_ScreenTexture"), 0);
-  glUniform1i(glGetUniformLocation(g_ShaderProgramID, "u_Texture"), 1);
+  glUniform1i(glGetUniformLocation(shaderProgramID, "u_ScreenTexture"), 0);
+  glUniform1i(glGetUniformLocation(shaderProgramID, "u_Texture"), 1);
 #endif
 
   glViewport(0, 0, g_ScreenWidth, g_ScreenHeight);
@@ -484,6 +401,9 @@ int main(int, char**)
           g_FragShaderNum = 0;
 #ifdef RTRT_DISPLAY_GUI
         RecompileShaders();
+        if ( !g_ShaderProgram )
+          break;
+        shaderProgramID = g_ShaderProgram -> GetShaderProgramID();
 #endif
       }
       ImGui::SameLine();
@@ -541,9 +461,12 @@ int main(int, char**)
   glDeleteBuffers(1, &vertexBufferID);
   glDeleteBuffers(1, &uvBufferID);
   glDeleteVertexArrays(1, &vertexArrayID);
-  glDeleteProgram(g_ShaderProgramID);
   glDeleteFramebuffers(1, &frameBufferID);
   glDeleteTextures(1, &g_ScreenTextureID);
+
+  if ( g_ShaderProgram )
+    delete g_ShaderProgram;
+  g_ShaderProgram = NULL;
 #endif
 
   glfwDestroyWindow(mainWindow);
