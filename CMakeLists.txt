@@ -21,6 +21,7 @@ target_include_directories(RTRT
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glfw/include
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/imgui
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/stb
+  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glm
   PUBLIC ${GLEW_INCLUDE_DIRS}
 )
 
@@ -31,6 +32,7 @@ target_link_directories(RTRT
 target_link_libraries(RTRT
   glfw
   imgui
+  
   ${GLEW_LIBRARIES}
   ${OPENGL_LIBRARIES}
 )

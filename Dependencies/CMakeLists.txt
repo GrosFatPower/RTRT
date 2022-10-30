@@ -1,4 +1,5 @@
 add_subdirectory(glfw)
+add_subdirectory(glm)
 
 if (RTRT_BUILD_IMGUI)
   set(imgui_dir imgui)
