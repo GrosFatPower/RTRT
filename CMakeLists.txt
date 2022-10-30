@@ -4,6 +4,10 @@ project(RTRT
   VERSION 1.0
 )
 
+SET_PROPERTY(GLOBAL PROPERTY USE_FOLDERS ON) 
+
+set(CMAKE_CONFIGURATION_TYPES "Debug;Release;RelWithDebInfo" CACHE STRING "Configuration types" FORCE)
+
 option(RTRT_IMGUI_IMGUI_SHARED "Use imgui as a shared library" OFF)
 option(RTRT_BUILD_IMGUI "Build imgui using sources provided in external/imgui" ON)
 set(RTRT_IMGUI_SOURCE_DIR ${CMAKE_SOURCE_DIR}/Dependencies/imgui CACHE STRING "Source dir of imgui")

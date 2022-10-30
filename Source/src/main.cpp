@@ -8,6 +8,7 @@
 
 #include "Shader.h"
 #include "ShaderProgram.h"
+#include "Camera.h"
 
 #include <vector>
 #include <string>
