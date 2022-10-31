@@ -30,4 +30,9 @@ void Camera::Update()
   _Up = glm::normalize(glm::cross(_Right, _Forward));
 }
 
+void Camera::SetFOV( float iFOV )
+{
+  _FOV = MathUtil::ToRadians(iFOV);
+}
+
 }

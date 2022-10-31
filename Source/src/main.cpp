@@ -9,6 +9,7 @@
 #include "Shader.h"
 #include "ShaderProgram.h"
 #include "Camera.h"
+#include "QuadMesh.h"
 
 #include <vector>
 #include <string>
@@ -179,7 +180,6 @@ int RecompileShaders()
     return 0;
 
   g_ShaderProgram -> Use();
-
   g_u_DirectOutPassID = glGetUniformLocation(shaderProgramID, "u_DirectOutputPass");
   g_u_ResolutionID    = glGetUniformLocation(shaderProgramID, "u_Resolution");
   g_u_MouseID         = glGetUniformLocation(shaderProgramID, "u_Mouse");
@@ -189,6 +189,7 @@ int RecompileShaders()
   g_u_FrameRateID     = glGetUniformLocation(shaderProgramID, "u_FrameRate");
   glUniform1i(glGetUniformLocation(shaderProgramID, "u_ScreenTexture"), 0);
   glUniform1i(glGetUniformLocation(shaderProgramID, "u_Texture"), 1);
+  g_ShaderProgram -> StopUsing();
 
   return 1;
 }
@@ -281,25 +282,7 @@ int main(int, char**)
   }
 
   // Quad
-  GLuint vertexArrayID;
-  glGenVertexArrays(1, &vertexArrayID);
-  glBindVertexArray(vertexArrayID);
-
-  GLuint vertexBufferID;
-  glGenBuffers(1, &vertexBufferID);
-  glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(g_QuadVtx), g_QuadVtx, GL_STATIC_DRAW);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-  glEnableVertexAttribArray(0);
-
-  GLuint uvBufferID;
-  glGenBuffers(1, &uvBufferID);
-  glBindBuffer(GL_ARRAY_BUFFER, uvBufferID);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(g_QuadUVs), g_QuadUVs, GL_STATIC_DRAW);
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
-  glEnableVertexAttribArray(1);
-
-  glBindVertexArray(vertexArrayID);
+  QuadMesh * quad = new QuadMesh();
 
   // Texture
   GLuint textureID;
@@ -335,8 +318,10 @@ int main(int, char**)
     exit(EXIT_FAILURE);
   }
 
+  g_ShaderProgram -> Use();
   glUniform1i(glGetUniformLocation(shaderProgramID, "u_ScreenTexture"), 0);
   glUniform1i(glGetUniformLocation(shaderProgramID, "u_Texture"), 1);
+  g_ShaderProgram -> StopUsing();
 #endif
 
   glViewport(0, 0, g_ScreenWidth, g_ScreenHeight);
@@ -430,6 +415,8 @@ int main(int, char**)
 #ifdef RTRT_RENDER_TO_TEXTURE
     // Render to frame buffer
    glBindFramebuffer(GL_FRAMEBUFFER, frameBufferID);
+
+   g_ShaderProgram -> Use();
    glUniform1i(g_u_DirectOutPassID, 0);
    glUniform3f(g_u_ResolutionID, g_ScreenWidth, g_ScreenHeight, 0.f);
    glUniform4f(g_u_MouseID, g_MouseX, g_MouseY, (float) g_LeftClick, (float) g_RightClick);
@@ -437,11 +424,16 @@ int main(int, char**)
    glUniform1f(g_u_TimeDeltaID, (float)timeDelta);
    glUniform1i(g_u_FrameID, (int)g_Frame);
    glUniform1f(g_u_FrameRateID, g_FrameRate);
-   glDrawArrays(GL_TRIANGLES, 0, 6);
+   g_ShaderProgram -> StopUsing();
+
+   quad -> Render(*g_ShaderProgram);
 
    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+   g_ShaderProgram -> Use();
    glUniform1i(g_u_DirectOutPassID, 1);
-   glDrawArrays(GL_TRIANGLES, 0, 6);
+   g_ShaderProgram -> StopUsing();
+
+   quad -> Render(*g_ShaderProgram);
 #endif
 
 #ifdef RTRT_DISPLAY_GUI
@@ -459,12 +451,12 @@ int main(int, char**)
 #endif
 
 #ifdef RTRT_RENDER_TO_TEXTURE
-  glDeleteBuffers(1, &vertexBufferID);
-  glDeleteBuffers(1, &uvBufferID);
-  glDeleteVertexArrays(1, &vertexArrayID);
   glDeleteFramebuffers(1, &frameBufferID);
   glDeleteTextures(1, &g_ScreenTextureID);
 
+  if ( quad )
+    delete quad;
+  quad = NULL;
   if ( g_ShaderProgram )
     delete g_ShaderProgram;
   g_ShaderProgram = NULL;

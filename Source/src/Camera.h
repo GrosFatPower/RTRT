@@ -16,9 +16,8 @@ public:
   Vec3 GetRight()   const { return _Right; }
   Vec3 GetForward() const { return _Forward; }
 
-public:
-
-  float _FOV;
+  void SetFOV( float iFOV );
+  float GetFOV() const { return _FOV; }
 
 private:
 
@@ -31,6 +30,7 @@ private:
   Vec3 _WorldUp;
   Vec3 _Pivot;
 
+  float _FOV;
   float _Pitch;
   float _Yaw;
   float _Radius;
