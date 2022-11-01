@@ -23,27 +23,23 @@
 namespace RTRT
 {
 
-#define RTRT_DISPLAY_GUI
-#define RTRT_RENDER_TO_TEXTURE
-
 // ----------------------------------------------------------------------------
 // Global variables
 // ----------------------------------------------------------------------------
-int g_ScreenWidth  = 1920;
-int g_ScreenHeight = 1080;
+int    g_ScreenWidth  = 1920;
+int    g_ScreenHeight = 1080;
 
-double g_MouseX     = 0.;
-double g_MouseY     = 0.;
-bool   g_LeftClick  = false;
-bool   g_RightClick = false;
+double g_MouseX       = 0.;
+double g_MouseY       = 0.;
+bool   g_LeftClick    = false;
+bool   g_RightClick   = false;
 
-long  g_Frame     = 0;
-float g_FrameRate = 60.;
+long  g_Frame         = 0;
+float g_FrameRate     = 60.;
 
 short g_VtxShaderNum  = 0;
 short g_FragShaderNum = 0;
 
-#ifdef RTRT_RENDER_TO_TEXTURE
 ShaderProgram * g_RTTShader = NULL;
 ShaderProgram * g_OutputShader = NULL;
 GLuint g_ScreenTextureID   = 0;
@@ -73,7 +69,6 @@ const GLfloat g_QuadUVs[] =
   0.0f, 1.0f,
   0.0f, 0.0f,
 };
-#endif
 
 // ----------------------------------------------------------------------------
 // Global functions
@@ -83,7 +78,6 @@ static void glfw_error_callback(int error, const char* description)
   fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
-#ifdef RTRT_DISPLAY_GUI
 void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
   if (action == GLFW_PRESS)
@@ -126,9 +120,7 @@ void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
   glBindTexture(GL_TEXTURE_2D, g_ScreenTextureID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, g_ScreenWidth, g_ScreenHeight, 0, GL_RGBA, GL_FLOAT, NULL);
 }
-#endif
 
-#ifdef RTRT_RENDER_TO_TEXTURE
 int RecompileShaders()
 {
   if ( g_RTTShader )
@@ -215,7 +207,6 @@ int RecompileShaders()
 
   return 1;
 }
-#endif
 
 Test1::Test1( int iScreenWidth, int iScreenHeight )
 {
@@ -261,7 +252,6 @@ int Test1::Run()
   glfwMakeContextCurrent(mainWindow);
   glfwSwapInterval(1); // Enable vsync
 
-#ifdef RTRT_DISPLAY_GUI
   // Setup Dear ImGui context
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
@@ -279,11 +269,9 @@ int Test1::Run()
   // Setup Platform/Renderer backends
   ImGui_ImplGlfw_InitForOpenGL(mainWindow, true);
   ImGui_ImplOpenGL3_Init(glsl_version);
-#endif
 
   // Init openGL scene
 
-#ifdef RTRT_RENDER_TO_TEXTURE
   glewExperimental = GL_TRUE;
   if ( glewInit() != GLEW_OK )
   {
@@ -353,7 +341,6 @@ int Test1::Run()
   glUniform1i(glGetUniformLocation(shaderProgramID, "u_ScreenTexture"), 0);
   glUniform1i(glGetUniformLocation(shaderProgramID, "u_Texture"), 1);
   g_RTTShader -> StopUsing();
-#endif
 
   glViewport(0, 0, g_ScreenWidth, g_ScreenHeight);
   glDisable(GL_DEPTH_TEST);
@@ -402,7 +389,6 @@ int Test1::Run()
     // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
     glfwPollEvents();
 
-#ifdef RTRT_DISPLAY_GUI
     // Start the Dear ImGui frame
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -416,12 +402,10 @@ int Test1::Run()
         g_FragShaderNum++;
         if ( g_FragShaderNum > 7 )
           g_FragShaderNum = 0;
-#ifdef RTRT_DISPLAY_GUI
         RecompileShaders();
         if ( !g_RTTShader )
           break;
         shaderProgramID = g_RTTShader -> GetShaderProgramID();
-#endif
       }
       ImGui::SameLine();
       ImGui::Text("Shader num = %d", g_FragShaderNum);
@@ -431,19 +415,15 @@ int Test1::Run()
 
       ImGui::End();
     }
-#endif
 
     // Rendering
-#ifdef RTRT_DISPLAY_GUI
     ImGui::Render();
-#endif
 
     glfwGetFramebufferSize(mainWindow, &g_ScreenWidth, &g_ScreenHeight);
     glViewport(0, 0, g_ScreenWidth, g_ScreenHeight);
     glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
 
-#ifdef RTRT_RENDER_TO_TEXTURE
     // Render to frame buffer
    glBindFramebuffer(GL_FRAMEBUFFER, frameBufferID);
    g_RTTShader -> Use();
@@ -459,23 +439,17 @@ int Test1::Run()
 
    glBindFramebuffer(GL_FRAMEBUFFER, 0);
    quad -> Render(*g_OutputShader);
-#endif
 
-#ifdef RTRT_DISPLAY_GUI
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-#endif
 
     glfwSwapBuffers(mainWindow);
   }
 
   // Cleanup
-#ifdef RTRT_DISPLAY_GUI
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplGlfw_Shutdown();
   ImGui::DestroyContext();
-#endif
 
-#ifdef RTRT_RENDER_TO_TEXTURE
   glDeleteFramebuffers(1, &frameBufferID);
   glDeleteTextures(1, &g_ScreenTextureID);
 
@@ -488,7 +462,6 @@ int Test1::Run()
   if ( g_OutputShader )
     delete g_OutputShader;
   g_OutputShader = NULL;
-#endif
 
   glfwDestroyWindow(mainWindow);
   glfwTerminate();
