@@ -6,7 +6,6 @@ out vec4 fragColor;
 uniform sampler2D u_ScreenTexture;
 uniform sampler2D u_Texture;
 uniform vec3      u_Resolution;
-uniform bool      u_DirectOutputPass;
 uniform float     u_Time;
 uniform float     u_TimeDelta;
 
@@ -52,19 +51,7 @@ void RenderToTexture()
   fragColor = vec4(col,1.0);
 }
 
-void RenderImage()
-{
-  fragColor = texture(u_ScreenTexture, fragUV);
-}
-
 void main()
 {
-  if ( u_DirectOutputPass )
-  {
-    RenderImage();
-  }
-  else
-  {
-    RenderToTexture();
-  }
+  RenderToTexture();
 }
