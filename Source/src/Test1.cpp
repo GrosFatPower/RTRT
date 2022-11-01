@@ -485,6 +485,9 @@ int Test1::Run()
   if ( g_RTTShader )
     delete g_RTTShader;
   g_RTTShader = NULL;
+  if ( g_OutputShader )
+    delete g_OutputShader;
+  g_OutputShader = NULL;
 #endif
 
   glfwDestroyWindow(mainWindow);
