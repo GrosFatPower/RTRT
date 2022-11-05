@@ -12,6 +12,7 @@
 #include "QuadMesh.h"
 #include "Texture.h"
 #include "Shape.h"
+#include "Scene.h"
 
 #include <vector>
 #include <string>
