@@ -5,13 +5,12 @@
 #include "backends/imgui_impl_opengl3.h"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
 
 #include "Shader.h"
 #include "ShaderProgram.h"
 #include "Camera.h"
 #include "QuadMesh.h"
+#include "Texture.h"
 
 #include <vector>
 #include <string>
@@ -289,14 +288,10 @@ int Test1::Run()
 
   GLuint shaderProgramID = g_RTTShader -> GetShaderProgramID();
 
-  int textWidth = 0, textHeight = 0, textNbChan = 0;
-  float * textureData = stbi_loadf("..\\..\\Resources\\Img\\nature.png", &textWidth, &textHeight, &textNbChan, 0);
-  if ( !textureData || ( ( textNbChan != 3 ) && ( textNbChan != 4 ) ) )
+  Texture backgroundTex;
+  if ( !backgroundTex.Load("..\\..\\Resources\\Img\\nature.png", 4) )
   {
-    std::cout << "unable to load image!" << std::endl;
     glfwTerminate();
-    if ( textureData )
-      stbi_image_free(textureData);
     return 1;
   }
 
@@ -308,14 +303,9 @@ int Test1::Run()
   glGenTextures(1, &textureID);
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, textureID);
-  if ( 4 == textNbChan )
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, textWidth, textHeight, 0, GL_RGBA, GL_FLOAT, textureData);
-  else
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, textWidth, textHeight, 0, GL_RGB, GL_FLOAT, textureData);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, backgroundTex.GetWidth(), backgroundTex.GetHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, backgroundTex.GetData());
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-  stbi_image_free(textureData);
 
   // Screen texture
   glGenTextures(1, &g_ScreenTextureID);

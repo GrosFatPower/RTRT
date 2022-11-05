@@ -15,6 +15,9 @@
 typedef glm::vec2   Vec2;
 typedef glm::vec3   Vec3;
 typedef glm::vec4   Vec4;
+typedef glm::uvec2  Vec2i;
+typedef glm::uvec3  Vec3i;
+typedef glm::uvec4  Vec4i;
 typedef glm::mat4x4 Mat4x4;
 
 struct MathUtil
