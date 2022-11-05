@@ -13,6 +13,7 @@
 #include "Texture.h"
 #include "Shape.h"
 #include "Scene.h"
+#include "Loader.h"
 
 #include <vector>
 #include <string>
@@ -341,12 +342,14 @@ int Test1::Run()
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   // Load shape
-  Shape shapeObj;
-  if ( !shapeObj.LoadFromFile("..\\..\\Assets\\cornell_box\\cbox_largebox.obj") )
+  Shape * shapeObj = nullptr;
+  if ( Loader::LoadShape("..\\..\\Assets\\cornell_box\\cbox_largebox.obj", shapeObj) )
   {
     glfwTerminate();
     return 1;
   }
+  delete shapeObj;
+  shapeObj = nullptr;
 
   // Main loop
   double averageDelta = 0.;

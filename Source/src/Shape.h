@@ -14,8 +14,6 @@ public:
   Shape() {}
   virtual ~Shape();
 
-  bool LoadFromFile( const std::string & iFilename );
-
 private:
 
   std::vector<Vec3>  _Vertices;
@@ -26,6 +24,8 @@ private:
   std::vector<Vec3i> _Indices;
 
   std::string _Filename = "";
+
+  friend class Loader;
 };
 
 }
