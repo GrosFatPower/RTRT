@@ -18,7 +18,6 @@ public:
 
 private:
 
-  int                _NbVertices = 0;
   std::vector<Vec3>  _Vertices;
   std::vector<Vec3>  _Normals;
   std::vector<Vec2>  _UVs;
@@ -27,7 +26,6 @@ private:
   std::vector<Vec3i> _Indices;
 
   std::string _Filename = "";
-
 };
 
 }

@@ -11,6 +11,7 @@
 #include "Camera.h"
 #include "QuadMesh.h"
 #include "Texture.h"
+#include "Shape.h"
 
 #include <vector>
 #include <string>
@@ -335,9 +336,16 @@ int Test1::Run()
   glViewport(0, 0, g_ScreenWidth, g_ScreenHeight);
   glDisable(GL_DEPTH_TEST);
 
-
   // Our state
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+  // Load shape
+  Shape shapeObj;
+  if ( !shapeObj.LoadFromFile("..\\..\\Assets\\cornell_box\\cbox_largebox.obj") )
+  {
+    glfwTerminate();
+    return 1;
+  }
 
   // Main loop
   double averageDelta = 0.;

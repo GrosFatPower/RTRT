@@ -26,6 +26,7 @@ target_include_directories(RTRT
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/imgui
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/stb
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glm
+  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinyobjloader
   PUBLIC ${GLEW_INCLUDE_DIRS}
 )
 
