@@ -9,7 +9,10 @@ namespace RTRT
 class Camera
 {
 public:
+  Camera();
   Camera(Vec3 iPos, Vec3 iLookAt, float iFOV);
+
+  void Initialize(Vec3 iPos, Vec3 iLookAt, float iFOV);
 
   Vec3 GetPos()     const { return _Pos; }
   Vec3 GetUp()      const { return _Up; }
@@ -34,6 +37,11 @@ private:
   float _Pitch;
   float _Yaw;
   float _Radius;
+
+  float _FocalDist = .1f;
+  float _Aperture  = 0.f;
+
+  friend class Loader;
 };
 
 }

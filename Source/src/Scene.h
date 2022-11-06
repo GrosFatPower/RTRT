@@ -28,6 +28,8 @@ private:
 
   std::vector<Shape*>       _Shapes;
   std::vector<Texture*>     _Textures;
+
+  friend class Loader;
 };
 
 }

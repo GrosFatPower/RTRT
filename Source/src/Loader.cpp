@@ -6,17 +6,46 @@
 #include "Loader.h"
 #include "Scene.h"
 #include "MeshData.h"
+#include "Light.h"
+#include "Camera.h"
+#include "Math.h"
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 #include <map>
 #include <vector>
 #include <iostream>
+#include <algorithm>
 #include <filesystem> // C++17
 
 namespace fs = std::filesystem;
 
 namespace RTRT
 {
+
+enum class State
+{
+  ExpectNewBlock,
+  ExpectOpenBracket,
+  ExpectClosingBracket,
+};
+
+void Tokenize( std::string iStr, std::vector<std::string> & oTokens )
+{
+  oTokens.clear();
+
+  //iStr.erase(std::remove(iStr.begin(), iStr.end(), '\t'), iStr.end());
+  std::replace(iStr.begin(), iStr.end(), '\t', ' ');
+
+  std::istringstream iss(iStr);
+  {
+    std::string token;
+    while ( std::getline(iss, token, ' ') )
+    {
+      if ( token.size() )
+        oTokens.push_back(token);
+    }
+  }
+}
 
 bool Loader::LoadScene(const std::string & iFilename, Scene * oScene)
 {
@@ -34,32 +63,161 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene * oScene)
 {
   oScene = nullptr;
 
-  FILE* file;
-  file = fopen(iFilename.c_str(), "r");
+  fs::path filepath = iFilename;
+  filepath.remove_filename();
 
-  if (!file)
+  std::ifstream file(iFilename);
+
+  if ( !file.is_open() )
   {
     printf("Loader : Couldn't open %s for reading\n", iFilename.c_str());
     return false;
   }
 
-  printf("Loading Scene...");
-
-  fs::path filepath = iFilename;
-  filepath.remove_filename();
+  printf("Loading Scene...\n");
 
   oScene = new Scene;
-  
-  fclose(file);
 
-  printf("DONE\n");
+  int parsingError = 0;
+  State curState = State::ExpectNewBlock;
+
+  std::string line;
+  while( std::getline( file, line ) && !parsingError )
+  {
+    std::vector<std::string> tokens;
+    Tokenize(line, tokens);
+    int nbTokens = tokens.size();
+    if ( !nbTokens || ( '#' == tokens[0][0] ) )
+      continue;
+    if ( State::ExpectNewBlock != curState )
+    {
+      parsingError++;
+      continue;
+    }
+    if ( ( '}' == tokens[0][0] ) || ( '}' == tokens[0][0] ) )
+    {
+      parsingError++;
+      continue;
+    }
+
+    //--------------------------------------------
+    // Material - START
+    if ( ( 2 == nbTokens ) && ( "material" == tokens[0] ) )
+    {
+      std::cout << "New material : " << tokens[1] << std::endl;
+
+      std::string materialName = tokens[1];
+
+      Material newMaterial;
+      parsingError += Loader::ParseMaterial(file, newMaterial);
+
+      if ( !parsingError )
+        curState = State::ExpectNewBlock;
+    }
+    // Material - END
+    //--------------------------------------------
+
+
+    //--------------------------------------------
+    // Mesh - START
+    if ( "mesh" == tokens[0] )
+    {
+      std::cout << "New mesh" << std::endl;
+
+      MeshData newMesh;
+      parsingError += Loader::ParseMeshData(file, newMesh);
+
+      if ( !parsingError )
+        curState = State::ExpectNewBlock;
+    }
+    // Mesh - END
+    //--------------------------------------------
+
+
+    //--------------------------------------------
+    // Light - START
+    if ( "light" == tokens[0] )
+    {
+      std::cout << "New light" << std::endl;
+
+      Light newLight;
+      parsingError += Loader::ParseLight(file, newLight);
+
+      if ( !parsingError )
+        curState = State::ExpectNewBlock;
+    }
+    // Light - END
+    //--------------------------------------------
+
+
+    //--------------------------------------------
+    // Camera - START
+    if ( "camera" == tokens[0] )
+    {
+      std::cout << "New camera" << std::endl;
+
+      Camera newCamera;
+      parsingError += Loader::ParseCamera(file, newCamera);
+
+      if ( !parsingError )
+      {
+        oScene -> _Camera = newCamera;
+
+        curState = State::ExpectNewBlock;
+      }
+    }
+    // Camera - END
+    //--------------------------------------------
+
+
+    //--------------------------------------------
+    // Renderer - START
+    if ( "renderer" == tokens[0] )
+    {
+      std::cout << "New renderer" << std::endl;
+
+      /*RenderOtions renderer*/
+      parsingError += Loader::ParseRenderer(file/*, renderer*/);
+
+      if ( !parsingError )
+        curState = State::ExpectNewBlock;
+    }
+    // Renderer - END
+    //--------------------------------------------
+
+
+    //--------------------------------------------
+    // GLTF - START
+    if ( "gltf" == tokens[0] )
+    {
+      std::cout << "New gltf model" << std::endl;
+
+      parsingError += Loader::ParseGLTF(file, *oScene);
+
+      if ( !parsingError )
+        curState = State::ExpectNewBlock;
+    }
+    // GLTF - END
+    //--------------------------------------------
+   
+
+  }
+
+  if ( parsingError )
+  {
+    printf("ERROR\n");
+    delete oScene;
+    oScene = nullptr;
+  }
+  else
+    printf("DONE\n");
 
   if ( oScene )
     return true;
   return false;
 }
 
-bool Loader::LoadMesh( const std::string & iFilename, MeshData * oMeshData )
+bool Loader::LoadMeshData( const std::string & iFilename, MeshData * oMeshData )
 {
   oMeshData = nullptr;
 
@@ -144,6 +302,334 @@ bool Loader::LoadMesh( const std::string & iFilename, MeshData * oMeshData )
   oMeshData -> _NbFaces = (int) oMeshData -> _Indices.size();
 
   return true;
+}
+
+int Loader::ParseMaterial( std::ifstream & iStr, Material & oMaterial )
+{
+  int parsingError = 0;
+
+  State curState = State::ExpectOpenBracket;
+  std::string line;
+  while( std::getline( iStr, line ) && !parsingError )
+  {
+    std::vector<std::string> tokens;
+    Tokenize(line, tokens);
+    int nbTokens = tokens.size();
+    if ( !nbTokens || ( '#' == tokens[0][0] ) )
+      continue;
+
+    if ( State::ExpectOpenBracket == curState )
+    {
+      if ( '{' == tokens[0][0] )
+        curState = State::ExpectClosingBracket;
+      else if ( '}' == tokens[0][0] )
+        parsingError++;
+      continue;
+    }
+
+    if ( State::ExpectClosingBracket == curState )
+    {
+      if ( '}' == tokens[0][0] )
+      {
+        curState = State::ExpectNewBlock;
+        break;
+      }
+      else if ( '{' == tokens[0][0] )
+      {
+        parsingError++;
+        continue;
+      }
+    }
+  }
+  if ( State::ExpectNewBlock != curState )
+    parsingError++;
+
+  return parsingError;
+}
+
+int Loader::ParseLight( std::ifstream & iStr, Light & oLight )
+{
+  int parsingError = 0;
+
+  State curState = State::ExpectOpenBracket;
+  std::string line;
+  while( std::getline( iStr, line ) && !parsingError )
+  {
+    std::vector<std::string> tokens;
+    Tokenize(line, tokens);
+    int nbTokens = tokens.size();
+    if ( !nbTokens || ( '#' == tokens[0][0] ) )
+      continue;
+
+    if ( State::ExpectOpenBracket == curState )
+    {
+      if ( '{' == tokens[0][0] )
+        curState = State::ExpectClosingBracket;
+      else if ( '}' == tokens[0][0] )
+        parsingError++;
+      continue;
+    }
+
+    if ( State::ExpectClosingBracket == curState )
+    {
+      if ( '}' == tokens[0][0] )
+      {
+        curState = State::ExpectNewBlock;
+        break;
+      }
+      else if ( '{' == tokens[0][0] )
+      {
+        parsingError++;
+        continue;
+      }
+    }
+  }
+  if ( State::ExpectNewBlock != curState )
+    parsingError++;
+
+  return parsingError;
+}
+
+int Loader::ParseCamera( std::ifstream & iStr, Camera & oCamera )
+{
+  int parsingError = 0;
+
+  Mat4x4 xform;
+
+  State curState = State::ExpectOpenBracket;
+  std::string line;
+  while( std::getline( iStr, line ) && !parsingError )
+  {
+    std::vector<std::string> tokens;
+    Tokenize(line, tokens);
+    int nbTokens = tokens.size();
+    if ( !nbTokens || ( '#' == tokens[0][0] ) )
+      continue;
+
+    if ( State::ExpectOpenBracket == curState )
+    {
+      if ( '{' == tokens[0][0] )
+        curState = State::ExpectClosingBracket;
+      else if ( '}' == tokens[0][0] )
+        parsingError++;
+      continue;
+    }
+
+    if ( State::ExpectClosingBracket == curState )
+    {
+      if ( '}' == tokens[0][0] )
+      {
+        curState = State::ExpectNewBlock;
+        break;
+      }
+      else if ( '{' == tokens[0][0] )
+      {
+        parsingError++;
+        continue;
+      }
+    }
+
+    if ( "position" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+        oCamera._Pos = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
+      else
+        parsingError++;
+    }
+    else if ( "lookat" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+        oCamera._Pivot = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
+      else
+        parsingError++;
+    }
+    else if ( "aperture" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oCamera._Aperture = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "focaldist" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oCamera._FocalDist = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "fov" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oCamera._FOV = (MathUtil::ToRadians(std::stof(tokens[1])));
+      else
+        parsingError++;
+    }
+    else if ( "matrix" == tokens[0] )
+    {
+      if ( 17 == nbTokens )
+      {
+        xform[0][0] = std::stof(tokens[1]);
+        xform[1][0] = std::stof(tokens[2]);
+        xform[2][0] = std::stof(tokens[3]);
+        xform[3][0] = std::stof(tokens[4]);
+        xform[0][1] = std::stof(tokens[5]);
+        xform[1][1] = std::stof(tokens[6]);
+        xform[2][1] = std::stof(tokens[7]);
+        xform[3][1] = std::stof(tokens[8]);
+        xform[0][2] = std::stof(tokens[9]);
+        xform[1][2] = std::stof(tokens[10]);
+        xform[2][2] = std::stof(tokens[11]);
+        xform[3][2] = std::stof(tokens[12]);
+        xform[0][3] = std::stof(tokens[13]);
+        xform[1][3] = std::stof(tokens[14]);
+        xform[2][3] = std::stof(tokens[15]);
+        xform[3][3] = std::stof(tokens[16]);
+
+        Vec3 forward = Vec3(xform[2][0], xform[2][1], xform[2][2]);
+        oCamera._Pos = Vec3(xform[3][0], xform[3][1], xform[3][2]);
+        oCamera._Pivot = oCamera._Pos + forward;
+      }
+      else
+        parsingError++;
+    }
+
+  }
+  if ( State::ExpectNewBlock != curState )
+    parsingError++;
+
+  if ( !parsingError )
+    oCamera.Update();
+
+  return parsingError;
+}
+
+int Loader::ParseRenderer( std::ifstream & iStr/*, RenderOtions & oRenderer*/ )
+{
+  int parsingError = 0;
+
+  State curState = State::ExpectOpenBracket;
+  std::string line;
+  while( std::getline( iStr, line ) && !parsingError )
+  {
+    std::vector<std::string> tokens;
+    Tokenize(line, tokens);
+    int nbTokens = tokens.size();
+    if ( !nbTokens || ( '#' == tokens[0][0] ) )
+      continue;
+
+    if ( State::ExpectOpenBracket == curState )
+    {
+      if ( '{' == tokens[0][0] )
+        curState = State::ExpectClosingBracket;
+      else if ( '}' == tokens[0][0] )
+        parsingError++;
+      continue;
+    }
+
+    if ( State::ExpectClosingBracket == curState )
+    {
+      if ( '}' == tokens[0][0] )
+      {
+        curState = State::ExpectNewBlock;
+        break;
+      }
+      else if ( '{' == tokens[0][0] )
+      {
+        parsingError++;
+        continue;
+      }
+    }
+  }
+  if ( State::ExpectNewBlock != curState )
+    parsingError++;
+
+  return parsingError;
+}
+
+int Loader::ParseMeshData( std::ifstream & iStr, MeshData & oMeshData )
+{
+  int parsingError = 0;
+
+  State curState = State::ExpectOpenBracket;
+  std::string line;
+  while( std::getline( iStr, line ) && !parsingError )
+  {
+    std::vector<std::string> tokens;
+    Tokenize(line, tokens);
+    int nbTokens = tokens.size();
+    if ( !nbTokens || ( '#' == tokens[0][0] ) )
+      continue;
+
+    if ( State::ExpectOpenBracket == curState )
+    {
+      if ( '{' == tokens[0][0] )
+        curState = State::ExpectClosingBracket;
+      else if ( '}' == tokens[0][0] )
+        parsingError++;
+      continue;
+    }
+
+    if ( State::ExpectClosingBracket == curState )
+    {
+      if ( '}' == tokens[0][0] )
+      {
+        curState = State::ExpectNewBlock;
+        break;
+      }
+      else if ( '{' == tokens[0][0] )
+      {
+        parsingError++;
+        continue;
+      }
+    }
+  }
+  if ( State::ExpectNewBlock != curState )
+    parsingError++;
+
+  return parsingError;
+}
+
+int Loader::ParseGLTF( std::ifstream & iStr, Scene & ioScene )
+{
+  int parsingError = 0;
+
+  State curState = State::ExpectOpenBracket;
+  std::string line;
+  while( std::getline( iStr, line ) && !parsingError )
+  {
+    std::vector<std::string> tokens;
+    Tokenize(line, tokens);
+    int nbTokens = tokens.size();
+    if ( !nbTokens || ( '#' == tokens[0][0] ) )
+      continue;
+
+    if ( State::ExpectOpenBracket == curState )
+    {
+      if ( '{' == tokens[0][0] )
+        curState = State::ExpectClosingBracket;
+      else if ( '}' == tokens[0][0] )
+        parsingError++;
+      continue;
+    }
+
+    if ( State::ExpectClosingBracket == curState )
+    {
+      if ( '}' == tokens[0][0] )
+      {
+        curState = State::ExpectNewBlock;
+        break;
+      }
+      else if ( '{' == tokens[0][0] )
+      {
+        parsingError++;
+        continue;
+      }
+    }
+  }
+  if ( State::ExpectNewBlock != curState )
+    parsingError++;
+
+  return parsingError;
 }
 
 }

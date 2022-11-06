@@ -343,7 +343,7 @@ int Test1::Run()
 
   // Load shape
   MeshData * meshObj = nullptr;
-  if ( !Loader::LoadMesh("..\\..\\Assets\\cornell_box\\cbox_largebox.obj", meshObj) )
+  if ( !Loader::LoadMeshData("..\\..\\Assets\\cornell_box\\cbox_largebox.obj", meshObj) )
   {
     glfwTerminate();
     return 1;
