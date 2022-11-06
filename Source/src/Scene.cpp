@@ -1,5 +1,5 @@
 #include "Scene.h"
-#include "Shape.h"
+#include "MeshData.h"
 #include "Texture.h"
 
 namespace RTRT

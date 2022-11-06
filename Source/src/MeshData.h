@@ -1,5 +1,5 @@
-#ifndef _Shape_
-#define _Shape_
+#ifndef _MeshData_
+#define _MeshData_
 
 #include "Math.h"
 #include <vector>
@@ -8,11 +8,11 @@
 namespace RTRT
 {
 
-class Shape
+class MeshData
 {
 public:
-  Shape() {}
-  virtual ~Shape();
+  MeshData() {}
+  virtual ~MeshData();
 
 private:
 
@@ -30,4 +30,4 @@ private:
 
 }
 
-#endif /* _Shape_ */
+#endif /* _MeshData_ */

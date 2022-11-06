@@ -11,7 +11,7 @@
 #include "Camera.h"
 #include "QuadMesh.h"
 #include "Texture.h"
-#include "Shape.h"
+#include "MeshData.h"
 #include "Scene.h"
 #include "Loader.h"
 
@@ -342,14 +342,23 @@ int Test1::Run()
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   // Load shape
-  Shape * shapeObj = nullptr;
-  if ( Loader::LoadShape("..\\..\\Assets\\cornell_box\\cbox_largebox.obj", shapeObj) )
+  MeshData * meshObj = nullptr;
+  if ( !Loader::LoadMesh("..\\..\\Assets\\cornell_box\\cbox_largebox.obj", meshObj) )
   {
     glfwTerminate();
     return 1;
   }
-  delete shapeObj;
-  shapeObj = nullptr;
+  delete meshObj;
+  meshObj = nullptr;
+
+  Scene * scene = nullptr;
+  if ( !Loader::LoadScene("..\\..\\Assets\\cornell_box_orig.scene", scene) )
+  {
+    glfwTerminate();
+    return 1;
+  }
+  delete scene;
+  scene = nullptr;
 
   // Main loop
   double averageDelta = 0.;

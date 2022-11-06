@@ -7,7 +7,7 @@ namespace RTRT
 {
 
 class Scene;
-class Shape;
+class MeshData;
 
 class Loader
 {
@@ -15,9 +15,11 @@ public:
 
   static bool LoadScene(const std::string & iFilename, Scene * oScene);
 
-  static bool LoadShape( const std::string & iFilename, Shape * oShape );
+  static bool LoadMesh( const std::string & iFilename, MeshData * oMeshData );
 
 private:
+
+  static bool LoadFromSceneFile(const std::string & iFilename, Scene * oScene);
 
   Loader();
   Loader( const Loader &);
