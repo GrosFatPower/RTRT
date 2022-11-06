@@ -25,7 +25,7 @@ private:
 
   static bool LoadFromSceneFile(const std::string & iFilename, Scene * oScene);
 
-  static int ParseMaterial( std::ifstream & iStr, Material & oMaterial );
+  static int ParseMaterial( std::ifstream & iStr, Material & oMaterial, Scene & ioScene );
   static int ParseLight( std::ifstream & iStr, Light & oLight );
   static int ParseCamera( std::ifstream & iStr, Camera & oCamera );
   static int ParseMeshData( std::ifstream & iStr, MeshData & oMeshData );

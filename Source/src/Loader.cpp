@@ -109,7 +109,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene * oScene)
       std::string materialName = tokens[1];
 
       Material newMaterial;
-      parsingError += Loader::ParseMaterial(file, newMaterial);
+      parsingError += Loader::ParseMaterial(file, newMaterial, *oScene);
 
       if ( !parsingError )
         curState = State::ExpectNewBlock;
@@ -144,7 +144,11 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene * oScene)
       parsingError += Loader::ParseLight(file, newLight);
 
       if ( !parsingError )
+      {
+        oScene -> _Lights.push_back(newLight);
+
         curState = State::ExpectNewBlock;
+      }
     }
     // Light - END
     //--------------------------------------------
@@ -304,9 +308,16 @@ bool Loader::LoadMeshData( const std::string & iFilename, MeshData * oMeshData )
   return true;
 }
 
-int Loader::ParseMaterial( std::ifstream & iStr, Material & oMaterial )
+int Loader::ParseMaterial( std::ifstream & iStr, Material & oMaterial, Scene & ioScene )
 {
   int parsingError = 0;
+
+  std::string albedoTexName;
+  std::string metallicRoughnessTTexName;
+  std::string normalTexName;
+  std::string emissionTexName;
+  std::string alphaMode;
+  std::string mediumType;
 
   State curState = State::ExpectOpenBracket;
   std::string line;
@@ -340,9 +351,197 @@ int Loader::ParseMaterial( std::ifstream & iStr, Material & oMaterial )
         continue;
       }
     }
+
+    if ( "color" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+        oMaterial._BaseColor = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
+      else
+        parsingError++;
+    }
+    else if ( "emission" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+        oMaterial._Emission = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
+      else
+        parsingError++;
+    }
+    else if ( "mediumcolor" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+        oMaterial._MediumColor = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
+      else
+        parsingError++;
+    }
+    else if ( "opacity" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oMaterial._Opacity = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "alphaCutoff" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oMaterial._AlphaCutoff = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "metallic" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oMaterial._Metallic = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "roughness" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oMaterial._Roughness = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "subsurface" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oMaterial._Subsurface = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "speculartint" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oMaterial._SpecularTint = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "anisotropic" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oMaterial._Anisotropic = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "sheen" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oMaterial._Sheen = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "sheenTint" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oMaterial._SheenTint = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "clearcoat" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oMaterial._Clearcoat = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "clearcoatgloss" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oMaterial._ClearcoatGloss = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "spectrans" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oMaterial._SpecTrans = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "ior" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oMaterial._IOR = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "mediumdensity" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oMaterial._MediumDensity = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "mediumanisotropy" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oMaterial._MediumAnisotropy = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "albedotexture" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        albedoTexName = tokens[1];
+      else
+        parsingError++;
+    }
+    else if ( "metallicroughnesstexture" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        metallicRoughnessTTexName = tokens[1];
+      else
+        parsingError++;
+    }
+    else if ( "normaltexture" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        normalTexName = tokens[1];
+      else
+        parsingError++;
+    }
+    else if ( "emissiontexture" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        emissionTexName = tokens[1];
+      else
+        parsingError++;
+    }
+    else if ( "alphamode" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        alphaMode = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "mediumtype" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        mediumType = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
   }
   if ( State::ExpectNewBlock != curState )
     parsingError++;
+
+  if ( !parsingError )
+  {
+    if ( "opaque" == alphaMode )
+      oMaterial._AlphaMode = (float)AlphaMode::Opaque;
+    else if ( "blend" == alphaMode )
+      oMaterial._AlphaMode = (float)AlphaMode::Blend;
+    else if ( "mask" == alphaMode )
+      oMaterial._AlphaMode = (float)AlphaMode::Mask;
+
+    if ( "absorb" == mediumType )
+      oMaterial._MediumType = (float)MediumType::Absorb;
+    else if ( "scatter" == mediumType )
+      oMaterial._MediumType = (float)MediumType::Scatter;
+    else if ( "emissive" == mediumType )
+      oMaterial._MediumType = (float)MediumType::Emissive;
+
+    // ToDo Add textures du scene and retrieve IDs
+  }
 
   return parsingError;
 }
@@ -383,9 +582,77 @@ int Loader::ParseLight( std::ifstream & iStr, Light & oLight )
         continue;
       }
     }
+
+    if ( "position" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+        oLight._Pos = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
+      else
+        parsingError++;
+    }
+    else if ( "emission" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+        oLight._Emission = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
+      else
+        parsingError++;
+    }
+    else if ( "v1" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+        oLight._DirU = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
+      else
+        parsingError++;
+    }
+    else if ( "v2" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+        oLight._DirV = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
+      else
+        parsingError++;
+    }
+    else if ( "radius" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oLight._Radius = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "type" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+      {
+        if ( "quad" == tokens[1] )
+          oLight._Type = (float) LightType::RectLight;
+        else if ( "sphere" == tokens[1] )
+          oLight._Type = (float) LightType::SphereLight;
+        else if ( "distant" == tokens[1] )
+          oLight._Type = (float) LightType::DistantLight;
+        else
+          parsingError++;
+      }
+      else
+        parsingError++;
+    }
   }
   if ( State::ExpectNewBlock != curState )
     parsingError++;
+
+  if ( !parsingError )
+  {
+    if ( LightType::RectLight == (LightType)oLight._Type )
+    {
+      oLight._Area = glm::length(glm::cross(oLight._DirU, oLight._DirV));
+    }
+    else if ( LightType::SphereLight == (LightType)oLight._Type )
+    {
+      oLight._Area = 4.0f * M_PI * oLight._Radius * oLight._Radius;
+    }
+    else if ( LightType::DistantLight == (LightType)oLight._Type )
+    {
+      oLight._Area = 0.f;
+    }
+  }
 
   return parsingError;
 }
