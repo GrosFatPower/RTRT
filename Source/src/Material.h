@@ -24,10 +24,10 @@ enum class MediumType
 struct Material
 {
   Vec3  _BaseColor              = Vec3(1.0f, 1.0f, 1.0f);
-  float _Anisotropic            = 0.f;
+  float _ID                     = -1.f;
 
   Vec3  _Emission               = Vec3(0.0f, 0.0f, 0.0f);
-  float _Padding1               = 0.f;
+  float _Anisotropic            = 0.f;
 
   Vec3  _MediumColor            = Vec3(1.0f, 1.0f, 1.0f);
   float _MediumAnisotropy       = 0.f;
@@ -49,13 +49,13 @@ struct Material
  
   float _BaseColorTexId         = -1.f;
   float _MetallicRoughnessTexID = -1.f;
-  float _NormalmapTexID         = -1.f;
-  float _EmissionmapTexID       = -1.f;
+  float _NormalMapTexID         = -1.f;
+  float _EmissionMapTexID       = -1.f;
  
   float _Opacity                = 1.f;
   float _AlphaMode              = 0.f;
   float _AlphaCutoff            = 0.f;
-  float _Padding2               = 0.f;
+  float _Padding                = 0.f;
 };
 
 }

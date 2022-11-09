@@ -112,7 +112,11 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene * oScene)
       parsingError += Loader::ParseMaterial(file, newMaterial, *oScene);
 
       if ( !parsingError )
+      {
+        oScene -> AddMaterial(newMaterial, materialName);
+
         curState = State::ExpectNewBlock;
+      }
     }
     // Material - END
     //--------------------------------------------
@@ -313,7 +317,7 @@ int Loader::ParseMaterial( std::ifstream & iStr, Material & oMaterial, Scene & i
   int parsingError = 0;
 
   std::string albedoTexName;
-  std::string metallicRoughnessTTexName;
+  std::string metallicRoughnessTexName;
   std::string normalTexName;
   std::string emissionTexName;
   std::string alphaMode;
@@ -488,7 +492,7 @@ int Loader::ParseMaterial( std::ifstream & iStr, Material & oMaterial, Scene & i
     else if ( "metallicroughnesstexture" == tokens[0] )
     {
       if ( 2 == nbTokens )
-        metallicRoughnessTTexName = tokens[1];
+        metallicRoughnessTexName = tokens[1];
       else
         parsingError++;
     }
@@ -540,7 +544,14 @@ int Loader::ParseMaterial( std::ifstream & iStr, Material & oMaterial, Scene & i
     else if ( "emissive" == mediumType )
       oMaterial._MediumType = (float)MediumType::Emissive;
 
-    // ToDo Add textures du scene and retrieve IDs
+    if ( !albedoTexName.empty() )
+      oMaterial._BaseColorTexId = ioScene.AddTexture(albedoTexName);
+    if ( !metallicRoughnessTexName.empty() )
+      oMaterial._MetallicRoughnessTexID = ioScene.AddTexture(metallicRoughnessTexName);
+    if ( !normalTexName.empty() )
+      oMaterial._NormalMapTexID = ioScene.AddTexture(normalTexName);
+    if ( !emissionTexName.empty() )
+      oMaterial._EmissionMapTexID = ioScene.AddTexture(emissionTexName);
   }
 
   return parsingError;
@@ -806,6 +817,8 @@ int Loader::ParseRenderer( std::ifstream & iStr/*, RenderOtions & oRenderer*/ )
         continue;
       }
     }
+
+    // TODO
   }
   if ( State::ExpectNewBlock != curState )
     parsingError++;
@@ -849,6 +862,8 @@ int Loader::ParseMeshData( std::ifstream & iStr, MeshData & oMeshData )
         continue;
       }
     }
+
+    // TODO
   }
   if ( State::ExpectNewBlock != curState )
     parsingError++;
@@ -892,6 +907,8 @@ int Loader::ParseGLTF( std::ifstream & iStr, Scene & ioScene )
         continue;
       }
     }
+
+    // TODO
   }
   if ( State::ExpectNewBlock != curState )
     parsingError++;
