@@ -27,9 +27,9 @@ public:
   const std::string & Filename() const { return _Filename; }
 
 private:
-  int             _TexID = -1;
-  int             _Width = 0;
-  int             _Height = 0;
+  int             _TexID        = -1;
+  int             _Width        = 0;
+  int             _Height       = 0;
   int             _NbComponents = 0;
 
   std::string     _Filename = "";

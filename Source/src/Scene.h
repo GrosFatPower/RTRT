@@ -14,6 +14,7 @@ namespace RTRT
 class Shape;
 class Texture;
 class Material;
+class Mesh;
 
 class Scene
 {
@@ -22,21 +23,23 @@ public:
   virtual ~Scene();
 
   int AddTexture( const std::string & iFilename );
-
+  int AddMesh( const std::string & iFilename );
   int AddMaterial( Material & ioMaterial, const std::string & iName );
+  int AddMeshInstance( MeshInstance & iMeshInstance );
 
-  std::string GetMaterialName( int MatID );
+  int FindMaterialID( const std::string & iMateralName );
 
 private:
 
   Camera                    _Camera;
   std::vector<Light>        _Lights;
   std::vector<Material>     _Materials;
-  std::map<int,std::string> _MaterialsName;
+  std::map<std::string,int> _MaterialIDs;
   std::vector<MeshInstance> _MeshInstances;
 
   std::vector<Shape*>       _Shapes;
   std::vector<Texture*>     _Textures;
+  std::vector<Mesh*>        _Meshes;
 
   friend class Loader;
 };

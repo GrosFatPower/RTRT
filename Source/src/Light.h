@@ -15,10 +15,10 @@ enum class LightType
 
 struct Light
 {
-  Vec3       _Pos      = Vec3(0.f, 0.f, 0.f);
-  Vec3       _Emission = Vec3(1.f, 1.f, 1.f);
-  Vec3       _DirU     = Vec3(1.f, 0.f, 0.f);
-  Vec3       _DirV     = Vec3(0.f, 1.f, 0.f);
+  Vec3       _Pos      = { 0.f, 0.f, 0.f };
+  Vec3       _Emission = { 1.f, 1.f, 1.f };
+  Vec3       _DirU     = { 1.f, 0.f, 0.f };
+  Vec3       _DirV     = { 0.f, 1.f, 0.f };
 
   float      _Radius   = 1.f;
   float      _Area     = 1.f;

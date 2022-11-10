@@ -5,17 +5,18 @@
 
 #include "Loader.h"
 #include "Scene.h"
-#include "MeshData.h"
+#include "Mesh.h"
 #include "Light.h"
 #include "Camera.h"
+#include "RenderSettings.h"
 #include "Math.h"
-#define TINYOBJLOADER_IMPLEMENTATION
-#include "tiny_obj_loader.h"
 #include <map>
 #include <vector>
 #include <iostream>
 #include <algorithm>
 #include <filesystem> // C++17
+#include <sstream>
+#include <fstream>
 
 namespace fs = std::filesystem;
 
@@ -47,24 +48,25 @@ void Tokenize( std::string iStr, std::vector<std::string> & oTokens )
   }
 }
 
-bool Loader::LoadScene(const std::string & iFilename, Scene * oScene)
+bool Loader::LoadScene(const std::string & iFilename, Scene * oScene, RenderSettings & oRenderSettings)
 {
   oScene = nullptr;
 
   fs::path filepath = iFilename;
 
   if ( ".scene" == filepath.extension() )
-    return Loader::LoadFromSceneFile(iFilename, oScene);
+    return Loader::LoadFromSceneFile(iFilename, oScene, oRenderSettings);
 
   return false;
 }
 
-bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene * oScene)
+bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene * oScene, RenderSettings & oRenderSettings )
 {
   oScene = nullptr;
 
   fs::path filepath = iFilename;
   filepath.remove_filename();
+  std::string path = filepath.string();
 
   std::ifstream file(iFilename);
 
@@ -109,7 +111,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene * oScene)
       std::string materialName = tokens[1];
 
       Material newMaterial;
-      parsingError += Loader::ParseMaterial(file, newMaterial, *oScene);
+      parsingError += Loader::ParseMaterial(file, path, newMaterial, *oScene);
 
       if ( !parsingError )
       {
@@ -128,8 +130,8 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene * oScene)
     {
       std::cout << "New mesh" << std::endl;
 
-      MeshData newMesh;
-      parsingError += Loader::ParseMeshData(file, newMesh);
+      Mesh newMesh;
+      parsingError += Loader::ParseMeshData(file, path, newMesh, *oScene);
 
       if ( !parsingError )
         curState = State::ExpectNewBlock;
@@ -184,11 +186,15 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene * oScene)
     {
       std::cout << "New renderer" << std::endl;
 
-      /*RenderOtions renderer*/
-      parsingError += Loader::ParseRenderer(file/*, renderer*/);
+      RenderSettings settings;
+      parsingError += Loader::ParseRenderSettings(file, settings);
 
       if ( !parsingError )
+      {
+        oRenderSettings = settings;
+
         curState = State::ExpectNewBlock;
+      }
     }
     // Renderer - END
     //--------------------------------------------
@@ -225,94 +231,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene * oScene)
   return false;
 }
 
-bool Loader::LoadMeshData( const std::string & iFilename, MeshData * oMeshData )
-{
-  oMeshData = nullptr;
-
-  tinyobj::attrib_t attrib;
-  std::vector<tinyobj::shape_t> shapes;
-  std::vector<tinyobj::material_t> materials;
-  std::string err, warn;
-  bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &err, &warn, iFilename.c_str(), 0, true);
-  if (!ret)
-  {
-    std::cout << "Loader : Unable to load object" << iFilename << std::endl;
-    if ( !err.empty() )
-      std::cout << err;
-    if ( !warn.empty() )
-      std::cout << warn;
-    return false;
-  }
-  else if ( !warn.empty() )
-  {
-    std::cout << "Loader : loading object" << iFilename << " ..."<< std::endl;
-    std::cout << warn;
-  }
-
-  oMeshData = new MeshData;
-
-  oMeshData -> _Filename = iFilename;
-
-  size_t nbVertices = attrib.vertices.size() / 3;
-  for ( unsigned int i = 0; i < nbVertices; ++i )
-  {
-    Vec3 coords;
-
-    coords.x = attrib.vertices[3 * i + 0];
-    coords.y = attrib.vertices[3 * i + 1];
-    coords.z = attrib.vertices[3 * i + 2];
-
-    oMeshData -> _Vertices.push_back(coords);
-  }
-
-  size_t nbNormals = attrib.normals.size() / 3;
-  for ( unsigned int i = 0; i < nbNormals; ++i )
-  {
-    Vec3 normal;
-    normal.x = attrib.normals[3 * i + 0];
-    normal.y = attrib.normals[3 * i + 1];
-    normal.z = attrib.normals[3 * i + 2];
-
-    oMeshData -> _Normals.push_back(normal);
-  }
-
-  size_t nbUVs = attrib.texcoords.size() / 3;
-  for ( unsigned int i = 0; i < nbUVs; ++i )
-  {
-    Vec2 uv;
-    uv.x = attrib.texcoords[2 * i + 0];
-    uv.y = attrib.texcoords[2 * i + 1];
-
-    oMeshData -> _UVs.push_back(uv);
-  }
-
-  for ( size_t s = 0; s < shapes.size(); ++s )
-  {
-    tinyobj::shape_t & shape = shapes[s];
-
-    size_t index_offset = 0;
-    for ( size_t f = 0; f < shape.mesh.num_face_vertices.size(); ++f )
-    {
-      for ( size_t v = 0; v < 3; ++v )
-      {
-        tinyobj::index_t idx = shape.mesh.indices[index_offset + v];
-
-        Vec3i indices;
-        indices.x = idx.vertex_index;
-        indices.y = idx.normal_index;
-        indices.z = idx.texcoord_index;
-
-        oMeshData -> _Indices.push_back(indices);
-      }
-      index_offset += 3;
-    }
-  }
-  oMeshData -> _NbFaces = (int) oMeshData -> _Indices.size();
-
-  return true;
-}
-
-int Loader::ParseMaterial( std::ifstream & iStr, Material & oMaterial, Scene & ioScene )
+int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, Material & oMaterial, Scene & ioScene )
 {
   int parsingError = 0;
 
@@ -545,13 +464,13 @@ int Loader::ParseMaterial( std::ifstream & iStr, Material & oMaterial, Scene & i
       oMaterial._MediumType = (float)MediumType::Emissive;
 
     if ( !albedoTexName.empty() )
-      oMaterial._BaseColorTexId = ioScene.AddTexture(albedoTexName);
+      oMaterial._BaseColorTexId = ioScene.AddTexture(iPath + albedoTexName);
     if ( !metallicRoughnessTexName.empty() )
-      oMaterial._MetallicRoughnessTexID = ioScene.AddTexture(metallicRoughnessTexName);
+      oMaterial._MetallicRoughnessTexID = ioScene.AddTexture(iPath + metallicRoughnessTexName);
     if ( !normalTexName.empty() )
-      oMaterial._NormalMapTexID = ioScene.AddTexture(normalTexName);
+      oMaterial._NormalMapTexID = ioScene.AddTexture(iPath + normalTexName);
     if ( !emissionTexName.empty() )
-      oMaterial._EmissionMapTexID = ioScene.AddTexture(emissionTexName);
+      oMaterial._EmissionMapTexID = ioScene.AddTexture(iPath + emissionTexName);
   }
 
   return parsingError;
@@ -781,7 +700,7 @@ int Loader::ParseCamera( std::ifstream & iStr, Camera & oCamera )
   return parsingError;
 }
 
-int Loader::ParseRenderer( std::ifstream & iStr/*, RenderOtions & oRenderer*/ )
+int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSettings )
 {
   int parsingError = 0;
 
@@ -818,7 +737,63 @@ int Loader::ParseRenderer( std::ifstream & iStr/*, RenderOtions & oRenderer*/ )
       }
     }
 
-    // TODO
+    if ( "resolution" == tokens[0] )
+    {
+      if ( 3 == nbTokens )
+        oSettings._RenderResolution = Vec2i(std::stoi(tokens[1]), std::stoi(tokens[2]));
+      else
+        parsingError++;
+    }
+    else if ( "windowresolution" == tokens[0] )
+    {
+      if ( 3 == nbTokens )
+        oSettings._WindowResolution = Vec2i(std::stoi(tokens[1]), std::stoi(tokens[2]));
+      else
+        parsingError++;
+    }
+    else if ( "backgroundcolor" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+        oSettings._BackgroundColor = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
+      else
+        parsingError++;
+    }
+    else if ( "uniformlightcolor" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+        oSettings._UniformLightCol = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
+      else
+        parsingError++;
+    }
+    else if ( "enablebackground" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+      {
+        if ( "true" == tokens[1] )
+          oSettings._EnableBackGround = true;
+        else if ( "false" == tokens[1] )
+          oSettings._EnableBackGround = false;
+        else
+          parsingError++;
+      }
+      else
+        parsingError++;
+    }
+    else if ( "uniformlightcolor" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+      {
+        if ( "true" == tokens[1] )
+          oSettings._EnableUniformLight = true;
+        else if ( "false" == tokens[1] )
+          oSettings._EnableUniformLight = false;
+        else
+          parsingError++;
+      }
+      else
+        parsingError++;
+    }
+
   }
   if ( State::ExpectNewBlock != curState )
     parsingError++;
@@ -826,9 +801,17 @@ int Loader::ParseRenderer( std::ifstream & iStr/*, RenderOtions & oRenderer*/ )
   return parsingError;
 }
 
-int Loader::ParseMeshData( std::ifstream & iStr, MeshData & oMeshData )
+int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Mesh & oMeshData, Scene & ioScene )
 {
   int parsingError = 0;
+
+  std::string meshName;
+  std::string meshFileName;
+  std::string materialName;
+  Mat4x4 transMat(1.f), rotMat(1.f), scaleMat(1.f);
+  Mat4x4 xform(1.f);
+  bool hasMatrix = false;
+
 
   State curState = State::ExpectOpenBracket;
   std::string line;
@@ -863,10 +846,119 @@ int Loader::ParseMeshData( std::ifstream & iStr, MeshData & oMeshData )
       }
     }
 
-    // TODO
+    if ( "name" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        meshName = tokens[1];
+      else
+        parsingError++;
+    }
+    else if ( "file" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        meshFileName = tokens[1];
+      else
+        parsingError++;
+    }
+    else if ( "material" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        materialName = tokens[1];
+      else
+        parsingError++;
+    }
+    else if ( "position" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+      {
+        transMat[3][0] = std::stof(tokens[1]);
+        transMat[3][1] = std::stof(tokens[2]);
+        transMat[3][2] = std::stof(tokens[3]);
+      }
+      else
+        parsingError++;
+    }
+    else if ( "scale" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+      {
+        scaleMat[0][0] = std::stof(tokens[1]);
+        scaleMat[1][1] = std::stof(tokens[2]);
+        scaleMat[2][2] = std::stof(tokens[3]);
+      }
+      else
+        parsingError++;
+    }
+    else if ( "rotation" == tokens[0] )
+    {
+      if ( 5 == nbTokens )
+      {
+        Vec4 quaternion; // { x, y, z, s } -> q = s + ix + jy + kz
+        quaternion.x = std::stof(tokens[1]);
+        quaternion.y = std::stof(tokens[2]);
+        quaternion.z = std::stof(tokens[3]);
+        quaternion.w = std::stof(tokens[4]);
+
+        rotMat = MathUtil::QuatToMatrix(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+      }
+      else
+        parsingError++;
+    }
+    else if ( "matrix" == tokens[0] )
+    {
+      if ( 17 == nbTokens )
+      {
+        xform[0][0] = std::stof(tokens[1]);
+        xform[1][0] = std::stof(tokens[2]);
+        xform[2][0] = std::stof(tokens[3]);
+        xform[3][0] = std::stof(tokens[4]);
+        xform[0][1] = std::stof(tokens[5]);
+        xform[1][1] = std::stof(tokens[6]);
+        xform[2][1] = std::stof(tokens[7]);
+        xform[3][1] = std::stof(tokens[8]);
+        xform[0][2] = std::stof(tokens[9]);
+        xform[1][2] = std::stof(tokens[10]);
+        xform[2][2] = std::stof(tokens[11]);
+        xform[3][2] = std::stof(tokens[12]);
+        xform[0][3] = std::stof(tokens[13]);
+        xform[1][3] = std::stof(tokens[14]);
+        xform[2][3] = std::stof(tokens[15]);
+        xform[3][3] = std::stof(tokens[16]);
+        hasMatrix = true;
+      }
+      else
+        parsingError++;
+    }
   }
   if ( State::ExpectNewBlock != curState )
     parsingError++;
+
+  if ( !parsingError && !meshFileName.empty() )
+  {
+    int meshID = ioScene.AddMesh(iPath + meshFileName);
+    if ( meshID >= 0 )
+    {
+      if ( meshName.empty() )
+      {
+        fs::path filepath = meshFileName;
+        meshName = filepath.filename().string();
+      }
+
+      int matID = -1;
+      if ( !materialName.empty() )
+      {
+        matID = ioScene.FindMaterialID(materialName);
+        if ( matID < 0 )
+          std::cout << "Loader : ERROR could not find material " << materialName << std::endl;
+      }
+
+      if ( !hasMatrix )
+        xform = scaleMat * rotMat * transMat;
+
+      MeshInstance instance(meshName, meshID, matID, xform);
+      ioScene.AddMeshInstance(instance);
+    }
+  }
 
   return parsingError;
 }

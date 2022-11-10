@@ -11,8 +11,9 @@
 #include "Camera.h"
 #include "QuadMesh.h"
 #include "Texture.h"
-#include "MeshData.h"
+#include "Mesh.h"
 #include "Scene.h"
+#include "RenderSettings.h"
 #include "Loader.h"
 
 #include <vector>
@@ -342,8 +343,8 @@ int Test1::Run()
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   // Load shape
-  MeshData * meshObj = nullptr;
-  if ( !Loader::LoadMeshData("..\\..\\Assets\\cornell_box\\cbox_largebox.obj", meshObj) )
+  Mesh * meshObj = new Mesh;
+  if ( !(meshObj -> Load("..\\..\\Assets\\cornell_box\\cbox_largebox.obj")) )
   {
     glfwTerminate();
     return 1;
@@ -352,7 +353,8 @@ int Test1::Run()
   meshObj = nullptr;
 
   Scene * scene = nullptr;
-  if ( !Loader::LoadScene("..\\..\\Assets\\cornell_box_orig.scene", scene) )
+  RenderSettings settings;
+  if ( !Loader::LoadScene("..\\..\\Assets\\cornell_box_orig.scene", scene, settings))
   {
     glfwTerminate();
     return 1;
