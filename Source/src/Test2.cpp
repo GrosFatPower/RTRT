@@ -141,7 +141,7 @@ int Test2::Run()
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
   // Create window with graphics context
-  GLFWwindow * mainWindow = glfwCreateWindow(_ScreenWitdh, _ScreenHeight, "RTRT Hello world", NULL, NULL);
+  GLFWwindow * mainWindow = glfwCreateWindow(_ScreenWitdh, _ScreenHeight, "RTRT - Test 2 : Scene loader", NULL, NULL);
   if ( !mainWindow )
   {
     std::cout << "Failed to create a window!" << std::endl;

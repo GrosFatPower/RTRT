@@ -12,6 +12,7 @@
 #include "Texture.h"
 
 #include <vector>
+#include <deque>
 #include <string>
 #include <stdio.h>
 #include <iostream>
@@ -33,20 +34,17 @@ static bool   g_LeftClick    = false;
 static bool   g_RightClick   = false;
 
 static long  g_Frame         = 0;
-static float g_FrameRate     = 60.;
+static float g_FrameRate     = 60.f;
+static float g_CurLoopTime   = 0.f;
+static float g_TimeDelta     = 0.f;
 
 static short g_VtxShaderNum  = 0;
 static short g_FragShaderNum = 0;
 
 static ShaderProgram * g_RTTShader = NULL;
 static ShaderProgram * g_OutputShader = NULL;
-static GLuint g_ScreenTextureID   = 0;
-static GLuint g_u_ResolutionID    = 0;
-static GLuint g_u_MouseID         = 0;
-static GLuint g_u_TimeID          = 0;
-static GLuint g_u_TimeDeltaID     = 0;
-static GLuint g_u_FrameID         = 0;
-static GLuint g_u_FrameRateID     = 0;
+
+static GLuint g_ScreenTextureID = 0;
 
 static const GLfloat g_QuadVtx[] =
 {
@@ -183,30 +181,33 @@ static int RecompileShaders()
   if ( !g_OutputShader )
     return 0;
 
-  GLuint shaderProgramID = g_RTTShader -> GetShaderProgramID();
-  if ( !shaderProgramID )
-    return 0;
-
-  g_RTTShader -> Use();
-  g_u_ResolutionID    = glGetUniformLocation(shaderProgramID, "u_Resolution");
-  g_u_MouseID         = glGetUniformLocation(shaderProgramID, "u_Mouse");
-  g_u_TimeID          = glGetUniformLocation(shaderProgramID, "u_Time");
-  g_u_TimeDeltaID     = glGetUniformLocation(shaderProgramID, "u_TimeDelta");
-  g_u_FrameID         = glGetUniformLocation(shaderProgramID, "u_Frame");
-  g_u_FrameRateID     = glGetUniformLocation(shaderProgramID, "u_FrameRate");
-  glUniform1i(glGetUniformLocation(shaderProgramID, "u_ScreenTexture"), 0);
-  glUniform1i(glGetUniformLocation(shaderProgramID, "u_Texture"), 1);
-  g_RTTShader -> StopUsing();
-
-  GLuint outputProgramID = g_OutputShader -> GetShaderProgramID();
-  if ( !outputProgramID )
-    return 0;
-
-  g_OutputShader -> Use();
-  glUniform1i(glGetUniformLocation(shaderProgramID, "u_ScreenTexture"), 0);
-  g_OutputShader -> StopUsing();
-
   return 1;
+}
+
+void UpdateUniforms()
+{
+  if ( g_RTTShader )
+  {
+    g_RTTShader -> Use();
+    GLuint shaderProgramID = g_RTTShader -> GetShaderProgramID();
+    glUniform3f(glGetUniformLocation(shaderProgramID, "u_Resolution"), g_ScreenWidth, g_ScreenHeight, 0.f);
+    glUniform4f(glGetUniformLocation(shaderProgramID, "u_Mouse"), g_MouseX, g_MouseY, (float) g_LeftClick, (float) g_RightClick);
+    glUniform1f(glGetUniformLocation(shaderProgramID, "u_Time"), g_CurLoopTime);
+    glUniform1f(glGetUniformLocation(shaderProgramID, "u_TimeDelta"), g_TimeDelta);
+    glUniform1i(glGetUniformLocation(shaderProgramID, "u_Frame"), (int)g_Frame);
+    glUniform1f(glGetUniformLocation(shaderProgramID, "u_FrameRate"), g_FrameRate);
+    glUniform1i(glGetUniformLocation(shaderProgramID, "u_ScreenTexture"), 0);
+    glUniform1i(glGetUniformLocation(shaderProgramID, "u_Texture"), 1);
+    g_RTTShader -> StopUsing();
+  }
+
+  if ( g_OutputShader )
+  {
+    g_OutputShader -> Use();
+    GLuint outputProgramID = g_OutputShader -> GetShaderProgramID();
+    glUniform1i(glGetUniformLocation(outputProgramID, "u_ScreenTexture"), 0);
+    g_OutputShader -> StopUsing();
+  }
 }
 
 Test1::Test1( int iScreenWidth, int iScreenHeight )
@@ -238,7 +239,7 @@ int Test1::Run()
   //glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
 
   // Create window with graphics context
-  GLFWwindow * mainWindow = glfwCreateWindow(g_ScreenWidth, g_ScreenHeight, "RTRT Hello world", NULL, NULL);
+  GLFWwindow * mainWindow = glfwCreateWindow(g_ScreenWidth, g_ScreenHeight, "RTRT - Test 1 : Render to texture", NULL, NULL);
   if ( !mainWindow )
   {
     std::cout << "Failed to create a window!" << std::endl;
@@ -329,11 +330,6 @@ int Test1::Run()
     return 1;
   }
 
-  g_RTTShader -> Use();
-  glUniform1i(glGetUniformLocation(shaderProgramID, "u_ScreenTexture"), 0);
-  glUniform1i(glGetUniformLocation(shaderProgramID, "u_Texture"), 1);
-  g_RTTShader -> StopUsing();
-
   glViewport(0, 0, g_ScreenWidth, g_ScreenHeight);
   glDisable(GL_DEPTH_TEST);
 
@@ -341,37 +337,29 @@ int Test1::Run()
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   // Main loop
-  double averageDelta = 0.;
-  double LastDeltas[30] = { 0. };
-  int nbStoredDeltas = 0;
+  std::deque<float> lastDeltas;
 
   double oldCpuTime = glfwGetTime();
   while (!glfwWindowShouldClose(mainWindow))
   {
     g_Frame++;
 
-    double curLoopTime = glfwGetTime();
+    g_CurLoopTime = glfwGetTime();
 
-    double timeDelta = curLoopTime - oldCpuTime;
-    oldCpuTime = curLoopTime;
+    g_TimeDelta = g_CurLoopTime - oldCpuTime;
+    oldCpuTime = g_CurLoopTime;
 
-    if ( 30 == nbStoredDeltas )
-    {
-      double totalDelta = 0.;
-      for ( int i = 0; i < 30; ++i )
-        totalDelta += LastDeltas[i];
-      averageDelta = totalDelta / 30;
-      nbStoredDeltas = 0;
-    }
-    else if ( nbStoredDeltas < 30 )
-      LastDeltas[nbStoredDeltas++] = timeDelta;
-    else
-      nbStoredDeltas = 0;
+    lastDeltas.push_back(g_TimeDelta);
+    while ( lastDeltas.size() > 60 )
+      lastDeltas.pop_front();
+    
+    double totalDelta = 0.;
+    for ( auto delta : lastDeltas )
+      totalDelta += delta;
+    double averageDelta = totalDelta / lastDeltas.size();
 
     if ( averageDelta > 0. )
-      g_FrameRate = 1. / averageDelta;
-    else if ( timeDelta > 0. )
-      g_FrameRate = 1. / timeDelta;
+      g_FrameRate = 1. / (float)averageDelta;
 
     // Poll and handle events (inputs, window resize, etc.)
     // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
@@ -415,21 +403,14 @@ int Test1::Run()
     glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    // Render to frame buffer
-   glBindFramebuffer(GL_FRAMEBUFFER, frameBufferID);
-   g_RTTShader -> Use();
-   glUniform3f(g_u_ResolutionID, g_ScreenWidth, g_ScreenHeight, 0.f);
-   glUniform3f(g_u_ResolutionID, g_ScreenWidth, g_ScreenHeight, 0.f);
-   glUniform4f(g_u_MouseID, g_MouseX, g_MouseY, (float) g_LeftClick, (float) g_RightClick);
-   glUniform1f(g_u_TimeID, (float)curLoopTime);
-   glUniform1f(g_u_TimeDeltaID, (float)timeDelta);
-   glUniform1i(g_u_FrameID, (int)g_Frame);
-   glUniform1f(g_u_FrameRateID, g_FrameRate);
-   g_RTTShader -> StopUsing();
-   quad -> Render(*g_RTTShader);
+    UpdateUniforms();
 
-   glBindFramebuffer(GL_FRAMEBUFFER, 0);
-   quad -> Render(*g_OutputShader);
+    // Render to frame buffer
+    glBindFramebuffer(GL_FRAMEBUFFER, frameBufferID);
+    quad -> Render(*g_RTTShader);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    quad -> Render(*g_OutputShader);
 
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
