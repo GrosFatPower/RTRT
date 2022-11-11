@@ -11,7 +11,6 @@
 namespace RTRT
 {
 
-class Shape;
 class Texture;
 class Material;
 class Mesh;
@@ -27,7 +26,15 @@ public:
   int AddMaterial( Material & ioMaterial, const std::string & iName );
   int AddMeshInstance( MeshInstance & iMeshInstance );
 
+  void SetCamera( const Camera & iCamera ) { _Camera = iCamera; }
+  void AddLight( const Light & iLight ) { _Lights.push_back(iLight); }
+
   int FindMaterialID( const std::string & iMateralName );
+
+  int GetNbLights()    { return _Lights.size();    }
+  int GetNbMaterials() { return _Materials.size(); }
+  int GetNbTextures()  { return _Textures.size();  }
+  int GetNbMeshes()    { return _Meshes.size();    }
 
 private:
 
@@ -37,11 +44,8 @@ private:
   std::map<std::string,int> _MaterialIDs;
   std::vector<MeshInstance> _MeshInstances;
 
-  std::vector<Shape*>       _Shapes;
   std::vector<Texture*>     _Textures;
   std::vector<Mesh*>        _Meshes;
-
-  friend class Loader;
 };
 
 }

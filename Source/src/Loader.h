@@ -8,26 +8,22 @@ namespace RTRT
 {
 
 class Scene;
-class Mesh;
-struct Material;
-struct Light;
-struct Camera;
 struct RenderSettings;
 
 class Loader
 {
 public:
 
-  static bool LoadScene(const std::string & iFilename, Scene * oScene, RenderSettings & oRenderSettings);
+  static bool LoadScene(const std::string & iFilename, Scene *& oScene, RenderSettings & oRenderSettings);
 
 private:
 
-  static bool LoadFromSceneFile(const std::string & iFilename, Scene * oScene, RenderSettings & oRenderSettings);
+  static bool LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, RenderSettings & oRenderSettings);
 
-  static int ParseMaterial( std::ifstream & iStr, const std::string & iPath, Material & oMaterial, Scene & ioScene );
-  static int ParseLight( std::ifstream & iStr, Light & oLight );
-  static int ParseCamera( std::ifstream & iStr, Camera & oCamera );
-  static int ParseMeshData( std::ifstream & iStr, const std::string & iPath, Mesh & oMesh, Scene & ioScene );
+  static int ParseMaterial( std::ifstream & iStr, const std::string & iPath, const std::string & iMaterialName, Scene & ioScene );
+  static int ParseLight( std::ifstream & iStr, Scene & ioScene );
+  static int ParseCamera( std::ifstream & iStr, Scene & ioScene );
+  static int ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scene & ioScene );
   static int ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSettings );
   static int ParseGLTF( std::ifstream & iStr, Scene & ioScene );
 

@@ -13,10 +13,6 @@ Scene::Scene()
 
 Scene::~Scene()
 {
-  for (auto & shape : _Shapes)
-    delete shape;
-  _Shapes.clear();
-
   for (auto & texture : _Textures)
     delete texture;
   _Textures.clear();

@@ -22,6 +22,12 @@ public:
   void SetFOV( float iFOV );
   float GetFOV() const { return _FOV; }
 
+  void SetFocalDist( float iFocalDist ) { _FocalDist = iFocalDist; }
+  float GetFocalDist() const { return _FocalDist; }
+
+  void SetAperture( float iAperture ) { _Aperture = iAperture; }
+  float GetAperture() const { return _Aperture; }
+
 private:
 
   void Update();
@@ -40,8 +46,6 @@ private:
 
   float _FocalDist = .1f;
   float _Aperture  = 0.f;
-
-  friend class Loader;
 };
 
 }

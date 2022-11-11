@@ -8,13 +8,8 @@
 
 #include "Shader.h"
 #include "ShaderProgram.h"
-#include "Camera.h"
 #include "QuadMesh.h"
 #include "Texture.h"
-#include "Mesh.h"
-#include "Scene.h"
-#include "RenderSettings.h"
-#include "Loader.h"
 
 #include <vector>
 #include <string>
@@ -29,31 +24,31 @@ namespace RTRT
 // ----------------------------------------------------------------------------
 // Global variables
 // ----------------------------------------------------------------------------
-int    g_ScreenWidth  = 1920;
-int    g_ScreenHeight = 1080;
+static int    g_ScreenWidth  = 1920;
+static int    g_ScreenHeight = 1080;
 
-double g_MouseX       = 0.;
-double g_MouseY       = 0.;
-bool   g_LeftClick    = false;
-bool   g_RightClick   = false;
+static double g_MouseX       = 0.;
+static double g_MouseY       = 0.;
+static bool   g_LeftClick    = false;
+static bool   g_RightClick   = false;
 
-long  g_Frame         = 0;
-float g_FrameRate     = 60.;
+static long  g_Frame         = 0;
+static float g_FrameRate     = 60.;
 
-short g_VtxShaderNum  = 0;
-short g_FragShaderNum = 0;
+static short g_VtxShaderNum  = 0;
+static short g_FragShaderNum = 0;
 
-ShaderProgram * g_RTTShader = NULL;
-ShaderProgram * g_OutputShader = NULL;
-GLuint g_ScreenTextureID   = 0;
-GLuint g_u_ResolutionID    = 0;
-GLuint g_u_MouseID         = 0;
-GLuint g_u_TimeID          = 0;
-GLuint g_u_TimeDeltaID     = 0;
-GLuint g_u_FrameID         = 0;
-GLuint g_u_FrameRateID     = 0;
+static ShaderProgram * g_RTTShader = NULL;
+static ShaderProgram * g_OutputShader = NULL;
+static GLuint g_ScreenTextureID   = 0;
+static GLuint g_u_ResolutionID    = 0;
+static GLuint g_u_MouseID         = 0;
+static GLuint g_u_TimeID          = 0;
+static GLuint g_u_TimeDeltaID     = 0;
+static GLuint g_u_FrameID         = 0;
+static GLuint g_u_FrameRateID     = 0;
 
-const GLfloat g_QuadVtx[] =
+static const GLfloat g_QuadVtx[] =
 {
   -1.0f, -1.0f,  0.0f,
    1.0f, -1.0f,  0.0f,
@@ -63,7 +58,7 @@ const GLfloat g_QuadVtx[] =
   -1.0f, -1.0f,  0.0f
 };
 
-const GLfloat g_QuadUVs[] =
+static const GLfloat g_QuadUVs[] =
 {
   0.0f, 0.0f,
   1.0f, 0.0f,
@@ -81,13 +76,13 @@ static void glfw_error_callback(int error, const char* description)
   fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
-void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
+static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
   if (action == GLFW_PRESS)
     std::cout << "EVENT : KEY PRESSED" << std::endl;
 }
 
-void MousebuttonCallback(GLFWwindow* window, int button, int action, int mods)
+static void MousebuttonCallback(GLFWwindow* window, int button, int action, int mods)
 {
   if ( !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) )
   {
@@ -111,9 +106,12 @@ void MousebuttonCallback(GLFWwindow* window, int button, int action, int mods)
   }
 }
 
-void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
+static void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 {
-  std::cout << "EVENT : FRAME BUFFER RESIZED" << std::endl;
+  std::cout << "EVENT : FRAME BUFFER RESIZED. WIDTH = " << width << " HEIGHT = " << height << std::endl;
+
+  if ( !width || !height )
+    return;
 
   g_ScreenWidth  = width;
   g_ScreenHeight = height;
@@ -124,7 +122,7 @@ void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, g_ScreenWidth, g_ScreenHeight, 0, GL_RGBA, GL_FLOAT, NULL);
 }
 
-int RecompileShaders()
+static int RecompileShaders()
 {
   if ( g_RTTShader )
   {
@@ -341,26 +339,6 @@ int Test1::Run()
 
   // Our state
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
-  // Load shape
-  Mesh * meshObj = new Mesh;
-  if ( !(meshObj -> Load("..\\..\\Assets\\cornell_box\\cbox_largebox.obj")) )
-  {
-    glfwTerminate();
-    return 1;
-  }
-  delete meshObj;
-  meshObj = nullptr;
-
-  Scene * scene = nullptr;
-  RenderSettings settings;
-  if ( !Loader::LoadScene("..\\..\\Assets\\cornell_box_orig.scene", scene, settings))
-  {
-    glfwTerminate();
-    return 1;
-  }
-  delete scene;
-  scene = nullptr;
 
   // Main loop
   double averageDelta = 0.;

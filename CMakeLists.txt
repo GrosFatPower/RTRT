@@ -27,6 +27,7 @@ target_include_directories(RTRT
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/stb
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glm
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinyobjloader
+  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinydir
   PUBLIC ${GLEW_INCLUDE_DIRS}
 )
 
@@ -44,4 +45,8 @@ target_link_libraries(RTRT
 
 target_compile_definitions(RTRT
   PUBLIC GLEW_STATIC
+)
+
+target_compile_features(RTRT
+ PRIVATE cxx_std_17
 )

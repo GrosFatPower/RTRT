@@ -32,8 +32,6 @@ private:
   std::vector<Vec3i> _Indices;
 
   std::string _Filename = "";
-
-  friend class Loader;
 };
 
 }
