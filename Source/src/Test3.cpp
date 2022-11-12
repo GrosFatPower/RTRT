@@ -1,6 +1,11 @@
 #include "Test3.h"
 #include "QuadMesh.h"
 #include "ShaderProgram.h"
+#include "Scene.h"
+#include "Camera.h"
+#include "Light.h"
+#include "Object.h"
+#include "ObjectInstance.h"
 
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
@@ -17,53 +22,51 @@ namespace RTRT
 // ----------------------------------------------------------------------------
 // Global variables
 // ----------------------------------------------------------------------------
-static double g_MouseX       = 0.;
-static double g_MouseY       = 0.;
-static bool   g_LeftClick    = false;
-static bool   g_RightClick   = false;
-
-static GLuint g_FrameBufferID   = 0;
-static GLuint g_ScreenTextureID = 0;
-
 static std::string g_AssetsDir = "..\\..\\Assets\\";
-static int         g_CurSceneIndex = 0;
-static int         g_LoadingState = 0;
 
 // ----------------------------------------------------------------------------
 // Global functions
 // ----------------------------------------------------------------------------
-static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
+void Test3::KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
   if (action == GLFW_PRESS)
     std::cout << "EVENT : KEY PRESSED" << std::endl;
 }
 
-static void MousebuttonCallback(GLFWwindow* window, int button, int action, int mods)
+void Test3::MousebuttonCallback(GLFWwindow* window, int button, int action, int mods)
 {
   if ( !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) )
   {
-    glfwGetCursorPos(window, &g_MouseX, &g_MouseY);
+    auto * const this_ = static_cast<Test3*>(glfwGetWindowUserPointer(window));
+    if ( !this_ )
+      return;
+
+    glfwGetCursorPos(window, &this_->_MouseX, &this_->_MouseY);
 
     if ( ( GLFW_MOUSE_BUTTON_1 == button ) && ( GLFW_PRESS == action ) )
     {
-      std::cout << "EVENT : LEFT CLICK (" << g_MouseX << "," << g_MouseY << ")" << std::endl;
-      g_LeftClick = true;
+      std::cout << "EVENT : LEFT CLICK (" << this_->_MouseX << "," << this_->_MouseY << ")" << std::endl;
+      this_->_LeftClick = true;
     }
     else
-      g_LeftClick = false;
+      this_->_LeftClick = false;
 
     if ( ( GLFW_MOUSE_BUTTON_2 == button ) && ( GLFW_PRESS == action ) )
     {
-      std::cout << "EVENT : RIGHT CLICK (" << g_MouseX << "," << g_MouseY << ")" << std::endl;
-      g_RightClick = true;
+      std::cout << "EVENT : RIGHT CLICK (" << this_->_MouseX << "," << this_->_MouseY << ")" << std::endl;
+      this_->_RightClick = true;
     }
     else
-      g_RightClick = false;
+      this_->_RightClick = false;
   }
 }
 
-static void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
+void Test3::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 {
+  auto * const this_ = static_cast<Test3*>(glfwGetWindowUserPointer(window));
+  if ( !this_ )
+    return;
+
   std::cout << "EVENT : FRAME BUFFER RESIZED. WIDTH = " << width << " HEIGHT = " << height << std::endl;
 
   if ( !width || !height )
@@ -71,7 +74,7 @@ static void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 
   glViewport(0, 0, width, height);
 
-  glBindTexture(GL_TEXTURE_2D, g_ScreenTextureID);
+  glBindTexture(GL_TEXTURE_2D, this_->_ScreenTextureID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
 }
 
@@ -84,8 +87,8 @@ Test3::Test3( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
 
 Test3::~Test3()
 {
-  glDeleteFramebuffers(1, &g_FrameBufferID);
-  glDeleteTextures(1, &g_ScreenTextureID);
+  glDeleteFramebuffers(1, &_FrameBufferID);
+  glDeleteTextures(1, &_ScreenTextureID);
 
   if (_Quad)
     delete _Quad;
@@ -96,22 +99,25 @@ Test3::~Test3()
   if (_RTSShader)
     delete _RTSShader;
   _RTSShader = nullptr;
+  if ( _Scene )
+    delete _Scene;
+  _Scene = nullptr;
 }
 
 int Test3::InitializeFrameBuffer()
 {
   // Screen texture
-  glGenTextures(1, &g_ScreenTextureID);
+  glGenTextures(1, &_ScreenTextureID);
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, g_ScreenTextureID);
+  glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _ScreenWidth, _ScreenHeight, 0, GL_RGBA, GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
   // FrameBuffer
-  glGenFramebuffers(1, &g_FrameBufferID);
-  glBindFramebuffer(GL_FRAMEBUFFER, g_FrameBufferID);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, g_ScreenTextureID, 0);
+  glGenFramebuffers(1, &_FrameBufferID);
+  glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _ScreenTextureID, 0);
   if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
     return 1;
 
@@ -167,6 +173,29 @@ int Test3::UpdateUniforms()
   return 0;
 }
 
+int Test3::InitializeUI()
+{
+  // Setup Dear ImGui context
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  ImGuiIO & io = ImGui::GetIO(); (void)io;
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+  // Setup Dear ImGui style
+  ImGui::StyleColorsDark();
+
+  // Load Fonts
+  io.Fonts->AddFontDefault();
+
+  // Setup Platform/Renderer backends
+  const char* glsl_version = "#version 130";
+  ImGui_ImplGlfw_InitForOpenGL(_MainWindow, true);
+  ImGui_ImplOpenGL3_Init(glsl_version);
+
+  return 0;
+}
+
 int Test3::DrawUI()
 {
   // Start the Dear ImGui frame
@@ -213,6 +242,45 @@ int Test3::UpdateCPUTime()
   return 0;
 }
 
+int Test3::InitializeScene()
+{
+  if ( _Scene )
+    delete _Scene;
+
+  _Scene = new Scene();
+
+  Camera newCamera({0.f, 0.f, -1.f}, { 0.f, 0.f, 0.f }, 80.f);
+  _Scene ->SetCamera(newCamera);
+
+  Light newLight;
+  newLight._Pos      = { 5.f, 5.f, -5.f };
+  newLight._Emission = { .3f, .3f, .3f };
+  newLight._Type     = (float)LightType::SphereLight;
+  _Scene -> AddLight(newLight);
+
+  Material greenMat;
+  greenMat._BaseColor = { .14f, .45f, .091f };
+  int greenMatID = _Scene -> AddMaterial(greenMat, "green");
+
+  Sphere sphere;
+  sphere._Radius = .5f;
+  int sphereID = _Scene -> AddObject(sphere);
+
+  Mat4x4 identity;
+  ObjectInstance sphereInstance(sphereID, greenMatID, identity);
+  _Scene -> AddObjectInstance(sphereInstance);
+
+  return 0;
+}
+
+int Test3::UpdateScene()
+{
+  if ( !_Scene )
+    return 1;
+
+  return 0;
+}
+
 int Test3::Run()
 {
   int ret = 0;
@@ -221,34 +289,19 @@ int Test3::Run()
     return 1;
 
   glfwSetWindowTitle(_MainWindow, "Test 3 : Basic ray tracing");
+  glfwSetWindowUserPointer(_MainWindow, this);
 
-  glfwSetFramebufferSizeCallback(_MainWindow, FramebufferSizeCallback);
-  glfwSetMouseButtonCallback(_MainWindow, MousebuttonCallback);
-  //glfwSetKeyCallback(_MainWindow, keyCallback);
+  glfwSetFramebufferSizeCallback(_MainWindow, Test3::FramebufferSizeCallback);
+  glfwSetMouseButtonCallback(_MainWindow, Test3::MousebuttonCallback);
+  //glfwSetKeyCallback(_MainWindow, Test3::KeyCallback);
 
   glfwMakeContextCurrent(_MainWindow);
   glfwSwapInterval(1); // Enable vsync
 
   // Setup Dear ImGui context
-  IMGUI_CHECKVERSION();
-  ImGui::CreateContext();
-  ImGuiIO & io = ImGui::GetIO(); (void)io;
-  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-  io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
-
-  // Setup Dear ImGui style
-  ImGui::StyleColorsDark();
-
-  // Load Fonts
-  io.Fonts->AddFontDefault();
-
-  // Setup Platform/Renderer backends
-  const char* glsl_version = "#version 130";
-  ImGui_ImplGlfw_InitForOpenGL(_MainWindow, true);
-  ImGui_ImplOpenGL3_Init(glsl_version);
+  InitializeUI();
 
   // Init openGL scene
-
   glewExperimental = GL_TRUE;
   if ( glewInit() != GLEW_OK )
   {
@@ -273,11 +326,14 @@ int Test3::Run()
     return 1;
   }
 
-  glViewport(0, 0, _ScreenWidth, _ScreenHeight);
-  glDisable(GL_DEPTH_TEST);
+  // Initialize the scene
+  InitializeScene();
 
   // Main loop
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+  glViewport(0, 0, _ScreenWidth, _ScreenHeight);
+  glDisable(GL_DEPTH_TEST);
 
   _CPULoopTime = glfwGetTime();
   while (!glfwWindowShouldClose(_MainWindow))
@@ -293,10 +349,11 @@ int Test3::Run()
     glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
 
+    UpdateScene();
     UpdateUniforms();
 
     // Render to texture
-    glBindFramebuffer(GL_FRAMEBUFFER, g_FrameBufferID);
+    glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
     _Quad -> Render(*_RTTShader);
 
     // Render to screen

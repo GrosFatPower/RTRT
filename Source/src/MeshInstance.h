@@ -14,8 +14,8 @@ struct MeshInstance
   int         _MaterialID;
   Mat4x4      _Transform;
 
-  MeshInstance( const std::string & iFilename, int iShapeID, int iMaterialID, const Mat4x4 & iTransform )
-  : _Filename(iFilename), _MeshID(iShapeID), _MaterialID(iMaterialID), _Transform(iTransform) {}
+  MeshInstance( const std::string & iFilename, int iMeshID, int iMaterialID, const Mat4x4 & iTransform )
+  : _Filename(iFilename), _MeshID(iMeshID), _MaterialID(iMaterialID), _Transform(iTransform) {}
 };
 
 }

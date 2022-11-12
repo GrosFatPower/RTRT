@@ -20,6 +20,10 @@ Scene::~Scene()
   for (auto & mesh : _Meshes)
     delete mesh;
   _Meshes.clear();
+
+  for (auto & object : _Objects)
+    delete object;
+  _Objects.clear();
 }
 
 int Scene::AddTexture( const std::string & iFilename )
@@ -123,6 +127,24 @@ int Scene::FindMaterialID( const std::string & iMateralName )
     matID = search -> second;
 
   return matID;
+}
+
+int Scene::AddObject( const Object & iObject )
+{
+  int objectID = _Objects.size();
+
+  Object * newObject = new Object(iObject);
+  newObject -> _ObjectID = objectID;
+  _Objects.push_back(newObject);
+
+  return objectID;
+}
+
+int Scene::AddObjectInstance( ObjectInstance & iObjectInstance )
+{
+  int instanceID = _ObjectInstances.size();
+  _ObjectInstances.push_back(iObjectInstance);
+  return instanceID;
 }
 
 }
