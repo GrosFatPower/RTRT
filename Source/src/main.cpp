@@ -1,5 +1,6 @@
 #include "Test1.h"
 #include "Test2.h"
+#include "Test3.h"
 
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
@@ -72,6 +73,9 @@ int main(int, char**)
   ImGui_ImplOpenGL3_Init(glsl_version);
 
   // Our state
+  const char * TestNames[] = { "Test 1 : Render to texture",
+                               "Test 2 : Scene loader",
+                               "Test 3 : Basic ray tracing" };
   int selectedTest = 0;
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
@@ -87,10 +91,16 @@ int main(int, char**)
     {
       ImGui::Begin("Test selection");
 
-      if (ImGui::Button("Test1"))
-        selectedTest = 1;
-      if (ImGui::Button("Test2"))
-        selectedTest = 2;
+      int comboSelection = 0;
+      if ( ImGui::Combo("Test selection", &comboSelection, TestNames, 3) )
+      {
+        if ( 0 == comboSelection )
+          selectedTest = 1;
+        else if ( 1 == comboSelection )
+          selectedTest = 2;
+        else if ( 2 == comboSelection )
+          selectedTest = 3;
+      }
 
       ImGui::End();
     }
@@ -119,10 +129,16 @@ int main(int, char**)
     failure = test1.Run();
   }
 
-  if ( 2 == selectedTest )
+  else if ( 2 == selectedTest )
   {
     RTRT::Test2 test2(mainWindow, g_ScreenWidth, g_ScreenHeight);
-    failure |= test2.Run();
+    failure = test2.Run();
+  }
+
+  else if ( 3 == selectedTest )
+  {
+    RTRT::Test3 test3(mainWindow, g_ScreenWidth, g_ScreenHeight);
+    failure = test3.Run();
   }
 
   glfwDestroyWindow(mainWindow);

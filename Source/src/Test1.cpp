@@ -223,6 +223,8 @@ int Test1::Run()
   if ( !_MainWindow )
     return 1;
 
+  glfwSetWindowTitle(_MainWindow, "Test 1 : Render to texture");
+
   glfwSetFramebufferSizeCallback(_MainWindow, FramebufferSizeCallback);
   glfwSetMouseButtonCallback(_MainWindow, MousebuttonCallback);
   //glfwSetKeyCallback(_MainWindow, keyCallback);

@@ -1,17 +1,14 @@
-#include "Test2.h"
+#include "Test3.h"
 
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
 
-#include "tinydir.h"
-
 #include <GL/glew.h>
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
 
-#include "Scene.h"
-#include "RenderSettings.h"
-#include "Loader.h"
+#include <deque>
+#include <iostream>
 
 namespace RTRT
 {
@@ -23,6 +20,11 @@ static double g_MouseX       = 0.;
 static double g_MouseY       = 0.;
 static bool   g_LeftClick    = false;
 static bool   g_RightClick   = false;
+
+static long  g_Frame         = 0;
+static float g_FrameRate     = 60.f;
+static float g_CurLoopTime   = 0.f;
+static float g_TimeDelta     = 0.f;
 
 static std::string g_AssetsDir = "..\\..\\Assets\\";
 static int         g_CurSceneIndex = 0;
@@ -71,60 +73,25 @@ static void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
   glViewport(0, 0, width, height);
 }
 
-static int LoadScene( const std::string & iFilename, Scene *& ioScene, RenderSettings & oSettings )
-{
-  if ( ioScene )
-    delete ioScene;
-  ioScene = nullptr;
-
-  if ( !Loader::LoadScene(g_AssetsDir + iFilename, ioScene, oSettings) || !ioScene )
-    return 1;
-
-  return 0;
-}
-
-Test2::Test2( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
+Test3::Test3( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
 : _MainWindow(iMainWindow)
 {
   _ScreenWitdh  = iScreenWidth;
   _ScreenHeight = iScreenHeight;
-
-  InitializeSceneFile();
 }
 
-Test2::~Test2()
+Test3::~Test3()
 {
-  if ( _Scene )
-    delete _Scene;
-  _Scene = nullptr;
 }
 
-void Test2::InitializeSceneFile()
-{
-  tinydir_dir dir;
-  tinydir_open_sorted(&dir, g_AssetsDir.c_str());
-
-  for ( int i = 0; i < dir.n_files; ++i )
-  {
-    tinydir_file file;
-    tinydir_readfile_n(&dir, &file, i);
-
-    std::string extension(file.extension);
-    if ( "scene" == extension )
-      _SceneFiles.push_back(std::string(file.name));
-  }
-
-  tinydir_close(&dir);
-}
-
-int Test2::Run()
+int Test3::Run()
 {
   int ret = 0;
 
   if ( !_MainWindow )
     return 1;
 
-  glfwSetWindowTitle(_MainWindow, "Test 2 : Scene loader");
+  glfwSetWindowTitle(_MainWindow, "Test 3 : Basic ray tracing");
 
   glfwSetFramebufferSizeCallback(_MainWindow, FramebufferSizeCallback);
   glfwSetMouseButtonCallback(_MainWindow, MousebuttonCallback);
@@ -167,22 +134,30 @@ int Test2::Run()
   // Our state
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-  bool forceResize = false;
+  // Main loop
+  std::deque<float> lastDeltas;
+
   double oldCpuTime = glfwGetTime();
   while (!glfwWindowShouldClose(_MainWindow))
   {
-    double curLoopTime = glfwGetTime();
+    g_Frame++;
 
-    double timeDelta = curLoopTime - oldCpuTime;
-    oldCpuTime = curLoopTime;
+    g_CurLoopTime = glfwGetTime();
 
-    if ( forceResize )
-    {
-      _ScreenWitdh  = _Settings._WindowResolution.x;
-      _ScreenHeight = _Settings._WindowResolution.y;
-      glfwSetWindowSize(_MainWindow, _ScreenWitdh, _ScreenHeight);
-      forceResize = false;
-    }
+    g_TimeDelta = g_CurLoopTime - oldCpuTime;
+    oldCpuTime = g_CurLoopTime;
+
+    lastDeltas.push_back(g_TimeDelta);
+    while ( lastDeltas.size() > 60 )
+      lastDeltas.pop_front();
+    
+    double totalDelta = 0.;
+    for ( auto delta : lastDeltas )
+      totalDelta += delta;
+    double averageDelta = totalDelta / lastDeltas.size();
+
+    if ( averageDelta > 0. )
+      g_FrameRate = 1. / (float)averageDelta;
 
     glfwPollEvents();
 
@@ -192,43 +167,9 @@ int Test2::Run()
     ImGui::NewFrame();
 
     {
-      ImGui::Begin("Scene loader");
+      ImGui::Begin("Test 3");
 
-      std::vector<const char*> sceneNames;
-      for (int i = 0; i < _SceneFiles.size(); ++i)
-          sceneNames.push_back(_SceneFiles[i].c_str());
-
-      if ( ImGui::Combo("Scene selection", &g_CurSceneIndex, sceneNames.data(), sceneNames.size()) )
-      {
-        int failed = LoadScene(_SceneFiles[g_CurSceneIndex], _Scene, _Settings);
-        if ( !failed )
-        {
-          g_LoadingState = 1;
-          forceResize = true;
-        }
-        else
-        {
-          g_LoadingState = 0;
-          std::cout << "Failed to load scene " << _SceneFiles[g_CurSceneIndex] << std::endl;
-        }
-      }
-
-      if ( g_LoadingState )
-      {
-        ImGui::BulletText("Settings");
-        ImGui::Text("Window resolution : w=%d h=%d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
-        ImGui::Text("Render resolution : w=%d h=%d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
-
-        ImGui::BulletText("Scene : %s", _SceneFiles[g_CurSceneIndex].c_str());
-        ImGui::Text("Nb lights    : %d",    _Scene -> GetNbLights());
-        ImGui::Text("Nb materials : %d", _Scene -> GetNbMaterials());
-        ImGui::Text("Nb textures  : %d",  _Scene -> GetNbTextures());
-        ImGui::Text("Nb meshes    : %d",    _Scene -> GetNbMeshes());
-      }
-      else
-      {
-        ImGui::Text("No loaded scene");
-      }
+      ImGui::Text("Render time %.3f ms/frame (%.1f FPS)", averageDelta * 1000.f, g_FrameRate);
 
       ImGui::End();
     }
