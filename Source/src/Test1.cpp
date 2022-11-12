@@ -69,11 +69,6 @@ static const GLfloat g_QuadUVs[] =
 // ----------------------------------------------------------------------------
 // Global functions
 // ----------------------------------------------------------------------------
-static void glfw_error_callback(int error, const char* description)
-{
-  fprintf(stderr, "Glfw Error %d: %s\n", error, description);
-}
-
 static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
   if (action == GLFW_PRESS)
@@ -210,7 +205,8 @@ void UpdateUniforms()
   }
 }
 
-Test1::Test1( int iScreenWidth, int iScreenHeight )
+Test1::Test1( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
+: _MainWindow(iMainWindow)
 {
   g_ScreenWidth = iScreenWidth;
   g_ScreenHeight = iScreenHeight;
@@ -224,34 +220,14 @@ int Test1::Run()
 {
   int ret = 0;
 
-  // Setup window
-  glfwSetErrorCallback(glfw_error_callback);
-  if ( !glfwInit() )
-  {
-    std::cout << "Failed to initialize GLFW!" << std::endl;
+  if ( !_MainWindow )
     return 1;
-  }
 
-  const char* glsl_version = "#version 130";
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-  //glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
-  //glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
+  glfwSetFramebufferSizeCallback(_MainWindow, FramebufferSizeCallback);
+  glfwSetMouseButtonCallback(_MainWindow, MousebuttonCallback);
+  //glfwSetKeyCallback(_MainWindow, keyCallback);
 
-  // Create window with graphics context
-  GLFWwindow * mainWindow = glfwCreateWindow(g_ScreenWidth, g_ScreenHeight, "RTRT - Test 1 : Render to texture", NULL, NULL);
-  if ( !mainWindow )
-  {
-    std::cout << "Failed to create a window!" << std::endl;
-    glfwTerminate();
-    return 1;
-  }
-
-  glfwSetFramebufferSizeCallback(mainWindow, FramebufferSizeCallback);
-  glfwSetMouseButtonCallback(mainWindow, MousebuttonCallback);
-  //glfwSetKeyCallback(mainWindow, keyCallback);
-
-  glfwMakeContextCurrent(mainWindow);
+  glfwMakeContextCurrent(_MainWindow);
   glfwSwapInterval(1); // Enable vsync
 
   // Setup Dear ImGui context
@@ -269,7 +245,8 @@ int Test1::Run()
   io.Fonts->AddFontDefault();
 
   // Setup Platform/Renderer backends
-  ImGui_ImplGlfw_InitForOpenGL(mainWindow, true);
+  const char* glsl_version = "#version 130";
+  ImGui_ImplGlfw_InitForOpenGL(_MainWindow, true);
   ImGui_ImplOpenGL3_Init(glsl_version);
 
   // Init openGL scene
@@ -340,7 +317,7 @@ int Test1::Run()
   std::deque<float> lastDeltas;
 
   double oldCpuTime = glfwGetTime();
-  while (!glfwWindowShouldClose(mainWindow))
+  while (!glfwWindowShouldClose(_MainWindow))
   {
     g_Frame++;
 
@@ -385,6 +362,9 @@ int Test1::Run()
         if ( !g_RTTShader )
           break;
         shaderProgramID = g_RTTShader -> GetShaderProgramID();
+
+        lastDeltas.clear();
+        lastDeltas.push_back(g_TimeDelta);
       }
       ImGui::SameLine();
       ImGui::Text("Shader num = %d", g_FragShaderNum);
@@ -398,7 +378,7 @@ int Test1::Run()
     // Rendering
     ImGui::Render();
 
-    glfwGetFramebufferSize(mainWindow, &g_ScreenWidth, &g_ScreenHeight);
+    glfwGetFramebufferSize(_MainWindow, &g_ScreenWidth, &g_ScreenHeight);
     glViewport(0, 0, g_ScreenWidth, g_ScreenHeight);
     glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -414,7 +394,7 @@ int Test1::Run()
 
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-    glfwSwapBuffers(mainWindow);
+    glfwSwapBuffers(_MainWindow);
   }
 
   // Cleanup
@@ -434,9 +414,6 @@ int Test1::Run()
   if ( g_OutputShader )
     delete g_OutputShader;
   g_OutputShader = NULL;
-
-  glfwDestroyWindow(mainWindow);
-  glfwTerminate();
 
   return ret;
 }

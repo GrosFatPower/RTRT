@@ -34,11 +34,6 @@ static int         g_LoadingState = 0;
 // ----------------------------------------------------------------------------
 // Global functions
 // ----------------------------------------------------------------------------
-static void glfw_error_callback(int error, const char* description)
-{
-  fprintf(stderr, "Glfw Error %d: %s\n", error, description);
-}
-
 static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
   if (action == GLFW_PRESS)
@@ -91,7 +86,8 @@ static int LoadScene( const std::string & iFilename, Scene *& ioScene, RenderSet
   return 0;
 }
 
-Test2::Test2( int iScreenWidth, int iScreenHeight )
+Test2::Test2( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
+: _MainWindow(iMainWindow)
 {
   _ScreenWitdh  = iScreenWidth;
   _ScreenHeight = iScreenHeight;
@@ -128,32 +124,14 @@ int Test2::Run()
 {
   int ret = 0;
 
-  // Setup window
-  glfwSetErrorCallback(glfw_error_callback);
-  if ( !glfwInit() )
-  {
-    std::cout << "Failed to initialize GLFW!" << std::endl;
+  if ( !_MainWindow )
     return 1;
-  }
 
-  const char* glsl_version = "#version 130";
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+  glfwSetFramebufferSizeCallback(_MainWindow, FramebufferSizeCallback);
+  glfwSetMouseButtonCallback(_MainWindow, MousebuttonCallback);
+  //glfwSetKeyCallback(_MainWindow, keyCallback);
 
-  // Create window with graphics context
-  GLFWwindow * mainWindow = glfwCreateWindow(_ScreenWitdh, _ScreenHeight, "RTRT - Test 2 : Scene loader", NULL, NULL);
-  if ( !mainWindow )
-  {
-    std::cout << "Failed to create a window!" << std::endl;
-    glfwTerminate();
-    return 1;
-  }
-
-  glfwSetFramebufferSizeCallback(mainWindow, FramebufferSizeCallback);
-  glfwSetMouseButtonCallback(mainWindow, MousebuttonCallback);
-  //glfwSetKeyCallback(mainWindow, keyCallback);
-
-  glfwMakeContextCurrent(mainWindow);
+  glfwMakeContextCurrent(_MainWindow);
   glfwSwapInterval(1); // Enable vsync
 
   // Setup Dear ImGui context
@@ -170,7 +148,8 @@ int Test2::Run()
   io.Fonts->AddFontDefault();
 
   // Setup Platform/Renderer backends
-  ImGui_ImplGlfw_InitForOpenGL(mainWindow, true);
+  const char* glsl_version = "#version 130";
+  ImGui_ImplGlfw_InitForOpenGL(_MainWindow, true);
   ImGui_ImplOpenGL3_Init(glsl_version);
 
   // Init openGL scene
@@ -191,7 +170,7 @@ int Test2::Run()
 
   bool forceResize = false;
   double oldCpuTime = glfwGetTime();
-  while (!glfwWindowShouldClose(mainWindow))
+  while (!glfwWindowShouldClose(_MainWindow))
   {
     g_Frame++;
 
@@ -204,7 +183,7 @@ int Test2::Run()
     {
       _ScreenWitdh  = _Settings._WindowResolution.x;
       _ScreenHeight = _Settings._WindowResolution.y;
-      glfwSetWindowSize(mainWindow, _ScreenWitdh, _ScreenHeight);
+      glfwSetWindowSize(_MainWindow, _ScreenWitdh, _ScreenHeight);
       forceResize = false;
     }
 
@@ -260,23 +239,20 @@ int Test2::Run()
     // Rendering
     ImGui::Render();
 
-    glfwGetFramebufferSize(mainWindow, &_ScreenWitdh, &_ScreenHeight);
+    glfwGetFramebufferSize(_MainWindow, &_ScreenWitdh, &_ScreenHeight);
     glViewport(0, 0, _ScreenWitdh, _ScreenHeight);
     glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
 
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-    glfwSwapBuffers(mainWindow);
+    glfwSwapBuffers(_MainWindow);
   }
 
   // Cleanup
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplGlfw_Shutdown();
   ImGui::DestroyContext();
-
-  glfwDestroyWindow(mainWindow);
-  glfwTerminate();
 
   return ret;
 }

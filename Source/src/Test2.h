@@ -5,6 +5,8 @@
 #include <vector>
 #include <string>
 
+struct GLFWwindow;
+
 namespace RTRT
 {
 
@@ -13,7 +15,7 @@ class Scene;
 class Test2
 {
 public:
-  Test2( int iScreenWidth, int iScreenHeight );
+  Test2( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight );
   virtual ~Test2();
 
   int Run();
@@ -21,6 +23,8 @@ public:
 private:
 
   void InitializeSceneFile();
+
+  GLFWwindow     * _MainWindow;
 
   Scene          * _Scene = nullptr;
   RenderSettings   _Settings;
