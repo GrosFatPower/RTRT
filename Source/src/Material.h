@@ -23,7 +23,7 @@ enum class MediumType
 
 struct Material
 {
-  Vec3  _BaseColor              = { 1.0f, 1.0f, 1.0f };
+  Vec3  _Albedo                 = { 1.0f, 1.0f, 1.0f };
   float _ID                     = -1.f;
 
   Vec3  _Emission               = { 0.0f, 0.0f, 0.0f };

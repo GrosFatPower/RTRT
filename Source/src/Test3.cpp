@@ -134,7 +134,7 @@ int Test3::RecompileShaders()
   _RTSShader = nullptr;
 
   ShaderSource vertexShaderSrc = Shader::LoadShader("..\\..\\shaders\\vertex_Default.glsl");
-  ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Default.glsl");
+  ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_BasicRT.glsl");
 
   _RTTShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !_RTTShader )
@@ -154,7 +154,6 @@ int Test3::UpdateUniforms()
   {
     _RTTShader -> Use();
     GLuint RTTProgramID = _RTTShader -> GetShaderProgramID();
-    glUniform1f(glGetUniformLocation(RTTProgramID, "u_Time"), _CPULoopTime);
     _RTTShader -> StopUsing();
   }
   else
@@ -259,7 +258,7 @@ int Test3::InitializeScene()
   _Scene -> AddLight(newLight);
 
   Material greenMat;
-  greenMat._BaseColor = { .14f, .45f, .091f };
+  greenMat._Albedo = { .14f, .45f, .091f };
   int greenMatID = _Scene -> AddMaterial(greenMat, "green");
 
   Sphere sphere;

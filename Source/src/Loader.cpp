@@ -264,7 +264,7 @@ int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, cons
     if ( "color" == tokens[0] )
     {
       if ( 4 == nbTokens )
-        newMaterial._BaseColor = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
+        newMaterial._Albedo = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
         parsingError++;
     }

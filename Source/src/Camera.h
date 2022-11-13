@@ -22,11 +22,20 @@ public:
   void SetFOV( float iFOV );
   float GetFOV() const { return _FOV; }
 
+  void SetRadius( float iRadius );
+  void IncreaseRadius( float iIncr );
+  float GetRadius() const { return _Radius; }
+
   void SetFocalDist( float iFocalDist ) { _FocalDist = iFocalDist; }
   float GetFocalDist() const { return _FocalDist; }
 
   void SetAperture( float iAperture ) { _Aperture = iAperture; }
   float GetAperture() const { return _Aperture; }
+
+  void Yaw(float iDx);
+  void Pitch(float iDy);
+  void OffsetOrientations(float iYaw, float iPitch);
+  void Strafe(float iDx, float iDy);
 
 private:
 

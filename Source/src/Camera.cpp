@@ -64,4 +64,41 @@ void Camera::SetFOV( float iFOV )
   _FOV = MathUtil::ToRadians(iFOV);
 }
 
+void Camera::SetRadius( float iRadius )
+{
+  _Radius = iRadius;
+  Update();
+}
+
+void Camera::IncreaseRadius( float iIncr )
+{
+  SetRadius(_Radius + iIncr);
+}
+
+void Camera::Yaw(float iDx)
+{
+  _Yaw += iDx;
+  Update();
+}
+
+void Camera::Pitch(float iDy)
+{
+  _Pitch += iDy;
+  Update();
+}
+
+void Camera::OffsetOrientations(float iYaw, float iPitch)
+{
+  _Yaw += iYaw;
+  _Pitch += iPitch;
+  Update();
+}
+
+void Camera::Strafe(float iDx, float iDy)
+{
+  Vec3 translation = _Right * -iDx + _Up * iDy;
+  _Pivot += translation;
+  Update();
+}
+
 }
