@@ -14,10 +14,10 @@ public:
 
   void Initialize(Vec3 iPos, Vec3 iLookAt, float iFOV);
 
-  Vec3 GetPos()     const { return _Pos; }
-  Vec3 GetUp()      const { return _Up; }
-  Vec3 GetRight()   const { return _Right; }
-  Vec3 GetForward() const { return _Forward; }
+  const Vec3 & GetPos()     const { return _Pos; }
+  const Vec3 & GetUp()      const { return _Up; }
+  const Vec3 & GetRight()   const { return _Right; }
+  const Vec3 & GetForward() const { return _Forward; }
 
   void SetFOV( float iFOV );
   float GetFOV() const { return _FOV; }

@@ -33,6 +33,8 @@ public:
   int AddObjectInstance( ObjectInstance & iObjectInstance );
 
   void SetCamera( const Camera & iCamera ) { _Camera = iCamera; }
+  Camera & GetCamera() { return _Camera; }
+
   void AddLight( const Light & iLight ) { _Lights.push_back(iLight); }
 
   int FindMaterialID( const std::string & iMateralName );

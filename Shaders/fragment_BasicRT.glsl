@@ -60,11 +60,10 @@ struct Camera
 };
 
 // Uniforms
-//uniform float u_AspectRatio;
+uniform vec2   u_Resolution;
+uniform Camera u_Camera;
 
 // Constants
-const Camera cam = Camera(vec3(0.f, 1.f, 0.f), vec3(1.f, 0.f, 0.f), vec3(0.f, 0.f, -1.f),vec3(0.f, 0.f, 2.f));
-
 const Material green  = Material(0, vec3( .1f, .8f, .1f ), vec3( 0.f, 0.f, 0.f ), .4f, .0f);
 const Material red    = Material(1, vec3( .8f, .1f, .1f ), vec3( 0.f, 0.f, 0.f ), .3f, .5f);
 const Material blue   = Material(2, vec3( .1f, .1f, .8f ), vec3( 0.f, 0.f, 0.f ), .2f, .3f);
@@ -166,14 +165,14 @@ bool TraceRay( Ray iRay, out HitPoint closestHit )
 
 void main()
 {
-  const float aspectRatio = 1.77f;
+  const float aspectRatio = u_Resolution.x / u_Resolution.y;
 
   // Initialization
   vec2 centeredUV = ( fragUV * 2.f - vec2(1.f) ) * vec2(aspectRatio, 1.f);
 
   Ray ray;
-  ray._Orig = cam._Pos;
-  ray._Dir = normalize(cam._Right * centeredUV.x + cam._Up * centeredUV.y + cam._Forward);
+  ray._Orig = u_Camera._Pos;
+  ray._Dir = normalize(u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward);
 
   vec3 pixelColor = vec3(0.f, 0.f, 0.f);
   float multiplier = 1.0f;

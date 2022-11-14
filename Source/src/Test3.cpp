@@ -154,6 +154,14 @@ int Test3::UpdateUniforms()
   {
     _RTTShader -> Use();
     GLuint RTTProgramID = _RTTShader -> GetShaderProgramID();
+    glUniform2f(glGetUniformLocation(RTTProgramID, "u_Resolution"), _ScreenWidth, _ScreenHeight);
+    if ( _Scene )
+    {
+      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Up"), _Scene -> GetCamera().GetUp().x, _Scene -> GetCamera().GetUp().y, _Scene -> GetCamera().GetUp().z);
+      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Right"), _Scene -> GetCamera().GetRight().x, _Scene -> GetCamera().GetRight().y, _Scene -> GetCamera().GetRight().z);
+      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Forward"), _Scene -> GetCamera().GetForward().x, _Scene -> GetCamera().GetForward().y, _Scene -> GetCamera().GetForward().z);
+      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Pos"), _Scene -> GetCamera().GetPos().x, _Scene -> GetCamera().GetPos().y, _Scene -> GetCamera().GetPos().z);
+    }
     _RTTShader -> StopUsing();
   }
   else
@@ -248,7 +256,7 @@ int Test3::InitializeScene()
 
   _Scene = new Scene();
 
-  Camera newCamera({0.f, 0.f, -1.f}, { 0.f, 0.f, 0.f }, 80.f);
+  Camera newCamera({0.f, 0.f, 2.f}, { 0.f, 0.f, 0.f }, 80.f);
   _Scene ->SetCamera(newCamera);
 
   Light newLight;
