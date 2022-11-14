@@ -43,7 +43,7 @@ private:
   static void MousebuttonCallback(GLFWwindow * window, int button, int action, int mods);
   static void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
 
-  GLFWwindow     * _MainWindow;
+  GLFWwindow    * _MainWindow;
   int             _ScreenWidth;
   int             _ScreenHeight;
 
@@ -63,9 +63,11 @@ private:
 
   double          _MouseX       = 0.;
   double          _MouseY       = 0.;
+  double          _OldMouseX    = 0.;
+  double          _OldMouseY    = 0.;
   bool            _LeftClick    = false;
   bool            _RightClick   = false;
-
+  bool            _MiddleClick  = false;
 
   Scene         * _Scene = nullptr;
   RenderSettings  _Settings;

@@ -58,6 +58,14 @@ void Test3::MousebuttonCallback(GLFWwindow* window, int button, int action, int 
     }
     else
       this_->_RightClick = false;
+
+    if ( ( GLFW_MOUSE_BUTTON_3 == button ) && ( GLFW_PRESS == action ) )
+    {
+      std::cout << "EVENT : MIDDLE CLICK (" << this_->_MouseX << "," << this_->_MouseY << ")" << std::endl;
+      this_->_MiddleClick = true;
+    }
+    else
+      this_->_MiddleClick = false;
   }
 }
 
@@ -284,6 +292,27 @@ int Test3::UpdateScene()
 {
   if ( !_Scene )
     return 1;
+
+  const float mouseSensitivity = 0.01f;
+
+	glfwGetCursorPos(_MainWindow, &_MouseX, &_MouseY);
+
+  double deltaX = _MouseX - _OldMouseX;
+  double deltaY = _MouseY - _OldMouseY;
+
+  if ( _LeftClick )
+    _Scene -> GetCamera().OffsetOrientations(deltaX, deltaY);
+  if ( _RightClick )
+  {
+    float newRadius = _Scene -> GetCamera().GetRadius() + mouseSensitivity * deltaY;
+    if ( newRadius > 0.f )
+      _Scene -> GetCamera().SetRadius(newRadius);
+  }
+  if ( _MiddleClick )
+    _Scene -> GetCamera().Strafe(mouseSensitivity * deltaX, mouseSensitivity * deltaY);
+
+  _OldMouseX = _MouseX;
+  _OldMouseY = _MouseY;
 
   return 0;
 }
