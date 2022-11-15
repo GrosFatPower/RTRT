@@ -29,8 +29,28 @@ static std::string g_AssetsDir = "..\\..\\Assets\\";
 // ----------------------------------------------------------------------------
 void Test3::KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-  if (action == GLFW_PRESS)
+  auto * const this_ = static_cast<Test3*>(glfwGetWindowUserPointer(window));
+  if ( !this_ )
+    return;
+
+  if ( ( action == GLFW_PRESS ) || ( action == GLFW_RELEASE ) )
+  {
     std::cout << "EVENT : KEY PRESSED" << std::endl;
+
+    switch ( key )
+    {
+    case GLFW_KEY_W:
+      this_ -> _KeyUp =    ( action == GLFW_PRESS ); break;
+    case GLFW_KEY_S:
+      this_ -> _KeyDown =  ( action == GLFW_PRESS ); break;
+    case GLFW_KEY_A:
+      this_ -> _KeyLeft =  ( action == GLFW_PRESS ); break;
+    case GLFW_KEY_D:
+      this_ -> _KeyRight = ( action == GLFW_PRESS ); break;
+    default :
+      break;
+    }
+  }
 }
 
 void Test3::MousebuttonCallback(GLFWwindow* window, int button, int action, int mods)
@@ -163,12 +183,19 @@ int Test3::UpdateUniforms()
     _RTTShader -> Use();
     GLuint RTTProgramID = _RTTShader -> GetShaderProgramID();
     glUniform2f(glGetUniformLocation(RTTProgramID, "u_Resolution"), _ScreenWidth, _ScreenHeight);
+    glUniform1f(glGetUniformLocation(RTTProgramID, "u_Time"), _CPULoopTime);
     if ( _Scene )
     {
       glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Up"), _Scene -> GetCamera().GetUp().x, _Scene -> GetCamera().GetUp().y, _Scene -> GetCamera().GetUp().z);
       glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Right"), _Scene -> GetCamera().GetRight().x, _Scene -> GetCamera().GetRight().y, _Scene -> GetCamera().GetRight().z);
       glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Forward"), _Scene -> GetCamera().GetForward().x, _Scene -> GetCamera().GetForward().y, _Scene -> GetCamera().GetForward().z);
       glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Pos"), _Scene -> GetCamera().GetPos().x, _Scene -> GetCamera().GetPos().y, _Scene -> GetCamera().GetPos().z);
+
+      Light firstLight;
+      _Scene -> GetLight(0, firstLight);
+      glUniform3f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Pos"), firstLight._Pos.x, firstLight._Pos.y, firstLight._Pos.z);
+      glUniform3f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Emission"), firstLight._Emission.x, firstLight._Emission.y, firstLight._Emission.z);
+      glUniform1f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Radius"), firstLight._Radius);
     }
     _RTTShader -> StopUsing();
   }
@@ -268,9 +295,10 @@ int Test3::InitializeScene()
   _Scene ->SetCamera(newCamera);
 
   Light newLight;
-  newLight._Pos      = { 5.f, 5.f, -5.f };
-  newLight._Emission = { .3f, .3f, .3f };
+  newLight._Pos      = { 2.f, 10.f, .5f };
+  newLight._Emission = { 1.f,  1.f, .5f };
   newLight._Type     = (float)LightType::SphereLight;
+  newLight._Radius   = 100.f;
   _Scene -> AddLight(newLight);
 
   Material greenMat;
@@ -293,26 +321,55 @@ int Test3::UpdateScene()
   if ( !_Scene )
     return 1;
 
-  const float mouseSensitivity = 0.01f;
-
-	glfwGetCursorPos(_MainWindow, &_MouseX, &_MouseY);
-
-  double deltaX = _MouseX - _OldMouseX;
-  double deltaY = _MouseY - _OldMouseY;
-
-  if ( _LeftClick )
-    _Scene -> GetCamera().OffsetOrientations(deltaX, deltaY);
-  if ( _RightClick )
+  // Mouse input
   {
-    float newRadius = _Scene -> GetCamera().GetRadius() + mouseSensitivity * deltaY;
-    if ( newRadius > 0.f )
-      _Scene -> GetCamera().SetRadius(newRadius);
-  }
-  if ( _MiddleClick )
-    _Scene -> GetCamera().Strafe(mouseSensitivity * deltaX, mouseSensitivity * deltaY);
+    const float mouseSensitivity = 0.01f;
 
-  _OldMouseX = _MouseX;
-  _OldMouseY = _MouseY;
+    glfwGetCursorPos(_MainWindow, &_MouseX, &_MouseY);
+
+    double deltaX = _MouseX - _OldMouseX;
+    double deltaY = _MouseY - _OldMouseY;
+
+    if ( _LeftClick )
+      _Scene -> GetCamera().OffsetOrientations(deltaX, deltaY);
+    if ( _RightClick )
+    {
+      float newRadius = _Scene -> GetCamera().GetRadius() + mouseSensitivity * deltaY;
+      if ( newRadius > 0.f )
+        _Scene -> GetCamera().SetRadius(newRadius);
+    }
+    if ( _MiddleClick )
+      _Scene -> GetCamera().Strafe(mouseSensitivity * deltaX, mouseSensitivity * deltaY);
+
+    _OldMouseX = _MouseX;
+    _OldMouseY = _MouseY;
+  }
+
+  // Keyboard input
+  {
+    const float velocity = 100.f;
+
+    if ( _KeyUp )
+    {
+      float newRadius = _Scene -> GetCamera().GetRadius() - _TimeDelta;
+      if ( newRadius > 0.f )
+        _Scene -> GetCamera().SetRadius(newRadius);
+    }
+    if ( _KeyDown )
+    {
+      float newRadius = _Scene -> GetCamera().GetRadius() + _TimeDelta;
+      if ( newRadius > 0.f )
+        _Scene -> GetCamera().SetRadius(newRadius);
+    }
+    if ( _KeyLeft )
+    {
+      _Scene -> GetCamera().OffsetOrientations(_TimeDelta * velocity, 0.f);
+    }
+    if ( _KeyRight )
+    {
+      _Scene -> GetCamera().OffsetOrientations(-_TimeDelta * velocity, 0.f);
+    }
+  }
 
   return 0;
 }
@@ -329,7 +386,7 @@ int Test3::Run()
 
   glfwSetFramebufferSizeCallback(_MainWindow, Test3::FramebufferSizeCallback);
   glfwSetMouseButtonCallback(_MainWindow, Test3::MousebuttonCallback);
-  //glfwSetKeyCallback(_MainWindow, Test3::KeyCallback);
+  glfwSetKeyCallback(_MainWindow, Test3::KeyCallback);
 
   glfwMakeContextCurrent(_MainWindow);
   glfwSwapInterval(1); // Enable vsync

@@ -60,8 +60,10 @@ struct Camera
 };
 
 // Uniforms
-uniform vec2   u_Resolution;
-uniform Camera u_Camera;
+uniform vec2        u_Resolution;
+uniform float       u_Time;
+uniform Camera      u_Camera;
+uniform SphereLight u_SphereLight;
 
 // Constants
 const Material green  = Material(0, vec3( .1f, .8f, .1f ), vec3( 0.f, 0.f, 0.f ), .4f, .0f);
@@ -69,8 +71,6 @@ const Material red    = Material(1, vec3( .8f, .1f, .1f ), vec3( 0.f, 0.f, 0.f )
 const Material blue   = Material(2, vec3( .1f, .1f, .8f ), vec3( 0.f, 0.f, 0.f ), .2f, .3f);
 const Material orange = Material(3, vec3( .8f, .6f, .2f ), vec3( 0.f, 0.f, 0.f ), .1f, .7f);
 const Material Materials[4] = { green, red, blue, orange };
-
-const SphereLight light = SphereLight(vec3( 2.f, 10.f, .5f ), vec3( 1.f, 1.f, .5f ), 10.f);
 
 const Sphere Spheres[] = { Sphere(vec3( 0.f, 0.f, 0.f ),   .3f, 0),
                            Sphere(vec3( .5f, 1.f, -.5f ),  .2f, 1),
@@ -188,7 +188,7 @@ void main()
       break;
     }
 
-    vec3 lightDir =  normalize(light._Pos - closestHit._Pos);
+    vec3 lightDir =  normalize(u_SphereLight._Pos - closestHit._Pos);
     float lightDist = length(lightDir);
     
     HitPoint occlusionHit;
@@ -199,7 +199,7 @@ void main()
 
     vec3 lightIntensity = vec3(0.f, 0.f, 0.f);
     if ( ( occlusionHit._Dist > lightDist ) || ( occlusionHit._Dist < -EPSILON ) )
-      lightIntensity = max(dot(closestHit._Normal, lightDir), 0.0f) * light._Emission;
+      lightIntensity = max(dot(closestHit._Normal, lightDir), 0.0f) * u_SphereLight._Emission;
 
     pixelColor += Materials[closestHit._MaterialID]._Albedo * lightIntensity * multiplier;
 

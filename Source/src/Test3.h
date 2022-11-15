@@ -69,6 +69,11 @@ private:
   bool            _RightClick   = false;
   bool            _MiddleClick  = false;
 
+  bool            _KeyUp       = false;
+  bool            _KeyDown     = false;
+  bool            _KeyLeft     = false;
+  bool            _KeyRight    = false;
+
   Scene         * _Scene = nullptr;
   RenderSettings  _Settings;
 };
