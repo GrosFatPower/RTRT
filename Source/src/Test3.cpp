@@ -186,13 +186,14 @@ int Test3::UpdateUniforms()
     glUniform1f(glGetUniformLocation(RTTProgramID, "u_Time"), _CPULoopTime);
     if ( _Scene )
     {
-      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Up"), _Scene -> GetCamera().GetUp().x, _Scene -> GetCamera().GetUp().y, _Scene -> GetCamera().GetUp().z);
-      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Right"), _Scene -> GetCamera().GetRight().x, _Scene -> GetCamera().GetRight().y, _Scene -> GetCamera().GetRight().z);
-      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Forward"), _Scene -> GetCamera().GetForward().x, _Scene -> GetCamera().GetForward().y, _Scene -> GetCamera().GetForward().z);
-      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Pos"), _Scene -> GetCamera().GetPos().x, _Scene -> GetCamera().GetPos().y, _Scene -> GetCamera().GetPos().z);
+      Camera & cam = _Scene -> GetCamera();
+      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Up"), cam.GetUp().x, cam.GetUp().y, cam.GetUp().z);
+      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Right"), cam.GetRight().x, cam.GetRight().y, cam.GetRight().z);
+      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Forward"), cam.GetForward().x, cam.GetForward().y, cam.GetForward().z);
+      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Pos"), cam.GetPos().x, cam.GetPos().y, cam.GetPos().z);
+      glUniform1f(glGetUniformLocation(RTTProgramID, "u_Camera._FOV"), cam.GetFOV());
 
-      Light firstLight;
-      _Scene -> GetLight(0, firstLight);
+      const Light & firstLight = _Scene -> GetLight(0);
       glUniform3f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Pos"), firstLight._Pos.x, firstLight._Pos.y, firstLight._Pos.z);
       glUniform3f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Emission"), firstLight._Emission.x, firstLight._Emission.y, firstLight._Emission.z);
       glUniform1f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Radius"), firstLight._Radius);
@@ -250,6 +251,40 @@ int Test3::DrawUI()
 
     ImGui::Text("Render time %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
 
+    if ( ImGui::CollapsingHeader("Camera") )
+    {
+      Camera & cam = _Scene -> GetCamera();
+
+      ImGui::Text("Position : %.2f, %.2f, %.2f", cam.GetPos().x, cam.GetPos().y, cam.GetPos().z);
+
+      float fov = MathUtil::ToDegrees(cam.GetFOV());
+      if ( ImGui::SliderFloat("Fov", &fov, 10.f, 100.f) )
+        cam.SetFOV(fov);
+    }
+
+    if ( ImGui::CollapsingHeader("Light") )
+    {
+      Light & firstLight = _Scene -> GetLight(0);
+
+      float pos[3] = { firstLight._Pos.x, firstLight._Pos.y, firstLight._Pos.z };
+      if ( ImGui::InputFloat3("Position", pos) )
+      {
+        firstLight._Pos.x = pos[0];
+        firstLight._Pos.y = pos[1];
+        firstLight._Pos.z = pos[2];
+      }
+
+      float rgb[3] = { firstLight._Emission.r, firstLight._Emission.g, firstLight._Emission.b };
+      if ( ImGui::ColorPicker3("Emission", rgb) )
+      {
+        firstLight._Emission.r = rgb[0];
+        firstLight._Emission.g = rgb[1];
+        firstLight._Emission.b = rgb[2];
+      }
+
+      ImGui::SliderFloat("Radius", &firstLight._Radius, 0.1f, 1000.f);
+    }
+
     ImGui::End();
   }
 
@@ -291,8 +326,8 @@ int Test3::InitializeScene()
 
   _Scene = new Scene();
 
-  Camera newCamera({0.f, 0.f, 2.f}, { 0.f, 0.f, 0.f }, 80.f);
-  _Scene ->SetCamera(newCamera);
+  Camera newCamera({0.f, 0.f, 2.f}, { 0.f, 0.f, 0.f }, 90.f);
+  _Scene -> SetCamera(newCamera);
 
   Light newLight;
   newLight._Pos      = { 2.f, 10.f, .5f };

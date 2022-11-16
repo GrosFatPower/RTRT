@@ -53,10 +53,11 @@ struct Plane
 
 struct Camera
 {
-  vec3 _Up;
-  vec3 _Right;
-  vec3 _Forward;
-  vec3 _Pos;
+  vec3  _Up;
+  vec3  _Right;
+  vec3  _Forward;
+  vec3  _Pos;
+  float _FOV;
 };
 
 // Uniforms
@@ -165,10 +166,12 @@ bool TraceRay( Ray iRay, out HitPoint closestHit )
 
 void main()
 {
-  const float aspectRatio = u_Resolution.x / u_Resolution.y;
-
   // Initialization
-  vec2 centeredUV = ( fragUV * 2.f - vec2(1.f) ) * vec2(aspectRatio, 1.f);
+  vec2 centeredUV = 2. * fragUV - 1.;
+
+  float scale = tan(u_Camera._FOV * .5);
+  centeredUV.x *= scale;
+  centeredUV.y *= ( u_Resolution.y / u_Resolution.x ) * scale;
 
   Ray ray;
   ray._Orig = u_Camera._Pos;
@@ -188,18 +191,23 @@ void main()
       break;
     }
 
-    vec3 lightDir =  normalize(u_SphereLight._Pos - closestHit._Pos);
+    vec3 lightDir = u_SphereLight._Pos - closestHit._Pos;
     float lightDist = length(lightDir);
-    
-    HitPoint occlusionHit;
-    Ray occlusionRay;
-    occlusionRay._Orig = closestHit._Pos + closestHit._Normal * EPSILON;
-    occlusionRay._Dir = lightDir;
-    TraceRay(occlusionRay, occlusionHit);
 
+    lightDir = normalize(lightDir);
+    
     vec3 lightIntensity = vec3(0.f, 0.f, 0.f);
-    if ( ( occlusionHit._Dist > lightDist ) || ( occlusionHit._Dist < -EPSILON ) )
-      lightIntensity = max(dot(closestHit._Normal, lightDir), 0.0f) * u_SphereLight._Emission;
+    if ( lightDist < u_SphereLight._Radius )
+    {
+      HitPoint occlusionHit;
+      Ray occlusionRay;
+      occlusionRay._Orig = closestHit._Pos + closestHit._Normal * EPSILON;
+      occlusionRay._Dir = lightDir;
+      TraceRay(occlusionRay, occlusionHit);
+
+      if ( ( occlusionHit._Dist > lightDist ) || ( occlusionHit._Dist < -EPSILON ) )
+        lightIntensity = max(dot(closestHit._Normal, lightDir), 0.0f) * u_SphereLight._Emission;
+    }
 
     pixelColor += Materials[closestHit._MaterialID]._Albedo * lightIntensity * multiplier;
 

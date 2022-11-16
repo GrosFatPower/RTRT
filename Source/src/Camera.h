@@ -20,7 +20,7 @@ public:
   const Vec3 & GetForward() const { return _Forward; }
 
   void SetFOV( float iFOV );
-  float GetFOV() const { return _FOV; }
+  float GetFOV() const { return _FOV; } // radian
 
   void SetRadius( float iRadius );
   void IncreaseRadius( float iIncr );
