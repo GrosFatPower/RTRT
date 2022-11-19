@@ -147,4 +147,10 @@ int Scene::AddObjectInstance( ObjectInstance & iObjectInstance )
   return instanceID;
 }
 
+int Scene::AddObjectInstance( int iObjectID, int iMaterialID, const Mat4x4 & iTransform )
+{
+  ObjectInstance instance(iObjectID, iMaterialID, iTransform);
+  return AddObjectInstance(instance);
+}
+
 }

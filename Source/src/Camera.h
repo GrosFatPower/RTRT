@@ -19,12 +19,15 @@ public:
   const Vec3 & GetRight()   const { return _Right; }
   const Vec3 & GetForward() const { return _Forward; }
 
-  void SetFOV( float iFOV );
-  float GetFOV() const { return _FOV; } // radian
+  float GetYaw()   const { return _Yaw; }
+  float GetPitch() const { return _Pitch; }
 
+  float GetRadius() const { return _Radius; }
   void SetRadius( float iRadius );
   void IncreaseRadius( float iIncr );
-  float GetRadius() const { return _Radius; }
+
+  void SetFOV( float iFOV );
+  float GetFOV() const { return _FOV; } // radian
 
   void SetFocalDist( float iFocalDist ) { _FocalDist = iFocalDist; }
   float GetFocalDist() const { return _FocalDist; }
@@ -48,9 +51,9 @@ private:
   Vec3 _WorldUp;
   Vec3 _Pivot;
 
-  float _FOV;
-  float _Pitch;
-  float _Yaw;
+  float _FOV;   // radian
+  float _Pitch; // degrees
+  float _Yaw;   // degrees
   float _Radius;
 
   float _FocalDist = .1f;

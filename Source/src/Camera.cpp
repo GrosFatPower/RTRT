@@ -91,6 +91,12 @@ void Camera::OffsetOrientations(float iYaw, float iPitch)
 {
   _Yaw += iYaw;
   _Pitch += iPitch;
+
+  if ( fabs(_Yaw) > 360.f )
+    _Yaw -= MathUtil::sign(_Yaw) * 360.f * floor( fabs(_Yaw / 360.f) );
+  if ( fabs(_Pitch) >= 90.f )
+    _Pitch = MathUtil::sign(_Pitch) * 89.999f;
+
   Update();
 }
 

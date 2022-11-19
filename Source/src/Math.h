@@ -7,10 +7,12 @@
 #include <cmath>
 #include <algorithm>
 
-#include "glm\vec2.hpp"
-#include "glm\vec3.hpp"
-#include "glm\vec4.hpp"
-#include "glm\mat4x4.hpp"
+#include "glm/vec2.hpp"
+#include "glm/vec3.hpp"
+#include "glm/vec4.hpp"
+#include "glm/mat4x4.hpp"
+#include "glm/gtx/transform.hpp"
+
 
 typedef glm::vec2   Vec2;
 typedef glm::vec3   Vec3;
@@ -26,6 +28,9 @@ typedef glm::mat4x4 Mat4x4;
 struct MathUtil
 {
 public:
+
+  template <typename T>
+  static int sign(T val) { return (T(0) < val) - (val < T(0)); }
 
   static float ToDegrees(float radians) { return radians * (180.f / M_PI); };
   static float ToRadians(float degrees) { return degrees * (M_PI / 180.f); };

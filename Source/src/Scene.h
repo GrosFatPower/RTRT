@@ -31,19 +31,25 @@ public:
 
   int AddObject( const Object & iObject );
   int AddObjectInstance( ObjectInstance & iObjectInstance );
+  int AddObjectInstance( int iObjectID, int iMaterialID, const Mat4x4 & iTransform );
 
   void SetCamera( const Camera & iCamera ) { _Camera = iCamera; }
   Camera & GetCamera() { return _Camera; }
 
   void AddLight( const Light & iLight ) { _Lights.push_back(iLight); }
-  Light & GetLight( unsigned int iIndex ) { return _Lights[iIndex]; }
+  Light * GetLight( unsigned int iIndex ) { return ( iIndex < _Lights.size() ) ? &_Lights[iIndex] : nullptr; }
 
   int FindMaterialID( const std::string & iMateralName );
 
-  int GetNbLights()    { return _Lights.size();    }
-  int GetNbMaterials() { return _Materials.size(); }
-  int GetNbTextures()  { return _Textures.size();  }
-  int GetNbMeshes()    { return _Meshes.size();    }
+  int GetNbLights()          { return _Lights.size();          }
+  int GetNbMaterials()       { return _Materials.size();       }
+  int GetNbTextures()        { return _Textures.size();        }
+  int GetNbMeshes()          { return _Meshes.size();          }
+  int GetNbMeshInstances()   { return _MeshInstances.size();   }
+  int GetNbObjectInstances() { return _ObjectInstances.size(); }
+
+  const std::vector<MeshInstance>   & GetMeshInstances()   { return _MeshInstances;   }
+  const std::vector<ObjectInstance> & GetObjectInstances() { return _ObjectInstances; }
 
 private:
 

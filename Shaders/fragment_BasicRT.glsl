@@ -2,6 +2,9 @@
 
 #define EPSILON 0.0001
 #define PI 3.14159265359
+#define MAX_MATERIAL_COUNT 64
+#define MAX_SPHERE_COUNT   64
+#define MAX_LIGHT_COUNT    64
 
 in vec2 fragUV;
 out vec4 fragColor;
@@ -65,6 +68,10 @@ uniform vec2        u_Resolution;
 uniform float       u_Time;
 uniform Camera      u_Camera;
 uniform SphereLight u_SphereLight;
+uniform int         u_NbMaterials;
+uniform Material    u_Materials[MAX_MATERIAL_COUNT];
+uniform int         u_NbSpheres;
+uniform Sphere      u_Spheres[MAX_SPHERE_COUNT];
 
 // Constants
 const Material green  = Material(0, vec3( .1f, .8f, .1f ), vec3( 0.f, 0.f, 0.f ), .4f, .0f);
