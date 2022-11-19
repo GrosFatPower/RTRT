@@ -66,6 +66,7 @@ struct Camera
 // Uniforms
 uniform vec2        u_Resolution;
 uniform float       u_Time;
+uniform int         u_FrameNum;
 uniform Camera      u_Camera;
 uniform SphereLight u_SphereLight;
 uniform int         u_NbMaterials;
@@ -74,12 +75,6 @@ uniform int         u_NbSpheres;
 uniform Sphere      u_Spheres[MAX_SPHERE_COUNT];
 
 // Constants
-const Material green  = Material(0, vec3( .1f, .8f, .1f ), vec3( 0.f, 0.f, 0.f ), .4f, .0f);
-const Material red    = Material(1, vec3( .8f, .1f, .1f ), vec3( 0.f, 0.f, 0.f ), .3f, .5f);
-const Material blue   = Material(2, vec3( .1f, .1f, .8f ), vec3( 0.f, 0.f, 0.f ), .2f, .3f);
-const Material orange = Material(3, vec3( .8f, .6f, .2f ), vec3( 0.f, 0.f, 0.f ), .1f, .7f);
-const Material Materials[4] = { green, red, blue, orange };
-
 const Sphere Spheres[] = { Sphere(vec3( 0.f, 0.f, 0.f ),   .3f, 0),
                            Sphere(vec3( .5f, 1.f, -.5f ),  .2f, 1),
                            Sphere(vec3( -.5f, 2.f, -.5f ), .2f, 2),
@@ -93,9 +88,29 @@ const vec3 background = vec3( .3f, .3f, .8f );
 const int bounces = 5;
 
 // Utils
-float rand(vec2 co)
+
+//RNG from code by Moroz Mykhailo (https://www.shadertoy.com/view/wltcRS)
+//internal RNG state 
+uvec4 g_Seed;
+ivec2 g_Pixel;
+
+void InitRNG( vec2 p, int frame )
 {
-  return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+  g_Pixel = ivec2(p);
+  g_Seed = uvec4(p, uint(frame), uint(p.x) + uint(p.y));
+}
+
+void pcg4d(inout uvec4 v)
+{
+  v = v * 1664525u + 1013904223u;
+  v.x += v.y * v.w; v.y += v.z * v.x; v.z += v.x * v.y; v.w += v.y * v.z;
+  v = v ^ (v >> 16u);
+  v.x += v.y * v.w; v.y += v.z * v.x; v.z += v.x * v.y; v.w += v.y * v.z;
+}
+
+float rand()
+{
+  pcg4d(g_Seed); return float(g_Seed.x) / float(0xffffffffu);
 }
 
 bool SphereIntersection( vec3 iSphereCenter, float _Radius, Ray iRay, out float oHitDistance )
@@ -132,21 +147,21 @@ bool PlaneIntersection( vec3 iOrig, vec3 iNormal, Ray iRay, out float oHitDistan
   return false; 
 } 
 
-bool TraceRay( Ray iRay, out HitPoint closestHit )
+bool TraceRay( Ray iRay, out HitPoint oClosestHit )
 {
-  closestHit = HitPoint(-1.f, vec3( 0.f, 0.f, 0.f ), vec3( 0.f, 0.f, 0.f ), -1);
+  oClosestHit = HitPoint(-1.f, vec3( 0.f, 0.f, 0.f ), vec3( 0.f, 0.f, 0.f ), -1);
 
   for ( int i = 0; i < Spheres.length(); ++i )
   {
     float hitDist = 0.f;
     if ( SphereIntersection(Spheres[i]._Center, Spheres[i]._Radius, iRay, hitDist) )
     {
-      if ( ( hitDist > 0.f ) && ( ( hitDist < closestHit._Dist ) || ( -1.f == closestHit._Dist ) ) )
+      if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
       {
-        closestHit._Dist       = hitDist;
-        closestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
-        closestHit._Normal     = normalize(closestHit._Pos - Spheres[i]._Center);
-        closestHit._MaterialID = Spheres[i]._MaterialID;
+        oClosestHit._Dist       = hitDist;
+        oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+        oClosestHit._Normal     = normalize(oClosestHit._Pos - Spheres[i]._Center);
+        oClosestHit._MaterialID = Spheres[i]._MaterialID;
       }
     }
   }
@@ -156,24 +171,51 @@ bool TraceRay( Ray iRay, out HitPoint closestHit )
     float hitDist = 0.f;
     if ( PlaneIntersection(Planes[i]._Orig, Planes[i]._Normal, iRay, hitDist) )
     {
-      if ( ( hitDist > 0.f ) && ( ( hitDist < closestHit._Dist ) || ( -1.f == closestHit._Dist ) ) )
+      if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
       {
-        closestHit._Dist       = hitDist;
-        closestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
-        closestHit._Normal     = Planes[i]._Normal;
-        closestHit._MaterialID = Planes[i]._MaterialID;
+        oClosestHit._Dist       = hitDist;
+        oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+        oClosestHit._Normal     = Planes[i]._Normal;
+        oClosestHit._MaterialID = Planes[i]._MaterialID;
       }
     }
   }
 
-  if ( -1 == closestHit._Dist )
+  if ( -1 == oClosestHit._Dist )
     return false;
   return true;
+}
+
+bool AnyHit( Ray iRay, float iMaxDist )
+{
+  for ( int i = 0; i < Spheres.length(); ++i )
+  {
+    float hitDist = 0.f;
+    if ( SphereIntersection(Spheres[i]._Center, Spheres[i]._Radius, iRay, hitDist) )
+    {
+      if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
+        return true;
+    }
+  }
+
+  for ( int i = 0; i < Planes.length(); ++i )
+  {
+    float hitDist = 0.f;
+    if ( PlaneIntersection(Planes[i]._Orig, Planes[i]._Normal, iRay, hitDist) )
+    {
+      if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
+        return true;
+    }
+  }
+
+  return false;
 }
 
 void main()
 {
   // Initialization
+  InitRNG(gl_FragCoord.xy, u_FrameNum);
+
   vec2 centeredUV = 2. * fragUV - 1.;
 
   float scale = tan(u_Camera._FOV * .5);
@@ -206,24 +248,22 @@ void main()
     vec3 lightIntensity = vec3(0.f, 0.f, 0.f);
     if ( lightDist < u_SphereLight._Radius )
     {
-      HitPoint occlusionHit;
       Ray occlusionRay;
       occlusionRay._Orig = closestHit._Pos + closestHit._Normal * EPSILON;
       occlusionRay._Dir = lightDir;
-      TraceRay(occlusionRay, occlusionHit);
 
-      if ( ( occlusionHit._Dist > lightDist ) || ( occlusionHit._Dist < -EPSILON ) )
+      if ( !AnyHit(occlusionRay, lightDist) )
         lightIntensity = max(dot(closestHit._Normal, lightDir), 0.0f) * u_SphereLight._Emission;
     }
 
-    pixelColor += Materials[closestHit._MaterialID]._Albedo * lightIntensity * multiplier;
+    pixelColor += u_Materials[closestHit._MaterialID]._Albedo * lightIntensity * multiplier;
 
-    multiplier *= Materials[closestHit._MaterialID]._Metallic;
+    multiplier *= u_Materials[closestHit._MaterialID]._Metallic;
 
-    vec3 randVec3 = vec3(rand(vec2(-.5f, .5f)),rand(vec2(-.5f, .5f)),rand(vec2(-.5f, .5f)));
+    vec3 randVec3 = vec3(rand() * 2. - 1.,rand() * 2. - 1.,rand() * 2. - 1.);
 
     ray._Orig = closestHit._Pos + closestHit._Normal * EPSILON;
-    ray._Dir = reflect(ray._Dir, closestHit._Normal);
+    ray._Dir = reflect(ray._Dir, closestHit._Normal + u_Materials[closestHit._MaterialID]._Roughness * randVec3 );
   }
 
   fragColor = vec4(pixelColor, 0.f);

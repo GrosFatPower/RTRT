@@ -54,7 +54,7 @@ private:
   GLuint          _FrameBufferID   = 0;
   GLuint          _ScreenTextureID = 0;
 
-  long            _Frame        = 0;
+  long            _FrameNum     = 0;
   float           _CPULoopTime  = 0.f;
   float           _FrameRate    = 0.f;
   float           _TimeDelta    = 0.f;
@@ -76,6 +76,10 @@ private:
 
   Scene         * _Scene = nullptr;
   RenderSettings  _Settings;
+  bool            _SceneCameraModified    = false;
+  bool            _SceneLightsModified    = false;
+  bool            _SceneMaterialsModified = false;
+  bool            _SceneInstancesModified = false;
 };
 
 }

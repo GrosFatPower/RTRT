@@ -118,7 +118,7 @@ int Scene::AddMeshInstance( MeshInstance & iMeshInstance )
   return instanceID;
 }
 
-int Scene::FindMaterialID( const std::string & iMateralName )
+int Scene::FindMaterialID( const std::string & iMateralName ) const
 {
   int matID = -1;
 
@@ -127,6 +127,17 @@ int Scene::FindMaterialID( const std::string & iMateralName )
     matID = search -> second;
 
   return matID;
+}
+
+std::string Scene::FindMaterialName( int iMaterialID ) const
+{
+  for ( auto it = _MaterialIDs.begin(); it != _MaterialIDs.end(); ++it )
+  {
+    if ( it -> second == iMaterialID )
+      return it -> first;
+  }
+
+  return "";
 }
 
 int Scene::AddObject( const Object & iObject )

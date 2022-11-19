@@ -107,6 +107,11 @@ void Test3::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
 }
 
+std::string UniformArrayElementName( const char * iUniformArrayName, int iIndex, const char * iAttributeName )
+{
+  return std::string(iUniformArrayName).append("[").append(std::to_string(iIndex)).append("].").append(iAttributeName);
+}
+
 Test3::Test3( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
 : _MainWindow(iMainWindow)
 {
@@ -185,20 +190,57 @@ int Test3::UpdateUniforms()
     GLuint RTTProgramID = _RTTShader -> GetShaderProgramID();
     glUniform2f(glGetUniformLocation(RTTProgramID, "u_Resolution"), _ScreenWidth, _ScreenHeight);
     glUniform1f(glGetUniformLocation(RTTProgramID, "u_Time"), _CPULoopTime);
+    glUniform1i(glGetUniformLocation(RTTProgramID, "u_FrameNum"), _FrameNum);
     if ( _Scene )
     {
-      Camera & cam = _Scene -> GetCamera();
-      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Up"), cam.GetUp().x, cam.GetUp().y, cam.GetUp().z);
-      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Right"), cam.GetRight().x, cam.GetRight().y, cam.GetRight().z);
-      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Forward"), cam.GetForward().x, cam.GetForward().y, cam.GetForward().z);
-      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Pos"), cam.GetPos().x, cam.GetPos().y, cam.GetPos().z);
-      glUniform1f(glGetUniformLocation(RTTProgramID, "u_Camera._FOV"), cam.GetFOV());
-
-      Light * firstLight = _Scene -> GetLight(0);
+      if ( _SceneCameraModified )
       {
-        glUniform3f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Pos"), firstLight -> _Pos.x, firstLight -> _Pos.y, firstLight -> _Pos.z);
-        glUniform3f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Emission"), firstLight -> _Emission.x, firstLight -> _Emission.y, firstLight -> _Emission.z);
-        glUniform1f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Radius"), firstLight -> _Radius);
+        Camera & cam = _Scene -> GetCamera();
+        glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Up"), cam.GetUp().x, cam.GetUp().y, cam.GetUp().z);
+        glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Right"), cam.GetRight().x, cam.GetRight().y, cam.GetRight().z);
+        glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Forward"), cam.GetForward().x, cam.GetForward().y, cam.GetForward().z);
+        glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Pos"), cam.GetPos().x, cam.GetPos().y, cam.GetPos().z);
+        glUniform1f(glGetUniformLocation(RTTProgramID, "u_Camera._FOV"), cam.GetFOV());
+        _SceneCameraModified = false;
+      }
+
+      if ( _SceneLightsModified )
+      {
+        Light * firstLight = _Scene -> GetLight(0);
+        {
+          glUniform3f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Pos"), firstLight -> _Pos.x, firstLight -> _Pos.y, firstLight -> _Pos.z);
+          glUniform3f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Emission"), firstLight -> _Emission.x, firstLight -> _Emission.y, firstLight -> _Emission.z);
+          glUniform1f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Radius"), firstLight -> _Radius);
+        }
+        _SceneLightsModified = false;
+      }
+
+      if ( _SceneMaterialsModified )
+      {
+        const std::vector<Material> & Materials =  _Scene -> GetMaterials();
+
+        int nbMaterials = Materials.size();
+        for ( int i = 0; i < nbMaterials; ++i )
+        {
+          const Material & curMat = Materials[i];
+
+          glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_ID").c_str()), i);
+          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Albedo").c_str()), curMat._Albedo.r, curMat._Albedo.g, curMat._Albedo.b);
+          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Emission").c_str()), curMat._Emission.r, curMat._Emission.g, curMat._Emission.b);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Metallic").c_str()), curMat._Metallic);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Roughness").c_str()), curMat._Roughness);
+        }
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbMaterials"), nbMaterials);
+
+        _SceneMaterialsModified = false;
+      }
+
+      if ( _SceneInstancesModified )
+      {
+        const std::vector<MeshInstance>   & MeshInstances   = _Scene -> GetMeshInstances();
+        const std::vector<ObjectInstance> & ObjectInstances = _Scene -> GetObjectInstances();
+
+        _SceneInstancesModified = false;
       }
     }
     _RTTShader -> StopUsing();
@@ -217,6 +259,28 @@ int Test3::UpdateUniforms()
     return 1;
 
   return 0;
+}
+
+Vec4ui g_Seed;
+Vec2i  g_Pixel;
+
+void InitRNG( Vec2 p, unsigned int frame )
+{
+  g_Pixel = Vec2i(p);
+  g_Seed = Vec4ui(p, frame, g_Pixel.x + g_Pixel.y);
+}
+
+void pcg4d(Vec4ui & v)
+{
+  v = v * 1664525u + 1013904223u;
+  v.x += v.y * v.w; v.y += v.z * v.x; v.z += v.x * v.y; v.w += v.y * v.z;
+  v = v ^ (v >> 16u);
+  v.x += v.y * v.w; v.y += v.z * v.x; v.z += v.x * v.y; v.w += v.y * v.z;
+}
+
+float rand()
+{
+  pcg4d(g_Seed); return float(g_Seed.x) / float(0xffffffffu);
 }
 
 int Test3::InitializeUI()
@@ -254,6 +318,12 @@ int Test3::DrawUI()
 
     ImGui::Text("Render time %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
 
+    InitRNG(Vec2(10,15), _FrameNum);
+    ImGui::Text("Rand : %.4f", rand());
+
+
+    ImGui::Text("Render time %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
+
     if ( ImGui::CollapsingHeader("Camera") )
     {
       Camera & cam = _Scene -> GetCamera();
@@ -264,7 +334,10 @@ int Test3::DrawUI()
 
       float fov = MathUtil::ToDegrees(cam.GetFOV());
       if ( ImGui::SliderFloat("Fov", &fov, 10.f, 100.f) )
+      {
         cam.SetFOV(fov);
+        _SceneCameraModified = true;
+      }
     }
 
     if ( ImGui::CollapsingHeader("Light") )
@@ -279,6 +352,7 @@ int Test3::DrawUI()
           firstLight -> _Pos.x = pos[0];
           firstLight -> _Pos.y = pos[1];
           firstLight -> _Pos.z = pos[2];
+          _SceneLightsModified = true;
         }
 
         float rgb[3] = { firstLight -> _Emission.r, firstLight -> _Emission.g, firstLight -> _Emission.b };
@@ -287,9 +361,39 @@ int Test3::DrawUI()
           firstLight -> _Emission.r = rgb[0];
           firstLight -> _Emission.g = rgb[1];
           firstLight -> _Emission.b = rgb[2];
+          _SceneLightsModified = true;
         }
 
-        ImGui::SliderFloat("Radius", &firstLight -> _Radius, 1.f, 1000.f);
+        if ( ImGui::SliderFloat("Radius", &firstLight -> _Radius, 1.f, 1000.f) )
+          _SceneLightsModified = true;
+      }
+    }
+
+    if ( ImGui::CollapsingHeader("Materials") )
+    {
+      std::vector<Material> & Materials =  _Scene -> GetMaterials();
+
+      int nbMaterials = Materials.size();
+      for ( int i = 0; i < nbMaterials; ++i )
+      {
+        Material & curMat = Materials[i];
+
+        float rgb[3] = { curMat._Albedo.r, curMat._Albedo.g, curMat._Albedo.b };
+        ImGui::Text(_Scene -> FindMaterialName(i).c_str());
+        ImGui::SameLine();
+        if ( ImGui::ColorPicker3(std::string("##MatAlbedo").append(std::to_string(i)).c_str(), rgb) )
+        {
+          curMat._Albedo.r = rgb[0];
+          curMat._Albedo.g = rgb[1];
+          curMat._Albedo.b = rgb[2];
+          _SceneMaterialsModified = true;
+        }
+
+        if ( ImGui::SliderFloat(std::string("Metallic_").append(std::to_string(i)).c_str(), &curMat._Metallic, 0.f, 1.f) )
+          _SceneMaterialsModified = true;
+
+        if ( ImGui::SliderFloat(std::string("Roughness_").append(std::to_string(i)).c_str(), &curMat._Roughness, 0.f, 1.f) )
+          _SceneMaterialsModified = true;
       }
     }
 
@@ -352,28 +456,28 @@ int Test3::InitializeScene()
   greenMat._Emission  = { 0.f, 0.f, 0.f };
   greenMat._Metallic  = 0.4f;
   greenMat._Roughness = 0.f;
-  int greenMatID = _Scene -> AddMaterial(greenMat, "green");
+  int greenMatID = _Scene -> AddMaterial(greenMat, "Green");
 
   Material redMat;
   redMat._Albedo    = { .8f, .1f, .1f };
   redMat._Emission  = { 0.f, 0.f, 0.f };
   redMat._Metallic  = 0.3f;
   redMat._Roughness = 0.5f;
-  int redMatID = _Scene -> AddMaterial(redMat, "red");
+  int redMatID = _Scene -> AddMaterial(redMat, "Red");
 
   Material blueMat;
-  blueMat._Albedo    = { .8f, .6f, .2f };
+  blueMat._Albedo    = { .1f, .1f, .8f };
   blueMat._Emission  = { 0.f, 0.f, 0.f };
   blueMat._Metallic  = 0.1f;
   blueMat._Roughness = 0.7f;
-  int blueMatID = _Scene -> AddMaterial(blueMat, "blue");
+  int blueMatID = _Scene -> AddMaterial(blueMat, "Blue");
 
   Material orangeMat;
   orangeMat._Albedo    = { .8f, .6f, .2f };
   orangeMat._Emission  = { 0.f, 0.f, 0.f };
   orangeMat._Metallic  = 0.1f;
   orangeMat._Roughness = 0.7f;
-  int orangeMatID = _Scene -> AddMaterial(orangeMat, "orange");
+  int orangeMatID = _Scene -> AddMaterial(orangeMat, "Orange");
 
   // Objects
   Sphere smallSphere;
@@ -403,6 +507,11 @@ int Test3::InitializeScene()
   transformMatrix = glm::translate(Mat4x4(), Vec3(-1.f, 1.f, -3.f));
   _Scene -> AddObjectInstance(bigSphereID, redMatID, transformMatrix);
 
+  _SceneCameraModified    = true;
+  _SceneLightsModified    = true;
+  _SceneMaterialsModified = true;
+  _SceneInstancesModified = true;
+
   return 0;
 }
 
@@ -421,14 +530,21 @@ int Test3::UpdateScene()
     double deltaY = _MouseY - _OldMouseY;
 
     if ( _LeftClick )
+    {
       _Scene -> GetCamera().OffsetOrientations(MouseSensitivity[0] * deltaX, MouseSensitivity[1] * -deltaY);
+      _SceneCameraModified = true;
+    }
     if ( _RightClick )
+    {
       _Scene -> GetCamera().Strafe(MouseSensitivity[2] * deltaX, MouseSensitivity[3] * deltaY);
+      _SceneCameraModified = true;
+    }
     if ( _MiddleClick )
     {
       float newRadius = _Scene -> GetCamera().GetRadius() + MouseSensitivity[4] * deltaY;
       if ( newRadius > 0.f )
         _Scene -> GetCamera().SetRadius(newRadius);
+      _SceneCameraModified = true;
     }
 
     _OldMouseX = _MouseX;
@@ -443,21 +559,29 @@ int Test3::UpdateScene()
     {
       float newRadius = _Scene -> GetCamera().GetRadius() - _TimeDelta;
       if ( newRadius > 0.f )
+      {
         _Scene -> GetCamera().SetRadius(newRadius);
+        _SceneCameraModified = true;
+      }
     }
     if ( _KeyDown )
     {
       float newRadius = _Scene -> GetCamera().GetRadius() + _TimeDelta;
       if ( newRadius > 0.f )
+      {
         _Scene -> GetCamera().SetRadius(newRadius);
+        _SceneCameraModified = true;
+      }
     }
     if ( _KeyLeft )
     {
       _Scene -> GetCamera().OffsetOrientations(_TimeDelta * velocity, 0.f);
+      _SceneCameraModified = true;
     }
     if ( _KeyRight )
     {
       _Scene -> GetCamera().OffsetOrientations(-_TimeDelta * velocity, 0.f);
+      _SceneCameraModified = true;
     }
   }
 
@@ -521,7 +645,7 @@ int Test3::Run()
   _CPULoopTime = glfwGetTime();
   while (!glfwWindowShouldClose(_MainWindow))
   {
-    _Frame++;
+    _FrameNum++;
 
     UpdateCPUTime();
 
