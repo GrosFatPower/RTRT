@@ -9,7 +9,10 @@
 in vec2 fragUV;
 out vec4 fragColor;
 
+// ----------
 // Data structures
+// ----------
+
 struct Ray
 {
   vec3 _Orig;
@@ -43,6 +46,7 @@ struct HitPoint
 struct Sphere
 {
   vec3  _Center;
+  //mat4  _Transform;
   float _Radius;
   int   _MaterialID;
 };
@@ -63,10 +67,15 @@ struct Camera
   float _FOV;
 };
 
+// ----------
 // Uniforms
+// ----------
+
 uniform vec2        u_Resolution;
 uniform float       u_Time;
 uniform int         u_FrameNum;
+uniform int         u_Bounces;
+uniform vec3        u_BackgroundColor;
 uniform Camera      u_Camera;
 uniform SphereLight u_SphereLight;
 uniform int         u_NbMaterials;
@@ -74,20 +83,9 @@ uniform Material    u_Materials[MAX_MATERIAL_COUNT];
 uniform int         u_NbSpheres;
 uniform Sphere      u_Spheres[MAX_SPHERE_COUNT];
 
-// Constants
-const Sphere Spheres[] = { Sphere(vec3( 0.f, 0.f, 0.f ),   .3f, 0),
-                           Sphere(vec3( .5f, 1.f, -.5f ),  .2f, 1),
-                           Sphere(vec3( -.5f, 2.f, -.5f ), .2f, 2),
-                           Sphere(vec3(  3.f, 2.f, -5.f ), .8f, 2),
-                           Sphere(vec3( -1.f, 1.f, -3.f ), 1.f, 1) };
-
-const Plane Planes[] = { Plane(vec3( 0.f, -.5f, 0.f ), vec3( 0.f, 1.f, 0.f ), 3) };
-
-const vec3 background = vec3( .3f, .3f, .8f );
-
-const int bounces = 5;
-
+// ----------
 // Utils
+// ----------
 
 //RNG from code by Moroz Mykhailo (https://www.shadertoy.com/view/wltcRS)
 //internal RNG state 
@@ -111,6 +109,14 @@ void pcg4d(inout uvec4 v)
 float rand()
 {
   pcg4d(g_Seed); return float(g_Seed.x) / float(0xffffffffu);
+}
+
+mat4 BuildTranslation( vec3 iTrans )
+{
+  return mat4(vec4(1.0, 0.0, 0.0, 0.0),
+              vec4(0.0, 1.0, 0.0, 0.0),
+              vec4(0.0, 0.0, 1.0, 0.0),
+              vec4(iTrans, 1.0)        );
 }
 
 bool SphereIntersection( vec3 iSphereCenter, float _Radius, Ray iRay, out float oHitDistance )
@@ -146,6 +152,28 @@ bool PlaneIntersection( vec3 iOrig, vec3 iNormal, Ray iRay, out float oHitDistan
  
   return false; 
 } 
+
+// ----------
+// Constants
+// ----------
+
+const Sphere Spheres[] = { Sphere(vec3( 0.f, 0.f, 0.f ),   .3f, 0),
+                           Sphere(vec3( .5f, 1.f, -.5f ),  .2f, 1),
+                           Sphere(vec3( -.5f, 2.f, -.5f ), .2f, 2),
+                           Sphere(vec3(  3.f, 2.f, -5.f ), .8f, 2),
+                           Sphere(vec3( -1.f, 1.f, -3.f ), 1.f, 1) };
+
+//const Sphere Spheres[] = { Sphere(BuildTranslation(vec3( 0.f, 0.f, 0.f )),   .3f, 0),
+//                           Sphere(BuildTranslation(vec3( .5f, 1.f, -.5f )),  .2f, 1),
+//                           Sphere(BuildTranslation(vec3( -.5f, 2.f, -.5f )), .2f, 2),
+//                           Sphere(BuildTranslation(vec3(  3.f, 2.f, -5.f )), .8f, 2),
+//                           Sphere(BuildTranslation(vec3( -1.f, 1.f, -3.f )), 1.f, 1) };
+
+const Plane Planes[] = { Plane(vec3( 0.f, -.5f, 0.f ), vec3( 0.f, 1.f, 0.f ), 3) };
+
+// ----------
+// Ray tracing
+// ----------
 
 bool TraceRay( Ray iRay, out HitPoint oClosestHit )
 {
@@ -211,12 +239,22 @@ bool AnyHit( Ray iRay, float iMaxDist )
   return false;
 }
 
+// MAIN
+
 void main()
 {
   // Initialization
   InitRNG(gl_FragCoord.xy, u_FrameNum);
 
-  vec2 centeredUV = 2. * fragUV - 1.;
+  //float r1 = 2.0 * rand();
+  //float r2 = 2.0 * rand();
+
+  //vec2 jitter;
+  //jitter.x = ( r1 < 1.0 ) ? ( sqrt(r1) - 1.0 ) : ( 1.0 - sqrt(2.0 - r1) ) ;
+  //jitter.y = ( r2 < 1.0 ) ? ( sqrt(r2) - 1.0 ) : ( 1.0 - sqrt(2.0 - r2) ) ;
+  //jitter /= (u_Resolution * 0.5);
+
+  vec2 centeredUV = ( 2. * fragUV - 1. ); // + jitter;
 
   float scale = tan(u_Camera._FOV * .5);
   centeredUV.x *= scale;
@@ -229,14 +267,14 @@ void main()
   vec3 pixelColor = vec3(0.f, 0.f, 0.f);
   float multiplier = 1.0f;
 
-  for ( int i = 0; i < bounces; ++i )
+  for ( int i = 0; i < u_Bounces; ++i )
   {
     // Ray cast
     HitPoint closestHit;
     TraceRay(ray, closestHit);
     if ( closestHit._Dist < -EPSILON )
     {
-      pixelColor += background * multiplier;
+      pixelColor += u_BackgroundColor * multiplier;
       break;
     }
 

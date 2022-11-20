@@ -39,6 +39,13 @@ private:
 
   int UpdateCPUTime();
 
+  float RenderScale() const { return ( _Settings._RenderScale / 100.f ); }
+  int RenderWidth()   const { return int( _ScreenWidth * RenderScale() ); }
+  int RenderHeight()  const { return int( _ScreenHeight * RenderScale() ); }
+
+  void RenderToTexture();
+  void RenderToSceen();
+
   static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
   static void MousebuttonCallback(GLFWwindow * window, int button, int action, int mods);
   static void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
@@ -80,6 +87,7 @@ private:
   bool            _SceneLightsModified    = false;
   bool            _SceneMaterialsModified = false;
   bool            _SceneInstancesModified = false;
+  bool            _RenderSettingsModified = false;
 };
 
 }
