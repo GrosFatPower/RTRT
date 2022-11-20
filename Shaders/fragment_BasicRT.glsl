@@ -243,13 +243,16 @@ bool AnyHit( Ray iRay, float iMaxDist )
   return false;
 }
 
+// UV mapping : https://en.wikipedia.org/wiki/UV_mapping
 vec3 SampleSkybox( vec3 iRayDir )
 {
-  float skyboxStrength = 1.0F;
+  float skyboxStrength = 1.0f;
   float skyboxGamma = 0.8F;
-  float skyboxCeiling = 10.0F;
+  float skyboxCeiling = 10.0f;
+  
+  vec3 skycolor = texture(u_SkyboxTexture, vec2(0.5 + atan(iRayDir.x, iRayDir.z)/(2*PI), 0.5 + asin(-iRayDir.y)/PI)).xyz;
 
-  return min(vec3(skyboxCeiling), skyboxStrength*pow(texture(u_SkyboxTexture, vec2(0.5 + atan(iRayDir.x, iRayDir.z)/(2*PI), 0.5 + asin(-iRayDir.y)/PI)).xyz, vec3(1.0/skyboxGamma)));
+  return min(vec3(skyboxCeiling), skyboxStrength*pow(skycolor, vec3(1.0/skyboxGamma)));
 }
 
 // MAIN
