@@ -6,6 +6,7 @@
 #include "Light.h"
 #include "Object.h"
 #include "ObjectInstance.h"
+#include "Texture.h"
 #include "Math.h"
 
 #include "imgui.h"
@@ -101,9 +102,9 @@ void Test3::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
   if ( !width || !height )
     return;
 
-  this_ -> _ScreenWidth  = width;
-  this_ -> _ScreenHeight = height;
-  glViewport(0, 0, this_ -> _ScreenWidth, this_ -> _ScreenHeight);
+  this_ -> _Settings._RenderResolution.x = width;
+  this_ -> _Settings._RenderResolution.y = height;
+  glViewport(0, 0, this_ -> _Settings._RenderResolution.x, this_ -> _Settings._RenderResolution.y);
 
   glBindTexture(GL_TEXTURE_2D, this_->_ScreenTextureID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, this_ -> RenderWidth(), this_ -> RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
@@ -118,8 +119,8 @@ std::string UniformArrayElementName( const char * iUniformArrayName, int iIndex,
 Test3::Test3( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
 : _MainWindow(iMainWindow)
 {
-  _ScreenWidth  = iScreenWidth;
-  _ScreenHeight = iScreenHeight;
+  _Settings._RenderResolution.x = iScreenWidth;
+  _Settings._RenderResolution.y = iScreenHeight;
 }
 
 Test3::~Test3()
@@ -197,6 +198,8 @@ int Test3::UpdateUniforms()
     glUniform2f(glGetUniformLocation(RTTProgramID, "u_Resolution"), RenderWidth(), RenderHeight());
     glUniform1f(glGetUniformLocation(RTTProgramID, "u_Time"), _CPULoopTime);
     glUniform1i(glGetUniformLocation(RTTProgramID, "u_FrameNum"), _FrameNum);
+    glUniform1i(glGetUniformLocation(RTTProgramID, "u_EnableSkybox"), (int)_Settings._EnableSkybox);
+    glUniform1i(glGetUniformLocation(RTTProgramID, "u_SkyboxTexture"), 1);
 
     if ( _RenderSettingsModified )
     {
@@ -275,28 +278,6 @@ int Test3::UpdateUniforms()
   return 0;
 }
 
-Vec4ui g_Seed;
-Vec2i  g_Pixel;
-
-void InitRNG( Vec2 p, unsigned int frame )
-{
-  g_Pixel = Vec2i(p);
-  g_Seed = Vec4ui(p, frame, g_Pixel.x + g_Pixel.y);
-}
-
-void pcg4d(Vec4ui & v)
-{
-  v = v * 1664525u + 1013904223u;
-  v.x += v.y * v.w; v.y += v.z * v.x; v.z += v.x * v.y; v.w += v.y * v.z;
-  v = v ^ (v >> 16u);
-  v.x += v.y * v.w; v.y += v.z * v.x; v.z += v.x * v.y; v.w += v.y * v.z;
-}
-
-float rand()
-{
-  pcg4d(g_Seed); return float(g_Seed.x) / float(0xffffffffu);
-}
-
 int Test3::InitializeUI()
 {
   // Setup Dear ImGui context
@@ -332,11 +313,7 @@ int Test3::DrawUI()
 
     ImGui::Text("Render time %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
 
-    InitRNG(Vec2(10,15), _FrameNum);
-    ImGui::Text("Rand : %.4f", rand());
-
-
-    ImGui::Text("Render time %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
+    ImGui::Text("Window width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
 
     if ( ImGui::CollapsingHeader("Render settings") )
     {
@@ -349,6 +326,11 @@ int Test3::DrawUI()
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
         glBindTexture(GL_TEXTURE_2D, 0);
 
+        _RenderSettingsModified = true;
+      }
+
+      if ( ImGui::Checkbox("Enable skybox", &_Settings._EnableSkybox) )
+      {
         _RenderSettingsModified = true;
       }
 
@@ -511,8 +493,8 @@ int Test3::InitializeScene()
   Material orangeMat;
   orangeMat._Albedo    = { .8f, .6f, .2f };
   orangeMat._Emission  = { 0.f, 0.f, 0.f };
-  orangeMat._Metallic  = 0.1f;
-  orangeMat._Roughness = 0.7f;
+  orangeMat._Metallic  = 0.5f;
+  orangeMat._Roughness = 0.05f;
   int orangeMatID = _Scene -> AddMaterial(orangeMat, "Orange");
 
   // Objects
@@ -548,8 +530,31 @@ int Test3::InitializeScene()
   _SceneMaterialsModified = true;
   _SceneInstancesModified = true;
 
+  // Textures
 
-  _Settings._Bounces = 5;
+  int skyboxID =_Scene -> AddTexture(g_AssetsDir + "skyboxes\\alps_field_2k.hdr");
+  {
+    std::vector<Texture*> & textures = _Scene -> GetTetxures();
+
+    Texture * skyboxTexture = textures[skyboxID];
+    if ( skyboxTexture )
+    {
+      glGenTextures(1, &_SkyboxTextureID);
+      glActiveTexture(GL_TEXTURE1);
+      glBindTexture(GL_TEXTURE_2D, _SkyboxTextureID);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, skyboxTexture -> GetWidth(), skyboxTexture -> GetHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, skyboxTexture -> GetData());
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      glBindTexture(GL_TEXTURE_2D, 0);
+
+      _Settings._EnableSkybox = true;
+    }
+    else
+      return 1;
+  }
+
+  // Render settings
+  _Settings._Bounces     = 5;
   _RenderSettingsModified = true;
 
   return 0;
@@ -631,9 +636,12 @@ int Test3::UpdateScene()
 void Test3::RenderToTexture()
 {
   glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
-  glActiveTexture(GL_TEXTURE0);
-
   glViewport(0, 0, RenderWidth(), RenderHeight());
+
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D, _SkyboxTextureID);
 
   _Quad -> Render(*_RTTShader);
 }
@@ -643,7 +651,7 @@ void Test3::RenderToSceen()
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glActiveTexture(GL_TEXTURE0);
   
-  glViewport(0, 0, _ScreenWidth, _ScreenHeight);
+  glViewport(0, 0, _Settings._RenderResolution.x, _Settings._RenderResolution.y);
 
   glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
 
@@ -699,7 +707,7 @@ int Test3::Run()
   InitializeScene();
 
   // Main loop
-  glViewport(0, 0, _ScreenWidth, _ScreenHeight);
+  glViewport(0, 0, _Settings._RenderResolution.x, _Settings._RenderResolution.y);
   glDisable(GL_DEPTH_TEST);
 
   _CPULoopTime = glfwGetTime();

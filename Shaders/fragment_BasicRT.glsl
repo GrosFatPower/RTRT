@@ -82,6 +82,8 @@ uniform int         u_NbMaterials;
 uniform Material    u_Materials[MAX_MATERIAL_COUNT];
 uniform int         u_NbSpheres;
 uniform Sphere      u_Spheres[MAX_SPHERE_COUNT];
+uniform int         u_EnableSkybox;
+uniform sampler2D   u_SkyboxTexture;
 
 // ----------
 // Utils
@@ -151,7 +153,7 @@ bool PlaneIntersection( vec3 iOrig, vec3 iNormal, Ray iRay, out float oHitDistan
   } 
  
   return false; 
-} 
+}
 
 // ----------
 // Constants
@@ -239,6 +241,15 @@ bool AnyHit( Ray iRay, float iMaxDist )
   return false;
 }
 
+vec3 SampleSkybox( vec3 iRayDir )
+{
+  float skyboxStrength = 1.0F;
+  float skyboxGamma = 0.8F;
+  float skyboxCeiling = 10.0F;
+
+  return min(vec3(skyboxCeiling), skyboxStrength*pow(texture(u_SkyboxTexture, vec2(0.5 + atan(iRayDir.x, iRayDir.z)/(2*PI), 0.5 + asin(-iRayDir.y)/PI)).xyz, vec3(1.0/skyboxGamma)));
+}
+
 // MAIN
 
 void main()
@@ -274,7 +285,11 @@ void main()
     TraceRay(ray, closestHit);
     if ( closestHit._Dist < -EPSILON )
     {
-      pixelColor += u_BackgroundColor * multiplier;
+      if ( 1 == u_EnableSkybox )
+        pixelColor += SampleSkybox(ray._Dir) * multiplier;
+      else
+        pixelColor += u_BackgroundColor * multiplier;
+      
       break;
     }
 

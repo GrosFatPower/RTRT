@@ -52,6 +52,7 @@ public:
   std::vector<MeshInstance>   & GetMeshInstances()   { return _MeshInstances;   }
   std::vector<ObjectInstance> & GetObjectInstances() { return _ObjectInstances; }
   std::vector<Material>       & GetMaterials()       { return _Materials;       }
+  std::vector<Texture*>       & GetTetxures()        { return _Textures;        }
 
 private:
 

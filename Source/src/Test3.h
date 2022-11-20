@@ -40,8 +40,8 @@ private:
   int UpdateCPUTime();
 
   float RenderScale() const { return ( _Settings._RenderScale / 100.f ); }
-  int RenderWidth()   const { return int( _ScreenWidth * RenderScale() ); }
-  int RenderHeight()  const { return int( _ScreenHeight * RenderScale() ); }
+  int RenderWidth()   const { return int( _Settings._RenderResolution.x * RenderScale() ); }
+  int RenderHeight()  const { return int( _Settings._RenderResolution.y * RenderScale() ); }
 
   void RenderToTexture();
   void RenderToSceen();
@@ -51,8 +51,6 @@ private:
   static void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
 
   GLFWwindow    * _MainWindow;
-  int             _ScreenWidth;
-  int             _ScreenHeight;
 
   QuadMesh      * _Quad      = nullptr;
   ShaderProgram * _RTTShader = nullptr;
@@ -60,6 +58,7 @@ private:
 
   GLuint          _FrameBufferID   = 0;
   GLuint          _ScreenTextureID = 0;
+  GLuint          _SkyboxTextureID = 0;
 
   long            _FrameNum     = 0;
   float           _CPULoopTime  = 0.f;
