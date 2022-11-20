@@ -105,6 +105,7 @@ void Test3::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
   this_ -> _Settings._RenderResolution.x = width;
   this_ -> _Settings._RenderResolution.y = height;
   glViewport(0, 0, this_ -> _Settings._RenderResolution.x, this_ -> _Settings._RenderResolution.y);
+  this_ -> _RenderSettingsModified = true;
 
   glBindTexture(GL_TEXTURE_2D, this_->_ScreenTextureID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, this_ -> RenderWidth(), this_ -> RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
@@ -198,13 +199,25 @@ int Test3::UpdateUniforms()
     glUniform2f(glGetUniformLocation(RTTProgramID, "u_Resolution"), RenderWidth(), RenderHeight());
     glUniform1f(glGetUniformLocation(RTTProgramID, "u_Time"), _CPULoopTime);
     glUniform1i(glGetUniformLocation(RTTProgramID, "u_FrameNum"), _FrameNum);
-    glUniform1i(glGetUniformLocation(RTTProgramID, "u_EnableSkybox"), (int)_Settings._EnableSkybox);
+    glUniform1i(glGetUniformLocation(RTTProgramID, "u_ScreenTexture"), 0);
     glUniform1i(glGetUniformLocation(RTTProgramID, "u_SkyboxTexture"), 1);
+
+    if ( !(_RenderSettingsModified + _SceneCameraModified + _SceneLightsModified + _SceneInstancesModified + _SceneMaterialsModified) )
+    {
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_Accumulate"), 1);
+      _AccumulatedPasses++;
+    }
+    else
+    {
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_Accumulate"), 0);
+      _AccumulatedPasses = 1;
+    }
 
     if ( _RenderSettingsModified )
     {
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_Bounces"), _Settings._Bounces);
       glUniform3f(glGetUniformLocation(RTTProgramID, "u_BackgroundColor"), _Settings._BackgroundColor.r, _Settings._BackgroundColor.g, _Settings._BackgroundColor.b);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_EnableSkybox"), (int)_Settings._EnableSkybox);
       _RenderSettingsModified = false;
     }
 
@@ -270,6 +283,7 @@ int Test3::UpdateUniforms()
     _RTSShader -> Use();
     GLuint RTSProgramID = _RTSShader -> GetShaderProgramID();
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), 0);
+    glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedPasses"), _AccumulatedPasses);
     _RTSShader -> StopUsing();
   }
   else

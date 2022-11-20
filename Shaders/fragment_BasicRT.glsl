@@ -74,6 +74,7 @@ struct Camera
 uniform vec2        u_Resolution;
 uniform float       u_Time;
 uniform int         u_FrameNum;
+uniform int         u_Accumulate;
 uniform int         u_Bounces;
 uniform vec3        u_BackgroundColor;
 uniform Camera      u_Camera;
@@ -84,6 +85,7 @@ uniform int         u_NbSpheres;
 uniform Sphere      u_Spheres[MAX_SPHERE_COUNT];
 uniform int         u_EnableSkybox;
 uniform sampler2D   u_SkyboxTexture;
+uniform sampler2D   u_ScreenTexture;
 
 // ----------
 // Utils
@@ -320,4 +322,7 @@ void main()
   }
 
   fragColor = vec4(pixelColor, 0.f);
+
+  if ( 1 == u_Accumulate )
+    fragColor += texture(u_ScreenTexture, fragUV);
 }

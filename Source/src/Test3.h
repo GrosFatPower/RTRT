@@ -60,11 +60,12 @@ private:
   GLuint          _ScreenTextureID = 0;
   GLuint          _SkyboxTextureID = 0;
 
-  long            _FrameNum     = 0;
-  float           _CPULoopTime  = 0.f;
-  float           _FrameRate    = 0.f;
-  float           _TimeDelta    = 0.f;
-  float           _AverageDelta = 0.f;
+  long            _FrameNum          = 0;
+  int             _AccumulatedPasses = 0;
+  float           _CPULoopTime       = 0.f;
+  float           _FrameRate         = 0.f;
+  float           _TimeDelta         = 0.f;
+  float           _AverageDelta      = 0.f;
   std::deque<float> _LastDeltas;
 
   double          _MouseX       = 0.;
