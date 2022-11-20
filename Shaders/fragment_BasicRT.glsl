@@ -262,15 +262,15 @@ void main()
   // Initialization
   InitRNG(gl_FragCoord.xy, u_FrameNum);
 
-  //float r1 = 2.0 * rand();
-  //float r2 = 2.0 * rand();
+ float r1 = 2.0 * rand();
+ float r2 = 2.0 * rand();
 
-  //vec2 jitter;
-  //jitter.x = ( r1 < 1.0 ) ? ( sqrt(r1) - 1.0 ) : ( 1.0 - sqrt(2.0 - r1) ) ;
-  //jitter.y = ( r2 < 1.0 ) ? ( sqrt(r2) - 1.0 ) : ( 1.0 - sqrt(2.0 - r2) ) ;
-  //jitter /= (u_Resolution * 0.5);
+ vec2 jitter;
+ jitter.x = ( r1 < 1.0 ) ? ( sqrt(r1) - 1.0 ) : ( 1.0 - sqrt(2.0 - r1) ) ;
+ jitter.y = ( r2 < 1.0 ) ? ( sqrt(r2) - 1.0 ) : ( 1.0 - sqrt(2.0 - r2) ) ;
+ jitter /= (u_Resolution * 0.5);
 
-  vec2 centeredUV = ( 2. * fragUV - 1. ); // + jitter;
+  vec2 centeredUV = ( 2. * fragUV - 1. ) + jitter;
 
   float scale = tan(u_Camera._FOV * .5);
   centeredUV.x *= scale;
