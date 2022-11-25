@@ -205,12 +205,12 @@ int Test3::UpdateUniforms()
     if ( !(_RenderSettingsModified + _SceneCameraModified + _SceneLightsModified + _SceneInstancesModified + _SceneMaterialsModified) )
     {
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_Accumulate"), 1);
-      _AccumulatedPasses++;
+      _AccumulatedFrames++;
     }
     else
     {
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_Accumulate"), 0);
-      _AccumulatedPasses = 1;
+      _AccumulatedFrames = 1;
     }
 
     if ( _RenderSettingsModified )
@@ -283,7 +283,7 @@ int Test3::UpdateUniforms()
     _RTSShader -> Use();
     GLuint RTSProgramID = _RTSShader -> GetShaderProgramID();
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), 0);
-    glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedPasses"), _AccumulatedPasses);
+    glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedFrames"), _AccumulatedFrames);
     _RTSShader -> StopUsing();
   }
   else
@@ -328,6 +328,8 @@ int Test3::DrawUI()
     ImGui::Text("Render time %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
 
     ImGui::Text("Window width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
+
+    ImGui::Text("Accumulated frames : %d", _AccumulatedFrames);
 
     if ( ImGui::CollapsingHeader("Render settings") )
     {

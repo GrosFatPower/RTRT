@@ -61,7 +61,7 @@ private:
   GLuint          _SkyboxTextureID = 0;
 
   long            _FrameNum          = 0;
-  int             _AccumulatedPasses = 0;
+  int             _AccumulatedFrames = 0;
   float           _CPULoopTime       = 0.f;
   float           _FrameRate         = 0.f;
   float           _TimeDelta         = 0.f;
