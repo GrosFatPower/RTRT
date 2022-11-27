@@ -140,28 +140,75 @@ std::string Scene::FindMaterialName( int iMaterialID ) const
   return "";
 }
 
+std::string Scene::FindObjectName( int iObjectInstanceID ) const
+{
+  for ( auto it = _ObjectNames.begin(); it != _ObjectNames.end(); ++it )
+  {
+    if ( it -> second == iObjectInstanceID )
+      return it -> first;
+  }
+
+  return "";
+}
+
 int Scene::AddObject( const Object & iObject )
 {
   int objectID = _Objects.size();
 
-  Object * newObject = new Object(iObject);
-  newObject -> _ObjectID = objectID;
-  _Objects.push_back(newObject);
+  Object * newObject = nullptr;
+  if ( iObject._Type == ObjectType::Sphere )
+    newObject = new Sphere(*((Sphere*)&iObject));
+  else if ( iObject._Type == ObjectType::Plane )
+    newObject = new Plane(*((Plane*)&iObject));
+  else if ( iObject._Type == ObjectType::Box )
+    newObject = new Box(*((Box*)&iObject));
 
-  return objectID;
+  if ( newObject )
+  {
+    newObject -> _ObjectID = objectID;
+    _Objects.push_back(newObject);
+    return objectID;
+  }
+  return -1;
 }
 
 int Scene::AddObjectInstance( ObjectInstance & iObjectInstance )
 {
   int instanceID = _ObjectInstances.size();
   _ObjectInstances.push_back(iObjectInstance);
+
+  {
+    Object * curObject = _Objects[iObjectInstance._ObjectID];
+
+    std::string objectName;
+    if ( curObject -> _Type == ObjectType::Sphere )
+      objectName = std::string("Sphere[").append(std::to_string(instanceID).append("]"));
+    else if ( curObject -> _Type == ObjectType::Plane )
+      objectName = std::string("Plane[").append(std::to_string(instanceID).append("]"));
+    else if ( curObject -> _Type == ObjectType::Box )
+      objectName = std::string("Box[").append(std::to_string(instanceID).append("]"));
+    else
+      objectName = std::string("Unknown[").append(std::to_string(instanceID).append("]"));
+
+    _ObjectNames.insert({objectName, instanceID});
+  }
+
   return instanceID;
 }
 
 int Scene::AddObjectInstance( int iObjectID, int iMaterialID, const Mat4x4 & iTransform )
 {
-  ObjectInstance instance(iObjectID, iMaterialID, iTransform);
-  return AddObjectInstance(instance);
+  std::string objectName;
+
+  if ( iObjectID >= 0 && iObjectID < _Objects.size() )
+  {
+    Object * curObject = _Objects[iObjectID];
+
+    ObjectInstance instance(iObjectID, iMaterialID, iTransform);
+    return AddObjectInstance(instance);
+  }
+
+  return -1;
 }
 
 }

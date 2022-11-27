@@ -4,6 +4,7 @@
 #define PI 3.14159265359
 #define MAX_MATERIAL_COUNT 64
 #define MAX_SPHERE_COUNT   64
+#define MAX_PLANES_COUNT   64
 #define MAX_LIGHT_COUNT    64
 
 in vec2 fragUV;
@@ -45,9 +46,7 @@ struct HitPoint
 
 struct Sphere
 {
-  vec3  _Center;
-  //mat4  _Transform;
-  float _Radius;
+  vec4  _CenterRad; // Center.xyz, radius.w
   int   _MaterialID;
 };
 
@@ -83,6 +82,8 @@ uniform int         u_NbMaterials;
 uniform Material    u_Materials[MAX_MATERIAL_COUNT];
 uniform int         u_NbSpheres;
 uniform Sphere      u_Spheres[MAX_SPHERE_COUNT];
+uniform int         u_NbPlanes;
+uniform Plane       u_Planes[MAX_PLANES_COUNT];
 uniform int         u_EnableSkybox;
 uniform sampler2D   u_SkyboxTexture;
 uniform sampler2D   u_ScreenTexture;
@@ -123,24 +124,20 @@ mat4 BuildTranslation( vec3 iTrans )
               vec4(iTrans, 1.0)        );
 }
 
-bool SphereIntersection( vec3 iSphereCenter, float _Radius, Ray iRay, out float oHitDistance )
+// https://iquilezles.org/articles/sphereshadow/
+bool SphereIntersection( vec4 iSphere, Ray iRay, out float oHitDistance )
 {
-  float t = dot(iSphereCenter - iRay._Orig, iRay._Dir);
-  vec3 p = iRay._Orig + iRay._Dir * t;
+  vec3 oc = iRay._Orig - iSphere.xyz;
 
-  float y = length(iSphereCenter - p);
-  if ( y < _Radius )
-  { 
-    float x =  sqrt(_Radius*_Radius - y*y);
-    float t1 = t-x;
-    if ( t1 >  0 )
-    {
-      oHitDistance = t1;
-      return true;
-    }
-  }
-  
-  return false;
+  float b = dot( oc, iRay._Dir );
+  float c = dot( oc, oc ) - iSphere.w * iSphere.w;
+  float h = b*b - c;
+
+  if( h < 0.0 )
+    return false;
+
+  oHitDistance = -b - sqrt( h );
+  return true;
 }
 
 bool PlaneIntersection( vec3 iOrig, vec3 iNormal, Ray iRay, out float oHitDistance )
@@ -158,24 +155,6 @@ bool PlaneIntersection( vec3 iOrig, vec3 iNormal, Ray iRay, out float oHitDistan
 }
 
 // ----------
-// Constants
-// ----------
-
-const Sphere Spheres[] = { Sphere(vec3( 0.f, 0.f, 0.f ),   .3f, 0),
-                           Sphere(vec3( .5f, 1.f, -.5f ),  .2f, 1),
-                           Sphere(vec3( -.5f, 2.f, -.5f ), .2f, 2),
-                           Sphere(vec3(  3.f, 2.f, -5.f ), .8f, 2),
-                           Sphere(vec3( -1.f, 1.f, -3.f ), 1.f, 1) };
-
-//const Sphere Spheres[] = { Sphere(BuildTranslation(vec3( 0.f, 0.f, 0.f )),   .3f, 0),
-//                           Sphere(BuildTranslation(vec3( .5f, 1.f, -.5f )),  .2f, 1),
-//                           Sphere(BuildTranslation(vec3( -.5f, 2.f, -.5f )), .2f, 2),
-//                           Sphere(BuildTranslation(vec3(  3.f, 2.f, -5.f )), .8f, 2),
-//                           Sphere(BuildTranslation(vec3( -1.f, 1.f, -3.f )), 1.f, 1) };
-
-const Plane Planes[] = { Plane(vec3( 0.f, -.5f, 0.f ), vec3( 0.f, 1.f, 0.f ), 3) };
-
-// ----------
 // Ray tracing
 // ----------
 
@@ -183,32 +162,32 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
 {
   oClosestHit = HitPoint(-1.f, vec3( 0.f, 0.f, 0.f ), vec3( 0.f, 0.f, 0.f ), -1);
 
-  for ( int i = 0; i < Spheres.length(); ++i )
+  for ( int i = 0; i < u_NbSpheres; ++i )
   {
     float hitDist = 0.f;
-    if ( SphereIntersection(Spheres[i]._Center, Spheres[i]._Radius, iRay, hitDist) )
+    if ( SphereIntersection(u_Spheres[i]._CenterRad, iRay, hitDist) )
     {
       if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
       {
         oClosestHit._Dist       = hitDist;
         oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
-        oClosestHit._Normal     = normalize(oClosestHit._Pos - Spheres[i]._Center);
-        oClosestHit._MaterialID = Spheres[i]._MaterialID;
+        oClosestHit._Normal     = normalize(oClosestHit._Pos - u_Spheres[i]._CenterRad.xyz);
+        oClosestHit._MaterialID = u_Spheres[i]._MaterialID;
       }
     }
   }
 
-  for ( int i = 0; i < Planes.length(); ++i )
+  for ( int i = 0; i < u_NbPlanes; ++i )
   {
     float hitDist = 0.f;
-    if ( PlaneIntersection(Planes[i]._Orig, Planes[i]._Normal, iRay, hitDist) )
+    if ( PlaneIntersection(u_Planes[i]._Orig, u_Planes[i]._Normal, iRay, hitDist) )
     {
       if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
       {
         oClosestHit._Dist       = hitDist;
         oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
-        oClosestHit._Normal     = Planes[i]._Normal;
-        oClosestHit._MaterialID = Planes[i]._MaterialID;
+        oClosestHit._Normal     = u_Planes[i]._Normal;
+        oClosestHit._MaterialID = u_Planes[i]._MaterialID;
       }
     }
   }
@@ -220,20 +199,20 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
 
 bool AnyHit( Ray iRay, float iMaxDist )
 {
-  for ( int i = 0; i < Spheres.length(); ++i )
+  for ( int i = 0; i < u_NbSpheres; ++i )
   {
     float hitDist = 0.f;
-    if ( SphereIntersection(Spheres[i]._Center, Spheres[i]._Radius, iRay, hitDist) )
+    if ( SphereIntersection(u_Spheres[i]._CenterRad, iRay, hitDist) )
     {
       if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
         return true;
     }
   }
 
-  for ( int i = 0; i < Planes.length(); ++i )
+  for ( int i = 0; i < u_NbPlanes; ++i )
   {
     float hitDist = 0.f;
-    if ( PlaneIntersection(Planes[i]._Orig, Planes[i]._Normal, iRay, hitDist) )
+    if ( PlaneIntersection(u_Planes[i]._Orig, u_Planes[i]._Normal, iRay, hitDist) )
     {
       if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
         return true;
@@ -262,13 +241,13 @@ void main()
   // Initialization
   InitRNG(gl_FragCoord.xy, u_FrameNum);
 
- float r1 = 2.0 * rand();
- float r2 = 2.0 * rand();
+  float r1 = 2.0 * rand();
+  float r2 = 2.0 * rand();
 
- vec2 jitter;
- jitter.x = ( r1 < 1.0 ) ? ( sqrt(r1) - 1.0 ) : ( 1.0 - sqrt(2.0 - r1) ) ;
- jitter.y = ( r2 < 1.0 ) ? ( sqrt(r2) - 1.0 ) : ( 1.0 - sqrt(2.0 - r2) ) ;
- jitter /= (u_Resolution * 0.5);
+  vec2 jitter;
+  jitter.x = ( r1 < 1.0 ) ? ( sqrt(r1) - 1.0 ) : ( 1.0 - sqrt(2.0 - r1) ) ;
+  jitter.y = ( r2 < 1.0 ) ? ( sqrt(r2) - 1.0 ) : ( 1.0 - sqrt(2.0 - r2) ) ;
+  jitter /= (u_Resolution * 0.5);
 
   vec2 centeredUV = ( 2. * fragUV - 1. ) + jitter;
 

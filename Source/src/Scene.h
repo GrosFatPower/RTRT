@@ -42,6 +42,8 @@ public:
   int FindMaterialID( const std::string & iMateralName ) const;
   std::string FindMaterialName( int iMaterialID ) const;
 
+  std::string FindObjectName( int iObjectInstanceID ) const;
+
   int GetNbLights()          { return _Lights.size();          }
   int GetNbMaterials()       { return _Materials.size();       }
   int GetNbTextures()        { return _Textures.size();        }
@@ -53,6 +55,8 @@ public:
   std::vector<ObjectInstance> & GetObjectInstances() { return _ObjectInstances; }
   std::vector<Material>       & GetMaterials()       { return _Materials;       }
   std::vector<Texture*>       & GetTetxures()        { return _Textures;        }
+  std::vector<Mesh*>          & GetMeshes()          { return _Meshes;          }
+  std::vector<Object*>        & GetObjects()         { return _Objects;         }
 
 private:
 
@@ -61,6 +65,7 @@ private:
   std::vector<Material>       _Materials;
   std::map<std::string,int>   _MaterialIDs;
   std::vector<MeshInstance>   _MeshInstances;
+  std::map<std::string,int>   _ObjectNames;
   std::vector<ObjectInstance> _ObjectInstances;
 
   std::vector<Texture*>       _Textures;

@@ -8,7 +8,8 @@ namespace RTRT
 
 enum class ObjectType
 {
-  Plane = 0,
+  Unknown = 0,
+  Plane,
   Box,
   Sphere
 };
@@ -17,9 +18,7 @@ struct Object
 {
   int        _ObjectID = -1;
   Vec3       _Origin   = { 0.f, 0.f, 0.f };
-
-protected:
-  ObjectType _Type;
+  ObjectType _Type     = ObjectType::Unknown;
 };
 
 struct Sphere : public Object

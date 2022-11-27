@@ -141,6 +141,9 @@ Test3::~Test3()
   if ( _Scene )
     delete _Scene;
   _Scene = nullptr;
+
+  for ( auto objName : _ObjectNames )
+    delete objName;
 }
 
 int Test3::InitializeFrameBuffer()
@@ -267,8 +270,46 @@ int Test3::UpdateUniforms()
 
       if ( _SceneInstancesModified )
       {
-        const std::vector<MeshInstance>   & MeshInstances   = _Scene -> GetMeshInstances();
+        //const std::vector<Mesh*>          & Meshes          = _Scene -> GetMeshes();
+        const std::vector<Object*>        & Objects         = _Scene -> GetObjects();
+        //const std::vector<MeshInstance>   & MeshInstances   = _Scene -> GetMeshInstances();
         const std::vector<ObjectInstance> & ObjectInstances = _Scene -> GetObjectInstances();
+
+        int nbSpheres = 0;
+        int nbPlanes = 0;
+        for ( auto obj : ObjectInstances )
+        {
+          if ( ( obj._ObjectID < 0 ) || ( obj._ObjectID >= Objects.size() ) )
+            continue;
+
+          Object * curObject = Objects[obj._ObjectID];
+          if ( !curObject )
+            continue;
+
+          if ( curObject -> _Type == ObjectType::Sphere )
+          {
+            Sphere * curSphere = (Sphere *) curObject;
+            Vec4 CenterRad = obj._Transform * Vec4(0.f, 0.f, 0.f, 1.f);
+            CenterRad.w = curSphere -> _Radius;
+
+            glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Spheres",nbSpheres,"_MaterialID").c_str()), obj._MaterialID);
+            glUniform4f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Spheres",nbSpheres,"_CenterRad").c_str()), CenterRad.x, CenterRad.y, CenterRad.z, CenterRad.w);
+            nbSpheres++;
+          }
+          else if ( curObject -> _Type == ObjectType::Plane )
+          {
+            Plane * curPlane = (Plane *) curObject;
+            Vec4 orig = obj._Transform * Vec4(curPlane -> _Origin.x, curPlane -> _Origin.y, curPlane -> _Origin.z, 1.f);
+            Vec4 normal = glm::transpose(glm::inverse(obj._Transform)) * Vec4(curPlane -> _Normal.x, curPlane -> _Normal.y, curPlane -> _Normal.z, 1.f);
+
+            glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Planes",nbPlanes,"_MaterialID").c_str()), obj._MaterialID);
+            glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Planes",nbPlanes,"_Orig").c_str()), orig.x, orig.y, orig.z);
+            glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Planes",nbPlanes,"_Normal").c_str()), normal.x, normal.y, normal.z);
+            nbPlanes++;
+          }
+        }
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbSpheres"), nbSpheres);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbPlanes"), nbPlanes);
 
         _SceneInstancesModified = false;
       }
@@ -431,6 +472,35 @@ int Test3::DrawUI()
       }
     }
 
+    if ( ImGui::CollapsingHeader("Objects") )
+    {
+      std::vector<Object*>        & Objects         = _Scene -> GetObjects();
+      std::vector<ObjectInstance> & ObjectInstances = _Scene -> GetObjectInstances();
+      std::vector<Material>       & Materials       =  _Scene -> GetMaterials();
+
+      int nbMaterial = Materials.size();
+
+      std::vector<const char*> objectNamesCSTR;
+      for ( auto objName : _ObjectNames )
+        objectNamesCSTR.push_back(objName -> c_str());
+
+      if ( ImGui::Combo("ObjectInstances", &_SelectedObject, objectNamesCSTR.data(), objectNamesCSTR.size()) )
+      {
+      }
+
+      if ( _SelectedObject >= 0 )
+      {
+        ObjectInstance & objInstance = ObjectInstances[_SelectedObject];
+        
+        int matID = objInstance._MaterialID;
+        if ( ImGui::SliderInt("MaterialID", &matID, 0, nbMaterial-1) )
+        {
+          objInstance._MaterialID = matID;
+          _SceneInstancesModified = true;
+        }
+      }
+    }
+
     ImGui::End();
   }
 
@@ -526,20 +596,33 @@ int Test3::InitializeScene()
   bigSphere._Radius = .5f;
   int bigSphereID = _Scene -> AddObject(bigSphere);
 
-  Mat4x4 transformMatrix;
+  Mat4x4 transformMatrix(1.f);
   _Scene -> AddObjectInstance(mediumSphereID, greenMatID, transformMatrix);
 
-  transformMatrix = glm::translate(Mat4x4(), Vec3(.5f, 1.f, -.5f));
+  transformMatrix = glm::translate(Mat4x4(1.f), Vec3(.5f, 1.f, -.5f));
   _Scene -> AddObjectInstance(smallSphereID, redMatID, transformMatrix);
 
-  transformMatrix = glm::translate(Mat4x4(), Vec3(-.5f, 2.f, -.5f));
+  transformMatrix = glm::translate(Mat4x4(1.f), Vec3(-.5f, 2.f, -.5f));
   _Scene -> AddObjectInstance(smallSphereID, blueMatID, transformMatrix);
 
-  transformMatrix = glm::translate(Mat4x4(), Vec3(3.f, 2.f, -5.f));
+  transformMatrix = glm::translate(Mat4x4(1.f), Vec3(3.f, 2.f, -5.f));
   _Scene -> AddObjectInstance(mediumSphereID, blueMatID, transformMatrix);
 
-  transformMatrix = glm::translate(Mat4x4(), Vec3(-1.f, 1.f, -3.f));
+  transformMatrix = glm::translate(Mat4x4(1.f), Vec3(-1.f, 1.f, -3.f));
   _Scene -> AddObjectInstance(bigSphereID, redMatID, transformMatrix);
+
+  Plane basePlane;
+  basePlane._Origin = {  0.f, -.5f, 0.f };
+  basePlane._Normal = {  0.f,  1.f, 0.f };
+
+  int basePlaneID = _Scene -> AddObject(basePlane);
+
+  transformMatrix = Mat4x4(1.f);
+  _Scene -> AddObjectInstance(basePlaneID, orangeMatID, transformMatrix);
+
+  const std::vector<ObjectInstance> & ObjectInstances = _Scene -> GetObjectInstances();
+  for ( int i = 0; i < ObjectInstances.size(); ++i )
+    _ObjectNames.push_back(new std::string(_Scene -> FindObjectName(i)));
 
   _SceneCameraModified    = true;
   _SceneLightsModified    = true;
