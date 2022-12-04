@@ -16,6 +16,10 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
 
+#include <glm/gtx/matrix_decompose.hpp>
+#include <glm/gtx/quaternion.hpp>
+
+#include <algorithm>
 #include <iostream>
 
 namespace RTRT
@@ -476,7 +480,7 @@ int Test3::DrawUI()
     {
       std::vector<Object*>        & Objects         = _Scene -> GetObjects();
       std::vector<ObjectInstance> & ObjectInstances = _Scene -> GetObjectInstances();
-      std::vector<Material>       & Materials       =  _Scene -> GetMaterials();
+      std::vector<Material>       & Materials       = _Scene -> GetMaterials();
 
       int nbMaterial = Materials.size();
 
@@ -491,12 +495,71 @@ int Test3::DrawUI()
       if ( _SelectedObject >= 0 )
       {
         ObjectInstance & objInstance = ObjectInstances[_SelectedObject];
-        
-        int matID = objInstance._MaterialID;
-        if ( ImGui::SliderInt("MaterialID", &matID, 0, nbMaterial-1) )
+
+        Vec3 scale;
+        glm::quat rotation;
+        Vec3 translation;
+        Vec3 skew;
+        Vec4 perspective;
+        glm::decompose(objInstance._Transform, scale, rotation, translation, skew, perspective);
+
+        float trans[3] = { translation.x, translation.y, translation.z };
+        if ( ImGui::InputFloat3("Translation", trans) )
         {
-          objInstance._MaterialID = matID;
+          translation.x = trans[0];
+          translation.y = trans[1];
+          translation.z = trans[2];
           _SceneInstancesModified = true;
+        }
+
+        if ( _SceneInstancesModified )
+        {
+          Mat4x4 translastionMatrix = glm::translate(Mat4x4(1.f), translation);
+          Mat4x4 rotationMatrix = glm::toMat4(rotation);
+          Mat4x4 scaleMatrix = glm::scale(Mat4x4(1.f), scale);
+          objInstance._Transform = translastionMatrix * rotationMatrix * scaleMatrix;
+        }
+
+        {
+          static char * MaterialNames[99] = { NULL };
+          static int nbMaterials = 0;
+
+          if ( _SceneMaterialsModified )
+          {
+            nbMaterials = 0;
+            for ( int i = 0; i < 99; ++i )
+            {
+              if ( MaterialNames[i] )
+                delete[] MaterialNames[i];
+            }
+
+            for ( auto mat : Materials )
+            {
+              std::string materialName = _Scene ->FindMaterialName((int)mat._ID);
+              MaterialNames[nbMaterials] = new char[materialName.size()+1];
+              strcpy(MaterialNames[nbMaterials], materialName.c_str());
+              nbMaterials++;
+              if ( nbMaterials >= 99 )
+                break;
+            }
+          }
+
+          int matID = 0;
+          if ( ImGui::Combo("MaterialNames", &matID, MaterialNames, nbMaterials) )
+          {
+            if ( matID >= 0 )
+            {
+              objInstance._MaterialID = matID;
+              _SceneInstancesModified = true;
+            }
+          }
+
+          // MLK
+          //for ( int i = 0; i < 99; ++i )
+          //{
+          //  if ( MaterialNames[i] )
+          //    delete[] MaterialNames[i];
+          //}
         }
       }
     }
