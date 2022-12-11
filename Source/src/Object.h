@@ -37,7 +37,8 @@ struct Plane : public Object
 
 struct Box : public  Object
 {
-  Vec3 _Size  = { 1.f, 1.f, 1.f };
+  Vec3 _Low   = { 0.f, 0.f, 0.f };
+  Vec3 _High  = { 1.f, 1.f, 1.f };
 
   Box() { _Type = ObjectType::Box; }
 };

@@ -1,10 +1,12 @@
 #version 430 core
 
-#define EPSILON 0.0001
+#define EPSILON 0.0001f
+#define INFINITY 3.402823466e+38
 #define PI 3.14159265359
 #define MAX_MATERIAL_COUNT 64
 #define MAX_SPHERE_COUNT   64
 #define MAX_PLANES_COUNT   64
+#define MAX_BOX_COUNT      64
 #define MAX_LIGHT_COUNT    64
 
 in vec2 fragUV;
@@ -57,6 +59,14 @@ struct Plane
   int   _MaterialID;
 };
 
+struct Box
+{
+  vec3  _Low;
+  vec3  _High;
+  mat4  _InvTransfo;
+  int   _MaterialID;
+};
+
 struct Camera
 {
   vec3  _Up;
@@ -84,6 +94,8 @@ uniform int         u_NbSpheres;
 uniform Sphere      u_Spheres[MAX_SPHERE_COUNT];
 uniform int         u_NbPlanes;
 uniform Plane       u_Planes[MAX_PLANES_COUNT];
+uniform int         u_NbBoxes;
+uniform Box         u_Boxes[MAX_BOX_COUNT];
 uniform int         u_EnableSkybox;
 uniform sampler2D   u_SkyboxTexture;
 uniform sampler2D   u_ScreenTexture;
@@ -154,6 +166,48 @@ bool PlaneIntersection( vec3 iOrig, vec3 iNormal, Ray iRay, out float oHitDistan
   return false; 
 }
 
+// https://gist.github.com/DomNomNom/46bb1ce47f68d255fd5d
+bool BoxIntersection( vec3 iLow, vec3 iHigh, mat4 iInvTransfo, Ray iRay, out float oHitDistance )
+{ 
+  vec3 rayOrig = (iInvTransfo * vec4(iRay._Orig, 1.f)).xyz; // BUG
+  vec3 rayDir  = (iInvTransfo * vec4(iRay._Dir, 1.f)).xyz;  // BUG
+
+  vec3 invDir = 1.f / rayDir;
+  vec3 tMin = (iLow - rayOrig) * invDir;
+  vec3 tMax = (iHigh - rayOrig) * invDir;
+  
+  vec3 t1 = min(tMin, tMax);
+  vec3 t2 = max(tMin, tMax);
+  
+  vec2 t = max(t1.xx, t1.yz);
+  float tNear = max(t.x, t.y);
+
+  t = min(t2.xx, t2.yz);
+  float tFar = min(t.x, t.y);
+
+  oHitDistance = tNear;
+
+  return ( tNear <= tFar );
+}
+
+// https://gist.github.com/Shtille/1f98c649abeeb7a18c5a56696546d3cf
+vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iInvTransfo, vec3 iHitPoint )
+{
+  vec3 hitPoint = (iInvTransfo * vec4(iHitPoint, 1.f)).xyz; // BUG
+
+  vec3 center = (iLow + iHigh) * .5f;
+  vec3 halfDiag = (iHigh - iLow) * .5f;
+  vec3 pc = hitPoint - center;
+
+  // step(edge,x) : x < edge ? 0 : 1
+  vec3 normal = vec3(0.0);
+  normal += vec3(sign(pc.x), 0.0, 0.0) * step(abs(abs(pc.x) - halfDiag.x), EPSILON);
+  normal += vec3(0.0, sign(pc.y), 0.0) * step(abs(abs(pc.y) - halfDiag.y), EPSILON);
+  normal += vec3(0.0, 0.0, sign(pc.z)) * step(abs(abs(pc.z) - halfDiag.z), EPSILON);
+
+  return normalize(normal); // -> need to apply the transfo to the normal
+}
+
 // ----------
 // Ray tracing
 // ----------
@@ -192,6 +246,21 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
     }
   }
 
+  for ( int i = 0; i < u_NbBoxes; ++i )
+  {
+    float hitDist = 0.f;
+    if ( BoxIntersection(u_Boxes[i]._Low, u_Boxes[i]._High, u_Boxes[i]._InvTransfo, iRay, hitDist) )
+    {
+      if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
+      {
+        oClosestHit._Dist       = hitDist;
+        oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+        oClosestHit._Normal     = BoxNormal(u_Boxes[i]._Low, u_Boxes[i]._High, u_Boxes[i]._InvTransfo, oClosestHit._Pos);
+        oClosestHit._MaterialID = u_Boxes[i]._MaterialID;
+      }
+    }
+  }
+
   if ( -1 == oClosestHit._Dist )
     return false;
   return true;
@@ -213,6 +282,16 @@ bool AnyHit( Ray iRay, float iMaxDist )
   {
     float hitDist = 0.f;
     if ( PlaneIntersection(u_Planes[i]._Orig, u_Planes[i]._Normal, iRay, hitDist) )
+    {
+      if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
+        return true;
+    }
+  }
+
+  for ( int i = 0; i < u_NbBoxes; ++i )
+  {
+    float hitDist = 0.f;
+    if ( BoxIntersection(u_Boxes[i]._Low, u_Boxes[i]._High, u_Boxes[i]._InvTransfo, iRay, hitDist) )
     {
       if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
         return true;

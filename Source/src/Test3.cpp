@@ -18,6 +18,7 @@
 
 #include <glm/gtx/matrix_decompose.hpp>
 #include <glm/gtx/quaternion.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #include <algorithm>
 #include <iostream>
@@ -281,6 +282,7 @@ int Test3::UpdateUniforms()
 
         int nbSpheres = 0;
         int nbPlanes = 0;
+        int nbBoxes = 0;
         for ( auto obj : ObjectInstances )
         {
           if ( ( obj._ObjectID < 0 ) || ( obj._ObjectID >= Objects.size() ) )
@@ -311,9 +313,21 @@ int Test3::UpdateUniforms()
             glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Planes",nbPlanes,"_Normal").c_str()), normal.x, normal.y, normal.z);
             nbPlanes++;
           }
+          else if ( curObject -> _Type == ObjectType::Box )
+          {
+            Box * curBox = (Box *) curObject;
+            Mat4x4 invTransfo = glm::inverse(obj._Transform);
+
+            glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_MaterialID").c_str()), obj._MaterialID);
+            glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_Low").c_str()), curBox -> _Low.x, curBox -> _Low.y, curBox -> _Low.z);
+            glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_High").c_str()), curBox -> _High.x, curBox -> _High.y, curBox -> _High.z);
+            glUniformMatrix4fv(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_InvTransfo").c_str()), 1, GL_FALSE, glm::value_ptr(invTransfo));
+            nbBoxes++;
+          }
         }
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbSpheres"), nbSpheres);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbPlanes"), nbPlanes);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbBoxes"), nbBoxes);
 
         _SceneInstancesModified = false;
       }
@@ -524,7 +538,7 @@ int Test3::DrawUI()
           static char * MaterialNames[99] = { NULL };
           static int nbMaterials = 0;
 
-          if ( _SceneMaterialsModified )
+          if ( _SceneMaterialsModified || !nbMaterials )
           {
             nbMaterials = 0;
             for ( int i = 0; i < 99; ++i )
@@ -682,6 +696,15 @@ int Test3::InitializeScene()
 
   transformMatrix = Mat4x4(1.f);
   _Scene -> AddObjectInstance(basePlaneID, orangeMatID, transformMatrix);
+
+  Box firstBox;
+  firstBox._Low  = { 0.f, 1.f, 1.f };
+  firstBox._High = { 2.f, 3.f, 3.f };
+
+  int firstBoxID = _Scene -> AddObject(firstBox);
+
+  transformMatrix = Mat4x4(1.f);
+  _Scene -> AddObjectInstance(firstBoxID, greenMatID, transformMatrix);
 
   const std::vector<ObjectInstance> & ObjectInstances = _Scene -> GetObjectInstances();
   for ( int i = 0; i < ObjectInstances.size(); ++i )
