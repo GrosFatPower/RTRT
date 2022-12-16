@@ -169,43 +169,45 @@ bool PlaneIntersection( vec3 iOrig, vec3 iNormal, Ray iRay, out float oHitDistan
 // https://gist.github.com/DomNomNom/46bb1ce47f68d255fd5d
 bool BoxIntersection( vec3 iLow, vec3 iHigh, mat4 iInvTransfo, Ray iRay, out float oHitDistance )
 { 
-  vec3 rayOrig = (iInvTransfo * vec4(iRay._Orig, 1.f)).xyz; // BUG
-  vec3 rayDir  = (iInvTransfo * vec4(iRay._Dir, 1.f)).xyz;  // BUG
+  //vec3 rayOrig = (iInvTransfo * vec4(iRay._Orig, 1.f)).xyz; // BUG
+  //vec3 rayDir  = (iInvTransfo * vec4(iRay._Dir, 1.f)).xyz;  // BUG
+  //
+  //vec3 invDir = 1.f / rayDir;
+  //vec3 tMin = (iLow - rayOrig) * invDir;
+  //vec3 tMax = (iHigh - rayOrig) * invDir;
+  //
+  //vec3 t1 = min(tMin, tMax);
+  //vec3 t2 = max(tMin, tMax);
+  //
+  //vec2 t = max(t1.xx, t1.yz);
+  //float tNear = max(t.x, t.y);
+  //
+  //t = min(t2.xx, t2.yz);
+  //float tFar = min(t.x, t.y);
+  //
+  //oHitDistance = tNear;
 
-  vec3 invDir = 1.f / rayDir;
-  vec3 tMin = (iLow - rayOrig) * invDir;
-  vec3 tMax = (iHigh - rayOrig) * invDir;
-  
-  vec3 t1 = min(tMin, tMax);
-  vec3 t2 = max(tMin, tMax);
-  
-  vec2 t = max(t1.xx, t1.yz);
-  float tNear = max(t.x, t.y);
-
-  t = min(t2.xx, t2.yz);
-  float tFar = min(t.x, t.y);
-
-  oHitDistance = tNear;
-
-  return ( tNear <= tFar );
+  //return ( tNear <= tFar );
+  return false;
 }
 
 // https://gist.github.com/Shtille/1f98c649abeeb7a18c5a56696546d3cf
 vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iInvTransfo, vec3 iHitPoint )
 {
-  vec3 hitPoint = (iInvTransfo * vec4(iHitPoint, 1.f)).xyz; // BUG
-
-  vec3 center = (iLow + iHigh) * .5f;
-  vec3 halfDiag = (iHigh - iLow) * .5f;
-  vec3 pc = hitPoint - center;
+  //vec3 hitPoint = (iInvTransfo * vec4(iHitPoint, 1.f)).xyz; // BUG
+  //
+  //vec3 center = (iLow + iHigh) * .5f;
+  //vec3 halfDiag = (iHigh - iLow) * .5f;
+  //vec3 pc = hitPoint - center;
 
   // step(edge,x) : x < edge ? 0 : 1
-  vec3 normal = vec3(0.0);
-  normal += vec3(sign(pc.x), 0.0, 0.0) * step(abs(abs(pc.x) - halfDiag.x), EPSILON);
-  normal += vec3(0.0, sign(pc.y), 0.0) * step(abs(abs(pc.y) - halfDiag.y), EPSILON);
-  normal += vec3(0.0, 0.0, sign(pc.z)) * step(abs(abs(pc.z) - halfDiag.z), EPSILON);
+  //vec3 normal = vec3(0.0);
+  //normal += vec3(sign(pc.x), 0.0, 0.0) * step(abs(abs(pc.x) - halfDiag.x), EPSILON);
+  //normal += vec3(0.0, sign(pc.y), 0.0) * step(abs(abs(pc.y) - halfDiag.y), EPSILON);
+  //normal += vec3(0.0, 0.0, sign(pc.z)) * step(abs(abs(pc.z) - halfDiag.z), EPSILON);
 
-  return normalize(normal); // -> need to apply the transfo to the normal
+  //return normalize(normal); // -> need to apply the transfo to the normal
+  return vec3(1.);
 }
 
 // ----------
