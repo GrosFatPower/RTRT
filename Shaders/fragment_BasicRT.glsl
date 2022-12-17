@@ -3,11 +3,11 @@
 #define EPSILON 0.0001f
 #define INFINITY 3.402823466e+38
 #define PI 3.14159265359
-#define MAX_MATERIAL_COUNT 64
-#define MAX_SPHERE_COUNT   64
-#define MAX_PLANES_COUNT   64
-#define MAX_BOX_COUNT      64
-#define MAX_LIGHT_COUNT    64
+#define MAX_MATERIAL_COUNT 32
+#define MAX_SPHERE_COUNT   32
+#define MAX_PLANES_COUNT   32
+#define MAX_BOX_COUNT      32
+#define MAX_LIGHT_COUNT    32
 
 in vec2 fragUV;
 out vec4 fragColor;
@@ -169,8 +169,10 @@ bool PlaneIntersection( vec3 iOrig, vec3 iNormal, Ray iRay, out float oHitDistan
 // https://gist.github.com/DomNomNom/46bb1ce47f68d255fd5d
 bool BoxIntersection( vec3 iLow, vec3 iHigh, mat4 iInvTransfo, Ray iRay, out float oHitDistance )
 { 
-  vec3 rayOrig = (iInvTransfo * vec4(iRay._Orig, 1.f)).xyz; // BUG
-  vec3 rayDir  = (iInvTransfo * vec4(iRay._Dir, 1.f)).xyz;  // BUG
+  //vec3 rayOrig = (iInvTransfo * vec4(iRay._Orig, 1.f)).xyz; // BUG
+  //vec3 rayDir  = (iInvTransfo * vec4(iRay._Dir, 1.f)).xyz;  // BUG
+  vec3 rayOrig = iRay._Orig;
+  vec3 rayDir  = iRay._Dir;
   
   vec3 invDir = 1.f / rayDir;
   vec3 tMin = (iLow - rayOrig) * invDir;
@@ -206,7 +208,6 @@ vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iInvTransfo, vec3 iHitPoint )
   normal += vec3(0.0, 0.0, sign(pc.z)) * step(abs(abs(pc.z) - halfDiag.z), EPSILON);
 
   return normalize(normal); // -> need to apply the transfo to the normal
-  return vec3(1.);
 }
 
 // ----------
