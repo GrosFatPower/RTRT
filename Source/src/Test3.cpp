@@ -316,12 +316,11 @@ int Test3::UpdateUniforms()
           else if ( curObject -> _Type == ObjectType::Box )
           {
             Box * curBox = (Box *) curObject;
-            Mat4x4 invTransfo = glm::inverse(obj._Transform);
 
             glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_MaterialID").c_str()), obj._MaterialID);
             glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_Low").c_str()), curBox -> _Low.x, curBox -> _Low.y, curBox -> _Low.z);
             glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_High").c_str()), curBox -> _High.x, curBox -> _High.y, curBox -> _High.z);
-            glUniformMatrix4fv(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_InvTransfo").c_str()), 1, GL_FALSE, glm::value_ptr(invTransfo));
+            glUniformMatrix4fv(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_Transfom").c_str()), 1, GL_FALSE, glm::value_ptr(obj._Transform));
             nbBoxes++;
           }
         }

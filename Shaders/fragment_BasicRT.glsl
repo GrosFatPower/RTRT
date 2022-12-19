@@ -1,6 +1,6 @@
 #version 430 core
 
-#define EPSILON 0.0001f
+#define EPSILON 0.00001f
 #define INFINITY 3.402823466e+38
 #define PI 3.14159265359
 #define MAX_MATERIAL_COUNT 32
@@ -63,7 +63,7 @@ struct Box
 {
   vec3  _Low;
   vec3  _High;
-  mat4  _InvTransfo;
+  mat4  _Transfom;
   int   _MaterialID;
 };
 
@@ -167,10 +167,10 @@ bool PlaneIntersection( vec3 iOrig, vec3 iNormal, Ray iRay, out float oHitDistan
 }
 
 // https://gist.github.com/DomNomNom/46bb1ce47f68d255fd5d
-bool BoxIntersection( vec3 iLow, vec3 iHigh, mat4 iInvTransfo, Ray iRay, out float oHitDistance )
+bool BoxIntersection( vec3 iLow, vec3 iHigh, mat4 iTransfom, Ray iRay, out float oHitDistance )
 { 
-  //vec3 rayOrig = (iInvTransfo * vec4(iRay._Orig, 1.f)).xyz; // BUG
-  //vec3 rayDir  = (iInvTransfo * vec4(iRay._Dir, 1.f)).xyz;  // BUG
+  //vec3 rayOrig = (iInvTransfom * vec4(iRay._Orig, 1.f)).xyz; // BUG
+  //vec3 rayDir  = (iInvTransfom * vec4(iRay._Dir, 1.f)).xyz;  // BUG
   vec3 rayOrig = iRay._Orig;
   vec3 rayDir  = iRay._Dir;
   
@@ -192,10 +192,170 @@ bool BoxIntersection( vec3 iLow, vec3 iHigh, mat4 iInvTransfo, Ray iRay, out flo
   return ( tNear <= tFar );
 }
 
-// https://gist.github.com/Shtille/1f98c649abeeb7a18c5a56696546d3cf
-vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iInvTransfo, vec3 iHitPoint )
+// https://gist.github.com/DomNomNom/46bb1ce47f68d255fd5d
+bool BoxIntersection2( vec3 iLow, vec3 iHigh, mat4 iTransfom, Ray iRay, out float oHitDistance )
+{ 
+  vec3 xAxis   = vec3(iTransfom[0][0],iTransfom[0][1], iTransfom[0][2]);
+  vec3 yAxis   = vec3(iTransfom[1][0],iTransfom[1][1], iTransfom[1][2]);
+  vec3 zAxis   = vec3(iTransfom[2][0],iTransfom[2][1], iTransfom[2][2]);
+  vec3 boxOrig = vec3(iTransfom[3][0],iTransfom[3][1], iTransfom[3][2]);
+
+  vec3 invDir;
+  invDir.x = 1.f / dot(iRay._Dir, xAxis);
+  invDir.y = 1.f / dot(iRay._Dir, yAxis);
+  invDir.y = 1.f / dot(iRay._Dir, zAxis);
+
+  vec3 delta = iRay._Orig - boxOrig;
+  vec3 orig;
+  orig.x = dot(xAxis, delta);
+  orig.y = dot(yAxis, delta);
+  orig.z = dot(zAxis, delta);
+  
+  vec3 tMin = (iLow - orig) * invDir;
+  vec3 tMax = (iHigh - orig) * invDir;
+  
+  vec3 t1 = min(tMin, tMax);
+  vec3 t2 = max(tMin, tMax);
+  
+  vec2 t = max(t1.xx, t1.yz);
+  float tNear = max(t.x, t.y);
+  
+  t = min(t2.xx, t2.yz);
+  float tFar = min(t.x, t.y);
+  
+  oHitDistance = tNear;
+
+  return ( tNear <= tFar );
+}
+
+// Intersection method from Real-Time Rendering and Essential Mathematics for Games
+bool BoxIntersection3( vec3 iLow, vec3 iHigh, mat4 iTransfom, Ray iRay, out float oHitDistance )
 {
-  vec3 hitPoint = (iInvTransfo * vec4(iHitPoint, 1.f)).xyz; // BUG
+  float tMin = 0.f;
+  float tMax = INFINITY;
+
+  vec3 boxOrig = vec3(iTransfom[3][0],iTransfom[3][1], iTransfom[3][2]);
+
+  vec3 delta = boxOrig - iRay._Orig;
+
+  // Test intersection with the 2 planes perpendicular to the OBB's X axis
+  {
+    vec3 xaxis = vec3(iTransfom[0][0],iTransfom[0][1], iTransfom[0][2]);
+    float e = dot(xaxis, delta);
+    float f = dot(iRay._Dir, xaxis);
+
+    if ( abs(f) > EPSILON )
+    { // Standard case
+
+      float t1 = (e+iLow.x)/f; // Intersection with the "left" plane
+      float t2 = (e+iHigh.x)/f; // Intersection with the "right" plane
+      // t1 and t2 now contain distances betwen ray origin and ray-plane intersections
+
+      // We want t1 to represent the nearest intersection, 
+      // so if it's not the case, invert t1 and t2
+      if (t1>t2)
+      {
+        float w=t1;t1=t2;t2=w; // swap t1 and t2
+      }
+
+      // tMax is the nearest "far" intersection (amongst the X,Y and Z planes pairs)
+      if ( t2 < tMax )
+        tMax = t2;
+      // tMin is the farthest "near" intersection (amongst the X,Y and Z planes pairs)
+      if ( t1 > tMin )
+        tMin = t1;
+
+      // And here's the trick :
+      // If "far" is closer than "near", then there is NO intersection.
+      // See the images in the tutorials for the visual explanation.
+      if (tMax < tMin )
+        return false;
+
+    }
+    else
+    { // Rare case : the ray is almost parallel to the planes, so they don't have any "intersection"
+      if(-e+iLow.x > 0.0f || -e+iHigh.x < 0.0f)
+        return false;
+    }
+  }
+
+
+  // Test intersection with the 2 planes perpendicular to the OBB's Y axis
+  // Exactly the same thing than above.
+  {
+    vec3 yaxis = vec3(iTransfom[1][0],iTransfom[1][1], iTransfom[1][2]);
+    float e = dot(yaxis, delta);
+    float f = dot(iRay._Dir, yaxis);
+
+    if ( abs(f) > EPSILON )
+    {
+      float t1 = (e+iLow.y)/f;
+      float t2 = (e+iHigh.y)/f;
+
+      if (t1>t2)
+      {
+        float w=t1;t1=t2;t2=w;
+      }
+
+      if ( t2 < tMax )
+        tMax = t2;
+      if ( t1 > tMin )
+        tMin = t1;
+      if (tMin > tMax)
+        return false;
+
+    }
+    else
+    {
+      if(-e+iLow.y > 0.0f || -e+iHigh.y < 0.0f)
+        return false;
+    }
+  }
+
+
+  // Test intersection with the 2 planes perpendicular to the OBB's Z axis
+  // Exactly the same thing than above.
+  {
+    vec3 zaxis = vec3(iTransfom[2][0],iTransfom[2][1], iTransfom[2][2]);
+    float e = dot(zaxis, delta);
+    float f = dot(iRay._Dir, zaxis);
+
+    if ( abs(f) > EPSILON )
+    {
+
+      float t1 = (e+iLow.z)/f;
+      float t2 = (e+iHigh.z)/f;
+
+      if (t1>t2)
+      {
+        float w=t1;t1=t2;t2=w;
+      }
+
+      if ( t2 < tMax )
+        tMax = t2;
+      if ( t1 > tMin )
+        tMin = t1;
+      if (tMin > tMax)
+        return false;
+
+    }
+    else
+    {
+      if(-e+iLow.z > 0.0f || -e+iHigh.z < 0.0f)
+        return false;
+    }
+  }
+
+  oHitDistance = tMin;
+
+  return true;
+
+}
+
+// https://gist.github.com/Shtille/1f98c649abeeb7a18c5a56696546d3cf
+vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iTransfom, vec3 iHitPoint )
+{
+  vec3 hitPoint = (iTransfom * vec4(iHitPoint, 1.f)).xyz; // BUG
   
   vec3 center = (iLow + iHigh) * .5f;
   vec3 halfDiag = (iHigh - iLow) * .5f;
@@ -208,6 +368,29 @@ vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iInvTransfo, vec3 iHitPoint )
   normal += vec3(0.0, 0.0, sign(pc.z)) * step(abs(abs(pc.z) - halfDiag.z), EPSILON);
 
   return normalize(normal); // -> need to apply the transfo to the normal
+}
+
+// https://gist.github.com/Shtille/1f98c649abeeb7a18c5a56696546d3cf
+vec3 BoxNormal2( vec3 iLow, vec3 iHigh, mat4 iTransfom, vec3 iHitPoint )
+{
+  // Resolution in local space
+  mat4 invTransfo = inverse(iTransfom);
+  vec3 localHitP = (invTransfo * vec4(iHitPoint, 1.f)).xyz;
+  
+  vec3 center = (iLow + iHigh) * .5f;
+  vec3 halfDiag = (iHigh - iLow) * .5f;
+  vec3 pc = localHitP - center;
+
+  // step(edge,x) : x < edge ? 0 : 1
+  vec3 normal = vec3(0.0);
+  normal += vec3(sign(pc.x), 0.0, 0.0) * step(abs(abs(pc.x) - halfDiag.x), EPSILON);
+  normal += vec3(0.0, sign(pc.y), 0.0) * step(abs(abs(pc.y) - halfDiag.y), EPSILON);
+  normal += vec3(0.0, 0.0, sign(pc.z)) * step(abs(abs(pc.z) - halfDiag.z), EPSILON);
+
+  // To world space
+  normal = (transpose(invTransfo) * vec4(normal, 1.f)).xyz;
+
+  return normalize(normal);
 }
 
 // ----------
@@ -251,13 +434,13 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
   for ( int i = 0; i < u_NbBoxes; ++i )
   {
     float hitDist = 0.f;
-    if ( BoxIntersection(u_Boxes[i]._Low, u_Boxes[i]._High, u_Boxes[i]._InvTransfo, iRay, hitDist) )
+    if ( BoxIntersection3(u_Boxes[i]._Low, u_Boxes[i]._High, u_Boxes[i]._Transfom, iRay, hitDist) )
     {
       if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
       {
         oClosestHit._Dist       = hitDist;
         oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
-        oClosestHit._Normal     = BoxNormal(u_Boxes[i]._Low, u_Boxes[i]._High, u_Boxes[i]._InvTransfo, oClosestHit._Pos);
+        oClosestHit._Normal     = BoxNormal2(u_Boxes[i]._Low, u_Boxes[i]._High, u_Boxes[i]._Transfom, oClosestHit._Pos);
         oClosestHit._MaterialID = u_Boxes[i]._MaterialID;
       }
     }
@@ -293,7 +476,7 @@ bool AnyHit( Ray iRay, float iMaxDist )
   for ( int i = 0; i < u_NbBoxes; ++i )
   {
     float hitDist = 0.f;
-    if ( BoxIntersection(u_Boxes[i]._Low, u_Boxes[i]._High, u_Boxes[i]._InvTransfo, iRay, hitDist) )
+    if ( BoxIntersection3(u_Boxes[i]._Low, u_Boxes[i]._High, u_Boxes[i]._Transfom, iRay, hitDist) )
     {
       if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
         return true;
