@@ -1,6 +1,7 @@
 #version 430 core
 
-#define EPSILON 0.00001f
+#define EPSILON 1e-9f
+#define RESOLUTION 0.001f
 #define INFINITY 3.402823466e+38
 #define PI 3.14159265359
 #define MAX_MATERIAL_COUNT 32
@@ -363,9 +364,9 @@ vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iTransfom, vec3 iHitPoint )
 
   // step(edge,x) : x < edge ? 0 : 1
   vec3 normal = vec3(0.0);
-  normal += vec3(sign(pc.x), 0.0, 0.0) * step(abs(abs(pc.x) - halfDiag.x), EPSILON);
-  normal += vec3(0.0, sign(pc.y), 0.0) * step(abs(abs(pc.y) - halfDiag.y), EPSILON);
-  normal += vec3(0.0, 0.0, sign(pc.z)) * step(abs(abs(pc.z) - halfDiag.z), EPSILON);
+  normal += vec3(sign(pc.x), 0.0, 0.0) * step(abs(abs(pc.x) - halfDiag.x), RESOLUTION);
+  normal += vec3(0.0, sign(pc.y), 0.0) * step(abs(abs(pc.y) - halfDiag.y), RESOLUTION);
+  normal += vec3(0.0, 0.0, sign(pc.z)) * step(abs(abs(pc.z) - halfDiag.z), RESOLUTION);
 
   return normalize(normal); // -> need to apply the transfo to the normal
 }
@@ -383,9 +384,9 @@ vec3 BoxNormal2( vec3 iLow, vec3 iHigh, mat4 iTransfom, vec3 iHitPoint )
 
   // step(edge,x) : x < edge ? 0 : 1
   vec3 normal = vec3(0.0);
-  normal += vec3(sign(pc.x), 0.0, 0.0) * step(abs(abs(pc.x) - halfDiag.x), EPSILON);
-  normal += vec3(0.0, sign(pc.y), 0.0) * step(abs(abs(pc.y) - halfDiag.y), EPSILON);
-  normal += vec3(0.0, 0.0, sign(pc.z)) * step(abs(abs(pc.z) - halfDiag.z), EPSILON);
+  normal += vec3(sign(pc.x), 0.0, 0.0) * step(abs(abs(pc.x) - halfDiag.x), RESOLUTION);
+  normal += vec3(0.0, sign(pc.y), 0.0) * step(abs(abs(pc.y) - halfDiag.y), RESOLUTION);
+  normal += vec3(0.0, 0.0, sign(pc.z)) * step(abs(abs(pc.z) - halfDiag.z), RESOLUTION);
 
   // To world space
   normal = (transpose(invTransfo) * vec4(normal, 1.f)).xyz;
@@ -531,7 +532,7 @@ void main()
     // Ray cast
     HitPoint closestHit;
     TraceRay(ray, closestHit);
-    if ( closestHit._Dist < -EPSILON )
+    if ( closestHit._Dist < -RESOLUTION )
     {
       if ( 1 == u_EnableSkybox )
         pixelColor += SampleSkybox(ray._Dir) * multiplier;
@@ -550,7 +551,7 @@ void main()
     if ( lightDist < u_SphereLight._Radius )
     {
       Ray occlusionRay;
-      occlusionRay._Orig = closestHit._Pos + closestHit._Normal * EPSILON;
+      occlusionRay._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
       occlusionRay._Dir = lightDir;
 
       if ( !AnyHit(occlusionRay, lightDist) )
@@ -563,7 +564,7 @@ void main()
 
     vec3 randVec3 = vec3(rand() * 2. - 1.,rand() * 2. - 1.,rand() * 2. - 1.);
 
-    ray._Orig = closestHit._Pos + closestHit._Normal * EPSILON;
+    ray._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
     ray._Dir = reflect(ray._Dir, closestHit._Normal + u_Materials[closestHit._MaterialID]._Roughness * randVec3 );
   }
 

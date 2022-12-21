@@ -12,6 +12,7 @@
 #include "glm/vec4.hpp"
 #include "glm/mat4x4.hpp"
 #include "glm/gtx/transform.hpp"
+#include "glm/gtx/quaternion.hpp"
 
 
 typedef glm::vec2   Vec2;
@@ -77,6 +78,18 @@ public:
     out[3][3] = 1.0f;
 
     return out;
+  }
+
+  static void Decompose(const Mat4x4 & iMat, Vec3 & oTranslation, glm::quat & oRotation, Vec3 & oScale)
+  {
+    oTranslation = iMat[3];
+    for (int i = 0; i < 3; i++)
+      oScale[i] = glm::length(Vec3(iMat[i]));
+    const glm::mat3 rotMtx(
+        Vec3(iMat[0]) / oScale[0],
+        Vec3(iMat[1]) / oScale[1],
+        Vec3(iMat[2]) / oScale[2]);
+    oRotation = glm::quat_cast(rotMtx);
   }
 };
 

@@ -107,4 +107,12 @@ void Camera::Strafe(float iDx, float iDy)
   Update();
 }
 
+void Camera::LookAt( Vec3 iPivot )
+{
+  _Pivot = iPivot;
+  Vec3 dir = glm::normalize(_Pivot - _Pos);
+
+  Update();
+}
+
 }

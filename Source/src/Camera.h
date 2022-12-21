@@ -40,6 +40,8 @@ public:
   void OffsetOrientations(float iYaw, float iPitch);
   void Strafe(float iDx, float iDy);
 
+  void LookAt( Vec3 iPivot );
+
 private:
 
   void Update();

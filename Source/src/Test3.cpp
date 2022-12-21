@@ -16,9 +16,11 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
 
-#include <glm/gtx/matrix_decompose.hpp>
-#include <glm/gtx/quaternion.hpp>
-#include <glm/gtc/type_ptr.hpp>
+#include "glm/gtx/matrix_decompose.hpp"
+#include "glm/gtx/quaternion.hpp"
+#include "glm/gtc/type_ptr.hpp"
+#include "glm/gtx/euler_angles.hpp"
+#include "glm/gtx/euler_angles.hpp"
 
 #include <algorithm>
 #include <iostream>
@@ -503,6 +505,16 @@ int Test3::DrawUI()
 
       if ( ImGui::Combo("ObjectInstances", &_SelectedObject, objectNamesCSTR.data(), objectNamesCSTR.size()) )
       {
+        ObjectInstance & objInstance = ObjectInstances[_SelectedObject];
+
+        Vec3 scale;
+        glm::quat rotation;
+        Vec3 translation;
+        MathUtil::Decompose(objInstance._Transform, translation, rotation, scale);
+
+        Camera & cam = _Scene -> GetCamera();
+        cam.LookAt(translation);
+        _SceneCameraModified = true;
       }
 
       if ( _SelectedObject >= 0 )
@@ -512,17 +524,37 @@ int Test3::DrawUI()
         Vec3 scale;
         glm::quat rotation;
         Vec3 translation;
-        Vec3 skew;
-        Vec4 perspective;
-        glm::decompose(objInstance._Transform, scale, rotation, translation, skew, perspective);
+        MathUtil::Decompose(objInstance._Transform, translation, rotation, scale);
 
+        // Translation
         float trans[3] = { translation.x, translation.y, translation.z };
-        if ( ImGui::InputFloat3("Translation", trans) )
+        if ( ImGui::InputFloat3("Translation (X,Y,Z)", trans) )
         {
           translation.x = trans[0];
           translation.y = trans[1];
           translation.z = trans[2];
           _SceneInstancesModified = true;
+        }
+
+        // Rotation
+        Vec3 eulerAngles = glm::eulerAngles(rotation); // pitch, yaw, roll
+        eulerAngles *= 180.f / M_PI;
+        int YawPitchRoll[3] = { (int)roundf(eulerAngles.y), (int)roundf(eulerAngles.x), (int)roundf(eulerAngles.z) };
+
+        if ( ImGui::SliderInt("Yaw", &YawPitchRoll[0], -89, 89) )
+          _SceneInstancesModified = true;
+        if ( ImGui::SliderInt("Pitch", &YawPitchRoll[1], -179, 179) )
+          _SceneInstancesModified = true;
+        if ( ImGui::SliderInt("Roll", &YawPitchRoll[2], -179, 179) )
+          _SceneInstancesModified = true;
+
+        if ( _SceneInstancesModified )
+        {
+          eulerAngles.x = YawPitchRoll[1] * ( M_PI / 180.f );
+          eulerAngles.y = YawPitchRoll[0] * ( M_PI / 180.f );
+          eulerAngles.z = YawPitchRoll[2] * ( M_PI / 180.f );
+
+          rotation = glm::quat(eulerAngles);
         }
 
         if ( _SceneInstancesModified )
@@ -697,12 +729,12 @@ int Test3::InitializeScene()
   _Scene -> AddObjectInstance(basePlaneID, orangeMatID, transformMatrix);
 
   Box firstBox;
-  firstBox._Low  = { 0.f, 1.f, 1.f };
-  firstBox._High = { 2.f, 3.f, 3.f };
+  firstBox._Low  = { -1.f, -1.f, -1.f };
+  firstBox._High = { 1.f, 1.f, 1.f };
 
   int firstBoxID = _Scene -> AddObject(firstBox);
 
-  transformMatrix = Mat4x4(1.f);
+  transformMatrix = glm::translate(Mat4x4(1.f), Vec3(-3.f, 2.f, -2.f));
   _Scene -> AddObjectInstance(firstBoxID, greenMatID, transformMatrix);
 
   const std::vector<ObjectInstance> & ObjectInstances = _Scene -> GetObjectInstances();
