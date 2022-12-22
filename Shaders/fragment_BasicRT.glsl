@@ -28,6 +28,7 @@ struct Material
   int   _ID;
   vec3  _Albedo;
   vec3  _Emission;
+  vec3  _Reflectance;
   float _Metallic;
   float _Roughness;
 };
@@ -367,6 +368,74 @@ vec3 ComputeColor( HitPoint iClosestHit )
   return pixelColor;
 }
 
+// GGX/Trowbridge-Reitz Normal Distribution Function
+float D( float iAlpha, vec3 iN, vec3 iH )
+{
+  float num = pow(iAlpha, 2.f);
+
+  float NdotH = max(dot(iN, iH), 0.f);
+  float denom = PI * pow(pow(NdotH, 2.f) * (pow(iAlpha, 2.f) - 1.f) + 1.f, 2.f);
+  denom = max(denom, EPSILON);
+
+  return num / denom;
+}
+
+// Schlick-Beckmann Geometry Shadowing Function
+float G1( float iAlpha, vec3 iN, vec3 iX )
+{
+  float NdotX = max(dot(iN, iX), 0.f);
+
+  float num = NdotX;
+
+  float k = iAlpha / 2.f;
+  float denom = NdotX * ( 1.f - k ) + k;
+  denom = max(denom, EPSILON);
+
+  return num / denom;
+}
+
+// Smith Model
+float G( float iAlpha, vec3 iN, vec3 iV, vec3 iL )
+{
+  return G1(iAlpha, iN, iV) * G1(iAlpha, iN, iL);
+}
+
+// Fresnel-Schlick Function
+vec3 F( vec3 iF0, vec3 iV, vec3 iH )
+{
+  return iF0 + (vec3(1.f) - iF0) * pow(1.f - max(dot(iV, iH), 0.f), 5.f);
+}
+
+// Computer Graphics Tutorial - PBR (Physically Based Rendering)
+// https://www.youtube.com/watch?v=RRE-F57fbXw&list=WL&index=109
+vec3 PBR( Ray iRay, HitPoint iClosestHit )
+{
+  vec3 F0 = vec3(.1f); // tmp
+
+  vec3 N = iClosestHit._Normal;
+  vec3 V = normalize(iRay._Orig - iClosestHit._Pos);
+  vec3 L = normalize(u_SphereLight._Pos - iClosestHit._Pos);
+  vec3 H = normalize(V + L);
+
+  float alpha = pow(u_Materials[iClosestHit._MaterialID]._Roughness, 2.f);
+
+  vec3 Ks = F(F0, V, H);
+  vec3 Kd = ( vec3(1.f) - Ks ) * ( 1.f - u_Materials[iClosestHit._MaterialID]._Metallic );
+
+  vec3 lambert = u_Materials[iClosestHit._MaterialID]._Albedo / PI;
+
+  vec3 cookTorranceNum = D(alpha, N, H) * G(alpha, N, V, L) * F(F0, V, H);
+  float cookTorranceDenom = 4.f * max(dot(V, N), 0.f) * max(dot(L, N), 0.f);
+  cookTorranceDenom = max(cookTorranceDenom, EPSILON);
+  vec3 cookTorrance = cookTorranceNum / cookTorranceDenom;
+
+  vec3 BRDF = Kd * lambert + cookTorrance;
+
+  vec3 pixelColor = u_Materials[iClosestHit._MaterialID]._Emission + BRDF  * u_SphereLight._Emission * max(dot(L, N), 0.f);
+
+  return pixelColor;
+}
+
 // ----------
 // MAIN
 // ----------
@@ -411,7 +480,8 @@ void main()
       break;
     }
 
-    pixelColor += ComputeColor(closestHit) * multiplier;
+    //pixelColor += ComputeColor(closestHit) * multiplier;
+    pixelColor += PBR(ray, closestHit) * multiplier;
 
     multiplier *= u_Materials[closestHit._MaterialID]._Metallic;
 
