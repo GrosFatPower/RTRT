@@ -344,6 +344,29 @@ vec3 SampleSkybox( vec3 iRayDir )
   return min(vec3(skyboxCeiling), skyboxStrength*pow(skycolor, vec3(1.0/skyboxGamma)));
 }
 
+vec3 ComputeColor( HitPoint iClosestHit )
+{
+  vec3 lightDir = u_SphereLight._Pos - iClosestHit._Pos;
+  float lightDist = length(lightDir);
+
+  lightDir = normalize(lightDir);
+    
+  vec3 lightIntensity = vec3(0.f, 0.f, 0.f);
+  if ( lightDist < u_SphereLight._Radius )
+  {
+    Ray occlusionRay;
+    occlusionRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
+    occlusionRay._Dir = lightDir;
+
+    if ( !AnyHit(occlusionRay, lightDist) )
+      lightIntensity = max(dot(iClosestHit._Normal, lightDir), 0.0f) * u_SphereLight._Emission;
+  }
+
+  vec3 pixelColor = u_Materials[iClosestHit._MaterialID]._Albedo * lightIntensity;
+
+  return pixelColor;
+}
+
 // ----------
 // MAIN
 // ----------
@@ -374,9 +397,9 @@ void main()
   vec3 pixelColor = vec3(0.f, 0.f, 0.f);
   float multiplier = 1.0f;
 
+  // Ray cast
   for ( int i = 0; i < u_Bounces; ++i )
   {
-    // Ray cast
     HitPoint closestHit;
     TraceRay(ray, closestHit);
     if ( closestHit._Dist < -RESOLUTION )
@@ -385,32 +408,14 @@ void main()
         pixelColor += SampleSkybox(ray._Dir) * multiplier;
       else
         pixelColor += u_BackgroundColor * multiplier;
-      
       break;
     }
 
-    vec3 lightDir = u_SphereLight._Pos - closestHit._Pos;
-    float lightDist = length(lightDir);
-
-    lightDir = normalize(lightDir);
-    
-    vec3 lightIntensity = vec3(0.f, 0.f, 0.f);
-    if ( lightDist < u_SphereLight._Radius )
-    {
-      Ray occlusionRay;
-      occlusionRay._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
-      occlusionRay._Dir = lightDir;
-
-      if ( !AnyHit(occlusionRay, lightDist) )
-        lightIntensity = max(dot(closestHit._Normal, lightDir), 0.0f) * u_SphereLight._Emission;
-    }
-
-    pixelColor += u_Materials[closestHit._MaterialID]._Albedo * lightIntensity * multiplier;
+    pixelColor += ComputeColor(closestHit) * multiplier;
 
     multiplier *= u_Materials[closestHit._MaterialID]._Metallic;
 
     vec3 randVec3 = vec3(rand() * 2. - 1.,rand() * 2. - 1.,rand() * 2. - 1.);
-
     ray._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
     ray._Dir = reflect(ray._Dir, closestHit._Normal + u_Materials[closestHit._MaterialID]._Roughness * randVec3 );
   }
