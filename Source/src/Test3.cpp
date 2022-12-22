@@ -458,7 +458,7 @@ int Test3::DrawUI()
           _SceneLightsModified = true;
         }
 
-        if ( ImGui::SliderFloat("Radius", &firstLight -> _Radius, 1.f, 1000.f) )
+        if ( ImGui::SliderFloat("Light radius", &firstLight -> _Radius, 1.f, 1000.f) )
           _SceneLightsModified = true;
       }
     }
@@ -520,6 +520,7 @@ int Test3::DrawUI()
       if ( _SelectedObject >= 0 )
       {
         ObjectInstance & objInstance = ObjectInstances[_SelectedObject];
+        Object * obj = Objects[objInstance._ObjectID];
 
         Vec3 scale;
         glm::quat rotation;
@@ -536,25 +537,40 @@ int Test3::DrawUI()
           _SceneInstancesModified = true;
         }
 
-        // Rotation
-        Vec3 eulerAngles = glm::eulerAngles(rotation); // pitch, yaw, roll
-        eulerAngles *= 180.f / M_PI;
-        int YawPitchRoll[3] = { (int)roundf(eulerAngles.y), (int)roundf(eulerAngles.x), (int)roundf(eulerAngles.z) };
-
-        if ( ImGui::SliderInt("Yaw", &YawPitchRoll[0], -89, 89) )
-          _SceneInstancesModified = true;
-        if ( ImGui::SliderInt("Pitch", &YawPitchRoll[1], -179, 179) )
-          _SceneInstancesModified = true;
-        if ( ImGui::SliderInt("Roll", &YawPitchRoll[2], -179, 179) )
-          _SceneInstancesModified = true;
-
-        if ( _SceneInstancesModified )
+        if ( obj )
         {
-          eulerAngles.x = YawPitchRoll[1] * ( M_PI / 180.f );
-          eulerAngles.y = YawPitchRoll[0] * ( M_PI / 180.f );
-          eulerAngles.z = YawPitchRoll[2] * ( M_PI / 180.f );
+          if ( ObjectType::Box == obj -> _Type )
+          {
+            // Rotation
+            Vec3 eulerAngles = glm::eulerAngles(rotation); // pitch, yaw, roll
+            eulerAngles *= 180.f / M_PI;
+            int YawPitchRoll[3] = { (int)roundf(eulerAngles.y), (int)roundf(eulerAngles.x), (int)roundf(eulerAngles.z) };
 
-          rotation = glm::quat(eulerAngles);
+            if ( ImGui::SliderInt("Yaw", &YawPitchRoll[0], -89, 89) )
+              _SceneInstancesModified = true;
+            if ( ImGui::SliderInt("Pitch", &YawPitchRoll[1], -179, 179) )
+              _SceneInstancesModified = true;
+            if ( ImGui::SliderInt("Roll", &YawPitchRoll[2], -179, 179) )
+              _SceneInstancesModified = true;
+
+            if ( _SceneInstancesModified )
+            {
+              eulerAngles.x = YawPitchRoll[1] * ( M_PI / 180.f );
+              eulerAngles.y = YawPitchRoll[0] * ( M_PI / 180.f );
+              eulerAngles.z = YawPitchRoll[2] * ( M_PI / 180.f );
+
+              rotation = glm::quat(eulerAngles);
+            }
+          }
+          else if ( ObjectType::Sphere == obj -> _Type )
+          {
+            float radius = ((Sphere*)obj) -> _Radius;
+            if ( ImGui::SliderFloat("Radius", &radius, .1f, 100.f) )
+            {
+              ((Sphere*)obj) -> _Radius = radius;
+              _SceneInstancesModified = true;
+            }
+          }
         }
 
         if ( _SceneInstancesModified )
