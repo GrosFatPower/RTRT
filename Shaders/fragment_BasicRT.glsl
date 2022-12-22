@@ -375,9 +375,8 @@ float D( float iAlpha, vec3 iN, vec3 iH )
 
   float NdotH = max(dot(iN, iH), 0.f);
   float denom = PI * pow(pow(NdotH, 2.f) * (pow(iAlpha, 2.f) - 1.f) + 1.f, 2.f);
-  denom = max(denom, EPSILON);
 
-  return num / denom;
+  return num / max(denom, EPSILON);
 }
 
 // Schlick-Beckmann Geometry Shadowing Function
@@ -389,9 +388,8 @@ float G1( float iAlpha, vec3 iN, vec3 iX )
 
   float k = iAlpha / 2.f;
   float denom = NdotX * ( 1.f - k ) + k;
-  denom = max(denom, EPSILON);
 
-  return num / denom;
+  return num / max(denom, EPSILON);
 }
 
 // Smith Model
@@ -410,30 +408,40 @@ vec3 F( vec3 iF0, vec3 iV, vec3 iH )
 // https://www.youtube.com/watch?v=RRE-F57fbXw&list=WL&index=109
 vec3 PBR( Ray iRay, HitPoint iClosestHit )
 {
-  vec3 F0 = vec3(.1f); // tmp
+  vec3 outColor = u_Materials[iClosestHit._MaterialID]._Emission;
 
-  vec3 N = iClosestHit._Normal;
-  vec3 V = normalize(iRay._Orig - iClosestHit._Pos);
-  vec3 L = normalize(u_SphereLight._Pos - iClosestHit._Pos);
-  vec3 H = normalize(V + L);
+  vec3 L = u_SphereLight._Pos - iClosestHit._Pos;
+  float distToLight = length(L);
+  L = normalize(L);
 
-  float alpha = pow(u_Materials[iClosestHit._MaterialID]._Roughness, 2.f);
+  Ray occlusionRay;
+  occlusionRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
+  occlusionRay._Dir = L;
+  if ( !AnyHit(occlusionRay, distToLight) )
+  {
+    vec3 N = iClosestHit._Normal;
+    vec3 V = normalize(iRay._Orig - iClosestHit._Pos);
+    vec3 H = normalize(V + L);
 
-  vec3 Ks = F(F0, V, H);
-  vec3 Kd = ( vec3(1.f) - Ks ) * ( 1.f - u_Materials[iClosestHit._MaterialID]._Metallic );
+    float alpha = pow(u_Materials[iClosestHit._MaterialID]._Roughness, 2.f);
 
-  vec3 lambert = u_Materials[iClosestHit._MaterialID]._Albedo / PI;
+    vec3 F0 = u_Materials[iClosestHit._MaterialID]._Albedo * vec3(u_Materials[iClosestHit._MaterialID]._Metallic); // test : reflectance value
 
-  vec3 cookTorranceNum = D(alpha, N, H) * G(alpha, N, V, L) * F(F0, V, H);
-  float cookTorranceDenom = 4.f * max(dot(V, N), 0.f) * max(dot(L, N), 0.f);
-  cookTorranceDenom = max(cookTorranceDenom, EPSILON);
-  vec3 cookTorrance = cookTorranceNum / cookTorranceDenom;
+    vec3 Ks = F(F0, V, H);
+    vec3 Kd = ( vec3(1.f) - Ks ) * ( 1.f - u_Materials[iClosestHit._MaterialID]._Metallic );
 
-  vec3 BRDF = Kd * lambert + cookTorrance;
+    vec3 lambert = u_Materials[iClosestHit._MaterialID]._Albedo / PI;
 
-  vec3 pixelColor = u_Materials[iClosestHit._MaterialID]._Emission + BRDF  * u_SphereLight._Emission * max(dot(L, N), 0.f);
+    vec3 cookTorranceNum = D(alpha, N, H) * G(alpha, N, V, L) * F(F0, V, H);   // DGF
+    float cookTorranceDenom = 4.f * max(dot(V, N), 0.f) * max(dot(L, N), 0.f); // 4(V.N)(L.N)
+    vec3 cookTorrance = cookTorranceNum / max(cookTorranceDenom, EPSILON);     // 
 
-  return pixelColor;
+    vec3 BRDF = Kd * lambert + cookTorrance; // kd * fDiffuse + ks * fSpecular
+
+    outColor += BRDF  * u_SphereLight._Emission * max(dot(L, N), 0.f);
+  }
+
+  return min(outColor, vec3(1.f));
 }
 
 // ----------
