@@ -240,6 +240,63 @@ vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iTransfom, vec3 iHitPoint )
   return normalize(normal);
 }
 
+// Rotation with angle (in radians) and axis
+mat3 AngleAxis3x3( float iAngle, vec3 iAxis )
+{
+  float c = cos(iAngle);
+  float s = sin(iAngle);
+
+  float t = 1 - c;
+  float x = iAxis.x;
+  float y = iAxis.y;
+  float z = iAxis.z;
+
+  return mat3(
+      t * x * x + c,      t * x * y - s * z,  t * x * z + s * y,
+      t * x * y + s * z,  t * y * y + c,      t * y * z - s * x,
+      t * x * z - s * y,  t * y * z + s * x,  t * z * z + c
+  );
+}
+
+// Ray-tracing soft shadows in real-time
+// https://medium.com/@alexander.wester/ray-tracing-soft-shadows-in-real-time-a53b836d123b
+float LightConeAngle( vec3 iSamplPos, vec3 iLightPos, vec3 iToLight, float iRadius )
+{
+  vec3 ortho = cross(iToLight, vec3(0.f, 1.f, 0.f));
+  if ( ( abs(ortho.x) < EPSILON ) && ( abs(ortho.y) < EPSILON ) && ( abs(ortho.z) < EPSILON ) )
+    ortho = vec3(1.f, 0.f, 0.f);
+  else
+    ortho = normalize(ortho);
+  
+  vec3 toLightEdge = normalize((iLightPos + ortho * iRadius) - iSamplPos);
+
+  return acos(dot(iToLight, toLightEdge)) * 2.0f;
+}
+
+// Returns a random direction vector inside a cone
+// Angle defined in radians
+// https://medium.com/@alexander.wester/ray-tracing-soft-shadows-in-real-time-a53b836d123b
+vec3 GetConeSample( vec3 iConeDir, float iConeAngle )
+{
+  float cosAngle = cos(iConeAngle);
+
+  float z = rand() * (1.0f - cosAngle) + cosAngle;
+  float phi = rand() * 2.0f * PI;
+  
+  float x = sqrt(1.0f - z * z) * cos(phi);
+  float y = sqrt(1.0f - z * z) * sin(phi);
+  vec3 up = vec3(0.f, 0.f, 1.f);
+  
+  // Find the rotation axis 'u' and rotation angle 'rot'
+  vec3 axis = normalize(cross(up, normalize(iConeDir)));
+  float angle = acos(dot(normalize(iConeDir), up));
+  
+  // Convert rotation axis and angle to 3x3 rotation matrix [2]
+  mat3 R = AngleAxis3x3(angle, axis);
+  
+  return R * vec3(x, y, z);
+}
+
 // ----------
 // Ray tracing
 // ----------
@@ -412,6 +469,13 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit )
 
   vec3 L = u_SphereLight._Pos - iClosestHit._Pos;
   float distToLight = length(L);
+
+  // Soft Shadows
+  //float angle = LightConeAngle(iClosestHit._Pos, u_SphereLight._Pos, L, u_SphereLight._Radius );
+  //L = normalize(GetConeSample(L, angle));
+  vec3 randVec3 = vec3(rand() * 2. - 1.,rand() * 2. - 1.,rand() * 2. - 1.);
+  L = L + randVec3;
+
   L = normalize(L);
 
   Ray occlusionRay;

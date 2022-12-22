@@ -458,7 +458,7 @@ int Test3::DrawUI()
           _SceneLightsModified = true;
         }
 
-        if ( ImGui::SliderFloat("Light radius", &firstLight -> _Radius, 1.f, 1000.f) )
+        if ( ImGui::SliderFloat("Light radius", &firstLight -> _Radius, 0.001f, 1.f) )
           _SceneLightsModified = true;
       }
     }
@@ -675,7 +675,7 @@ int Test3::InitializeScene()
   newLight._Pos      = { 2.f, 10.f, .5f };
   newLight._Emission = { 1.f,  1.f, .5f };
   newLight._Type     = (float)LightType::SphereLight;
-  newLight._Radius   = 100.f;
+  newLight._Radius   = 0.1f;
   _Scene -> AddLight(newLight);
 
   // Materials
