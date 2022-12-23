@@ -675,7 +675,7 @@ int Test3::InitializeScene()
   newLight._Pos      = { 2.f, 10.f, .5f };
   newLight._Emission = { 1.f,  1.f, .5f };
   newLight._Type     = (float)LightType::SphereLight;
-  newLight._Radius   = 0.1f;
+  newLight._Radius   = .5f;
   _Scene -> AddLight(newLight);
 
   // Materials
@@ -695,9 +695,9 @@ int Test3::InitializeScene()
 
   Material blueMat;
   blueMat._Albedo    = { .1f, .1f, .8f };
-  blueMat._Emission  = { 0.f, 0.f, 0.f };
+  blueMat._Emission  = { .1f, .1f, .5f };
   blueMat._Metallic  = 0.1f;
-  blueMat._Roughness = 0.7f;
+  blueMat._Roughness = 0.6f;
   int blueMatID = _Scene -> AddMaterial(blueMat, "Blue");
 
   Material orangeMat;

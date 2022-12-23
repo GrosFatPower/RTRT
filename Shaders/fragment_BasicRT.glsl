@@ -109,11 +109,11 @@ uniform sampler2D   u_ScreenTexture;
 //RNG from code by Moroz Mykhailo (https://www.shadertoy.com/view/wltcRS)
 //internal RNG state 
 uvec4 g_Seed;
-ivec2 g_Pixel;
+//ivec2 g_Pixel;
 
 void InitRNG( vec2 p, int frame )
 {
-  g_Pixel = ivec2(p);
+  //g_Pixel = ivec2(p);
   g_Seed = uvec4(p, uint(frame), uint(p.x) + uint(p.y));
 }
 
@@ -260,7 +260,7 @@ mat3 AngleAxis3x3( float iAngle, vec3 iAxis )
 
 // Ray-tracing soft shadows in real-time
 // https://medium.com/@alexander.wester/ray-tracing-soft-shadows-in-real-time-a53b836d123b
-float LightConeAngle( vec3 iSamplPos, vec3 iLightPos, vec3 iToLight, float iRadius )
+/*float LightConeAngle( vec3 iSamplPos, vec3 iLightPos, vec3 iToLight, float iRadius )
 {
   vec3 ortho = cross(iToLight, vec3(0.f, 1.f, 0.f));
   if ( ( abs(ortho.x) < EPSILON ) && ( abs(ortho.y) < EPSILON ) && ( abs(ortho.z) < EPSILON ) )
@@ -271,12 +271,12 @@ float LightConeAngle( vec3 iSamplPos, vec3 iLightPos, vec3 iToLight, float iRadi
   vec3 toLightEdge = normalize((iLightPos + ortho * iRadius) - iSamplPos);
 
   return acos(dot(iToLight, toLightEdge)) * 2.0f;
-}
+}*/
 
 // Returns a random direction vector inside a cone
 // Angle defined in radians
 // https://medium.com/@alexander.wester/ray-tracing-soft-shadows-in-real-time-a53b836d123b
-vec3 GetConeSample( vec3 iConeDir, float iConeAngle )
+/*vec3 GetConeSample( vec3 iConeDir, float iConeAngle )
 {
   float cosAngle = cos(iConeAngle);
 
@@ -295,6 +295,15 @@ vec3 GetConeSample( vec3 iConeDir, float iConeAngle )
   mat3 R = AngleAxis3x3(angle, axis);
   
   return R * vec3(x, y, z);
+}*/
+
+vec3 GetLightDirSample( vec3 iSamplePos, vec3 iLightPos, float iLightRadius )
+{
+  vec3 randVec3 = normalize(vec3(rand() * 2. - 1.,rand() * 2. - 1.,rand() * 2. - 1.));
+
+  vec3 lightSample = iLightPos + randVec3 * iLightRadius;
+
+  return lightSample - iSamplePos;
 }
 
 // ----------
@@ -467,17 +476,17 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit )
 {
   vec3 outColor = u_Materials[iClosestHit._MaterialID]._Emission;
 
-  vec3 L = u_SphereLight._Pos - iClosestHit._Pos;
-  float distToLight = length(L);
-
   // Soft Shadows
+  // vec3 L = u_SphereLight._Pos - iClosestHit._Pos;
+  // float distToLight = length(L);
   //float angle = LightConeAngle(iClosestHit._Pos, u_SphereLight._Pos, L, u_SphereLight._Radius );
   //L = normalize(GetConeSample(L, angle));
-  vec3 randVec3 = vec3(rand() * 2. - 1.,rand() * 2. - 1.,rand() * 2. - 1.);
-  L = L + randVec3;
-
+  //vec3 randVec3 = vec3(rand() * 2. - 1.,rand() * 2. - 1.,rand() * 2. - 1.);
+  //L = L + randVec3;
+  vec3 L = GetLightDirSample(iClosestHit._Pos, u_SphereLight._Pos, u_SphereLight._Radius);
+  float distToLight = length(L);
   L = normalize(L);
-
+    
   Ray occlusionRay;
   occlusionRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
   occlusionRay._Dir = L;
