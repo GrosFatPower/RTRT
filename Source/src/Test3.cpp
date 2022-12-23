@@ -4,8 +4,8 @@
 #include "Scene.h"
 #include "Camera.h"
 #include "Light.h"
-#include "Object.h"
-#include "ObjectInstance.h"
+#include "Primitive.h"
+#include "PrimitiveInstance.h"
 #include "Texture.h"
 #include "Math.h"
 
@@ -149,8 +149,8 @@ Test3::~Test3()
     delete _Scene;
   _Scene = nullptr;
 
-  for ( auto objName : _ObjectNames )
-    delete objName;
+  for ( auto primName : _PrimitiveNames )
+    delete primName;
 }
 
 int Test3::InitializeFrameBuffer()
@@ -228,6 +228,7 @@ int Test3::UpdateUniforms()
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_Bounces"), _Settings._Bounces);
       glUniform3f(glGetUniformLocation(RTTProgramID, "u_BackgroundColor"), _Settings._BackgroundColor.r, _Settings._BackgroundColor.g, _Settings._BackgroundColor.b);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_EnableSkybox"), (int)_Settings._EnableSkybox);
+      glUniform1f(glGetUniformLocation(RTTProgramID, "u_Gamma"), _Settings._Gamma);
       _RenderSettingsModified = false;
     }
 
@@ -249,7 +250,7 @@ int Test3::UpdateUniforms()
         Light * firstLight = _Scene -> GetLight(0);
         {
           glUniform3f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Pos"), firstLight -> _Pos.x, firstLight -> _Pos.y, firstLight -> _Pos.z);
-          glUniform3f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Emission"), firstLight -> _Emission.x, firstLight -> _Emission.y, firstLight -> _Emission.z);
+          glUniform3f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Emission"), firstLight -> _Emission.r, firstLight -> _Emission.g, firstLight -> _Emission.b);
           glUniform1f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Radius"), firstLight -> _Radius);
         }
         _SceneLightsModified = false;
@@ -278,51 +279,51 @@ int Test3::UpdateUniforms()
       if ( _SceneInstancesModified )
       {
         //const std::vector<Mesh*>          & Meshes          = _Scene -> GetMeshes();
-        const std::vector<Object*>        & Objects         = _Scene -> GetObjects();
+        const std::vector<Primitive*>        & Primitives         = _Scene -> GetPrimitives();
         //const std::vector<MeshInstance>   & MeshInstances   = _Scene -> GetMeshInstances();
-        const std::vector<ObjectInstance> & ObjectInstances = _Scene -> GetObjectInstances();
+        const std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene -> GetPrimitiveInstances();
 
         int nbSpheres = 0;
         int nbPlanes = 0;
         int nbBoxes = 0;
-        for ( auto obj : ObjectInstances )
+        for ( auto prim : PrimitiveInstances )
         {
-          if ( ( obj._ObjectID < 0 ) || ( obj._ObjectID >= Objects.size() ) )
+          if ( ( prim._PrimID < 0 ) || ( prim._PrimID >= Primitives.size() ) )
             continue;
 
-          Object * curObject = Objects[obj._ObjectID];
-          if ( !curObject )
+          Primitive * curPrimitive = Primitives[prim._PrimID];
+          if ( !curPrimitive )
             continue;
 
-          if ( curObject -> _Type == ObjectType::Sphere )
+          if ( curPrimitive -> _Type == PrimitiveType::Sphere )
           {
-            Sphere * curSphere = (Sphere *) curObject;
-            Vec4 CenterRad = obj._Transform * Vec4(0.f, 0.f, 0.f, 1.f);
+            Sphere * curSphere = (Sphere *) curPrimitive;
+            Vec4 CenterRad = prim._Transform * Vec4(0.f, 0.f, 0.f, 1.f);
             CenterRad.w = curSphere -> _Radius;
 
-            glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Spheres",nbSpheres,"_MaterialID").c_str()), obj._MaterialID);
+            glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Spheres",nbSpheres,"_MaterialID").c_str()), prim._MaterialID);
             glUniform4f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Spheres",nbSpheres,"_CenterRad").c_str()), CenterRad.x, CenterRad.y, CenterRad.z, CenterRad.w);
             nbSpheres++;
           }
-          else if ( curObject -> _Type == ObjectType::Plane )
+          else if ( curPrimitive -> _Type == PrimitiveType::Plane )
           {
-            Plane * curPlane = (Plane *) curObject;
-            Vec4 orig = obj._Transform * Vec4(curPlane -> _Origin.x, curPlane -> _Origin.y, curPlane -> _Origin.z, 1.f);
-            Vec4 normal = glm::transpose(glm::inverse(obj._Transform)) * Vec4(curPlane -> _Normal.x, curPlane -> _Normal.y, curPlane -> _Normal.z, 1.f);
+            Plane * curPlane = (Plane *) curPrimitive;
+            Vec4 orig = prim._Transform * Vec4(curPlane -> _Origin.x, curPlane -> _Origin.y, curPlane -> _Origin.z, 1.f);
+            Vec4 normal = glm::transpose(glm::inverse(prim._Transform)) * Vec4(curPlane -> _Normal.x, curPlane -> _Normal.y, curPlane -> _Normal.z, 1.f);
 
-            glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Planes",nbPlanes,"_MaterialID").c_str()), obj._MaterialID);
+            glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Planes",nbPlanes,"_MaterialID").c_str()), prim._MaterialID);
             glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Planes",nbPlanes,"_Orig").c_str()), orig.x, orig.y, orig.z);
             glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Planes",nbPlanes,"_Normal").c_str()), normal.x, normal.y, normal.z);
             nbPlanes++;
           }
-          else if ( curObject -> _Type == ObjectType::Box )
+          else if ( curPrimitive -> _Type == PrimitiveType::Box )
           {
-            Box * curBox = (Box *) curObject;
+            Box * curBox = (Box *) curPrimitive;
 
-            glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_MaterialID").c_str()), obj._MaterialID);
+            glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_MaterialID").c_str()), prim._MaterialID);
             glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_Low").c_str()), curBox -> _Low.x, curBox -> _Low.y, curBox -> _Low.z);
             glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_High").c_str()), curBox -> _High.x, curBox -> _High.y, curBox -> _High.z);
-            glUniformMatrix4fv(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_Transfom").c_str()), 1, GL_FALSE, glm::value_ptr(obj._Transform));
+            glUniformMatrix4fv(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_Transfom").c_str()), 1, GL_FALSE, glm::value_ptr(prim._Transform));
             nbBoxes++;
           }
         }
@@ -405,10 +406,11 @@ int Test3::DrawUI()
         _RenderSettingsModified = true;
       }
 
-      if ( ImGui::Checkbox("Enable skybox", &_Settings._EnableSkybox) )
-      {
+      if ( ImGui::SliderFloat("Gamma", &_Settings._Gamma, .5f, 3.f) )
         _RenderSettingsModified = true;
-      }
+
+      if ( ImGui::Checkbox("Enable skybox", &_Settings._EnableSkybox) )
+        _RenderSettingsModified = true;
 
       float rgb[3] = { _Settings._BackgroundColor.r, _Settings._BackgroundColor.g, _Settings._BackgroundColor.b };
       if ( ImGui::ColorPicker3("Background", rgb) )
@@ -491,41 +493,41 @@ int Test3::DrawUI()
       }
     }
 
-    if ( ImGui::CollapsingHeader("Objects") )
+    if ( ImGui::CollapsingHeader("Primitives") )
     {
-      std::vector<Object*>        & Objects         = _Scene -> GetObjects();
-      std::vector<ObjectInstance> & ObjectInstances = _Scene -> GetObjectInstances();
+      std::vector<Primitive*>        & Primitives         = _Scene -> GetPrimitives();
+      std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene -> GetPrimitiveInstances();
       std::vector<Material>       & Materials       = _Scene -> GetMaterials();
 
       int nbMaterial = Materials.size();
 
-      std::vector<const char*> objectNamesCSTR;
-      for ( auto objName : _ObjectNames )
-        objectNamesCSTR.push_back(objName -> c_str());
+      std::vector<const char*> PrimitiveNamesCSTR;
+      for ( auto primName : _PrimitiveNames )
+        PrimitiveNamesCSTR.push_back(primName -> c_str());
 
-      if ( ImGui::Combo("ObjectInstances", &_SelectedObject, objectNamesCSTR.data(), objectNamesCSTR.size()) )
+      if ( ImGui::Combo("PrimitiveInstances", &_SelectedPrimitive, PrimitiveNamesCSTR.data(), PrimitiveNamesCSTR.size()) )
       {
-        ObjectInstance & objInstance = ObjectInstances[_SelectedObject];
+        PrimitiveInstance & primInstance = PrimitiveInstances[_SelectedPrimitive];
 
         Vec3 scale;
         glm::quat rotation;
         Vec3 translation;
-        MathUtil::Decompose(objInstance._Transform, translation, rotation, scale);
+        MathUtil::Decompose(primInstance._Transform, translation, rotation, scale);
 
         Camera & cam = _Scene -> GetCamera();
         cam.LookAt(translation);
         _SceneCameraModified = true;
       }
 
-      if ( _SelectedObject >= 0 )
+      if ( _SelectedPrimitive >= 0 )
       {
-        ObjectInstance & objInstance = ObjectInstances[_SelectedObject];
-        Object * obj = Objects[objInstance._ObjectID];
+        PrimitiveInstance & primInstance = PrimitiveInstances[_SelectedPrimitive];
+        Primitive * prim = Primitives[primInstance._PrimID];
 
         Vec3 scale;
         glm::quat rotation;
         Vec3 translation;
-        MathUtil::Decompose(objInstance._Transform, translation, rotation, scale);
+        MathUtil::Decompose(primInstance._Transform, translation, rotation, scale);
 
         // Translation
         float trans[3] = { translation.x, translation.y, translation.z };
@@ -537,9 +539,9 @@ int Test3::DrawUI()
           _SceneInstancesModified = true;
         }
 
-        if ( obj )
+        if ( prim )
         {
-          if ( ObjectType::Box == obj -> _Type )
+          if ( PrimitiveType::Box == prim -> _Type )
           {
             // Rotation
             Vec3 eulerAngles = glm::eulerAngles(rotation); // pitch, yaw, roll
@@ -562,12 +564,12 @@ int Test3::DrawUI()
               rotation = glm::quat(eulerAngles);
             }
           }
-          else if ( ObjectType::Sphere == obj -> _Type )
+          else if ( PrimitiveType::Sphere == prim -> _Type )
           {
-            float radius = ((Sphere*)obj) -> _Radius;
+            float radius = ((Sphere*)prim) -> _Radius;
             if ( ImGui::SliderFloat("Radius", &radius, .1f, 100.f) )
             {
-              ((Sphere*)obj) -> _Radius = radius;
+              ((Sphere*)prim) -> _Radius = radius;
               _SceneInstancesModified = true;
             }
           }
@@ -578,7 +580,7 @@ int Test3::DrawUI()
           Mat4x4 translastionMatrix = glm::translate(Mat4x4(1.f), translation);
           Mat4x4 rotationMatrix = glm::toMat4(rotation);
           Mat4x4 scaleMatrix = glm::scale(Mat4x4(1.f), scale);
-          objInstance._Transform = translastionMatrix * rotationMatrix * scaleMatrix;
+          primInstance._Transform = translastionMatrix * rotationMatrix * scaleMatrix;
         }
 
         {
@@ -610,7 +612,7 @@ int Test3::DrawUI()
           {
             if ( matID >= 0 )
             {
-              objInstance._MaterialID = matID;
+              primInstance._MaterialID = matID;
               _SceneInstancesModified = true;
             }
           }
@@ -673,7 +675,7 @@ int Test3::InitializeScene()
   // Lights
   Light newLight;
   newLight._Pos      = { 2.f, 10.f, .5f };
-  newLight._Emission = { 1.f,  1.f, .5f };
+  newLight._Emission = { .6f, .6f, .4f };
   newLight._Type     = (float)LightType::SphereLight;
   newLight._Radius   = .5f;
   _Scene -> AddLight(newLight);
@@ -707,55 +709,55 @@ int Test3::InitializeScene()
   orangeMat._Roughness = 0.05f;
   int orangeMatID = _Scene -> AddMaterial(orangeMat, "Orange");
 
-  // Objects
+  // Primitives
   Sphere smallSphere;
   smallSphere._Radius = .2f;
-  int smallSphereID = _Scene -> AddObject(smallSphere);
+  int smallSphereID = _Scene -> AddPrimitive(smallSphere);
 
   Sphere mediumSphere;
   mediumSphere._Radius = .5f;
-  int mediumSphereID = _Scene -> AddObject(mediumSphere);
+  int mediumSphereID = _Scene -> AddPrimitive(mediumSphere);
 
   Sphere bigSphere;
   bigSphere._Radius = .5f;
-  int bigSphereID = _Scene -> AddObject(bigSphere);
+  int bigSphereID = _Scene -> AddPrimitive(bigSphere);
 
   Mat4x4 transformMatrix(1.f);
-  _Scene -> AddObjectInstance(mediumSphereID, greenMatID, transformMatrix);
+  _Scene -> AddPrimitiveInstance(mediumSphereID, greenMatID, transformMatrix);
 
   transformMatrix = glm::translate(Mat4x4(1.f), Vec3(.5f, 1.f, -.5f));
-  _Scene -> AddObjectInstance(smallSphereID, redMatID, transformMatrix);
+  _Scene -> AddPrimitiveInstance(smallSphereID, redMatID, transformMatrix);
 
   transformMatrix = glm::translate(Mat4x4(1.f), Vec3(-.5f, 2.f, -.5f));
-  _Scene -> AddObjectInstance(smallSphereID, blueMatID, transformMatrix);
+  _Scene -> AddPrimitiveInstance(smallSphereID, blueMatID, transformMatrix);
 
   transformMatrix = glm::translate(Mat4x4(1.f), Vec3(3.f, 2.f, -5.f));
-  _Scene -> AddObjectInstance(mediumSphereID, blueMatID, transformMatrix);
+  _Scene -> AddPrimitiveInstance(mediumSphereID, blueMatID, transformMatrix);
 
   transformMatrix = glm::translate(Mat4x4(1.f), Vec3(-1.f, 1.f, -3.f));
-  _Scene -> AddObjectInstance(bigSphereID, redMatID, transformMatrix);
+  _Scene -> AddPrimitiveInstance(bigSphereID, redMatID, transformMatrix);
 
   Plane basePlane;
   basePlane._Origin = {  0.f, -.5f, 0.f };
   basePlane._Normal = {  0.f,  1.f, 0.f };
 
-  int basePlaneID = _Scene -> AddObject(basePlane);
+  int basePlaneID = _Scene -> AddPrimitive(basePlane);
 
   transformMatrix = Mat4x4(1.f);
-  _Scene -> AddObjectInstance(basePlaneID, orangeMatID, transformMatrix);
+  _Scene -> AddPrimitiveInstance(basePlaneID, orangeMatID, transformMatrix);
 
   Box firstBox;
   firstBox._Low  = { -1.f, -1.f, -1.f };
   firstBox._High = { 1.f, 1.f, 1.f };
 
-  int firstBoxID = _Scene -> AddObject(firstBox);
+  int firstBoxID = _Scene -> AddPrimitive(firstBox);
 
   transformMatrix = glm::translate(Mat4x4(1.f), Vec3(-3.f, 2.f, -2.f));
-  _Scene -> AddObjectInstance(firstBoxID, greenMatID, transformMatrix);
+  _Scene -> AddPrimitiveInstance(firstBoxID, greenMatID, transformMatrix);
 
-  const std::vector<ObjectInstance> & ObjectInstances = _Scene -> GetObjectInstances();
-  for ( int i = 0; i < ObjectInstances.size(); ++i )
-    _ObjectNames.push_back(new std::string(_Scene -> FindObjectName(i)));
+  const std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene -> GetPrimitiveInstances();
+  for ( int i = 0; i < PrimitiveInstances.size(); ++i )
+    _PrimitiveNames.push_back(new std::string(_Scene -> FindPrimitiveName(i)));
 
   _SceneCameraModified    = true;
   _SceneLightsModified    = true;

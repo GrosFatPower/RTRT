@@ -84,6 +84,7 @@ struct Camera
 
 uniform vec2        u_Resolution;
 uniform float       u_Time;
+uniform float       u_Gamma;
 uniform int         u_FrameNum;
 uniform int         u_Accumulate;
 uniform int         u_Bounces;
@@ -129,6 +130,35 @@ float rand()
 {
   pcg4d(g_Seed); return float(g_Seed.x) / float(0xffffffffu);
 }
+
+vec3 RandomVector()
+{
+  return vec3(rand() * 2. - 1.,rand() * 2. - 1.,rand() * 2. - 1.);
+}
+
+vec3 RandomInUnitSphere()
+{
+  vec3 v;
+
+  while ( true )
+  {
+    v = RandomVector();
+    if ( dot(v, v) < 1.f )
+      break;
+  }
+
+  return v;
+}
+
+vec3 RandomUnitVector()
+{
+  return normalize(vec3(rand() * 2. - 1.,rand() * 2. - 1.,rand() * 2. - 1.));
+}
+
+//vec3 RandomUnitVector()
+//{
+//  return normalize(RandomInUnitSphere());
+//}
 
 // https://iquilezles.org/articles/sphereshadow/
 bool SphereIntersection( vec4 iSphere, Ray iRay, out float oHitDistance )
@@ -299,9 +329,7 @@ mat3 AngleAxis3x3( float iAngle, vec3 iAxis )
 
 vec3 GetLightDirSample( vec3 iSamplePos, vec3 iLightPos, float iLightRadius )
 {
-  vec3 randVec3 = normalize(vec3(rand() * 2. - 1.,rand() * 2. - 1.,rand() * 2. - 1.));
-
-  vec3 lightSample = iLightPos + randVec3 * iLightRadius;
+  vec3 lightSample = iLightPos + RandomUnitVector() * iLightRadius;
 
   return lightSample - iSamplePos;
 }
@@ -481,16 +509,15 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit )
   // float distToLight = length(L);
   //float angle = LightConeAngle(iClosestHit._Pos, u_SphereLight._Pos, L, u_SphereLight._Radius );
   //L = normalize(GetConeSample(L, angle));
-  //vec3 randVec3 = vec3(rand() * 2. - 1.,rand() * 2. - 1.,rand() * 2. - 1.);
-  //L = L + randVec3;
+  //L = L + RandomUnitVector();
   vec3 L = GetLightDirSample(iClosestHit._Pos, u_SphereLight._Pos, u_SphereLight._Radius);
   float distToLight = length(L);
   L = normalize(L);
     
-  Ray occlusionRay;
-  occlusionRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
-  occlusionRay._Dir = L;
-  if ( !AnyHit(occlusionRay, distToLight) )
+  Ray occlusionTestRay;
+  occlusionTestRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
+  occlusionTestRay._Dir = L;
+  if ( !AnyHit(occlusionTestRay, distToLight) )
   {
     vec3 N = iClosestHit._Normal;
     vec3 V = normalize(iRay._Orig - iClosestHit._Pos);
@@ -514,7 +541,7 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit )
     outColor += BRDF  * u_SphereLight._Emission * max(dot(L, N), 0.f);
   }
 
-  return min(outColor, vec3(1.f));
+  return clamp(outColor, 0.f, 1.f);
 }
 
 // ----------
@@ -566,10 +593,13 @@ void main()
 
     multiplier *= u_Materials[closestHit._MaterialID]._Metallic;
 
-    vec3 randVec3 = vec3(rand() * 2. - 1.,rand() * 2. - 1.,rand() * 2. - 1.);
     ray._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
-    ray._Dir = reflect(ray._Dir, closestHit._Normal + u_Materials[closestHit._MaterialID]._Roughness * randVec3 );
+    ray._Dir = reflect(ray._Dir, closestHit._Normal + u_Materials[closestHit._MaterialID]._Roughness * RandomVector() );
   }
+
+  // Apply gamma correction
+  pixelColor = pow(pixelColor, vec3(1. / u_Gamma));
+  pixelColor = clamp(pixelColor, 0.f, 1.f);
 
   fragColor = vec4(pixelColor, 0.f);
 

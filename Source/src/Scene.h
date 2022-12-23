@@ -5,8 +5,8 @@
 #include "Camera.h"
 #include "Material.h"
 #include "MeshInstance.h"
-#include "Object.h"
-#include "ObjectInstance.h"
+#include "Primitive.h"
+#include "PrimitiveInstance.h"
 #include <vector>
 #include <map>
 
@@ -29,9 +29,9 @@ public:
   int AddMesh( const std::string & iFilename );
   int AddMeshInstance( MeshInstance & iMeshInstance );
 
-  int AddObject( const Object & iObject );
-  int AddObjectInstance( ObjectInstance & iObjectInstance );
-  int AddObjectInstance( int iObjectID, int iMaterialID, const Mat4x4 & iTransform );
+  int AddPrimitive( const Primitive & iPrimitive );
+  int AddPrimitiveInstance( PrimitiveInstance & iPrimitiveInstance );
+  int AddPrimitiveInstance( int iPrimitiveID, int iMaterialID, const Mat4x4 & iTransform );
 
   void SetCamera( const Camera & iCamera ) { _Camera = iCamera; }
   Camera & GetCamera() { return _Camera; }
@@ -42,35 +42,35 @@ public:
   int FindMaterialID( const std::string & iMateralName ) const;
   std::string FindMaterialName( int iMaterialID ) const;
 
-  std::string FindObjectName( int iObjectInstanceID ) const;
+  std::string FindPrimitiveName( int iPrimitiveInstanceID ) const;
 
   int GetNbLights()          { return _Lights.size();          }
   int GetNbMaterials()       { return _Materials.size();       }
   int GetNbTextures()        { return _Textures.size();        }
   int GetNbMeshes()          { return _Meshes.size();          }
   int GetNbMeshInstances()   { return _MeshInstances.size();   }
-  int GetNbObjectInstances() { return _ObjectInstances.size(); }
+  int GetNbPrimitiveInstances() { return _PrimitiveInstances.size(); }
 
-  std::vector<MeshInstance>   & GetMeshInstances()   { return _MeshInstances;   }
-  std::vector<ObjectInstance> & GetObjectInstances() { return _ObjectInstances; }
-  std::vector<Material>       & GetMaterials()       { return _Materials;       }
-  std::vector<Texture*>       & GetTetxures()        { return _Textures;        }
-  std::vector<Mesh*>          & GetMeshes()          { return _Meshes;          }
-  std::vector<Object*>        & GetObjects()         { return _Objects;         }
+  std::vector<MeshInstance>      & GetMeshInstances()      { return _MeshInstances;      }
+  std::vector<PrimitiveInstance> & GetPrimitiveInstances() { return _PrimitiveInstances; }
+  std::vector<Material>          & GetMaterials()          { return _Materials;          }
+  std::vector<Texture*>          & GetTetxures()           { return _Textures;           }
+  std::vector<Mesh*>             & GetMeshes()             { return _Meshes;             }
+  std::vector<Primitive*>        & GetPrimitives()         { return _Primitives;         }
 
 private:
 
-  Camera                      _Camera;
-  std::vector<Light>          _Lights;
-  std::vector<Material>       _Materials;
-  std::map<std::string,int>   _MaterialIDs;
-  std::vector<MeshInstance>   _MeshInstances;
-  std::map<std::string,int>   _ObjectNames;
-  std::vector<ObjectInstance> _ObjectInstances;
+  Camera                         _Camera;
+  std::vector<Light>             _Lights;
+  std::vector<Material>          _Materials;
+  std::map<std::string,int>      _MaterialIDs;
+  std::vector<MeshInstance>      _MeshInstances;
+  std::map<std::string,int>      _PrimitiveNames;
+  std::vector<PrimitiveInstance> _PrimitiveInstances;
 
-  std::vector<Texture*>       _Textures;
-  std::vector<Mesh*>          _Meshes;
-  std::vector<Object*>        _Objects;
+  std::vector<Texture*>          _Textures;
+  std::vector<Mesh*>             _Meshes;
+  std::vector<Primitive*>        _Primitives;
 };
 
 }

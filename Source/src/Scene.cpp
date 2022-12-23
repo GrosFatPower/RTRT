@@ -21,9 +21,9 @@ Scene::~Scene()
     delete mesh;
   _Meshes.clear();
 
-  for (auto & object : _Objects)
-    delete object;
-  _Objects.clear();
+  for (auto & Primitive : _Primitives)
+    delete Primitive;
+  _Primitives.clear();
 }
 
 int Scene::AddTexture( const std::string & iFilename )
@@ -140,72 +140,72 @@ std::string Scene::FindMaterialName( int iMaterialID ) const
   return "";
 }
 
-std::string Scene::FindObjectName( int iObjectInstanceID ) const
+std::string Scene::FindPrimitiveName( int iPrimitiveInstanceID ) const
 {
-  for ( auto it = _ObjectNames.begin(); it != _ObjectNames.end(); ++it )
+  for ( auto it = _PrimitiveNames.begin(); it != _PrimitiveNames.end(); ++it )
   {
-    if ( it -> second == iObjectInstanceID )
+    if ( it -> second == iPrimitiveInstanceID )
       return it -> first;
   }
 
   return "";
 }
 
-int Scene::AddObject( const Object & iObject )
+int Scene::AddPrimitive( const Primitive & iPrimitive )
 {
-  int objectID = _Objects.size();
+  int PrimitiveID = _Primitives.size();
 
-  Object * newObject = nullptr;
-  if ( iObject._Type == ObjectType::Sphere )
-    newObject = new Sphere(*((Sphere*)&iObject));
-  else if ( iObject._Type == ObjectType::Plane )
-    newObject = new Plane(*((Plane*)&iObject));
-  else if ( iObject._Type == ObjectType::Box )
-    newObject = new Box(*((Box*)&iObject));
+  Primitive * newPrimitive = nullptr;
+  if ( iPrimitive._Type == PrimitiveType::Sphere )
+    newPrimitive = new Sphere(*((Sphere*)&iPrimitive));
+  else if ( iPrimitive._Type == PrimitiveType::Plane )
+    newPrimitive = new Plane(*((Plane*)&iPrimitive));
+  else if ( iPrimitive._Type == PrimitiveType::Box )
+    newPrimitive = new Box(*((Box*)&iPrimitive));
 
-  if ( newObject )
+  if ( newPrimitive )
   {
-    newObject -> _ObjectID = objectID;
-    _Objects.push_back(newObject);
-    return objectID;
+    newPrimitive -> _PrimID = PrimitiveID;
+    _Primitives.push_back(newPrimitive);
+    return PrimitiveID;
   }
   return -1;
 }
 
-int Scene::AddObjectInstance( ObjectInstance & iObjectInstance )
+int Scene::AddPrimitiveInstance( PrimitiveInstance & iPrimitiveInstance )
 {
-  int instanceID = _ObjectInstances.size();
-  _ObjectInstances.push_back(iObjectInstance);
+  int instanceID = _PrimitiveInstances.size();
+  _PrimitiveInstances.push_back(iPrimitiveInstance);
 
   {
-    Object * curObject = _Objects[iObjectInstance._ObjectID];
+    Primitive * curPrimitive = _Primitives[iPrimitiveInstance._PrimID];
 
-    std::string objectName;
-    if ( curObject -> _Type == ObjectType::Sphere )
-      objectName = std::string("Sphere[").append(std::to_string(instanceID).append("]"));
-    else if ( curObject -> _Type == ObjectType::Plane )
-      objectName = std::string("Plane[").append(std::to_string(instanceID).append("]"));
-    else if ( curObject -> _Type == ObjectType::Box )
-      objectName = std::string("Box[").append(std::to_string(instanceID).append("]"));
+    std::string PrimitiveName;
+    if ( curPrimitive -> _Type == PrimitiveType::Sphere )
+      PrimitiveName = std::string("Sphere[").append(std::to_string(instanceID).append("]"));
+    else if ( curPrimitive -> _Type == PrimitiveType::Plane )
+      PrimitiveName = std::string("Plane[").append(std::to_string(instanceID).append("]"));
+    else if ( curPrimitive -> _Type == PrimitiveType::Box )
+      PrimitiveName = std::string("Box[").append(std::to_string(instanceID).append("]"));
     else
-      objectName = std::string("Unknown[").append(std::to_string(instanceID).append("]"));
+      PrimitiveName = std::string("Unknown[").append(std::to_string(instanceID).append("]"));
 
-    _ObjectNames.insert({objectName, instanceID});
+    _PrimitiveNames.insert({PrimitiveName, instanceID});
   }
 
   return instanceID;
 }
 
-int Scene::AddObjectInstance( int iObjectID, int iMaterialID, const Mat4x4 & iTransform )
+int Scene::AddPrimitiveInstance( int iPrimitiveID, int iMaterialID, const Mat4x4 & iTransform )
 {
-  std::string objectName;
+  std::string PrimitiveName;
 
-  if ( iObjectID >= 0 && iObjectID < _Objects.size() )
+  if ( iPrimitiveID >= 0 && iPrimitiveID < _Primitives.size() )
   {
-    Object * curObject = _Objects[iObjectID];
+    Primitive * curPrimitive = _Primitives[iPrimitiveID];
 
-    ObjectInstance instance(iObjectID, iMaterialID, iTransform);
-    return AddObjectInstance(instance);
+    PrimitiveInstance instance(iPrimitiveID, iMaterialID, iTransform);
+    return AddPrimitiveInstance(instance);
   }
 
   return -1;

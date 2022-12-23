@@ -89,8 +89,8 @@ private:
   bool            _SceneInstancesModified = false;
   bool            _RenderSettingsModified = false;
 
-  std::vector<std::string *> _ObjectNames;
-  int                        _SelectedObject = 0;
+  std::vector<std::string *> _PrimitiveNames;
+  int                        _SelectedPrimitive = 0;
 };
 
 }

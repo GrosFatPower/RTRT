@@ -17,6 +17,7 @@ struct RenderSettings
   bool  _EnableUniformLight = true;
   int   _Bounces            = 1;
   int   _RenderScale        = 100;
+  float _Gamma              = 1.2f;
 };
 
 }
