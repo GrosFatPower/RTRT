@@ -228,6 +228,7 @@ int Test3::UpdateUniforms()
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_Bounces"), _Settings._Bounces);
       glUniform3f(glGetUniformLocation(RTTProgramID, "u_BackgroundColor"), _Settings._BackgroundColor.r, _Settings._BackgroundColor.g, _Settings._BackgroundColor.b);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_EnableSkybox"), (int)_Settings._EnableSkybox);
+      glUniform1f(glGetUniformLocation(RTTProgramID, "u_SkyboxRotation"), _Settings._SkyBoxRotation / 360.f);
       glUniform1f(glGetUniformLocation(RTTProgramID, "u_Gamma"), _Settings._Gamma);
       _RenderSettingsModified = false;
     }
@@ -410,6 +411,9 @@ int Test3::DrawUI()
         _RenderSettingsModified = true;
 
       if ( ImGui::Checkbox("Enable skybox", &_Settings._EnableSkybox) )
+        _RenderSettingsModified = true;
+
+      if ( ImGui::SliderFloat("Skybox rotation", &_Settings._SkyBoxRotation, 0.f, 360.f) )
         _RenderSettingsModified = true;
 
       float rgb[3] = { _Settings._BackgroundColor.r, _Settings._BackgroundColor.g, _Settings._BackgroundColor.b };
@@ -766,7 +770,7 @@ int Test3::InitializeScene()
 
   // Textures
 
-  int skyboxID =_Scene -> AddTexture(g_AssetsDir + "skyboxes\\alps_field_2k.hdr");
+  int skyboxID =_Scene -> AddTexture(g_AssetsDir + "skyboxes\\alps_field_2k.hdr", 4, TexFormat::TEX_FLOAT);
   {
     std::vector<Texture*> & textures = _Scene -> GetTetxures();
 
@@ -776,7 +780,7 @@ int Test3::InitializeScene()
       glGenTextures(1, &_SkyboxTextureID);
       glActiveTexture(GL_TEXTURE1);
       glBindTexture(GL_TEXTURE_2D, _SkyboxTextureID);
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, skyboxTexture -> GetWidth(), skyboxTexture -> GetHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, skyboxTexture -> GetData());
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, skyboxTexture -> GetWidth(), skyboxTexture -> GetHeight(), 0, GL_RGBA, GL_FLOAT, skyboxTexture -> GetFData());
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
       glBindTexture(GL_TEXTURE_2D, 0);

@@ -26,7 +26,7 @@ Scene::~Scene()
   _Primitives.clear();
 }
 
-int Scene::AddTexture( const std::string & iFilename )
+int Scene::AddTexture( const std::string & iFilename, int iNbComponents, TexFormat iFormat )
 {
   int texID = -1;
 
@@ -44,7 +44,7 @@ int Scene::AddTexture( const std::string & iFilename )
     Texture * texture = new Texture;
 
     std::cout << "Scene : Loading texture " << iFilename << std::endl;
-    if ( texture -> Load(iFilename) )
+    if ( texture -> Load(iFilename, iNbComponents, iFormat) )
     {
       texID = _Textures.size();
       texture -> SetTexID(texID);

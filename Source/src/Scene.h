@@ -7,6 +7,7 @@
 #include "MeshInstance.h"
 #include "Primitive.h"
 #include "PrimitiveInstance.h"
+#include "Texture.h"
 #include <vector>
 #include <map>
 
@@ -23,7 +24,7 @@ public:
   Scene();
   virtual ~Scene();
 
-  int AddTexture( const std::string & iFilename );
+  int AddTexture( const std::string & iFilename, int iNbComponents = 4, TexFormat iFormat = TexFormat::TEX_UNSIGNED_BYTE );
   int AddMaterial( Material & ioMaterial, const std::string & iName );
 
   int AddMesh( const std::string & iFilename );

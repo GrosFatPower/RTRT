@@ -1,9 +1,13 @@
 #version 430 core
 
-#define EPSILON 1e-9f
-#define RESOLUTION 0.001f
-#define INFINITY 3.402823466e+38
-#define PI 3.14159265359
+#define EPSILON            1e-9f
+#define RESOLUTION         0.001f
+#define INFINITY           3.402823466e+38
+#define PI                 3.14159265358979323
+#define INV_PI             0.31830988618379067
+#define TWO_PI             6.28318530717958648
+#define INV_TWO_PI         0.15915494309189533
+#define INV_4_PI           0.07957747154594766
 #define MAX_MATERIAL_COUNT 32
 #define MAX_SPHERE_COUNT   32
 #define MAX_PLANES_COUNT   32
@@ -100,6 +104,7 @@ uniform Plane       u_Planes[MAX_PLANES_COUNT];
 uniform int         u_NbBoxes;
 uniform Box         u_Boxes[MAX_BOX_COUNT];
 uniform int         u_EnableSkybox;
+uniform float       u_SkyboxRotation;
 uniform sampler2D   u_SkyboxTexture;
 uniform sampler2D   u_ScreenTexture;
 
@@ -180,7 +185,8 @@ bool PlaneIntersection( vec3 iOrig, vec3 iNormal, Ray iRay, out float oHitDistan
 { 
   float denom = dot(iNormal, iRay._Dir);
 
-  if ( abs(denom) > EPSILON )
+  //if ( abs(denom) > EPSILON )
+  if ( denom < -EPSILON ) // Front face only
   { 
     vec3 d = iOrig - iRay._Orig; 
     oHitDistance = dot(d, iNormal) / denom; 
@@ -271,7 +277,7 @@ vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iTransfom, vec3 iHitPoint )
 }
 
 // Rotation with angle (in radians) and axis
-mat3 AngleAxis3x3( float iAngle, vec3 iAxis )
+/*mat3 AngleAxis3x3( float iAngle, vec3 iAxis )
 {
   float c = cos(iAngle);
   float s = sin(iAngle);
@@ -286,7 +292,7 @@ mat3 AngleAxis3x3( float iAngle, vec3 iAxis )
       t * x * y + s * z,  t * y * y + c,      t * y * z - s * x,
       t * x * z - s * y,  t * y * z + s * x,  t * z * z + c
   );
-}
+}*/
 
 // Ray-tracing soft shadows in real-time
 // https://medium.com/@alexander.wester/ray-tracing-soft-shadows-in-real-time-a53b836d123b
@@ -430,13 +436,14 @@ bool AnyHit( Ray iRay, float iMaxDist )
 // UV mapping : https://en.wikipedia.org/wiki/UV_mapping
 vec3 SampleSkybox( vec3 iRayDir )
 {
-  float skyboxStrength = 1.0f;
-  float skyboxGamma = 0.8F;
-  float skyboxCeiling = 10.0f;
-  
-  vec3 skycolor = texture(u_SkyboxTexture, vec2(0.5 + atan(iRayDir.x, iRayDir.z)/(2*PI), 0.5 + asin(-iRayDir.y)/PI)).xyz;
+  float theta = acos(clamp(iRayDir.y, -1.0, 1.0));
+  vec2 uv = vec2((PI + atan(iRayDir.z, iRayDir.x)) * INV_TWO_PI, theta * INV_PI) + vec2(u_SkyboxRotation, 0.0);
+    
+  vec3 skycolor = texture(u_SkyboxTexture, uv).rgb;
+  return skycolor;
 
-  return min(vec3(skyboxCeiling), skyboxStrength*pow(skycolor, vec3(1.0/skyboxGamma)));
+  //float pdf = Luminance(color) / envMapTotalSum;
+  //return vec4(color, (pdf * envMapRes.x * envMapRes.y) / (TWO_PI * PI * sin(theta)));
 }
 
 vec3 ComputeColor( HitPoint iClosestHit )
@@ -500,7 +507,7 @@ vec3 F( vec3 iF0, vec3 iV, vec3 iH )
 
 // Computer Graphics Tutorial - PBR (Physically Based Rendering)
 // https://www.youtube.com/watch?v=RRE-F57fbXw&list=WL&index=109
-vec3 PBR( Ray iRay, HitPoint iClosestHit )
+vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuation )
 {
   vec3 outColor = u_Materials[iClosestHit._MaterialID]._Emission;
 
@@ -513,6 +520,8 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit )
   vec3 L = GetLightDirSample(iClosestHit._Pos, u_SphereLight._Pos, u_SphereLight._Radius);
   float distToLight = length(L);
   L = normalize(L);
+
+  vec3 F0 = u_Materials[iClosestHit._MaterialID]._Albedo * vec3(u_Materials[iClosestHit._MaterialID]._Metallic); // test : reflectance value
     
   Ray occlusionTestRay;
   occlusionTestRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
@@ -524,8 +533,6 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit )
     vec3 H = normalize(V + L);
 
     float alpha = pow(u_Materials[iClosestHit._MaterialID]._Roughness, 2.f);
-
-    vec3 F0 = u_Materials[iClosestHit._MaterialID]._Albedo * vec3(u_Materials[iClosestHit._MaterialID]._Metallic); // test : reflectance value
 
     vec3 Ks = F(F0, V, H);
     vec3 Kd = ( vec3(1.f) - Ks ) * ( 1.f - u_Materials[iClosestHit._MaterialID]._Metallic );
@@ -540,6 +547,10 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit )
 
     outColor += BRDF  * u_SphereLight._Emission * max(dot(L, N), 0.f);
   }
+
+  oScattered._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
+  oScattered._Dir  = reflect(iRay._Dir, iClosestHit._Normal + u_Materials[iClosestHit._MaterialID]._Roughness * RandomVector() );
+  oAttenuation = F0;
 
   return clamp(outColor, 0.f, 1.f);
 }
@@ -572,7 +583,8 @@ void main()
   ray._Dir = normalize(u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward);
 
   vec3 pixelColor = vec3(0.f, 0.f, 0.f);
-  float multiplier = 1.0f;
+  //float multiplier = 1.0f;
+  vec3 multiplier = vec3(1.f);
 
   // Ray cast
   for ( int i = 0; i < u_Bounces; ++i )
@@ -589,12 +601,15 @@ void main()
     }
 
     //pixelColor += ComputeColor(closestHit) * multiplier;
-    pixelColor += PBR(ray, closestHit) * multiplier;
+    //multiplier *= u_Materials[closestHit._MaterialID]._Metallic;
+    //ray._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
+    //ray._Dir = reflect(ray._Dir, closestHit._Normal + u_Materials[closestHit._MaterialID]._Roughness * RandomVector() );
 
-    multiplier *= u_Materials[closestHit._MaterialID]._Metallic;
-
-    ray._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
-    ray._Dir = reflect(ray._Dir, closestHit._Normal + u_Materials[closestHit._MaterialID]._Roughness * RandomVector() );
+    Ray scattered;
+    vec3 attenuation;
+    pixelColor += PBR(ray, closestHit, scattered, attenuation) * multiplier;
+    ray = scattered;
+    multiplier *= attenuation;
   }
 
   // Apply gamma correction

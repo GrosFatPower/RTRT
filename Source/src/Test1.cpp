@@ -285,7 +285,7 @@ int Test1::Run()
   glGenTextures(1, &textureID);
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, textureID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, backgroundTex.GetWidth(), backgroundTex.GetHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, backgroundTex.GetData());
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, backgroundTex.GetWidth(), backgroundTex.GetHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, backgroundTex.GetUCData());
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 

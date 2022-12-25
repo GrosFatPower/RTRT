@@ -6,20 +6,27 @@
 namespace RTRT
 {
 
+enum class TexFormat
+{
+  TEX_UNSIGNED_BYTE = 0,
+  TEX_FLOAT
+};
+
 class Texture
 {
 public:
   Texture() {}
   virtual ~Texture();
 
-  bool Load( const std::string & iFilename, int iNbComponents = 4 );
+  bool Load( const std::string & iFilename, int iNbComponents = 4, TexFormat iFormat = TexFormat::TEX_UNSIGNED_BYTE );
 
   bool Resize( int iWidth, int iHeight );
 
   int GetWidth() const { return _Width; }
   int GetHeight() const { return _Height; }
   int GetNbComponents() const { return _NbComponents; }
-  unsigned char * GetData() const { return _TexData; }
+  unsigned char * GetUCData() const { return ( TexFormat::TEX_UNSIGNED_BYTE == _Format ) ? ( (unsigned char *)_TexData ) : ( nullptr ); }
+  float * GetFData() const { return ( TexFormat::TEX_FLOAT == _Format ) ? ( (float *)_TexData ) : ( nullptr ); }
 
   int GetTexID() const { return _TexID; }
   void SetTexID( int iTextID ) { _TexID = iTextID; }
@@ -31,9 +38,10 @@ private:
   int             _Width        = 0;
   int             _Height       = 0;
   int             _NbComponents = 0;
+  TexFormat       _Format       = TexFormat::TEX_UNSIGNED_BYTE;
 
   std::string     _Filename = "";
-  unsigned char * _TexData = nullptr;
+  void          * _TexData = nullptr;
 
   Texture( const Texture & ); // not implemented
   Texture & operator=( const Texture & ); // not implemented
