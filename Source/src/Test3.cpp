@@ -266,11 +266,13 @@ int Test3::UpdateUniforms()
         {
           const Material & curMat = Materials[i];
 
-          glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_ID").c_str()), i);
-          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Albedo").c_str()), curMat._Albedo.r, curMat._Albedo.g, curMat._Albedo.b);
-          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Emission").c_str()), curMat._Emission.r, curMat._Emission.g, curMat._Emission.b);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Metallic").c_str()), curMat._Metallic);
+          glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_ID"       ).c_str()), i);
+          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Albedo"   ).c_str()), curMat._Albedo.r, curMat._Albedo.g, curMat._Albedo.b);
+          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Emission" ).c_str()), curMat._Emission.r, curMat._Emission.g, curMat._Emission.b);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Metallic" ).c_str()), curMat._Metallic);
           glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Roughness").c_str()), curMat._Roughness);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_IOR"      ).c_str()), curMat._IOR);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Opacity"  ).c_str()), curMat._Opacity);
         }
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbMaterials"), nbMaterials);
 
@@ -493,6 +495,12 @@ int Test3::DrawUI()
           _SceneMaterialsModified = true;
 
         if ( ImGui::SliderFloat(std::string("Roughness_").append(std::to_string(i)).c_str(), &curMat._Roughness, 0.f, 1.f) )
+          _SceneMaterialsModified = true;
+
+        if ( ImGui::SliderFloat(std::string("IOR_").append(std::to_string(i)).c_str(), &curMat._IOR, 1.f, 3.f) )
+          _SceneMaterialsModified = true;
+
+        if ( ImGui::SliderFloat(std::string("Opacity_").append(std::to_string(i)).c_str(), &curMat._Opacity, 0.f, 1.f) )
           _SceneMaterialsModified = true;
       }
     }

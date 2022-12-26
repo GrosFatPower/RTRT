@@ -35,6 +35,8 @@ struct Material
   vec3  _Reflectance;
   float _Metallic;
   float _Roughness;
+  float _IOR;
+  float _Opacity;
 };
 
 struct SphereLight
@@ -165,19 +167,23 @@ vec3 RandomUnitVector()
 //  return normalize(RandomInUnitSphere());
 //}
 
-// https://iquilezles.org/articles/sphereshadow/
+// https://raytracing.github.io/books/RayTracingInOneWeekend.html#overview
+// Ray direction should be normalized 
 bool SphereIntersection( vec4 iSphere, Ray iRay, out float oHitDistance )
 {
   vec3 oc = iRay._Orig - iSphere.xyz;
 
-  float b = dot( oc, iRay._Dir );
+  float halfB = dot( oc, iRay._Dir );
   float c = dot( oc, oc ) - iSphere.w * iSphere.w;
-  float h = b*b - c;
+  float discriminant = halfB * halfB - c;
 
-  if( h < 0.0 )
+  if ( discriminant < 0.f )
     return false;
 
-  oHitDistance = -b - sqrt( h );
+  oHitDistance = -halfB - sqrt(discriminant);
+  if (  oHitDistance < 0.f ) 
+    oHitDistance = -halfB + sqrt(discriminant);
+
   return true;
 }
 
@@ -185,8 +191,8 @@ bool PlaneIntersection( vec3 iOrig, vec3 iNormal, Ray iRay, out float oHitDistan
 { 
   float denom = dot(iNormal, iRay._Dir);
 
-  //if ( abs(denom) > EPSILON )
-  if ( denom < -EPSILON ) // Front face only
+  if ( abs(denom) > EPSILON )
+  //if ( denom < -EPSILON ) // Front face only
   { 
     vec3 d = iOrig - iRay._Orig; 
     oHitDistance = dot(d, iNormal) / denom; 
@@ -275,63 +281,6 @@ vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iTransfom, vec3 iHitPoint )
 
   return normalize(normal);
 }
-
-// Rotation with angle (in radians) and axis
-/*mat3 AngleAxis3x3( float iAngle, vec3 iAxis )
-{
-  float c = cos(iAngle);
-  float s = sin(iAngle);
-
-  float t = 1 - c;
-  float x = iAxis.x;
-  float y = iAxis.y;
-  float z = iAxis.z;
-
-  return mat3(
-      t * x * x + c,      t * x * y - s * z,  t * x * z + s * y,
-      t * x * y + s * z,  t * y * y + c,      t * y * z - s * x,
-      t * x * z - s * y,  t * y * z + s * x,  t * z * z + c
-  );
-}*/
-
-// Ray-tracing soft shadows in real-time
-// https://medium.com/@alexander.wester/ray-tracing-soft-shadows-in-real-time-a53b836d123b
-/*float LightConeAngle( vec3 iSamplPos, vec3 iLightPos, vec3 iToLight, float iRadius )
-{
-  vec3 ortho = cross(iToLight, vec3(0.f, 1.f, 0.f));
-  if ( ( abs(ortho.x) < EPSILON ) && ( abs(ortho.y) < EPSILON ) && ( abs(ortho.z) < EPSILON ) )
-    ortho = vec3(1.f, 0.f, 0.f);
-  else
-    ortho = normalize(ortho);
-  
-  vec3 toLightEdge = normalize((iLightPos + ortho * iRadius) - iSamplPos);
-
-  return acos(dot(iToLight, toLightEdge)) * 2.0f;
-}*/
-
-// Returns a random direction vector inside a cone
-// Angle defined in radians
-// https://medium.com/@alexander.wester/ray-tracing-soft-shadows-in-real-time-a53b836d123b
-/*vec3 GetConeSample( vec3 iConeDir, float iConeAngle )
-{
-  float cosAngle = cos(iConeAngle);
-
-  float z = rand() * (1.0f - cosAngle) + cosAngle;
-  float phi = rand() * 2.0f * PI;
-  
-  float x = sqrt(1.0f - z * z) * cos(phi);
-  float y = sqrt(1.0f - z * z) * sin(phi);
-  vec3 up = vec3(0.f, 0.f, 1.f);
-  
-  // Find the rotation axis 'u' and rotation angle 'rot'
-  vec3 axis = normalize(cross(up, normalize(iConeDir)));
-  float angle = acos(dot(normalize(iConeDir), up));
-  
-  // Convert rotation axis and angle to 3x3 rotation matrix [2]
-  mat3 R = AngleAxis3x3(angle, axis);
-  
-  return R * vec3(x, y, z);
-}*/
 
 vec3 GetLightDirSample( vec3 iSamplePos, vec3 iLightPos, float iLightRadius )
 {
@@ -434,16 +383,16 @@ bool AnyHit( Ray iRay, float iMaxDist )
 }
 
 // UV mapping : https://en.wikipedia.org/wiki/UV_mapping
+// iRayDir should be normalized
+// (U,V) = normalized spherical coordinates
 vec3 SampleSkybox( vec3 iRayDir )
 {
-  float theta = acos(clamp(iRayDir.y, -1.0, 1.0));
-  vec2 uv = vec2((PI + atan(iRayDir.z, iRayDir.x)) * INV_TWO_PI, theta * INV_PI) + vec2(u_SkyboxRotation, 0.0);
-    
+  float theta = asin(iRayDir.y);
+  float phi   = atan(iRayDir.z, iRayDir.x);
+  vec2 uv = vec2(.5f + phi * INV_TWO_PI, .5f - theta * INV_PI) + vec2(u_SkyboxRotation, 0.0);
+
   vec3 skycolor = texture(u_SkyboxTexture, uv).rgb;
   return skycolor;
-
-  //float pdf = Luminance(color) / envMapTotalSum;
-  //return vec4(color, (pdf * envMapRes.x * envMapRes.y) / (TWO_PI * PI * sin(theta)));
 }
 
 vec3 ComputeColor( HitPoint iClosestHit )
@@ -509,47 +458,77 @@ vec3 F( vec3 iF0, vec3 iV, vec3 iH )
 // https://www.youtube.com/watch?v=RRE-F57fbXw&list=WL&index=109
 vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuation )
 {
+  double cosTheta = dot(-iRay._Dir, iClosestHit._Normal);
+  bool frontFace = ( cosTheta > 0. );
+
   vec3 outColor = u_Materials[iClosestHit._MaterialID]._Emission;
 
-  // Soft Shadows
-  // vec3 L = u_SphereLight._Pos - iClosestHit._Pos;
-  // float distToLight = length(L);
-  //float angle = LightConeAngle(iClosestHit._Pos, u_SphereLight._Pos, L, u_SphereLight._Radius );
-  //L = normalize(GetConeSample(L, angle));
-  //L = L + RandomUnitVector();
-  vec3 L = GetLightDirSample(iClosestHit._Pos, u_SphereLight._Pos, u_SphereLight._Radius);
-  float distToLight = length(L);
-  L = normalize(L);
+  vec3 F0 = u_Materials[iClosestHit._MaterialID]._Albedo * u_Materials[iClosestHit._MaterialID]._Metallic * u_Materials[iClosestHit._MaterialID]._Opacity; // test : reflectance value
 
-  vec3 F0 = u_Materials[iClosestHit._MaterialID]._Albedo * vec3(u_Materials[iClosestHit._MaterialID]._Metallic); // test : reflectance value
-    
-  Ray occlusionTestRay;
-  occlusionTestRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
-  occlusionTestRay._Dir = L;
-  if ( !AnyHit(occlusionTestRay, distToLight) )
+  if ( frontFace)
   {
-    vec3 N = iClosestHit._Normal;
-    vec3 V = normalize(iRay._Orig - iClosestHit._Pos);
-    vec3 H = normalize(V + L);
+    // Soft Shadows
+    vec3 L = GetLightDirSample(iClosestHit._Pos, u_SphereLight._Pos, u_SphereLight._Radius);
+    float distToLight = length(L);
+    L = normalize(L);
+    
+    Ray occlusionTestRay;
+    occlusionTestRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
+    occlusionTestRay._Dir = L;
+    if ( !AnyHit(occlusionTestRay, distToLight) )
+    {
+      vec3 N = iClosestHit._Normal;
+      vec3 V = normalize(iRay._Orig - iClosestHit._Pos);
+      vec3 H = normalize(V + L);
 
-    float alpha = pow(u_Materials[iClosestHit._MaterialID]._Roughness, 2.f);
+      float alpha = pow(u_Materials[iClosestHit._MaterialID]._Roughness, 2.f);
 
-    vec3 Ks = F(F0, V, H);
-    vec3 Kd = ( vec3(1.f) - Ks ) * ( 1.f - u_Materials[iClosestHit._MaterialID]._Metallic );
+      vec3 Ks = F(F0, V, H);
+      vec3 Kd = ( vec3(1.f) - Ks ) * ( 1.f - u_Materials[iClosestHit._MaterialID]._Metallic );
 
-    vec3 lambert = u_Materials[iClosestHit._MaterialID]._Albedo / PI;
+      vec3 lambert = u_Materials[iClosestHit._MaterialID]._Albedo / PI;
 
-    vec3 cookTorranceNum = D(alpha, N, H) * G(alpha, N, V, L) * F(F0, V, H);   // DGF
-    float cookTorranceDenom = 4.f * max(dot(V, N), 0.f) * max(dot(L, N), 0.f); // 4(V.N)(L.N)
-    vec3 cookTorrance = cookTorranceNum / max(cookTorranceDenom, EPSILON);     // 
+      vec3 cookTorranceNum = D(alpha, N, H) * G(alpha, N, V, L) * F(F0, V, H);   // DGF
+      float cookTorranceDenom = 4.f * max(dot(V, N), 0.f) * max(dot(L, N), 0.f); // 4(V.N)(L.N)
+      vec3 cookTorrance = cookTorranceNum / max(cookTorranceDenom, EPSILON);     // 
 
-    vec3 BRDF = Kd * lambert + cookTorrance; // kd * fDiffuse + ks * fSpecular
+      vec3 BRDF = Kd * lambert + cookTorrance; // kd * fDiffuse + ks * fSpecular
 
-    outColor += BRDF  * u_SphereLight._Emission * max(dot(L, N), 0.f);
+      outColor += BRDF  * u_SphereLight._Emission * max(dot(L, N), 0.f);
+    }
   }
 
-  oScattered._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
-  oScattered._Dir  = reflect(iRay._Dir, iClosestHit._Normal + u_Materials[iClosestHit._MaterialID]._Roughness * RandomVector() );
+  // Reflect or refract ?
+  double sinTheta = 1.f;
+  float refractionRatio = 1.f;
+  
+  if ( u_Materials[iClosestHit._MaterialID]._Opacity < 1.f )
+  {
+    sinTheta = sqrt(1.f - cosTheta * cosTheta);
+
+    refractionRatio = (1. / u_Materials[iClosestHit._MaterialID]._IOR);
+    if ( !frontFace )
+      refractionRatio = u_Materials[iClosestHit._MaterialID]._IOR;
+
+    outColor *= vec3(u_Materials[iClosestHit._MaterialID]._Opacity);
+  }
+
+  vec3 normal = normalize(iClosestHit._Normal + u_Materials[iClosestHit._MaterialID]._Roughness * RandomVector());
+  if ( !frontFace )
+    normal *= -1;
+
+  if ( ( refractionRatio * sinTheta ) >= 1.f )
+  {
+    // Must Reflect
+    oScattered._Orig = iClosestHit._Pos + normal * RESOLUTION;
+    oScattered._Dir  = reflect(iRay._Dir, normal);
+  }
+  else
+  {
+    // Can Refract
+    oScattered._Orig = iClosestHit._Pos - normal;
+    oScattered._Dir  = refract(iRay._Dir, normal, refractionRatio);
+  }
   oAttenuation = F0;
 
   return clamp(outColor, 0.f, 1.f);

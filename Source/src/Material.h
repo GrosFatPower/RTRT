@@ -43,7 +43,7 @@ struct Material
   float _ClearcoatGloss         = 0.f;
  
   float _SpecTrans              = 0.f;
-  float _IOR                    = 1.5f;
+  float _IOR                    = 2.5f;
   float _MediumType             = 0.f;
   float _MediumDensity          = 0.f;
  
