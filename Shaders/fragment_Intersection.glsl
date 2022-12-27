@@ -126,20 +126,72 @@ vec3 GetLightDirSample( vec3 iSamplePos, vec3 iLightPos, float iLightRadius )
 // https://www.shadertoy.com/view/MlGcDz
 bool TriangleIntersection( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oHitDistance, out vec2 oUV )
 {
-  vec3 v1v0 = iV1 - iV0;
-  vec3 v2v0 = iV2 - iV0;
+  vec3 v0v1 = iV1 - iV0;
+  vec3 v0v2 = iV2 - iV0;
   vec3 rov0 = iRay._Orig - iV0;
 
-  vec3  n = cross( v1v0, v2v0 );
-  vec3  q = cross( rov0, iRay._Dir );
-  float d = 1.f / dot( iRay._Dir, n );
+  vec3  n = cross( v0v1, v0v2 );
+  float dirDotN = dot( iRay._Dir, n );
+  if ( abs(dirDotN) < EPSILON )
+    return false;
+  float invDirDotN = 1.f / dirDotN;
 
-  oUV.x = d * dot( -q, v2v0 );
-  oUV.y = d * dot(  q, v1v0 );
-  oHitDistance = d * dot( -n, rov0 );
+  oHitDistance = dot( -n, rov0 ) * invDirDotN;
+  if ( oHitDistance < 0.f )
+    return false;
+
+  vec3  q = cross( rov0, iRay._Dir );
+  oUV.x = dot( -q, v0v2 ) * invDirDotN;
+  oUV.y = dot(  q, v0v1 ) * invDirDotN;
 
   if( ( oUV.x < 0.f ) || ( oUV.y < 0.f) || ( oUV.x + oUV.y ) > 1.f )
     return false;
 
   return true;
+}
+
+// https://www.scratchapixel.com/lessons/3d-basic-rendering/ray-tracing-rendering-a-triangle/barycentric-coordinates
+bool rayTriangleIntersect2( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oHitDistance, out vec2 oUV )
+{ 
+  vec3 v0v1 = iV1 - iV0;
+  vec3 v0v2 = iV2 - iV0;
+
+  vec3  N = cross( v0v1, v0v2 );
+ 
+  // Step 1: finding P
+  float dirDotN = dot( N, iRay._Dir );
+  if ( abs(dirDotN) < EPSILON )
+    return false;
+ 
+  oHitDistance = ( dot( N , iRay._Orig ) + dot( N , iV0 ) ) / dirDotN;
+  if ( oHitDistance < 0.f )
+    return false;
+ 
+  // Step 2: inside-outside test
+  vec3 P = iRay._Orig + oHitDistance * iRay._Dir;
+
+  // edge 0
+  vec3 vp0 = P - iV0;
+  vec3 C = cross( v0v1, vp0 );
+  if ( dot( N, C ) < 0.f )
+    return false;  //P is on the right side 
+ 
+  // edge 1
+  vec3 v2v1 = iV2 - iV1; 
+  vec3 vp1 = P - iV1;
+  C = cross( v2v1, vp1 );
+  oUV.x = dot( N, C );
+  if ( oUV.x < 0.f )
+    return false;  //P is on the right side 
+ 
+  // edge 2
+  vec3 vp2 = P - iV2;
+  C = cross( -v0v2, vp2 );
+  oUV.y = dot( N, C );
+  if ( oUV.y < 0.f )
+    return false;  //P is on the right side 
+ 
+  oUV /= dot( N, N );
+ 
+  return true;  //this ray hits the triangle 
 }
