@@ -1,0 +1,110 @@
+renderer
+{
+	resolution 1920 1080
+	enablebackground true
+	#background skyboxes/alps_field_2k.hdr
+	bounces 5
+}
+
+camera
+{
+	position 5.0 2.0 8.0
+	lookat 0.0 0.0 0.0
+	fov 80
+}
+
+light
+{
+	type sphere
+	position .2 10.0 .5
+	emission .6 .6 .4
+	radius .5
+}
+
+material Green
+{
+	color .1 .8 .1 
+	metallic 0.4
+	roughness 0.01
+}
+
+material Red
+{
+	color .8 .1 .1
+	metallic 0.7
+	roughness 0.05
+	emission .2 .0 .0
+}
+
+material Blue
+{
+	color .4 .4 .8
+	metallic 0.3
+	roughness 0.1
+}
+
+material White
+{
+	color .8 .8 .8
+	metallic 0.4
+	roughness 0.05
+}
+
+material Orange
+{
+	color .8 .4 .0
+	metallic 0.3
+	roughness 0.2
+}
+
+material Yellow
+{
+	color .8 .8 .0
+	metallic 0.7
+	roughness 0.001
+}
+
+sphere
+{
+	radius .5
+	material Green
+	position 0.0 0.0 0.0
+}
+
+sphere
+{
+	radius 1.0
+	material Orange
+	position 2.0 2.0 -3.0
+}
+
+sphere
+{
+	radius 2.0
+	material Blue
+	position -5.0 3.0 4.0
+}
+
+box
+{
+	low -1.0 -1.0 -1.0
+	hight 1.0 1.0 1.0
+	material Yellow
+	position -3.0 1.0 -2.0
+}
+
+box
+{
+	low -1.0 -2.0 -1.0
+	hight 1.0 2.0 1.0
+	material Red
+	position 4.0 1.5 2.0
+}
+
+plane
+{
+	origin 0.0 -0.5 0.0
+	normal 0.0 1.0 0.0
+	material White
+	position 0.0 0.0 0.0
+}

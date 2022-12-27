@@ -6,6 +6,7 @@
 #include "Loader.h"
 #include "Scene.h"
 #include "Mesh.h"
+#include "Primitive.h"
 #include "Light.h"
 #include "Camera.h"
 #include "RenderSettings.h"
@@ -135,6 +136,51 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
 
 
     //--------------------------------------------
+    // Sphere - START
+    if ( "sphere" == tokens[0] )
+    {
+      std::cout << "New sphere" << std::endl;
+
+      parsingError += Loader::ParseSphere(file, *oScene);
+
+      if ( !parsingError )
+        curState = State::ExpectNewBlock;
+    }
+    // Sphere - END
+    //--------------------------------------------
+
+
+    //--------------------------------------------
+    // Box - START
+    if ( "box" == tokens[0] )
+    {
+      std::cout << "New box" << std::endl;
+
+      parsingError += Loader::ParseBox(file, *oScene);
+
+      if ( !parsingError )
+        curState = State::ExpectNewBlock;
+    }
+    // Box - END
+    //--------------------------------------------
+
+
+    //--------------------------------------------
+    // Plane - START
+    if ( "plane" == tokens[0] )
+    {
+      std::cout << "New plane" << std::endl;
+
+      parsingError += Loader::ParsePlane(file, *oScene);
+
+      if ( !parsingError )
+        curState = State::ExpectNewBlock;
+    }
+    // Plane - END
+    //--------------------------------------------
+
+
+    //--------------------------------------------
     // Light - START
     if ( "light" == tokens[0] )
     {
@@ -171,7 +217,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
       std::cout << "New renderer" << std::endl;
 
       RenderSettings settings;
-      parsingError += Loader::ParseRenderSettings(file, settings);
+      parsingError += Loader::ParseRenderSettings(file, settings, *oScene);
 
       if ( !parsingError )
       {
@@ -585,7 +631,7 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
 
   Vec3 pos({0.f, 0.f, -1.f});
   Vec3 lookAt({0.f, 0.f, 0.f});
-  float fov = MathUtil::ToRadians(80.f);
+  float fov = 80.f;
   float focalDist = -1.f;
   float aperture  = -1.f;
 
@@ -656,7 +702,7 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
     else if ( "fov" == tokens[0] )
     {
       if ( 2 == nbTokens )
-        fov = (MathUtil::ToRadians(std::stof(tokens[1])));
+        fov = std::stof(tokens[1]);
       else
         parsingError++;
     }
@@ -711,7 +757,7 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
   return parsingError;
 }
 
-int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSettings )
+int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSettings, Scene & ioScene )
 {
   int parsingError = 0;
 
@@ -799,7 +845,7 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSetting
       else
         parsingError++;
     }
-    else if ( "uniformlightcolor" == tokens[0] )
+    else if ( "enableuniformlight" == tokens[0] )
     {
       if ( 2 == nbTokens )
       {
@@ -813,7 +859,21 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSetting
       else
         parsingError++;
     }
-
+    else if ( "bounces" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oSettings._Bounces =  std::stoi(tokens[1]);
+      else
+        parsingError++;
+    }
+    //else if ( "background" == tokens[0] )
+    //{
+    //  if ( 2 == nbTokens )
+    //  {
+    //  }
+    //  else
+    //    parsingError++;
+    //}
   }
   if ( State::ExpectNewBlock != curState )
     parsingError++;
@@ -826,6 +886,464 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSetting
       oSettings._RenderResolution = oSettings._WindowResolution;
     else if ( !hasRenderResolution && !hasWindowResolution )
       oSettings._RenderResolution = oSettings._WindowResolution = { 1920, 1080 };
+  }
+
+  return parsingError;
+}
+
+int Loader::ParseSphere( std::ifstream & iStr, Scene & ioScene )
+{
+  int parsingError = 0;
+
+  std::string materialName;
+  Mat4x4 transMat(1.f), rotMat(1.f), scaleMat(1.f);
+  Mat4x4 xform(1.f);
+  bool hasMatrix = false;
+
+  Sphere newSphere;
+
+  State curState = State::ExpectOpenBracket;
+  std::string line;
+  while( std::getline( iStr, line ) && !parsingError )
+  {
+    std::vector<std::string> tokens;
+    Tokenize(line, tokens);
+    int nbTokens = tokens.size();
+    if ( !nbTokens || ( '#' == tokens[0][0] ) )
+      continue;
+
+    if ( State::ExpectOpenBracket == curState )
+    {
+      if ( '{' == tokens[0][0] )
+        curState = State::ExpectClosingBracket;
+      else if ( '}' == tokens[0][0] )
+        parsingError++;
+      continue;
+    }
+
+    if ( State::ExpectClosingBracket == curState )
+    {
+      if ( '}' == tokens[0][0] )
+      {
+        curState = State::ExpectNewBlock;
+        break;
+      }
+      else if ( '{' == tokens[0][0] )
+      {
+        parsingError++;
+        continue;
+      }
+    }
+
+    if ( "radius" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        newSphere._Radius = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "material" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        materialName = tokens[1];
+      else
+        parsingError++;
+    }
+    else if ( "position" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+      {
+        transMat[3][0] = std::stof(tokens[1]);
+        transMat[3][1] = std::stof(tokens[2]);
+        transMat[3][2] = std::stof(tokens[3]);
+      }
+      else
+        parsingError++;
+    }
+    else if ( "scale" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+      {
+        scaleMat[0][0] = std::stof(tokens[1]);
+        scaleMat[1][1] = std::stof(tokens[2]);
+        scaleMat[2][2] = std::stof(tokens[3]);
+      }
+      else
+        parsingError++;
+    }
+    else if ( "rotation" == tokens[0] )
+    {
+      if ( 5 == nbTokens )
+      {
+        Vec4 quaternion; // { x, y, z, s } -> q = s + ix + jy + kz
+        quaternion.x = std::stof(tokens[1]);
+        quaternion.y = std::stof(tokens[2]);
+        quaternion.z = std::stof(tokens[3]);
+        quaternion.w = std::stof(tokens[4]);
+
+        rotMat = MathUtil::QuatToMatrix(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+      }
+      else
+        parsingError++;
+    }
+    else if ( "matrix" == tokens[0] )
+    {
+      if ( 17 == nbTokens )
+      {
+        xform[0][0] = std::stof(tokens[1]);
+        xform[1][0] = std::stof(tokens[2]);
+        xform[2][0] = std::stof(tokens[3]);
+        xform[3][0] = std::stof(tokens[4]);
+        xform[0][1] = std::stof(tokens[5]);
+        xform[1][1] = std::stof(tokens[6]);
+        xform[2][1] = std::stof(tokens[7]);
+        xform[3][1] = std::stof(tokens[8]);
+        xform[0][2] = std::stof(tokens[9]);
+        xform[1][2] = std::stof(tokens[10]);
+        xform[2][2] = std::stof(tokens[11]);
+        xform[3][2] = std::stof(tokens[12]);
+        xform[0][3] = std::stof(tokens[13]);
+        xform[1][3] = std::stof(tokens[14]);
+        xform[2][3] = std::stof(tokens[15]);
+        xform[3][3] = std::stof(tokens[16]);
+        hasMatrix = true;
+      }
+      else
+        parsingError++;
+    }
+  }
+  if ( State::ExpectNewBlock != curState )
+    parsingError++;
+
+  if ( !parsingError )
+  {
+    int sphereID = ioScene.AddPrimitive(newSphere);
+    if ( sphereID >= 0 )
+    {
+      int matID = -1;
+      if ( !materialName.empty() )
+      {
+        matID = ioScene.FindMaterialID(materialName);
+        if ( matID < 0 )
+          std::cout << "Loader : ERROR could not find material " << materialName << std::endl;
+      }
+
+      if ( !hasMatrix )
+        xform = transMat * rotMat * scaleMat;
+
+      PrimitiveInstance instance(sphereID, matID, xform);
+      ioScene.AddPrimitiveInstance(instance);
+    }
+  }
+
+  return parsingError;
+}
+
+int Loader::ParseBox( std::ifstream & iStr, Scene & ioScene )
+{
+  int parsingError = 0;
+
+  std::string materialName;
+  Mat4x4 transMat(1.f), rotMat(1.f), scaleMat(1.f);
+  Mat4x4 xform(1.f);
+  bool hasMatrix = false;
+
+  Box newBox;
+
+  State curState = State::ExpectOpenBracket;
+  std::string line;
+  while( std::getline( iStr, line ) && !parsingError )
+  {
+    std::vector<std::string> tokens;
+    Tokenize(line, tokens);
+    int nbTokens = tokens.size();
+    if ( !nbTokens || ( '#' == tokens[0][0] ) )
+      continue;
+
+    if ( State::ExpectOpenBracket == curState )
+    {
+      if ( '{' == tokens[0][0] )
+        curState = State::ExpectClosingBracket;
+      else if ( '}' == tokens[0][0] )
+        parsingError++;
+      continue;
+    }
+
+    if ( State::ExpectClosingBracket == curState )
+    {
+      if ( '}' == tokens[0][0] )
+      {
+        curState = State::ExpectNewBlock;
+        break;
+      }
+      else if ( '{' == tokens[0][0] )
+      {
+        parsingError++;
+        continue;
+      }
+    }
+
+    if ( "low" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+        newBox._Low = { std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]) };
+      else
+        parsingError++;
+    }
+    else if ( "high" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+        newBox._High = { std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]) };
+      else
+        parsingError++;
+    }
+    else if ( "material" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        materialName = tokens[1];
+      else
+        parsingError++;
+    }
+    else if ( "position" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+      {
+        transMat[3][0] = std::stof(tokens[1]);
+        transMat[3][1] = std::stof(tokens[2]);
+        transMat[3][2] = std::stof(tokens[3]);
+      }
+      else
+        parsingError++;
+    }
+    else if ( "scale" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+      {
+        scaleMat[0][0] = std::stof(tokens[1]);
+        scaleMat[1][1] = std::stof(tokens[2]);
+        scaleMat[2][2] = std::stof(tokens[3]);
+      }
+      else
+        parsingError++;
+    }
+    else if ( "rotation" == tokens[0] )
+    {
+      if ( 5 == nbTokens )
+      {
+        Vec4 quaternion; // { x, y, z, s } -> q = s + ix + jy + kz
+        quaternion.x = std::stof(tokens[1]);
+        quaternion.y = std::stof(tokens[2]);
+        quaternion.z = std::stof(tokens[3]);
+        quaternion.w = std::stof(tokens[4]);
+
+        rotMat = MathUtil::QuatToMatrix(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+      }
+      else
+        parsingError++;
+    }
+    else if ( "matrix" == tokens[0] )
+    {
+      if ( 17 == nbTokens )
+      {
+        xform[0][0] = std::stof(tokens[1]);
+        xform[1][0] = std::stof(tokens[2]);
+        xform[2][0] = std::stof(tokens[3]);
+        xform[3][0] = std::stof(tokens[4]);
+        xform[0][1] = std::stof(tokens[5]);
+        xform[1][1] = std::stof(tokens[6]);
+        xform[2][1] = std::stof(tokens[7]);
+        xform[3][1] = std::stof(tokens[8]);
+        xform[0][2] = std::stof(tokens[9]);
+        xform[1][2] = std::stof(tokens[10]);
+        xform[2][2] = std::stof(tokens[11]);
+        xform[3][2] = std::stof(tokens[12]);
+        xform[0][3] = std::stof(tokens[13]);
+        xform[1][3] = std::stof(tokens[14]);
+        xform[2][3] = std::stof(tokens[15]);
+        xform[3][3] = std::stof(tokens[16]);
+        hasMatrix = true;
+      }
+      else
+        parsingError++;
+    }
+  }
+  if ( State::ExpectNewBlock != curState )
+    parsingError++;
+
+  if ( !parsingError )
+  {
+    int boxID = ioScene.AddPrimitive(newBox);
+    if ( boxID >= 0 )
+    {
+      int matID = -1;
+      if ( !materialName.empty() )
+      {
+        matID = ioScene.FindMaterialID(materialName);
+        if ( matID < 0 )
+          std::cout << "Loader : ERROR could not find material " << materialName << std::endl;
+      }
+
+      if ( !hasMatrix )
+        xform = transMat * rotMat * scaleMat;
+
+      PrimitiveInstance instance(boxID, matID, xform);
+      ioScene.AddPrimitiveInstance(instance);
+    }
+  }
+
+  return parsingError;
+}
+
+int Loader::ParsePlane( std::ifstream & iStr, Scene & ioScene )
+{
+  int parsingError = 0;
+
+  std::string materialName;
+  Mat4x4 transMat(1.f), rotMat(1.f), scaleMat(1.f);
+  Mat4x4 xform(1.f);
+  bool hasMatrix = false;
+
+  Plane newPlane;
+
+  State curState = State::ExpectOpenBracket;
+  std::string line;
+  while( std::getline( iStr, line ) && !parsingError )
+  {
+    std::vector<std::string> tokens;
+    Tokenize(line, tokens);
+    int nbTokens = tokens.size();
+    if ( !nbTokens || ( '#' == tokens[0][0] ) )
+      continue;
+
+    if ( State::ExpectOpenBracket == curState )
+    {
+      if ( '{' == tokens[0][0] )
+        curState = State::ExpectClosingBracket;
+      else if ( '}' == tokens[0][0] )
+        parsingError++;
+      continue;
+    }
+
+    if ( State::ExpectClosingBracket == curState )
+    {
+      if ( '}' == tokens[0][0] )
+      {
+        curState = State::ExpectNewBlock;
+        break;
+      }
+      else if ( '{' == tokens[0][0] )
+      {
+        parsingError++;
+        continue;
+      }
+    }
+
+    if ( "origin" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+        newPlane._Origin = { std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]) };
+      else
+        parsingError++;
+    }
+    else if ( "normal" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+        newPlane._Normal = { std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]) };
+      else
+        parsingError++;
+    }
+    else if ( "material" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        materialName = tokens[1];
+      else
+        parsingError++;
+    }
+    else if ( "position" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+      {
+        transMat[3][0] = std::stof(tokens[1]);
+        transMat[3][1] = std::stof(tokens[2]);
+        transMat[3][2] = std::stof(tokens[3]);
+      }
+      else
+        parsingError++;
+    }
+    else if ( "scale" == tokens[0] )
+    {
+      if ( 4 == nbTokens )
+      {
+        scaleMat[0][0] = std::stof(tokens[1]);
+        scaleMat[1][1] = std::stof(tokens[2]);
+        scaleMat[2][2] = std::stof(tokens[3]);
+      }
+      else
+        parsingError++;
+    }
+    else if ( "rotation" == tokens[0] )
+    {
+      if ( 5 == nbTokens )
+      {
+        Vec4 quaternion; // { x, y, z, s } -> q = s + ix + jy + kz
+        quaternion.x = std::stof(tokens[1]);
+        quaternion.y = std::stof(tokens[2]);
+        quaternion.z = std::stof(tokens[3]);
+        quaternion.w = std::stof(tokens[4]);
+
+        rotMat = MathUtil::QuatToMatrix(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+      }
+      else
+        parsingError++;
+    }
+    else if ( "matrix" == tokens[0] )
+    {
+      if ( 17 == nbTokens )
+      {
+        xform[0][0] = std::stof(tokens[1]);
+        xform[1][0] = std::stof(tokens[2]);
+        xform[2][0] = std::stof(tokens[3]);
+        xform[3][0] = std::stof(tokens[4]);
+        xform[0][1] = std::stof(tokens[5]);
+        xform[1][1] = std::stof(tokens[6]);
+        xform[2][1] = std::stof(tokens[7]);
+        xform[3][1] = std::stof(tokens[8]);
+        xform[0][2] = std::stof(tokens[9]);
+        xform[1][2] = std::stof(tokens[10]);
+        xform[2][2] = std::stof(tokens[11]);
+        xform[3][2] = std::stof(tokens[12]);
+        xform[0][3] = std::stof(tokens[13]);
+        xform[1][3] = std::stof(tokens[14]);
+        xform[2][3] = std::stof(tokens[15]);
+        xform[3][3] = std::stof(tokens[16]);
+        hasMatrix = true;
+      }
+      else
+        parsingError++;
+    }
+  }
+  if ( State::ExpectNewBlock != curState )
+    parsingError++;
+
+  if ( !parsingError )
+  {
+    int planeID = ioScene.AddPrimitive(newPlane);
+    if ( planeID >= 0 )
+    {
+      int matID = -1;
+      if ( !materialName.empty() )
+      {
+        matID = ioScene.FindMaterialID(materialName);
+        if ( matID < 0 )
+          std::cout << "Loader : ERROR could not find material " << materialName << std::endl;
+      }
+
+      if ( !hasMatrix )
+        xform = transMat * rotMat * scaleMat;
+
+      PrimitiveInstance instance(planeID, matID, xform);
+      ioScene.AddPrimitiveInstance(instance);
+    }
   }
 
   return parsingError;
@@ -983,7 +1501,7 @@ int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scen
       }
 
       if ( !hasMatrix )
-        xform = scaleMat * rotMat * transMat;
+        xform = transMat * rotMat * scaleMat;
 
       MeshInstance instance(meshName, meshID, matID, xform);
       ioScene.AddMeshInstance(instance);

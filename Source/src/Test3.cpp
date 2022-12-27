@@ -8,6 +8,7 @@
 #include "PrimitiveInstance.h"
 #include "Texture.h"
 #include "Math.h"
+#include "Loader.h"
 
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
@@ -678,105 +679,18 @@ int Test3::InitializeScene()
   if ( _Scene )
     delete _Scene;
 
-  _Scene = new Scene();
+  std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene.scene";
 
-  // Camera
-  Camera newCamera({0.f, 0.f, 2.f}, { 0.f, 0.f, 0.f }, 90.f);
-  _Scene -> SetCamera(newCamera);
-
-  // Lights
-  Light newLight;
-  newLight._Pos      = { 2.f, 10.f, .5f };
-  newLight._Emission = { .6f, .6f, .4f };
-  newLight._Type     = (float)LightType::SphereLight;
-  newLight._Radius   = .5f;
-  _Scene -> AddLight(newLight);
-
-  // Materials
-  Material greenMat;
-  greenMat._Albedo    = { .1f, .8f, .1f };
-  greenMat._Emission  = { 0.f, 0.f, 0.f };
-  greenMat._Metallic  = 0.4f;
-  greenMat._Roughness = 0.f;
-  int greenMatID = _Scene -> AddMaterial(greenMat, "Green");
-
-  Material redMat;
-  redMat._Albedo    = { .8f, .1f, .1f };
-  redMat._Emission  = { 0.f, 0.f, 0.f };
-  redMat._Metallic  = 0.3f;
-  redMat._Roughness = 0.5f;
-  int redMatID = _Scene -> AddMaterial(redMat, "Red");
-
-  Material blueMat;
-  blueMat._Albedo    = { .1f, .1f, .8f };
-  blueMat._Emission  = { .1f, .1f, .5f };
-  blueMat._Metallic  = 0.1f;
-  blueMat._Roughness = 0.6f;
-  int blueMatID = _Scene -> AddMaterial(blueMat, "Blue");
-
-  Material orangeMat;
-  orangeMat._Albedo    = { .8f, .6f, .2f };
-  orangeMat._Emission  = { 0.f, 0.f, 0.f };
-  orangeMat._Metallic  = 0.5f;
-  orangeMat._Roughness = 0.05f;
-  int orangeMatID = _Scene -> AddMaterial(orangeMat, "Orange");
-
-  // Primitives
-  Sphere smallSphere;
-  smallSphere._Radius = .2f;
-  int smallSphereID = _Scene -> AddPrimitive(smallSphere);
-
-  Sphere mediumSphere;
-  mediumSphere._Radius = .5f;
-  int mediumSphereID = _Scene -> AddPrimitive(mediumSphere);
-
-  Sphere bigSphere;
-  bigSphere._Radius = .5f;
-  int bigSphereID = _Scene -> AddPrimitive(bigSphere);
-
-  Mat4x4 transformMatrix(1.f);
-  _Scene -> AddPrimitiveInstance(mediumSphereID, greenMatID, transformMatrix);
-
-  transformMatrix = glm::translate(Mat4x4(1.f), Vec3(.5f, 1.f, -.5f));
-  _Scene -> AddPrimitiveInstance(smallSphereID, redMatID, transformMatrix);
-
-  transformMatrix = glm::translate(Mat4x4(1.f), Vec3(-.5f, 2.f, -.5f));
-  _Scene -> AddPrimitiveInstance(smallSphereID, blueMatID, transformMatrix);
-
-  transformMatrix = glm::translate(Mat4x4(1.f), Vec3(3.f, 2.f, -5.f));
-  _Scene -> AddPrimitiveInstance(mediumSphereID, blueMatID, transformMatrix);
-
-  transformMatrix = glm::translate(Mat4x4(1.f), Vec3(-1.f, 1.f, -3.f));
-  _Scene -> AddPrimitiveInstance(bigSphereID, redMatID, transformMatrix);
-
-  Plane basePlane;
-  basePlane._Origin = {  0.f, -.5f, 0.f };
-  basePlane._Normal = {  0.f,  1.f, 0.f };
-
-  int basePlaneID = _Scene -> AddPrimitive(basePlane);
-
-  transformMatrix = Mat4x4(1.f);
-  _Scene -> AddPrimitiveInstance(basePlaneID, orangeMatID, transformMatrix);
-
-  Box firstBox;
-  firstBox._Low  = { -1.f, -1.f, -1.f };
-  firstBox._High = { 1.f, 1.f, 1.f };
-
-  int firstBoxID = _Scene -> AddPrimitive(firstBox);
-
-  transformMatrix = glm::translate(Mat4x4(1.f), Vec3(-3.f, 2.f, -2.f));
-  _Scene -> AddPrimitiveInstance(firstBoxID, greenMatID, transformMatrix);
+  //_Scene = new Scene();
+  if ( !Loader::LoadScene(sceneFile, _Scene, _Settings) || !_Scene )
+  {
+    std::cout << "Failed to load scene : " << sceneFile << std::endl;
+    return 1;
+  }
 
   const std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene -> GetPrimitiveInstances();
   for ( int i = 0; i < PrimitiveInstances.size(); ++i )
     _PrimitiveNames.push_back(new std::string(_Scene -> FindPrimitiveName(i)));
-
-  _SceneCameraModified    = true;
-  _SceneLightsModified    = true;
-  _SceneMaterialsModified = true;
-  _SceneInstancesModified = true;
-
-  // Textures
 
   int skyboxID =_Scene -> AddTexture(g_AssetsDir + "skyboxes\\alps_field_2k.hdr", 4, TexFormat::TEX_FLOAT);
   {
@@ -793,15 +707,17 @@ int Test3::InitializeScene()
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
       glBindTexture(GL_TEXTURE_2D, 0);
 
-      _Settings._EnableSkybox = true;
+      //_Settings._EnableSkybox = true;
     }
     else
       return 1;
   }
 
-  // Render settings
-  _Settings._Bounces     = 5;
   _RenderSettingsModified = true;
+  _SceneCameraModified    = true;
+  _SceneLightsModified    = true;
+  _SceneMaterialsModified = true;
+  _SceneInstancesModified = true;
 
   return 0;
 }

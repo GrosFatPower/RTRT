@@ -122,3 +122,24 @@ vec3 GetLightDirSample( vec3 iSamplePos, vec3 iLightPos, float iLightRadius )
 
   return lightSample - iSamplePos;
 }
+
+// https://www.shadertoy.com/view/MlGcDz
+bool TriangleIntersection( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oHitDistance, out vec2 oUV )
+{
+  vec3 v1v0 = iV1 - iV0;
+  vec3 v2v0 = iV2 - iV0;
+  vec3 rov0 = iRay._Orig - iV0;
+
+  vec3  n = cross( v1v0, v2v0 );
+  vec3  q = cross( rov0, iRay._Dir );
+  float d = 1.f / dot( iRay._Dir, n );
+
+  oUV.x = d * dot( -q, v2v0 );
+  oUV.y = d * dot(  q, v1v0 );
+  oHitDistance = d * dot( -n, rov0 );
+
+  if( ( oUV.x < 0.f ) || ( oUV.y < 0.f) || ( oUV.x + oUV.y ) > 1.f )
+    return false;
+
+  return true;
+}

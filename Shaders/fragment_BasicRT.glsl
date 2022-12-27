@@ -245,7 +245,7 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuat
       vec3 Ks = F(F0, V, H);
       vec3 Kd = ( vec3(1.f) - Ks ) * ( 1.f - u_Materials[iClosestHit._MaterialID]._Metallic );
 
-      vec3 lambert = u_Materials[iClosestHit._MaterialID]._Albedo / PI;
+      vec3 lambert = u_Materials[iClosestHit._MaterialID]._Albedo * INV_PI;
 
       vec3 cookTorranceNum = D(alpha, N, H) * G(alpha, N, V, L) * F(F0, V, H);   // DGF
       float cookTorranceDenom = 4.f * max(dot(V, N), 0.f) * max(dot(L, N), 0.f); // 4(V.N)(L.N)
