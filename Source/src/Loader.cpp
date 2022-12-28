@@ -845,6 +845,20 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSetting
       else
         parsingError++;
     }
+    else if ( "enableskybox" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+      {
+        if ( "true" == tokens[1] )
+          oSettings._EnableSkybox = true;
+        else if ( "false" == tokens[1] )
+          oSettings._EnableSkybox = false;
+        else
+          parsingError++;
+      }
+      else
+        parsingError++;
+    }
     else if ( "enableuniformlight" == tokens[0] )
     {
       if ( 2 == nbTokens )

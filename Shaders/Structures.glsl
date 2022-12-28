@@ -32,6 +32,7 @@ struct HitPoint
   float _Dist;
   vec3  _Pos;
   vec3  _Normal;
+  vec2  _UV;
   int   _MaterialID;
   bool  _FrontFace;
 };

@@ -216,7 +216,7 @@ void Scene::CompileMeshData()
   _NbFaces = 0;
   _Vertices.clear();
   _Normals.clear();
-  _UVs.clear();
+  _UVMatID.clear();
   _Indices.clear();
 
   int vtxIndexOffset  = 0;
@@ -235,9 +235,11 @@ void Scene::CompileMeshData()
 
     std::vector<Vec3> transformedVertices;
     std::vector<Vec3> transformedNormals;
+    std::vector<Vec3> uvMatIDs;
     std::vector<Vec3i> offsetIdx;
     transformedVertices.resize(curVertices.size());
     transformedNormals.resize(curNormals.size());
+    uvMatIDs.resize(curUVs.size());
     offsetIdx.resize(curIndices.size());
 
     for ( int i = 0; i < curVertices.size(); ++i )
@@ -253,19 +255,34 @@ void Scene::CompileMeshData()
       transformedNormals[i] = { transformedNormal[0], transformedNormal[1], transformedNormal[2] };
     }
 
+    if ( curUVs.size() )
+    {
+      for ( int i = 0; i < curUVs.size(); ++i )
+      {
+        uvMatIDs[i] = { curUVs[i].x, curUVs[i].y, (float)meshInst._MaterialID };
+      }
+    }
+    else
+    {
+      uvMatIDs.push_back({ 0.f, 0.f, (float)meshInst._MaterialID });
+    }
+
     for ( int i = 0; i < curIndices.size(); ++i )
     {
-      offsetIdx[i] = { curIndices[i].x + vtxIndexOffset, curIndices[i].y + normIndexOffset, curIndices[i].z + uvIndexOffset };
+      if ( curUVs.size() )
+        offsetIdx[i] = { curIndices[i].x + vtxIndexOffset, curIndices[i].y + normIndexOffset, curIndices[i].z + uvIndexOffset };
+      else
+        offsetIdx[i] = { curIndices[i].x + vtxIndexOffset, curIndices[i].y + normIndexOffset, (uvMatIDs.size()-1)  + uvIndexOffset };
     }
 
     _Vertices.insert(std::end(_Vertices), std::begin(transformedVertices), std::end(transformedVertices));
     _Normals.insert(std::end(_Normals), std::begin(transformedNormals), std::end(transformedNormals));
-    _UVs.insert(std::end(_UVs), std::begin(curUVs), std::end(curUVs));
+    _UVMatID.insert(std::end(_UVMatID), std::begin(uvMatIDs), std::end(uvMatIDs));
     _Indices.insert(std::end(_Indices), std::begin(offsetIdx), std::end(offsetIdx));
 
-    vtxIndexOffset  += curVertices.size();
-    normIndexOffset += curNormals.size();
-    uvIndexOffset   += curUVs.size();
+    vtxIndexOffset  += transformedVertices.size();
+    normIndexOffset += transformedNormals.size();
+    uvIndexOffset   += uvMatIDs.size();
   }
 
   _NbFaces = _Indices.size() / 3;

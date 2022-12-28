@@ -698,7 +698,7 @@ int Test3::InitializeScene()
   if ( _Scene )
     delete _Scene;
 
-  std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene.scene";
+  std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
 
   //_Scene = new Scene();
   if ( !Loader::LoadScene(sceneFile, _Scene, _Settings) || !_Scene )
@@ -729,14 +729,14 @@ int Test3::InitializeScene()
     glBindTexture(GL_TEXTURE_BUFFER, _VtxNormTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _VtxNormBufferID);
 
-    if ( _Scene -> GetUVs().size() )
+    if ( _Scene -> GetUVMatID().size() )
     {
       glGenBuffers(1, &_VtxUVBufferID);
       glBindBuffer(GL_TEXTURE_BUFFER, _VtxUVBufferID);
-      glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec2) * _Scene -> GetUVs().size(), &_Scene -> GetUVs()[0], GL_STATIC_DRAW);
+      glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene -> GetUVMatID().size(), &_Scene -> GetUVMatID()[0], GL_STATIC_DRAW);
       glGenTextures(1, &_VtxUVTextureID);
       glBindTexture(GL_TEXTURE_BUFFER, _VtxUVTextureID);
-      glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32F, _VtxUVBufferID);
+      glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _VtxUVBufferID);
     }
 
     glGenBuffers(1, &_VtxIndBufferID);
@@ -936,6 +936,7 @@ int Test3::Run()
   InitializeScene();
 
   // Main loop
+  glfwSetWindowSize(_MainWindow, _Settings._RenderResolution.x, _Settings._RenderResolution.y);
   glViewport(0, 0, _Settings._RenderResolution.x, _Settings._RenderResolution.y);
   glDisable(GL_DEPTH_TEST);
 

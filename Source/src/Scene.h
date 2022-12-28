@@ -64,7 +64,7 @@ public:
   int GetNbFaces() const { return _NbFaces; }
   const std::vector<Vec3>  & GetVertices() const { return _Vertices; }
   const std::vector<Vec3>  & GetNormals()  const { return _Normals;  }
-  const std::vector<Vec2>  & GetUVs()      const { return _UVs;      }
+  const std::vector<Vec3>  & GetUVMatID()  const { return _UVMatID;  }
   const std::vector<Vec3i> & GetIndices()  const { return _Indices;  }
 
 private:
@@ -84,7 +84,7 @@ private:
   int                            _NbFaces = 0;
   std::vector<Vec3>              _Vertices;
   std::vector<Vec3>              _Normals;
-  std::vector<Vec2>              _UVs;
+  std::vector<Vec3>              _UVMatID;
   std::vector<Vec3i>             _Indices;
 };
 

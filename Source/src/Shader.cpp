@@ -25,6 +25,9 @@ Shader::Shader(const ShaderSource & iShaderSource, GLuint iShaderType)
 {
   _ShaderID = glCreateShader(_ShaderType);
 
+  if ( 0 )
+    std::cout << iShaderSource._Src << std::endl;
+
   printf("Compiling Shader %s\n", iShaderSource._Path.c_str());
   const GLchar* src = (const GLchar*)iShaderSource._Src.c_str();
     

@@ -42,7 +42,7 @@ uniform sampler2D      u_SkyboxTexture;
 uniform sampler2D      u_ScreenTexture;
 uniform samplerBuffer  u_VtxTexture;
 uniform samplerBuffer  u_VtxNormTexture;
-uniform isamplerBuffer u_VtxUVTexture;
+uniform samplerBuffer  u_VtxUVTexture;
 uniform isamplerBuffer u_VtxIndTexture;
 
 // ----------
@@ -51,7 +51,7 @@ uniform isamplerBuffer u_VtxIndTexture;
 
 bool TraceRay( Ray iRay, out HitPoint oClosestHit )
 {
-  oClosestHit = HitPoint(-1.f, vec3( 0.f, 0.f, 0.f ), vec3( 0.f, 0.f, 0.f ), -1, true);
+  oClosestHit = HitPoint(-1.f, vec3( 0.f, 0.f, 0.f ), vec3( 0.f, 0.f, 0.f ), vec2( 0.f, 0.f ), -1, true);
 
   for ( int i = 0; i < u_NbSpheres; ++i )
   {
@@ -118,10 +118,15 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
         vec3 norm1 = texelFetch(u_VtxNormTexture, vInd1.y).xyz;
         vec3 norm2 = texelFetch(u_VtxNormTexture, vInd2.y).xyz;
 
+        vec3 uvMatID0 = texelFetch(u_VtxUVTexture, vInd0.z).xyz;
+        vec3 uvMatID1 = texelFetch(u_VtxUVTexture, vInd1.z).xyz;
+        vec3 uvMatID2 = texelFetch(u_VtxUVTexture, vInd2.z).xyz;
+
         oClosestHit._Dist       = hitDist;
         oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
         oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
-        oClosestHit._MaterialID = 0;
+        oClosestHit._UV.xy      = uv;
+        oClosestHit._MaterialID = int(uvMatID0.z);
       }
     }
   }
