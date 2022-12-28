@@ -6,6 +6,8 @@
 #include "Light.h"
 #include "Primitive.h"
 #include "PrimitiveInstance.h"
+#include "Mesh.h"
+#include "MeshInstance.h"
 #include "Texture.h"
 #include "Math.h"
 #include "Loader.h"
@@ -135,7 +137,17 @@ Test3::Test3( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
 Test3::~Test3()
 {
   glDeleteFramebuffers(1, &_FrameBufferID);
+
+  glDeleteBuffers(1, &_VtxBufferID);
+  glDeleteBuffers(1, &_VtxNormBufferID);
+  glDeleteBuffers(1, &_VtxUVBufferID);
+  glDeleteBuffers(1, &_VtxIndBufferID);
+
   glDeleteTextures(1, &_ScreenTextureID);
+  glDeleteTextures(1, &_VtxTextureID);
+  glDeleteTextures(1, &_VtxNormTextureID);
+  glDeleteTextures(1, &_VtxUVTextureID);
+  glDeleteTextures(1, &_VtxIndTextureID);
 
   if (_Quad)
     delete _Quad;
@@ -209,9 +221,7 @@ int Test3::UpdateUniforms()
     GLuint RTTProgramID = _RTTShader -> GetShaderProgramID();
     glUniform2f(glGetUniformLocation(RTTProgramID, "u_Resolution"), RenderWidth(), RenderHeight());
     glUniform1f(glGetUniformLocation(RTTProgramID, "u_Time"), _CPULoopTime);
-    glUniform1i(glGetUniformLocation(RTTProgramID, "u_FrameNum"), _FrameNum);
-    glUniform1i(glGetUniformLocation(RTTProgramID, "u_ScreenTexture"), 0);
-    glUniform1i(glGetUniformLocation(RTTProgramID, "u_SkyboxTexture"), 1);
+    glUniform1i(glGetUniformLocation(RTTProgramID, "u_FrameNum"), _FrameNum);  
 
     if ( !(_RenderSettingsModified + _SceneCameraModified + _SceneLightsModified + _SceneInstancesModified + _SceneMaterialsModified) )
     {
@@ -231,6 +241,8 @@ int Test3::UpdateUniforms()
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_EnableSkybox"), (int)_Settings._EnableSkybox);
       glUniform1f(glGetUniformLocation(RTTProgramID, "u_SkyboxRotation"), _Settings._SkyBoxRotation / 360.f);
       glUniform1f(glGetUniformLocation(RTTProgramID, "u_Gamma"), _Settings._Gamma);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_ScreenTexture"), 0);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_SkyboxTexture"), 1);
       _RenderSettingsModified = false;
     }
 
@@ -331,9 +343,16 @@ int Test3::UpdateUniforms()
             nbBoxes++;
           }
         }
+
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxTexture"),     2);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxNormTexture"), 3);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxUVTexture"),   4);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxIndTexture"),  5);
+
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbSpheres"), nbSpheres);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbPlanes"), nbPlanes);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbBoxes"), nbBoxes);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbTriangles"), _NbTriangles);
 
         _SceneInstancesModified = false;
       }
@@ -688,6 +707,46 @@ int Test3::InitializeScene()
     return 1;
   }
 
+  // Test - Load first mesh
+  _Scene -> CompileMeshData();
+
+  _NbTriangles = _Scene -> GetNbFaces();
+  if ( _NbTriangles )
+  {
+    glPixelStorei(GL_PACK_ALIGNMENT, 1); // ???
+
+    glGenBuffers(1, &_VtxBufferID);
+    glBindBuffer(GL_TEXTURE_BUFFER, _VtxBufferID);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene -> GetVertices().size(), &_Scene -> GetVertices()[0], GL_STATIC_DRAW);
+    glGenTextures(1, &_VtxTextureID);
+    glBindTexture(GL_TEXTURE_BUFFER, _VtxTextureID);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _VtxBufferID);
+
+    glGenBuffers(1, &_VtxNormBufferID);
+    glBindBuffer(GL_TEXTURE_BUFFER, _VtxNormBufferID);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene -> GetNormals().size(), &_Scene -> GetNormals()[0], GL_STATIC_DRAW);
+    glGenTextures(1, &_VtxNormTextureID);
+    glBindTexture(GL_TEXTURE_BUFFER, _VtxNormTextureID);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _VtxNormBufferID);
+
+    if ( _Scene -> GetUVs().size() )
+    {
+      glGenBuffers(1, &_VtxUVBufferID);
+      glBindBuffer(GL_TEXTURE_BUFFER, _VtxUVBufferID);
+      glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec2) * _Scene -> GetUVs().size(), &_Scene -> GetUVs()[0], GL_STATIC_DRAW);
+      glGenTextures(1, &_VtxUVTextureID);
+      glBindTexture(GL_TEXTURE_BUFFER, _VtxUVTextureID);
+      glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32F, _VtxUVBufferID);
+    }
+
+    glGenBuffers(1, &_VtxIndBufferID);
+    glBindBuffer(GL_TEXTURE_BUFFER, _VtxIndBufferID);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3i) * _Scene -> GetIndices().size(), &_Scene -> GetIndices()[0], GL_STATIC_DRAW);
+    glGenTextures(1, &_VtxIndTextureID);
+    glBindTexture(GL_TEXTURE_BUFFER, _VtxIndTextureID);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32I, _VtxIndBufferID);
+  }
+
   const std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene -> GetPrimitiveInstances();
   for ( int i = 0; i < PrimitiveInstances.size(); ++i )
     _PrimitiveNames.push_back(new std::string(_Scene -> FindPrimitiveName(i)));
@@ -804,6 +863,14 @@ void Test3::RenderToTexture()
   glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, _SkyboxTextureID);
+  glActiveTexture(GL_TEXTURE2);
+  glBindTexture(GL_TEXTURE_BUFFER, _VtxTextureID);
+  glActiveTexture(GL_TEXTURE3);
+  glBindTexture(GL_TEXTURE_BUFFER, _VtxNormTextureID);
+  glActiveTexture(GL_TEXTURE4);
+  glBindTexture(GL_TEXTURE_BUFFER, _VtxUVTextureID);
+  glActiveTexture(GL_TEXTURE5);
+  glBindTexture(GL_TEXTURE_BUFFER, _VtxIndTextureID);
 
   _Quad -> Render(*_RTTShader);
 }

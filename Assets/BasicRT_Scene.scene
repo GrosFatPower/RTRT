@@ -64,6 +64,11 @@ material Yellow
 	roughness 0.001
 }
 
+material small_box_white
+{
+	color 0.725 0.71 0.68
+}
+
 sphere
 {
 	radius .5
@@ -107,4 +112,20 @@ plane
 	normal 0.0 1.0 0.0
 	material White
 	position 0.0 0.0 0.0
+}
+
+mesh
+{
+	file diningroom/book17.obj
+	material small_box_white
+	position .1855 .0835 .169
+	scale 1 1 1
+}
+
+mesh
+{
+	file cornell_box/cbox_smallbox.obj
+	material small_box_white
+	position -10 10 10
+	scale 0.1 0.1 0.1
 }

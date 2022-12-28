@@ -18,27 +18,32 @@ out vec4 fragColor;
 #define MAX_BOX_COUNT      32
 #define MAX_LIGHT_COUNT    32
 
-uniform vec2        u_Resolution;
-uniform float       u_Time;
-uniform float       u_Gamma;
-uniform int         u_FrameNum;
-uniform int         u_Accumulate;
-uniform int         u_Bounces;
-uniform vec3        u_BackgroundColor;
-uniform Camera      u_Camera;
-uniform SphereLight u_SphereLight;
-uniform int         u_NbMaterials;
-uniform Material    u_Materials[MAX_MATERIAL_COUNT];
-uniform int         u_NbSpheres;
-uniform Sphere      u_Spheres[MAX_SPHERE_COUNT];
-uniform int         u_NbPlanes;
-uniform Plane       u_Planes[MAX_PLANES_COUNT];
-uniform int         u_NbBoxes;
-uniform Box         u_Boxes[MAX_BOX_COUNT];
-uniform int         u_EnableSkybox;
-uniform float       u_SkyboxRotation;
-uniform sampler2D   u_SkyboxTexture;
-uniform sampler2D   u_ScreenTexture;
+uniform vec2           u_Resolution;
+uniform float          u_Time;
+uniform float          u_Gamma;
+uniform int            u_FrameNum;
+uniform int            u_Accumulate;
+uniform int            u_Bounces;
+uniform vec3           u_BackgroundColor;
+uniform Camera         u_Camera;
+uniform SphereLight    u_SphereLight;
+uniform int            u_NbMaterials;
+uniform Material       u_Materials[MAX_MATERIAL_COUNT];
+uniform int            u_NbSpheres;
+uniform Sphere         u_Spheres[MAX_SPHERE_COUNT];
+uniform int            u_NbPlanes;
+uniform Plane          u_Planes[MAX_PLANES_COUNT];
+uniform int            u_NbBoxes;
+uniform Box            u_Boxes[MAX_BOX_COUNT];
+uniform int            u_NbTriangles;
+uniform int            u_EnableSkybox;
+uniform float          u_SkyboxRotation;
+uniform sampler2D      u_SkyboxTexture;
+uniform sampler2D      u_ScreenTexture;
+uniform samplerBuffer  u_VtxTexture;
+uniform samplerBuffer  u_VtxNormTexture;
+uniform isamplerBuffer u_VtxUVTexture;
+uniform isamplerBuffer u_VtxIndTexture;
 
 // ----------
 // Ray tracing
@@ -93,6 +98,34 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
     }
   }
 
+  for ( int i = 0; i < u_NbTriangles; ++i )
+  {
+    ivec3 vInd0 = ivec3(texelFetch(u_VtxIndTexture, i*3).xyz);
+    ivec3 vInd1 = ivec3(texelFetch(u_VtxIndTexture, i*3+1).xyz);
+    ivec3 vInd2 = ivec3(texelFetch(u_VtxIndTexture, i*3+2).xyz);
+
+    vec3 v0 = texelFetch(u_VtxTexture, vInd0.x).xyz;
+    vec3 v1 = texelFetch(u_VtxTexture, vInd1.x).xyz;
+    vec3 v2 = texelFetch(u_VtxTexture, vInd2.x).xyz;
+
+    float hitDist = 0.f;
+    vec2 uv;
+    if ( TriangleIntersection(iRay, v0, v1, v2, hitDist, uv) )
+    {
+      if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
+      {
+        vec3 norm0 = texelFetch(u_VtxNormTexture, vInd0.y).xyz;
+        vec3 norm1 = texelFetch(u_VtxNormTexture, vInd1.y).xyz;
+        vec3 norm2 = texelFetch(u_VtxNormTexture, vInd2.y).xyz;
+
+        oClosestHit._Dist       = hitDist;
+        oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+        oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
+        oClosestHit._MaterialID = 0;
+      }
+    }
+  }
+
   if ( -1 == oClosestHit._Dist )
     return false;
 
@@ -133,6 +166,25 @@ bool AnyHit( Ray iRay, float iMaxDist )
   {
     float hitDist = 0.f;
     if ( BoxIntersection(u_Boxes[i]._Low, u_Boxes[i]._High, u_Boxes[i]._Transfom, iRay, hitDist) )
+    {
+      if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
+        return true;
+    }
+  }
+
+  for ( int i = 0; i < u_NbTriangles; ++i )
+  {
+    ivec3 vInd0 = ivec3(texelFetch(u_VtxIndTexture, i*3).xyz);
+    ivec3 vInd1 = ivec3(texelFetch(u_VtxIndTexture, i*3+1).xyz);
+    ivec3 vInd2 = ivec3(texelFetch(u_VtxIndTexture, i*3+2).xyz);
+
+    vec3 v0 = texelFetch(u_VtxTexture, vInd0.x).xyz;
+    vec3 v1 = texelFetch(u_VtxTexture, vInd1.x).xyz;
+    vec3 v2 = texelFetch(u_VtxTexture, vInd2.x).xyz;
+
+    float hitDist = 0.f;
+    vec2 uv;
+    if ( TriangleIntersection(iRay, v0, v1, v2, hitDist, uv) )
     {
       if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
         return true;

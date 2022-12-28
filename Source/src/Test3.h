@@ -59,6 +59,14 @@ private:
   GLuint          _FrameBufferID   = 0;
   GLuint          _ScreenTextureID = 0;
   GLuint          _SkyboxTextureID = 0;
+  GLuint          _VtxBufferID     = 0;
+  GLuint          _VtxNormBufferID = 0;
+  GLuint          _VtxUVBufferID   = 0;
+  GLuint          _VtxIndBufferID  = 0;
+  GLuint          _VtxTextureID    = 0;
+  GLuint          _VtxNormTextureID = 0;
+  GLuint          _VtxUVTextureID  = 0;
+  GLuint          _VtxIndTextureID = 0;
 
   long            _FrameNum          = 0;
   int             _AccumulatedFrames = 0;
@@ -91,6 +99,7 @@ private:
 
   std::vector<std::string *> _PrimitiveNames;
   int                        _SelectedPrimitive = 0;
+  int                        _NbTriangles = 0;
 };
 
 }

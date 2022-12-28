@@ -211,4 +211,64 @@ int Scene::AddPrimitiveInstance( int iPrimitiveID, int iMaterialID, const Mat4x4
   return -1;
 }
 
+void Scene::CompileMeshData()
+{
+  _NbFaces = 0;
+  _Vertices.clear();
+  _Normals.clear();
+  _UVs.clear();
+  _Indices.clear();
+
+  int vtxIndexOffset  = 0;
+  int normIndexOffset = 0;
+  int uvIndexOffset   = 0;
+  for ( auto meshInst : _MeshInstances )
+  {
+    Mesh * curMesh = _Meshes[meshInst._MeshID];
+    if ( !curMesh || !curMesh -> GetNbFaces() )
+      continue;
+
+    const std::vector<Vec3>  & curVertices = curMesh -> GetVertices();
+    const std::vector<Vec3>  & curNormals  = curMesh -> GetNormals();
+    const std::vector<Vec2>  & curUVs      = curMesh -> GetUVs();
+    const std::vector<Vec3i> & curIndices  = curMesh -> GetIndices();
+
+    std::vector<Vec3> transformedVertices;
+    std::vector<Vec3> transformedNormals;
+    std::vector<Vec3i> offsetIdx;
+    transformedVertices.resize(curVertices.size());
+    transformedNormals.resize(curNormals.size());
+    offsetIdx.resize(curIndices.size());
+
+    for ( int i = 0; i < curVertices.size(); ++i )
+    {
+      Vec4 transformedVtx = meshInst._Transform * Vec4(curVertices[i], 1.f);
+      transformedVertices[i] = { transformedVtx[0], transformedVtx[1], transformedVtx[2] };
+    }
+
+    Mat4x4 trInvTransfo = glm::transpose(glm::inverse(meshInst._Transform));
+    for ( int i = 0; i < curNormals.size(); ++i )
+    {
+      Vec4 transformedNormal = trInvTransfo * Vec4(curNormals[i], 1.f);
+      transformedNormals[i] = { transformedNormal[0], transformedNormal[1], transformedNormal[2] };
+    }
+
+    for ( int i = 0; i < curIndices.size(); ++i )
+    {
+      offsetIdx[i] = { curIndices[i].x + vtxIndexOffset, curIndices[i].y + normIndexOffset, curIndices[i].z + uvIndexOffset };
+    }
+
+    _Vertices.insert(std::end(_Vertices), std::begin(transformedVertices), std::end(transformedVertices));
+    _Normals.insert(std::end(_Normals), std::begin(transformedNormals), std::end(transformedNormals));
+    _UVs.insert(std::end(_UVs), std::begin(curUVs), std::end(curUVs));
+    _Indices.insert(std::end(_Indices), std::begin(offsetIdx), std::end(offsetIdx));
+
+    vtxIndexOffset  += curVertices.size();
+    normIndexOffset += curNormals.size();
+    uvIndexOffset   += curUVs.size();
+  }
+
+  _NbFaces = _Indices.size() / 3;
+}
+
 }

@@ -75,21 +75,24 @@ bool Mesh::Load( const std::string & iFilename )
     size_t index_offset = 0;
     for ( size_t f = 0; f < shape.mesh.num_face_vertices.size(); ++f )
     {
-      for ( size_t v = 0; v < 3; ++v )
+      if ( shape.mesh.num_face_vertices[f] == 3 ) // triangles only
       {
-        tinyobj::index_t idx = shape.mesh.indices[index_offset + v];
+        for ( size_t v = 0; v < 3; ++v )
+        {
+          tinyobj::index_t idx = shape.mesh.indices[index_offset + v];
 
-        Vec3i indices;
-        indices.x = idx.vertex_index;
-        indices.y = idx.normal_index;
-        indices.z = idx.texcoord_index;
+          Vec3i indices;
+          indices.x = idx.vertex_index;
+          indices.y = idx.normal_index;
+          indices.z = idx.texcoord_index;
 
-        _Indices.push_back(indices);
+          _Indices.push_back(indices);
+        }
       }
-      index_offset += 3;
+      index_offset += shape.mesh.num_face_vertices[f];
+      _NbFaces++;
     }
   }
-  _NbFaces = (int) _Indices.size();
 
   return true;
 }

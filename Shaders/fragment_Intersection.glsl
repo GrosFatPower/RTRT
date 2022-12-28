@@ -151,7 +151,7 @@ bool TriangleIntersection( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oHi
 }
 
 // https://www.scratchapixel.com/lessons/3d-basic-rendering/ray-tracing-rendering-a-triangle/barycentric-coordinates
-bool rayTriangleIntersect2( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oHitDistance, out vec2 oUV )
+bool TriangleIntersection2( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oHitDistance, out vec2 oUV )
 { 
   vec3 v0v1 = iV1 - iV0;
   vec3 v0v2 = iV2 - iV0;

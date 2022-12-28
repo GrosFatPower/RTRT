@@ -45,6 +45,8 @@ public:
 
   std::string FindPrimitiveName( int iPrimitiveInstanceID ) const;
 
+  void CompileMeshData();
+
   int GetNbLights()          { return _Lights.size();          }
   int GetNbMaterials()       { return _Materials.size();       }
   int GetNbTextures()        { return _Textures.size();        }
@@ -59,6 +61,12 @@ public:
   std::vector<Mesh*>             & GetMeshes()             { return _Meshes;             }
   std::vector<Primitive*>        & GetPrimitives()         { return _Primitives;         }
 
+  int GetNbFaces() const { return _NbFaces; }
+  const std::vector<Vec3>  & GetVertices() const { return _Vertices; }
+  const std::vector<Vec3>  & GetNormals()  const { return _Normals;  }
+  const std::vector<Vec2>  & GetUVs()      const { return _UVs;      }
+  const std::vector<Vec3i> & GetIndices()  const { return _Indices;  }
+
 private:
 
   Camera                         _Camera;
@@ -72,6 +80,12 @@ private:
   std::vector<Texture*>          _Textures;
   std::vector<Mesh*>             _Meshes;
   std::vector<Primitive*>        _Primitives;
+
+  int                            _NbFaces = 0;
+  std::vector<Vec3>              _Vertices;
+  std::vector<Vec3>              _Normals;
+  std::vector<Vec2>              _UVs;
+  std::vector<Vec3i>             _Indices;
 };
 
 }
