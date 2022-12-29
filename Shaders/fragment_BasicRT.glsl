@@ -44,6 +44,8 @@ uniform samplerBuffer  u_VtxTexture;
 uniform samplerBuffer  u_VtxNormTexture;
 uniform samplerBuffer  u_VtxUVTexture;
 uniform isamplerBuffer u_VtxIndTexture;
+uniform isamplerBuffer u_TexIndTexture;
+uniform sampler2DArray u_TexArrayTexture;
 
 // ----------
 // Ray tracing
@@ -125,7 +127,7 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
         oClosestHit._Dist       = hitDist;
         oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
         oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
-        oClosestHit._UV.xy      = uv;
+        oClosestHit._UV         = ( 1 - uv.x - uv.y ) * uvMatID0.xy + uv.x * uvMatID1.xy + uv.y * uvMatID2.xy;
         oClosestHit._MaterialID = int(uvMatID0.z);
       }
     }
@@ -275,6 +277,15 @@ vec3 F( vec3 iF0, vec3 iV, vec3 iH )
 // https://www.youtube.com/watch?v=RRE-F57fbXw&list=WL&index=109
 vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuation )
 {
+  // TMP : texturing test
+  //if ( u_Materials[iClosestHit._MaterialID]._BaseColorTexID >= 0 )
+  //{
+  //  int texArrayID = texelFetch(u_TexIndTexture, u_Materials[iClosestHit._MaterialID]._BaseColorTexID).x;
+  //  if ( texArrayID >= 0 )
+  //    return texture(u_TexArrayTexture, vec3(iClosestHit._UV, texArrayID)).rgb;
+  //}
+  // TMP END
+
   double cosTheta = dot(-iRay._Dir, iClosestHit._Normal);
 
   vec3 outColor = u_Materials[iClosestHit._MaterialID]._Emission;
@@ -302,7 +313,14 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuat
       vec3 Ks = F(F0, V, H);
       vec3 Kd = ( vec3(1.f) - Ks ) * ( 1.f - u_Materials[iClosestHit._MaterialID]._Metallic );
 
-      vec3 lambert = u_Materials[iClosestHit._MaterialID]._Albedo * INV_PI;
+      vec3 lambert = u_Materials[iClosestHit._MaterialID]._Albedo;
+      if ( u_Materials[iClosestHit._MaterialID]._BaseColorTexID >= 0 )
+      {
+        int texArrayID = texelFetch(u_TexIndTexture, u_Materials[iClosestHit._MaterialID]._BaseColorTexID).x;
+        if ( texArrayID >= 0 )
+          lambert = texture(u_TexArrayTexture, vec3(iClosestHit._UV, texArrayID)).rgb;
+      }
+      lambert *= INV_PI;
 
       vec3 cookTorranceNum = D(alpha, N, H) * G(alpha, N, V, L) * F(F0, V, H);   // DGF
       float cookTorranceDenom = 4.f * max(dot(V, N), 0.f) * max(dot(L, N), 0.f); // 4(V.N)(L.N)

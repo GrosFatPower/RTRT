@@ -21,98 +21,118 @@ light
 	radius .5
 }
 
-material Green
+#material Green
+#{
+#	color .1 .8 .1 
+#	metallic 0.4
+#	roughness 0.01
+#}
+
+#material Red
+#{
+#	color .8 .1 .1
+#	metallic 0.7
+#	roughness 0.05
+#	emission .2 .0 .0
+#}
+
+#material Blue
+#{
+#	color .4 .4 .8
+#	metallic 0.3
+#	roughness 0.1
+#}
+
+#material White
+#{
+#	color .8 .8 .8
+#	metallic 0.4
+#	roughness 0.05
+#}
+
+#material Orange
+#{
+#	color .8 .4 .0
+#	metallic 0.3
+#	roughness 0.2
+#}
+
+#material Yellow
+#{
+#	color .8 .8 .0
+#	metallic 0.7
+#	roughness 0.001
+#}
+
+#material small_box_white
+#{
+#	color 0.725 0.71 0.68
+#}
+
+material Book1
 {
-	color .1 .8 .1 
-	metallic 0.4
-	roughness 0.01
+	albedotexture diningroom/textures/book1.jpg
 }
 
-material Red
-{
-	color .8 .1 .1
-	metallic 0.7
-	roughness 0.05
-	emission .2 .0 .0
-}
+#material Book2
+#{
+#	albedotexture diningroom/textures/book2.jpg
+#}
 
-material Blue
-{
-	color .4 .4 .8
-	metallic 0.3
-	roughness 0.1
-}
+#material Book3
+#{
+#	albedotexture diningroom/textures/book3.jpg
+#}
 
-material White
-{
-	color .8 .8 .8
-	metallic 0.4
-	roughness 0.05
-}
+#material Book4
+#{
+#	albedotexture diningroom/textures/book4.jpg
+#}
 
-material Orange
-{
-	color .8 .4 .0
-	metallic 0.3
-	roughness 0.2
-}
+#sphere
+#{
+#	radius .5
+#	material Green
+#	position 0.0 0.0 0.0
+#}
 
-material Yellow
-{
-	color .8 .8 .0
-	metallic 0.7
-	roughness 0.001
-}
+#sphere
+#{
+#	radius 1.0
+#	material Orange
+#	position 2.0 2.0 -3.0
+#}
 
-material small_box_white
-{
-	color 0.725 0.71 0.68
-}
+#sphere
+#{
+#	radius 2.0
+#	material Blue
+#	position -5.0 3.0 4.0
+#}
 
-sphere
-{
-	radius .5
-	material Green
-	position 0.0 0.0 0.0
-}
+#box
+#{
+#	low -1.0 -1.0 -1.0
+#	hight 1.0 1.0 1.0
+#	material Yellow
+#	position -3.0 1.0 -2.0
+#}
 
-sphere
-{
-	radius 1.0
-	material Orange
-	position 2.0 2.0 -3.0
-}
+#box
+#{
+#	low -1.0 -2.0 -1.0
+#	hight 1.0 2.0 1.0
+#	material Red
+#	position 4.0 1.5 2.0
+#}
 
-sphere
-{
-	radius 2.0
-	material Blue
-	position -5.0 3.0 4.0
-}
-
-box
-{
-	low -1.0 -1.0 -1.0
-	hight 1.0 1.0 1.0
-	material Yellow
-	position -3.0 1.0 -2.0
-}
-
-box
-{
-	low -1.0 -2.0 -1.0
-	hight 1.0 2.0 1.0
-	material Red
-	position 4.0 1.5 2.0
-}
-
-plane
-{
-	origin 0.0 -0.5 0.0
-	normal 0.0 1.0 0.0
-	material White
-	position 0.0 0.0 0.0
-}
+#plane
+#{
+#	origin 0.0 -0.5 0.0
+#	normal 0.0 1.0 0.0
+#	material White
+#	position 0.0 0.0 0.0
+#}
 
 #mesh
 #{
@@ -122,10 +142,34 @@ plane
 #	scale 1 1 1
 #}
 
+#mesh
+#{
+#	file cornell_box/cbox_smallbox.obj
+#	material small_box_white
+#	position 5 3 5
+#	scale 0.1 0.1 0.1
+#}
+
 mesh
 {
-	file cornell_box/cbox_smallbox.obj
-	material small_box_white
-	position 5 3 5
-	scale 0.1 0.1 0.1
+	file diningroom/book1.obj
+	material Book1
 }
+
+#mesh
+#{
+#	file diningroom/book2.obj
+#	material Book2
+#}
+
+#mesh
+#{
+#	file diningroom/book3.obj
+#	material Book3
+#}
+
+#mesh
+#{
+#	file diningroom/book4.obj
+#	material Book4
+#}

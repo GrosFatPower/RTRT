@@ -11,6 +11,7 @@ struct Ray
 struct Material
 {
   int   _ID;
+  int   _BaseColorTexID;
   vec3  _Albedo;
   vec3  _Emission;
   vec3  _Reflectance;

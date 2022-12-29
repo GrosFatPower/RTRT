@@ -142,13 +142,16 @@ Test3::~Test3()
   glDeleteBuffers(1, &_VtxNormBufferID);
   glDeleteBuffers(1, &_VtxUVBufferID);
   glDeleteBuffers(1, &_VtxIndBufferID);
+  glDeleteBuffers(1, &_TexIndBufferID);
 
   glDeleteTextures(1, &_ScreenTextureID);
   glDeleteTextures(1, &_VtxTextureID);
   glDeleteTextures(1, &_VtxNormTextureID);
   glDeleteTextures(1, &_VtxUVTextureID);
   glDeleteTextures(1, &_VtxIndTextureID);
-
+  glDeleteTextures(1, &_TexIndTextureID);
+  glDeleteTextures(1, &_TexArrayTextureID);
+  
   if (_Quad)
     delete _Quad;
   _Quad = nullptr;
@@ -279,13 +282,14 @@ int Test3::UpdateUniforms()
         {
           const Material & curMat = Materials[i];
 
-          glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_ID"       ).c_str()), i);
-          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Albedo"   ).c_str()), curMat._Albedo.r, curMat._Albedo.g, curMat._Albedo.b);
-          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Emission" ).c_str()), curMat._Emission.r, curMat._Emission.g, curMat._Emission.b);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Metallic" ).c_str()), curMat._Metallic);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Roughness").c_str()), curMat._Roughness);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_IOR"      ).c_str()), curMat._IOR);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Opacity"  ).c_str()), curMat._Opacity);
+          glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_ID"             ).c_str()), i);
+          glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_BaseColorTexID" ).c_str()), (int)curMat._BaseColorTexId );
+          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Albedo"         ).c_str()), curMat._Albedo.r, curMat._Albedo.g, curMat._Albedo.b);
+          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Emission"       ).c_str()), curMat._Emission.r, curMat._Emission.g, curMat._Emission.b);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Metallic"       ).c_str()), curMat._Metallic);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Roughness"      ).c_str()), curMat._Roughness);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_IOR"            ).c_str()), curMat._IOR);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Opacity"        ).c_str()), curMat._Opacity);
         }
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbMaterials"), nbMaterials);
 
@@ -344,10 +348,12 @@ int Test3::UpdateUniforms()
           }
         }
 
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxTexture"),     2);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxNormTexture"), 3);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxUVTexture"),   4);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxIndTexture"),  5);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxTexture"),      2);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxNormTexture"),  3);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxUVTexture"),    4);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxIndTexture"),   5);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexIndTexture"),   6);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexArrayTexture"), 7);
 
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbSpheres"), nbSpheres);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbPlanes"), nbPlanes);
@@ -698,7 +704,7 @@ int Test3::InitializeScene()
   if ( _Scene )
     delete _Scene;
 
-  std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
+  std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene.scene";
 
   //_Scene = new Scene();
   if ( !Loader::LoadScene(sceneFile, _Scene, _Settings) || !_Scene )
@@ -707,8 +713,16 @@ int Test3::InitializeScene()
     return 1;
   }
 
+  // Scene should contain at least one light
+  Light * firstLight = _Scene -> GetLight(0);
+  if ( !firstLight )
+  {
+    Light newLight;
+    _Scene -> AddLight(newLight);
+  }
+
   // Test - Load first mesh
-  _Scene -> CompileMeshData();
+  _Scene -> CompileMeshData( _Settings._TextureSize );
 
   _NbTriangles = _Scene -> GetNbFaces();
   if ( _NbTriangles )
@@ -745,6 +759,23 @@ int Test3::InitializeScene()
     glGenTextures(1, &_VtxIndTextureID);
     glBindTexture(GL_TEXTURE_BUFFER, _VtxIndTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32I, _VtxIndBufferID);
+
+    if ( _Scene -> GetTextureArrayIDs().size() )
+    {
+      glGenBuffers(1, &_TexIndBufferID);
+      glBindBuffer(GL_TEXTURE_BUFFER, _TexIndBufferID);
+      glBufferData(GL_TEXTURE_BUFFER, sizeof(int) * _Scene -> GetTextureArrayIDs().size(), &_Scene -> GetTextureArrayIDs()[0], GL_STATIC_DRAW);
+      glGenTextures(1, &_TexIndTextureID);
+      glBindTexture(GL_TEXTURE_BUFFER, _TexIndTextureID);
+      glTexBuffer(GL_TEXTURE_BUFFER, GL_R32I, _TexIndBufferID);
+
+      glGenTextures(1, &_TexArrayTextureID);
+      glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTextureID);
+      glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, _Settings._TextureSize.x, _Settings._TextureSize.y, _Scene -> GetNbCompiledTex(), 0, GL_RGBA, GL_UNSIGNED_BYTE, &_Scene -> GetTextureArray()[0]);
+      glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    }
   }
 
   const std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene -> GetPrimitiveInstances();
@@ -871,7 +902,11 @@ void Test3::RenderToTexture()
   glBindTexture(GL_TEXTURE_BUFFER, _VtxUVTextureID);
   glActiveTexture(GL_TEXTURE5);
   glBindTexture(GL_TEXTURE_BUFFER, _VtxIndTextureID);
-
+  glActiveTexture(GL_TEXTURE6);
+  glBindTexture(GL_TEXTURE_BUFFER, _TexIndTextureID);
+  glActiveTexture(GL_TEXTURE7);
+  glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTextureID);
+  
   _Quad -> Render(*_RTTShader);
 }
 

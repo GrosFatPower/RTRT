@@ -45,8 +45,6 @@ public:
 
   std::string FindPrimitiveName( int iPrimitiveInstanceID ) const;
 
-  void CompileMeshData();
-
   int GetNbLights()          { return _Lights.size();          }
   int GetNbMaterials()       { return _Materials.size();       }
   int GetNbTextures()        { return _Textures.size();        }
@@ -61,11 +59,16 @@ public:
   std::vector<Mesh*>             & GetMeshes()             { return _Meshes;             }
   std::vector<Primitive*>        & GetPrimitives()         { return _Primitives;         }
 
+  // Compiled data
+  void CompileMeshData( Vec2i iTextureSize );
   int GetNbFaces() const { return _NbFaces; }
-  const std::vector<Vec3>  & GetVertices() const { return _Vertices; }
-  const std::vector<Vec3>  & GetNormals()  const { return _Normals;  }
-  const std::vector<Vec3>  & GetUVMatID()  const { return _UVMatID;  }
-  const std::vector<Vec3i> & GetIndices()  const { return _Indices;  }
+  int GetNbCompiledTex() const { return _NbCompiledTex; }
+  const std::vector<Vec3>          & GetVertices()        const { return _Vertices;        }
+  const std::vector<Vec3>          & GetNormals()         const { return _Normals;         }
+  const std::vector<Vec3>          & GetUVMatID()         const { return _UVMatID;         }
+  const std::vector<Vec3i>         & GetIndices()         const { return _Indices;         }
+  const std::vector<int>           & GetTextureArrayIDs() const { return _TextureArrayIDs; }
+  const std::vector<unsigned char> & GetTextureArray()    const { return _TextureArray;    }
 
 private:
 
@@ -81,11 +84,15 @@ private:
   std::vector<Mesh*>             _Meshes;
   std::vector<Primitive*>        _Primitives;
 
+  // Compiled data
   int                            _NbFaces = 0;
   std::vector<Vec3>              _Vertices;
   std::vector<Vec3>              _Normals;
   std::vector<Vec3>              _UVMatID;
   std::vector<Vec3i>             _Indices;
+  int                            _NbCompiledTex = 0;
+  std::vector<int>               _TextureArrayIDs;
+  std::vector<unsigned char>     _TextureArray;
 };
 
 }
