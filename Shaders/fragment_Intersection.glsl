@@ -195,3 +195,44 @@ bool TriangleIntersection2( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oH
  
   return true;  //this ray hits the triangle 
 }
+
+// https://www.mathematik.uni-marburg.de/~thormae/lectures/graphics2/graphics_2_2_eng_web.html#1
+bool TriangleIntersection3( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oHitDistance, out vec2 oUV )
+{ 
+  vec3 i = iV1 - iV0;
+  vec3 j = iV2 - iV0;
+  vec3 k = iRay._Orig - iV0;
+  vec3 r = iRay._Dir;
+  
+  // implementing ray/triangle intersection according to
+  // the lecture slides by computing
+  // (t, u, v) = (1 / (r x j) * i) ((k x i) * j, (r x j) *k, (k x i) * r)
+  vec3 rxj = cross(r, j);
+  float rxji = dot(rxj, i);
+  
+  // denominator close to zero?
+  if (abs(rxji) < EPSILON) return false;
+  
+  float f = 1.0f / rxji;
+  
+  // compute u
+  float u = dot(rxj, k) * f;
+  if (u < 0.0f || u > 1.0f) return false;
+  
+  // compute v
+  vec3 kxi = cross(k, i);
+  float v =  dot(kxi, r) * f;
+  if (v < 0.0 || v > 1.0) return false;
+  if(u + v > 1.0) return false;
+  
+  // compute t
+  float t =  dot(kxi, j) * f;
+
+  if ( t < 0. ) return false;
+
+  oHitDistance = t;
+  oUV.x = u;
+  oUV.y = v;
+
+  return true;
+}

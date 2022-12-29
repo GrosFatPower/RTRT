@@ -127,7 +127,7 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
         oClosestHit._Dist       = hitDist;
         oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
         oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
-        oClosestHit._UV         = ( 1 - uv.x - uv.y ) * uvMatID0.xy + uv.x * uvMatID1.xy + uv.y * uvMatID2.xy;
+        oClosestHit._UV         = uvMatID0.xy * ( 1 - uv.x - uv.y ) + uvMatID1.xy * uv.x + uvMatID2.xy * uv.y;
         oClosestHit._MaterialID = int(uvMatID0.z);
       }
     }
@@ -214,29 +214,6 @@ vec3 SampleSkybox( vec3 iRayDir )
   return skycolor;
 }
 
-vec3 ComputeColor( HitPoint iClosestHit )
-{
-  vec3 lightDir = u_SphereLight._Pos - iClosestHit._Pos;
-  float lightDist = length(lightDir);
-
-  lightDir = normalize(lightDir);
-    
-  vec3 lightIntensity = vec3(0.f, 0.f, 0.f);
-  if ( lightDist < u_SphereLight._Radius )
-  {
-    Ray occlusionRay;
-    occlusionRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
-    occlusionRay._Dir = lightDir;
-
-    if ( !AnyHit(occlusionRay, lightDist) )
-      lightIntensity = max(dot(iClosestHit._Normal, lightDir), 0.0f) * u_SphereLight._Emission;
-  }
-
-  vec3 pixelColor = u_Materials[iClosestHit._MaterialID]._Albedo * lightIntensity;
-
-  return pixelColor;
-}
-
 // GGX/Trowbridge-Reitz Normal Distribution Function
 float D( float iAlpha, vec3 iN, vec3 iH )
 {
@@ -273,19 +250,18 @@ vec3 F( vec3 iF0, vec3 iV, vec3 iH )
   return iF0 + (vec3(1.f) - iF0) * pow(1.f - max(dot(iV, iH), 0.f), 5.f);
 }
 
+vec3 pattern( vec2 uv )
+{
+    vec3 col = vec3(0.6);
+    col += 0.4*smoothstep(-0.01,0.01,cos(uv.x*0.5)*cos(uv.y*0.5)); 
+    col *= smoothstep(-1.0,-0.98,cos(uv.x))*smoothstep(-1.0,-0.98,cos(uv.y));
+    return col;
+}
+
 // Computer Graphics Tutorial - PBR (Physically Based Rendering)
 // https://www.youtube.com/watch?v=RRE-F57fbXw&list=WL&index=109
 vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuation )
 {
-  // TMP : texturing test
-  //if ( u_Materials[iClosestHit._MaterialID]._BaseColorTexID >= 0 )
-  //{
-  //  int texArrayID = texelFetch(u_TexIndTexture, u_Materials[iClosestHit._MaterialID]._BaseColorTexID).x;
-  //  if ( texArrayID >= 0 )
-  //    return texture(u_TexArrayTexture, vec3(iClosestHit._UV, texArrayID)).rgb;
-  //}
-  // TMP END
-
   double cosTheta = dot(-iRay._Dir, iClosestHit._Normal);
 
   vec3 outColor = u_Materials[iClosestHit._MaterialID]._Emission;
@@ -364,6 +340,41 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuat
   return clamp(outColor, 0.f, 1.f);
 }
 
+vec3 ComputeColor( HitPoint iClosestHit )
+{
+  vec3 lightDir = u_SphereLight._Pos - iClosestHit._Pos;
+  float lightDist = length(lightDir);
+
+  lightDir = normalize(lightDir);
+    
+  vec3 lightIntensity = vec3(0.f, 0.f, 0.f);
+  if ( lightDist < u_SphereLight._Radius )
+  {
+    Ray occlusionRay;
+    occlusionRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
+    occlusionRay._Dir = lightDir;
+
+    if ( !AnyHit(occlusionRay, lightDist) )
+      lightIntensity = max(dot(iClosestHit._Normal, lightDir), 0.0f) * u_SphereLight._Emission;
+  }
+
+  vec3 pixelColor = u_Materials[iClosestHit._MaterialID]._Albedo * lightIntensity;
+
+  return pixelColor;
+}
+
+vec3 Albedo( HitPoint iClosestHit )
+{
+  if ( u_Materials[iClosestHit._MaterialID]._BaseColorTexID >= 0 )
+  {
+    int texArrayID = texelFetch(u_TexIndTexture, u_Materials[iClosestHit._MaterialID]._BaseColorTexID).x;
+    if ( texArrayID >= 0 )
+      return texture(u_TexArrayTexture, vec3(iClosestHit._UV, float(texArrayID))).rgb;
+  }
+
+  return u_Materials[iClosestHit._MaterialID]._Albedo;
+}
+
 // ----------
 // MAIN
 // ----------
@@ -414,11 +425,15 @@ void main()
     //ray._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
     //ray._Dir = reflect(ray._Dir, closestHit._Normal + u_Materials[closestHit._MaterialID]._Roughness * RandomVector() );
 
-    Ray scattered;
-    vec3 attenuation;
-    pixelColor += PBR(ray, closestHit, scattered, attenuation) * multiplier;
-    ray = scattered;
-    multiplier *= attenuation;
+    //Ray scattered;
+    //vec3 attenuation;
+    //pixelColor += PBR(ray, closestHit, scattered, attenuation) * multiplier;
+    //ray = scattered;
+    //multiplier *= attenuation;
+
+    // TMP : Texture mapping
+    pixelColor = Albedo(closestHit);
+    break;
   }
 
   // Apply gamma correction

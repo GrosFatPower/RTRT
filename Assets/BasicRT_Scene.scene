@@ -3,7 +3,7 @@ renderer
 	resolution 1920 1080
 	enablebackground true
 	#background skyboxes/alps_field_2k.hdr
-	bounces 5
+	bounces 1
 }
 
 camera
@@ -69,6 +69,11 @@ light
 #	color 0.725 0.71 0.68
 #}
 
+material textured_box
+{
+	albedotexture misc/textures/box.jpg
+}
+
 material Book1
 {
 	albedotexture diningroom/textures/book1.jpg
@@ -133,6 +138,12 @@ material Book1
 #	material White
 #	position 0.0 0.0 0.0
 #}
+
+mesh
+{
+	file misc/TexturedBox.obj
+	material textured_box
+}
 
 #mesh
 #{

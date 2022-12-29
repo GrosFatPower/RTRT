@@ -58,7 +58,7 @@ bool Mesh::Load( const std::string & iFilename )
     _Normals.push_back(normal);
   }
 
-  size_t nbUVs = attrib.texcoords.size() / 3;
+  size_t nbUVs = attrib.texcoords.size() / 2;
   for ( unsigned int i = 0; i < nbUVs; ++i )
   {
     Vec2 uv;
