@@ -442,8 +442,10 @@ int Test3::DrawUI()
 
       if ( _Settings._AutoScale )
       {
-        if ( ImGui::SliderFloat("Target FPS", &_Settings._TargetFPS, 1, 200) )
+        int targetFrameRate = _Settings._TargetFPS;
+        if ( ImGui::SliderInt("Target FPS", &targetFrameRate, 1, 200) )
         {
+          _Settings._TargetFPS = (float)targetFrameRate;
           _RenderSettingsModified = true;
         }
 
