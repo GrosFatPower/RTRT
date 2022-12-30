@@ -434,6 +434,21 @@ int Test3::DrawUI()
 
         _RenderSettingsModified = true;
       }
+      ImGui::SameLine();
+      if ( ImGui::Checkbox("Auto", &_Settings._AutoScale) )
+      {
+        _RenderSettingsModified = true;
+      }
+
+      if ( _Settings._AutoScale )
+      {
+        if ( ImGui::SliderFloat("Target FPS", &_Settings._TargetFPS, 1, 200) )
+        {
+          _RenderSettingsModified = true;
+        }
+
+        this -> AdjustRenderScale();
+      }
 
       if ( ImGui::SliderFloat("Gamma", &_Settings._Gamma, .5f, 3.f) )
         _RenderSettingsModified = true;
@@ -445,7 +460,7 @@ int Test3::DrawUI()
         _RenderSettingsModified = true;
 
       float rgb[3] = { _Settings._BackgroundColor.r, _Settings._BackgroundColor.g, _Settings._BackgroundColor.b };
-      if ( ImGui::ColorPicker3("Background", rgb) )
+      if ( ImGui::ColorEdit3("Background", rgb) )
       {
         _Settings._BackgroundColor = { rgb[0], rgb[1], rgb[2] };
         _RenderSettingsModified = true;
@@ -484,7 +499,7 @@ int Test3::DrawUI()
         }
 
         float rgb[3] = { firstLight -> _Emission.r, firstLight -> _Emission.g, firstLight -> _Emission.b };
-        if ( ImGui::ColorPicker3("Emission", rgb) )
+        if ( ImGui::ColorEdit3("Emission", rgb) )
         {
           firstLight -> _Emission.r = rgb[0];
           firstLight -> _Emission.g = rgb[1];
@@ -509,7 +524,7 @@ int Test3::DrawUI()
         float rgb[3] = { curMat._Albedo.r, curMat._Albedo.g, curMat._Albedo.b };
         ImGui::Text(_Scene -> FindMaterialName(i).c_str());
         ImGui::SameLine();
-        if ( ImGui::ColorPicker3(std::string("##MatAlbedo").append(std::to_string(i)).c_str(), rgb) )
+        if ( ImGui::ColorEdit3(std::string("##MatAlbedo").append(std::to_string(i)).c_str(), rgb) )
         {
           curMat._Albedo.r = rgb[0];
           curMat._Albedo.g = rgb[1];
@@ -531,11 +546,11 @@ int Test3::DrawUI()
       }
     }
 
-    if ( ImGui::CollapsingHeader("Primitives") )
+    if ( _PrimitiveNames.size() && ImGui::CollapsingHeader("Primitives") )
     {
       std::vector<Primitive*>        & Primitives         = _Scene -> GetPrimitives();
       std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene -> GetPrimitiveInstances();
-      std::vector<Material>       & Materials       = _Scene -> GetMaterials();
+      std::vector<Material>          & Materials          = _Scene -> GetMaterials();
 
       int nbMaterial = Materials.size();
 
@@ -697,6 +712,40 @@ int Test3::UpdateCPUTime()
     _FrameRate = 1. / (float)_AverageDelta;
 
   return 0;
+}
+
+void Test3::AdjustRenderScale()
+{
+  if ( !_Settings._AutoScale )
+    return;
+  if ( _LastDeltas.size() < 10 )
+    return;
+
+  int newScale = _Settings._RenderScale;
+
+  float diff = _FrameRate - _Settings._TargetFPS;
+  if ( abs(diff) > ( _Settings._TargetFPS * .05f ) )
+  {
+    if ( diff < -10.f )
+      newScale -= std::min((int)floor(abs(diff)), 25);
+    else if ( ( abs(diff) > 3.f ) && ( _LastDeltas.size() >= 20 ) )
+      newScale += MathUtil::Sign(diff) * floor(diff);
+    else
+      newScale += MathUtil::Sign(diff) * 1;
+
+    newScale = MathUtil::Clamp(newScale, 25, 200);
+  }
+
+  if ( newScale != _Settings._RenderScale )
+  {
+    _Settings._RenderScale = newScale;
+    _LastDeltas.clear();
+    _RenderSettingsModified = true;
+
+    glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
 }
 
 int Test3::InitializeScene()

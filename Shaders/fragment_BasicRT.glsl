@@ -8,6 +8,9 @@ out vec4 fragColor;
 #include RNG.glsl
 #include fragment_Intersection.glsl
 
+#define PBR_RENDERING
+//#define DIRECT_ILLUMINATION
+
 // ----------
 // Uniforms
 // ----------
@@ -348,17 +351,22 @@ vec3 ComputeColor( HitPoint iClosestHit )
   lightDir = normalize(lightDir);
     
   vec3 lightIntensity = vec3(0.f, 0.f, 0.f);
-  if ( lightDist < u_SphereLight._Radius )
+
+  Ray occlusionRay;
+  occlusionRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
+  occlusionRay._Dir = lightDir;
+
+  if ( !AnyHit(occlusionRay, lightDist) )
+    lightIntensity = max(dot(iClosestHit._Normal, lightDir), 0.0f) * u_SphereLight._Emission;
+
+  vec3 pixelColor = u_Materials[iClosestHit._MaterialID]._Albedo;
+  if ( u_Materials[iClosestHit._MaterialID]._BaseColorTexID >= 0 )
   {
-    Ray occlusionRay;
-    occlusionRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
-    occlusionRay._Dir = lightDir;
-
-    if ( !AnyHit(occlusionRay, lightDist) )
-      lightIntensity = max(dot(iClosestHit._Normal, lightDir), 0.0f) * u_SphereLight._Emission;
+    int texArrayID = texelFetch(u_TexIndTexture, u_Materials[iClosestHit._MaterialID]._BaseColorTexID).x;
+    if ( texArrayID >= 0 )
+      pixelColor = texture(u_TexArrayTexture, vec3(iClosestHit._UV, float(texArrayID))).rgb;
   }
-
-  vec3 pixelColor = u_Materials[iClosestHit._MaterialID]._Albedo * lightIntensity;
+  pixelColor *= lightIntensity;
 
   return pixelColor;
 }
@@ -420,20 +428,23 @@ void main()
       break;
     }
 
-    //pixelColor += ComputeColor(closestHit) * multiplier;
-    //multiplier *= u_Materials[closestHit._MaterialID]._Metallic;
-    //ray._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
-    //ray._Dir = reflect(ray._Dir, closestHit._Normal + u_Materials[closestHit._MaterialID]._Roughness * RandomVector() );
-
-    //Ray scattered;
-    //vec3 attenuation;
-    //pixelColor += PBR(ray, closestHit, scattered, attenuation) * multiplier;
-    //ray = scattered;
-    //multiplier *= attenuation;
-
-    // TMP : Texture mapping
+#ifdef PBR_RENDERING
+    // TEST1 : PBR
+    Ray scattered;
+    vec3 attenuation;
+    pixelColor += PBR(ray, closestHit, scattered, attenuation) * multiplier;
+    ray = scattered;
+    multiplier *= attenuation;
+#elif defined(DIRECT_ILLUMINATION)
+    // TEST 2 : basic RT
+    pixelColor += ComputeColor(closestHit) * multiplier;
+    multiplier *= u_Materials[closestHit._MaterialID]._Metallic;
+    ray._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
+    ray._Dir = reflect(ray._Dir, closestHit._Normal + u_Materials[closestHit._MaterialID]._Roughness * RandomVector() );
+#else
     pixelColor = Albedo(closestHit);
     break;
+#endif
   }
 
   // Apply gamma correction

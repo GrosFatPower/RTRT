@@ -31,11 +31,13 @@ struct MathUtil
 public:
 
   template <typename T>
-  static int sign(T val) { return (T(0) < val) - (val < T(0)); }
+  static int Sign(T val) { return (T(0) < val) - (val < T(0)); }
 
   static float ToDegrees(float radians) { return radians * (180.f / M_PI); };
   static float ToRadians(float degrees) { return degrees * (M_PI / 180.f); };
-  static float Clamp(float x, float lower, float upper) { return std::min(upper, std::max(x, lower)); };
+
+  template <typename T>
+  static T Clamp(T x, T lower, T upper) { return std::min(upper, std::max(x, lower)); };
 
   static Mat4x4 QuatToMatrix( float x, float y, float z, float s ) // q = s + ix + jy + kz
   {

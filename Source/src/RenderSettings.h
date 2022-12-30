@@ -16,8 +16,10 @@ struct RenderSettings
   bool  _EnableBackGround   = true;
   bool  _EnableSkybox       = true;
   bool  _EnableUniformLight = true;
+  bool  _AutoScale          = false;
   int   _Bounces            = 1;
   int   _RenderScale        = 100;
+  float _TargetFPS          = 60.f;
   float _Gamma              = 2.f;
   float _SkyBoxRotation     = 0.f;
 };

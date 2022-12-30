@@ -3,7 +3,7 @@ renderer
 	resolution 1920 1080
 	enablebackground true
 	#background skyboxes/alps_field_2k.hdr
-	bounces 1
+	bounces 3
 }
 
 camera
@@ -16,58 +16,58 @@ camera
 light
 {
 	type sphere
-	position .2 10.0 .5
+	position 2 10 5
 	emission .6 .6 .4
 	radius .5
 }
 
-#material Green
-#{
-#	color .1 .8 .1 
-#	metallic 0.4
-#	roughness 0.01
-#}
+material Green
+{
+	color .1 .8 .1 
+	metallic 0.4
+	roughness 0.01
+}
 
-#material Red
-#{
-#	color .8 .1 .1
-#	metallic 0.7
-#	roughness 0.05
-#	emission .2 .0 .0
-#}
+material Red
+{
+	color .8 .1 .1
+	metallic 0.7
+	roughness 0.05
+	emission .2 .0 .0
+}
 
-#material Blue
-#{
-#	color .4 .4 .8
-#	metallic 0.3
-#	roughness 0.1
-#}
+material Blue
+{
+	color .4 .4 .8
+	metallic 0.3
+	roughness 0.1
+}
 
-#material White
-#{
-#	color .8 .8 .8
-#	metallic 0.4
-#	roughness 0.05
-#}
+material White
+{
+	color .8 .8 .8
+	metallic 0.4
+	roughness 0.05
+}
 
-#material Orange
-#{
-#	color .8 .4 .0
-#	metallic 0.3
-#	roughness 0.2
-#}
+material Orange
+{
+	color .8 .4 .0
+	metallic 0.3
+	roughness 0.2
+}
 
-#material Yellow
-#{
-#	color .8 .8 .0
-#	metallic 0.7
-#	roughness 0.001
-#}
+material Yellow
+{
+	color .8 .8 .0
+	metallic 0.7
+	roughness 0.001
+}
 
-#material small_box_white
-#{
-#	color 0.725 0.71 0.68
-#}
+material small_box_white
+{
+	color 0.725 0.71 0.68
+}
 
 material textured_box
 {
@@ -79,65 +79,65 @@ material Book1
 	albedotexture diningroom/textures/book1.jpg
 }
 
-#material Book2
-#{
-#	albedotexture diningroom/textures/book2.jpg
-#}
+material Book2
+{
+	albedotexture diningroom/textures/book2.jpg
+}
 
-#material Book3
-#{
-#	albedotexture diningroom/textures/book3.jpg
-#}
+material Book3
+{
+	albedotexture diningroom/textures/book3.jpg
+}
 
-#material Book4
-#{
-#	albedotexture diningroom/textures/book4.jpg
-#}
+material Book4
+{
+	albedotexture diningroom/textures/book4.jpg
+}
 
-#sphere
-#{
-#	radius .5
-#	material Green
-#	position 0.0 0.0 0.0
-#}
+sphere
+{
+	radius .5
+	material Green
+	position 0.0 0.0 0.0
+}
 
-#sphere
-#{
-#	radius 1.0
-#	material Orange
-#	position 2.0 2.0 -3.0
-#}
+sphere
+{
+	radius 1.0
+	material Orange
+	position 2.0 2.0 -3.0
+}
 
-#sphere
-#{
-#	radius 2.0
-#	material Blue
-#	position -5.0 3.0 4.0
-#}
+sphere
+{
+	radius 2.0
+	material Blue
+	position -5.0 3.0 4.0
+}
 
-#box
-#{
-#	low -1.0 -1.0 -1.0
-#	hight 1.0 1.0 1.0
-#	material Yellow
-#	position -3.0 1.0 -2.0
-#}
+box
+{
+	low -1.0 -1.0 -1.0
+	hight 1.0 1.0 1.0
+	material Yellow
+	position -3.0 1.0 -2.0
+}
 
-#box
-#{
-#	low -1.0 -2.0 -1.0
-#	hight 1.0 2.0 1.0
-#	material Red
-#	position 4.0 1.5 2.0
-#}
+box
+{
+	low -1.0 -2.0 -1.0
+	hight 1.0 2.0 1.0
+	material Red
+	position 4.0 1.5 2.0
+}
 
-#plane
-#{
-#	origin 0.0 -0.5 0.0
-#	normal 0.0 1.0 0.0
-#	material White
-#	position 0.0 0.0 0.0
-#}
+plane
+{
+	origin 0.0 -1 0.0
+	normal 0.0 1.0 0.0
+	material White
+	position 0.0 0.0 0.0
+}
 
 mesh
 {
@@ -167,20 +167,20 @@ mesh
 	material Book1
 }
 
-#mesh
-#{
-#	file diningroom/book2.obj
-#	material Book2
-#}
+mesh
+{
+	file diningroom/book2.obj
+	material Book2
+}
 
-#mesh
-#{
-#	file diningroom/book3.obj
-#	material Book3
-#}
+mesh
+{
+	file diningroom/book3.obj
+	material Book3
+}
 
-#mesh
-#{
-#	file diningroom/book4.obj
-#	material Book4
-#}
+mesh
+{
+	file diningroom/book4.obj
+	material Book4
+}

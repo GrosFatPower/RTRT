@@ -880,6 +880,13 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSetting
       else
         parsingError++;
     }
+    else if ( "maxdepth" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        oSettings._Bounces =  std::stoi(tokens[1]);
+      else
+        parsingError++;
+    }
     //else if ( "background" == tokens[0] )
     //{
     //  if ( 2 == nbTokens )

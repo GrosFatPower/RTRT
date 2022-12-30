@@ -63,7 +63,7 @@ bool Mesh::Load( const std::string & iFilename )
   {
     Vec2 uv;
     uv.x = attrib.texcoords[2 * i + 0];
-    uv.y = attrib.texcoords[2 * i + 1];
+    uv.y = 1.f - attrib.texcoords[2 * i + 1];
 
     _UVs.push_back(uv);
   }

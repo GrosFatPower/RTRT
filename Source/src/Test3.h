@@ -39,6 +39,8 @@ private:
 
   int UpdateCPUTime();
 
+  void AdjustRenderScale();
+
   float RenderScale() const { return ( _Settings._RenderScale / 100.f ); }
   int RenderWidth()   const { return int( _Settings._RenderResolution.x * RenderScale() ); }
   int RenderHeight()  const { return int( _Settings._RenderResolution.y * RenderScale() ); }
