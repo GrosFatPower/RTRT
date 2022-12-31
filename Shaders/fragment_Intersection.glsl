@@ -150,89 +150,41 @@ bool TriangleIntersection( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oHi
   return true;
 }
 
-// https://www.scratchapixel.com/lessons/3d-basic-rendering/ray-tracing-rendering-a-triangle/barycentric-coordinates
-bool TriangleIntersection2( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oHitDistance, out vec2 oUV )
-{ 
-  vec3 v0v1 = iV1 - iV0;
-  vec3 v0v2 = iV2 - iV0;
-
-  vec3  N = cross( v0v1, v0v2 );
- 
-  // Step 1: finding P
-  float dirDotN = dot( N, iRay._Dir );
-  if ( abs(dirDotN) < EPSILON )
-    return false;
- 
-  oHitDistance = ( dot( N , iRay._Orig ) + dot( N , iV0 ) ) / dirDotN;
-  if ( oHitDistance < 0.f )
-    return false;
- 
-  // Step 2: inside-outside test
-  vec3 P = iRay._Orig + oHitDistance * iRay._Dir;
-
-  // edge 0
-  vec3 vp0 = P - iV0;
-  vec3 C = cross( v0v1, vp0 );
-  if ( dot( N, C ) < 0.f )
-    return false;  //P is on the right side 
- 
-  // edge 1
-  vec3 v2v1 = iV2 - iV1; 
-  vec3 vp1 = P - iV1;
-  C = cross( v2v1, vp1 );
-  oUV.x = dot( N, C );
-  if ( oUV.x < 0.f )
-    return false;  //P is on the right side 
- 
-  // edge 2
-  vec3 vp2 = P - iV2;
-  C = cross( -v0v2, vp2 );
-  oUV.y = dot( N, C );
-  if ( oUV.y < 0.f )
-    return false;  //P is on the right side 
- 
-  oUV /= dot( N, N );
- 
-  return true;  //this ray hits the triangle 
-}
-
 // https://www.mathematik.uni-marburg.de/~thormae/lectures/graphics2/graphics_2_2_eng_web.html#1
-bool TriangleIntersection3( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oHitDistance, out vec2 oUV )
+bool TriangleIntersection2( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oHitDistance, out vec2 oUV )
 { 
   vec3 i = iV1 - iV0;
   vec3 j = iV2 - iV0;
   vec3 k = iRay._Orig - iV0;
-  vec3 r = iRay._Dir;
+  //vec3 r = iRay._Dir;
   
-  // implementing ray/triangle intersection according to
-  // the lecture slides by computing
   // (t, u, v) = (1 / (r x j) * i) ((k x i) * j, (r x j) *k, (k x i) * r)
-  vec3 rxj = cross(r, j);
+  vec3 rxj = cross(iRay._Dir, j);
   float rxji = dot(rxj, i);
   
   // denominator close to zero?
-  if (abs(rxji) < EPSILON) return false;
+  if ( abs(rxji) < EPSILON )
+    return false;
   
   float f = 1.0f / rxji;
   
-  // compute u
-  float u = dot(rxj, k) * f;
-  if (u < 0.0f || u > 1.0f) return false;
+  // compute oUV.x=u
+  oUV.x = dot(rxj, k) * f;
+  if ( oUV.x < 0.f || oUV.x > 1.f )
+  return false;
   
   // compute v
   vec3 kxi = cross(k, i);
-  float v =  dot(kxi, r) * f;
-  if (v < 0.0 || v > 1.0) return false;
-  if(u + v > 1.0) return false;
+  oUV.y =  dot(kxi, iRay._Dir) * f;
+  if ( oUV.y < 0.f || oUV.y > 1.f )
+    return false;
+  if( oUV.x + oUV.y > 1.0 )
+    return false;
   
   // compute t
-  float t =  dot(kxi, j) * f;
-
-  if ( t < 0. ) return false;
-
-  oHitDistance = t;
-  oUV.x = u;
-  oUV.y = v;
+  oHitDistance =  dot(kxi, j) * f;
+  if ( oHitDistance < 0.f )
+    return false;
 
   return true;
 }
