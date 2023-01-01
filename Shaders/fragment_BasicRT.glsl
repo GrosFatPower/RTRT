@@ -217,7 +217,17 @@ vec3 SampleSkybox( vec3 iRayDir )
   return skycolor;
 }
 
-// GGX/Trowbridge-Reitz Normal Distribution Function
+vec3 pattern( vec2 uv )
+{
+    vec3 col = vec3(0.6);
+    col += 0.4*smoothstep(-0.01,0.01,cos(uv.x*0.5)*cos(uv.y*0.5)); 
+    col *= smoothstep(-1.0,-0.98,cos(uv.x))*smoothstep(-1.0,-0.98,cos(uv.y));
+    return col;
+}
+
+// GGX/Trowbridge-Reitz : Normal Distribution Function
+// Larger the more micro-facets are aligned to H
+// NDF = alpha^2 / ( PI * ( (n.h)^2  * ( aplha^2 -1 ) + 1 )^2 )
 float D( float iAlpha, vec3 iN, vec3 iH )
 {
   float num = pow(iAlpha, 2.f);
@@ -229,6 +239,8 @@ float D( float iAlpha, vec3 iN, vec3 iH )
 }
 
 // Schlick-Beckmann Geometry Shadowing Function
+// G_SchilickGGX = (n.v) / ( (n.v) * ( 1 - k ) + k )
+// with k = alpha / 2
 float G1( float iAlpha, vec3 iN, vec3 iX )
 {
   float NdotX = max(dot(iN, iX), 0.f);
@@ -242,23 +254,18 @@ float G1( float iAlpha, vec3 iN, vec3 iX )
 }
 
 // Smith Model
+// Smaller the more micro-facets are shadowed by other micro-facets
 float G( float iAlpha, vec3 iN, vec3 iV, vec3 iL )
 {
   return G1(iAlpha, iN, iV) * G1(iAlpha, iN, iL);
 }
 
 // Fresnel-Schlick Function
-vec3 F( vec3 iF0, vec3 iV, vec3 iH )
+// Proportion of specular reflectance
+// FSchlick = F0 + (1-F0)(1-(h.v))^5
+vec3 FSchlick( vec3 iF0, vec3 iV, vec3 iH )
 {
   return iF0 + (vec3(1.f) - iF0) * pow(1.f - max(dot(iV, iH), 0.f), 5.f);
-}
-
-vec3 pattern( vec2 uv )
-{
-    vec3 col = vec3(0.6);
-    col += 0.4*smoothstep(-0.01,0.01,cos(uv.x*0.5)*cos(uv.y*0.5)); 
-    col *= smoothstep(-1.0,-0.98,cos(uv.x))*smoothstep(-1.0,-0.98,cos(uv.y));
-    return col;
 }
 
 // Computer Graphics Tutorial - PBR (Physically Based Rendering)
@@ -269,7 +276,8 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuat
 
   vec3 outColor = u_Materials[iClosestHit._MaterialID]._Emission;
 
-  vec3 F0 = u_Materials[iClosestHit._MaterialID]._Albedo * u_Materials[iClosestHit._MaterialID]._Metallic * u_Materials[iClosestHit._MaterialID]._Opacity; // test : reflectance value
+  //vec3 F0 = u_Materials[iClosestHit._MaterialID]._Albedo * u_Materials[iClosestHit._MaterialID]._Metallic * u_Materials[iClosestHit._MaterialID]._Opacity; // test : reflectance value
+  vec3 F0 = mix(vec3(0.4), u_Materials[iClosestHit._MaterialID]._Albedo, u_Materials[iClosestHit._MaterialID]._Metallic); // https://www.youtube.com/watch?v=5p0e7YNONr8
 
   if ( iClosestHit._FrontFace )
   {
@@ -287,10 +295,10 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuat
       vec3 V = normalize(iRay._Orig - iClosestHit._Pos);
       vec3 H = normalize(V + L);
 
-      float alpha = pow(u_Materials[iClosestHit._MaterialID]._Roughness, 2.f);
+      float attenuation = 1.f;// / ( distToLight * distToLight );
+      vec3 radiance = u_SphereLight._Emission * attenuation;
 
-      vec3 Ks = F(F0, V, H);
-      vec3 Kd = ( vec3(1.f) - Ks ) * ( 1.f - u_Materials[iClosestHit._MaterialID]._Metallic );
+      float alpha = pow(u_Materials[iClosestHit._MaterialID]._Roughness, 2.f);
 
       vec3 lambert = u_Materials[iClosestHit._MaterialID]._Albedo;
       if ( u_Materials[iClosestHit._MaterialID]._BaseColorTexID >= 0 )
@@ -301,13 +309,21 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuat
       }
       lambert *= INV_PI;
 
-      vec3 cookTorranceNum = D(alpha, N, H) * G(alpha, N, V, L) * F(F0, V, H);   // DGF
+      float D = D(alpha, N, H);
+      float G = G(alpha, N, V, L);
+      vec3  F = FSchlick(F0, V, H);
+
+      vec3 cookTorranceNum =  D * G * F;
       float cookTorranceDenom = 4.f * max(dot(V, N), 0.f) * max(dot(L, N), 0.f); // 4(V.N)(L.N)
-      vec3 cookTorrance = cookTorranceNum / max(cookTorranceDenom, EPSILON);     // 
+      vec3 specular = cookTorranceNum / max(cookTorranceDenom, EPSILON);     // cookTorrance
 
-      vec3 BRDF = Kd * lambert + cookTorrance; // kd * fDiffuse + ks * fSpecular
+      vec3 Ks = F;
+      vec3 Kd = vec3(1.f) - Ks;
+      Kd *= ( 1 - u_Materials[iClosestHit._MaterialID]._Metallic ); // pure metals have no diffuse light
 
-      outColor += BRDF  * u_SphereLight._Emission * max(dot(L, N), 0.f);
+      vec3 BRDF = Kd * lambert + specular; // kd * fDiffuse + ks * fSpecular
+
+      outColor += BRDF  * radiance * max(dot(L, N), 0.f);
     }
   }
 
