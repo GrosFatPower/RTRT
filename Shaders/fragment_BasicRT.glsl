@@ -272,12 +272,18 @@ vec3 FSchlick( vec3 iF0, vec3 iV, vec3 iH )
 // https://www.youtube.com/watch?v=RRE-F57fbXw&list=WL&index=109
 vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuation )
 {
-  double cosTheta = dot(-iRay._Dir, iClosestHit._Normal);
-
   vec3 outColor = u_Materials[iClosestHit._MaterialID]._Emission;
 
-  //vec3 F0 = u_Materials[iClosestHit._MaterialID]._Albedo * u_Materials[iClosestHit._MaterialID]._Metallic * u_Materials[iClosestHit._MaterialID]._Opacity; // test : reflectance value
-  vec3 F0 = mix(vec3(0.4), u_Materials[iClosestHit._MaterialID]._Albedo, u_Materials[iClosestHit._MaterialID]._Metallic); // https://www.youtube.com/watch?v=5p0e7YNONr8
+  vec3 albedo = u_Materials[iClosestHit._MaterialID]._Albedo;
+  if ( u_Materials[iClosestHit._MaterialID]._BaseColorTexID >= 0 )
+  {
+    int texArrayID = texelFetch(u_TexIndTexture, u_Materials[iClosestHit._MaterialID]._BaseColorTexID).x;
+    if ( texArrayID >= 0 )
+      albedo = texture(u_TexArrayTexture, vec3(iClosestHit._UV, texArrayID)).rgb;
+  }
+
+  //vec3 F0 = albedo * u_Materials[iClosestHit._MaterialID]._Metallic * u_Materials[iClosestHit._MaterialID]._Opacity; // test : reflectance value
+  vec3 F0 = mix(vec3(0.04), albedo, u_Materials[iClosestHit._MaterialID]._Metallic); // https://www.youtube.com/watch?v=5p0e7YNONr8
 
   if ( iClosestHit._FrontFace )
   {
@@ -298,28 +304,20 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuat
       float attenuation = 1.f;// / ( distToLight * distToLight );
       vec3 radiance = u_SphereLight._Emission * attenuation;
 
-      float alpha = pow(u_Materials[iClosestHit._MaterialID]._Roughness, 2.f);
-
-      vec3 lambert = u_Materials[iClosestHit._MaterialID]._Albedo;
-      if ( u_Materials[iClosestHit._MaterialID]._BaseColorTexID >= 0 )
-      {
-        int texArrayID = texelFetch(u_TexIndTexture, u_Materials[iClosestHit._MaterialID]._BaseColorTexID).x;
-        if ( texArrayID >= 0 )
-          lambert = texture(u_TexArrayTexture, vec3(iClosestHit._UV, texArrayID)).rgb;
-      }
-      lambert *= INV_PI;
-
-      float D = D(alpha, N, H);
-      float G = G(alpha, N, V, L);
-      vec3  F = FSchlick(F0, V, H);
-
-      vec3 cookTorranceNum =  D * G * F;
-      float cookTorranceDenom = 4.f * max(dot(V, N), 0.f) * max(dot(L, N), 0.f); // 4(V.N)(L.N)
-      vec3 specular = cookTorranceNum / max(cookTorranceDenom, EPSILON);     // cookTorrance
-
+      // Diffuse
+      vec3 F  = FSchlick(F0, V, H);
       vec3 Ks = F;
       vec3 Kd = vec3(1.f) - Ks;
       Kd *= ( 1 - u_Materials[iClosestHit._MaterialID]._Metallic ); // pure metals have no diffuse light
+      vec3 lambert = albedo * INV_PI;
+
+      // Specular (cookTorrance)
+      float alpha = pow(u_Materials[iClosestHit._MaterialID]._Roughness, 2.f);
+      float D     = D(alpha, N, H);
+      float G     = G(alpha, N, V, L);
+      vec3 cookTorranceNum =  D * G * F;
+      float cookTorranceDenom = 4.f * max(dot(V, N), 0.f) * max(dot(L, N), 0.f); // 4(V.N)(L.N)
+      vec3 specular = cookTorranceNum / max(cookTorranceDenom, EPSILON);
 
       vec3 BRDF = Kd * lambert + specular; // kd * fDiffuse + ks * fSpecular
 
@@ -330,9 +328,9 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuat
   // Reflect or refract ?
   double sinTheta = 1.f;
   float refractionRatio = 1.f;
-  
   if ( u_Materials[iClosestHit._MaterialID]._Opacity < 1.f )
   {
+    double cosTheta = dot(-iRay._Dir, iClosestHit._Normal);
     sinTheta = sqrt(1.f - cosTheta * cosTheta);
 
     refractionRatio = (1. / u_Materials[iClosestHit._MaterialID]._IOR);
@@ -463,10 +461,12 @@ void main()
 #endif
   }
 
-  // Apply gamma correction
+  // Tone mapping
+  //pixelColor /= pixelColor + vec3(1.);
+  // Gamma correction
   pixelColor = pow(pixelColor, vec3(1. / u_Gamma));
-  pixelColor = clamp(pixelColor, 0.f, 1.f);
 
+  pixelColor = clamp(pixelColor, 0.f, 1.f);
   fragColor = vec4(pixelColor, 0.f);
 
   if ( 1 == u_Accumulate )
