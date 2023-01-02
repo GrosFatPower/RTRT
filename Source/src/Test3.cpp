@@ -662,7 +662,7 @@ int Test3::DrawUI()
             }
           }
 
-          int matID = 0;
+          int matID = primInstance._MaterialID;
           if ( ImGui::Combo("MaterialNames", &matID, MaterialNames, nbMaterials) )
           {
             if ( matID >= 0 )
@@ -1025,6 +1025,10 @@ int Test3::Run()
   glfwSetWindowSize(_MainWindow, _Settings._RenderResolution.x, _Settings._RenderResolution.y);
   glViewport(0, 0, _Settings._RenderResolution.x, _Settings._RenderResolution.y);
   glDisable(GL_DEPTH_TEST);
+
+  glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
+  glBindTexture(GL_TEXTURE_2D, 0);
 
   _CPULoopTime = glfwGetTime();
   while (!glfwWindowShouldClose(_MainWindow))

@@ -345,14 +345,15 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuat
     // Must Reflect
     oScattered._Orig = iClosestHit._Pos + normal * RESOLUTION;
     oScattered._Dir  = reflect(iRay._Dir, normal);
+    oAttenuation = F0;
   }
   else
   {
     // Can Refract
     oScattered._Orig = iClosestHit._Pos - normal;
     oScattered._Dir  = refract(iRay._Dir, normal, refractionRatio);
+    oAttenuation = vec3(1.f);
   }
-  oAttenuation = F0;
 
   return clamp(outColor, 0.f, 1.f);
 }
