@@ -110,7 +110,7 @@ mesh
 light
 {
 	type sphere
-	position  .34299999 .54779997 .22700010
-	emission .6 .6 .4
-	radius .5
+	position  .28 .55 .20
+	emission 2. 2. 2.
+	radius .05
 }

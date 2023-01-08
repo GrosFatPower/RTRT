@@ -17,7 +17,7 @@ light
 {
 	type sphere
 	position 2 10 5
-	emission .6 .6 .4
+	emission 4. 4. 4.
 	radius .5
 }
 

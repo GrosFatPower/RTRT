@@ -56,11 +56,14 @@ uniform sampler2DArray u_TexArrayTexture;
 
 bool TraceRay( Ray iRay, out HitPoint oClosestHit )
 {
-  oClosestHit = HitPoint(-1.f, vec3( 0.f, 0.f, 0.f ), vec3( 0.f, 0.f, 0.f ), vec2( 0.f, 0.f ), -1, true);
+  oClosestHit = HitPoint(-1.f, vec3( 0.f, 0.f, 0.f ), vec3( 0.f, 0.f, 0.f ), vec2( 0.f, 0.f ), -1, 0, true, false);
 
+  float hitDist = 0.f;
+
+  // Objects
   for ( int i = 0; i < u_NbSpheres; ++i )
   {
-    float hitDist = 0.f;
+    hitDist = 0.f;
     if ( SphereIntersection(u_Spheres[i]._CenterRad, iRay, hitDist) )
     {
       if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
@@ -75,7 +78,7 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
 
   for ( int i = 0; i < u_NbPlanes; ++i )
   {
-    float hitDist = 0.f;
+    hitDist = 0.f;
     if ( PlaneIntersection(u_Planes[i]._Orig, u_Planes[i]._Normal, iRay, hitDist) )
     {
       if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
@@ -90,7 +93,7 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
 
   for ( int i = 0; i < u_NbBoxes; ++i )
   {
-    float hitDist = 0.f;
+    hitDist = 0.f;
     if ( BoxIntersection(u_Boxes[i]._Low, u_Boxes[i]._High, u_Boxes[i]._Transfom, iRay, hitDist) )
     {
       if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
@@ -113,7 +116,7 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
     vec3 v1 = texelFetch(u_VtxTexture, vInd1.x).xyz;
     vec3 v2 = texelFetch(u_VtxTexture, vInd2.x).xyz;
 
-    float hitDist = 0.f;
+    hitDist = 0.f;
     vec2 uv;
     if ( TriangleIntersection(iRay, v0, v1, v2, hitDist, uv) )
     {
@@ -133,6 +136,20 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
         oClosestHit._UV         = uvMatID0.xy * ( 1 - uv.x - uv.y ) + uvMatID1.xy * uv.x + uvMatID2.xy * uv.y;
         oClosestHit._MaterialID = int(uvMatID0.z);
       }
+    }
+  }
+
+  // Lights
+  hitDist = 0.f;
+  if ( SphereIntersection(vec4(u_SphereLight._Pos.xyz, u_SphereLight._Radius), iRay, hitDist) )
+  {
+    if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
+    {
+      oClosestHit._Dist       = hitDist;
+      oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+      oClosestHit._MaterialID = -1;
+      oClosestHit._LightID    = 0;
+      oClosestHit._IsEmitter  = true;
     }
   }
 
@@ -440,6 +457,12 @@ void main()
         pixelColor += SampleSkybox(ray._Dir) * multiplier;
       else
         pixelColor += u_BackgroundColor * multiplier;
+      break;
+    }
+
+    if ( closestHit._IsEmitter )
+    {
+      pixelColor += u_SphereLight._Emission * multiplier;
       break;
     }
 

@@ -35,7 +35,9 @@ struct HitPoint
   vec3  _Normal;
   vec2  _UV;
   int   _MaterialID;
+  int   _LightID;
   bool  _FrontFace;
+  bool  _IsEmitter;
 };
 
 struct Sphere
