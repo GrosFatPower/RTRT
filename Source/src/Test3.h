@@ -102,9 +102,11 @@ private:
   bool            _SceneInstancesModified = false;
   bool            _RenderSettingsModified = false;
 
-  std::vector<std::string *> _PrimitiveNames;
-  int                        _SelectedPrimitive = 0;
-  int                        _NbTriangles = 0;
+  std::vector<std::string> _MaterialNames;
+  int                      _SelectedMaterial = -1;
+  std::vector<std::string> _PrimitiveNames;
+  int                      _SelectedPrimitive = -1;
+  int                      _NbTriangles = 0;
 };
 
 }

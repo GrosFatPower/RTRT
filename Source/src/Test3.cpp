@@ -127,6 +127,17 @@ std::string UniformArrayElementName( const char * iUniformArrayName, int iIndex,
   return std::string(iUniformArrayName).append("[").append(std::to_string(iIndex)).append("].").append(iAttributeName);
 }
 
+// https://github.com/ocornut/imgui/issues/911
+bool VectorOfStringGetter(void* data, int n, const char** out_text)
+{
+  const std::vector<std::string> * v = (std::vector<std::string>*)data;
+  *out_text = (*v)[n].c_str();
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// CTOR
+// ----------------------------------------------------------------------------
 Test3::Test3( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
 : _MainWindow(iMainWindow)
 {
@@ -134,6 +145,9 @@ Test3::Test3( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
   _Settings._RenderResolution.y = iScreenHeight;
 }
 
+// ----------------------------------------------------------------------------
+// DTOR
+// ----------------------------------------------------------------------------
 Test3::~Test3()
 {
   glDeleteFramebuffers(1, &_FrameBufferID);
@@ -164,9 +178,6 @@ Test3::~Test3()
   if ( _Scene )
     delete _Scene;
   _Scene = nullptr;
-
-  for ( auto primName : _PrimitiveNames )
-    delete primName;
 }
 
 int Test3::InitializeFrameBuffer()
@@ -518,15 +529,23 @@ int Test3::DrawUI()
     {
       std::vector<Material> & Materials =  _Scene -> GetMaterials();
 
-      int nbMaterials = Materials.size();
-      for ( int i = 0; i < nbMaterials; ++i )
+      ImGui::ListBoxHeader("##MaterialNames");
+      for (int i = 0; i < _MaterialNames.size(); i++)
       {
-        Material & curMat = Materials[i];
+        bool is_selected = ( _SelectedMaterial == i );
+        if (ImGui::Selectable(_MaterialNames[i].c_str(), is_selected))
+        {
+          _SelectedMaterial = i;
+        }
+      }
+      ImGui::ListBoxFooter();
+
+      if ( _SelectedMaterial >= 0 )
+      {
+        Material & curMat = Materials[_SelectedMaterial];
 
         float rgb[3] = { curMat._Albedo.r, curMat._Albedo.g, curMat._Albedo.b };
-        ImGui::Text(_Scene -> FindMaterialName(i).c_str());
-        ImGui::SameLine();
-        if ( ImGui::ColorEdit3(std::string("##MatAlbedo").append(std::to_string(i)).c_str(), rgb) )
+        if ( ImGui::ColorEdit3("Albedo", rgb) )
         {
           curMat._Albedo.r = rgb[0];
           curMat._Albedo.g = rgb[1];
@@ -534,16 +553,25 @@ int Test3::DrawUI()
           _SceneMaterialsModified = true;
         }
 
-        if ( ImGui::SliderFloat(std::string("Metallic_").append(std::to_string(i)).c_str(), &curMat._Metallic, 0.f, 1.f) )
+        rgb[0] = curMat._Emission.r, rgb[1] = curMat._Emission.g, rgb[2] = curMat._Emission.b;
+        if ( ImGui::ColorEdit3("Emission", rgb) )
+        {
+          curMat._Emission.r = rgb[0];
+          curMat._Emission.g = rgb[1];
+          curMat._Emission.b = rgb[2];
+          _SceneMaterialsModified = true;
+        }
+
+        if ( ImGui::SliderFloat("Metallic", &curMat._Metallic, 0.f, 1.f) )
           _SceneMaterialsModified = true;
 
-        if ( ImGui::SliderFloat(std::string("Roughness_").append(std::to_string(i)).c_str(), &curMat._Roughness, 0.f, 1.f) )
+        if ( ImGui::SliderFloat("Roughness", &curMat._Roughness, 0.f, 1.f) )
           _SceneMaterialsModified = true;
 
-        if ( ImGui::SliderFloat(std::string("IOR_").append(std::to_string(i)).c_str(), &curMat._IOR, 1.f, 3.f) )
+        if ( ImGui::SliderFloat("IOR", &curMat._IOR, 1.f, 3.f) )
           _SceneMaterialsModified = true;
 
-        if ( ImGui::SliderFloat(std::string("Opacity_").append(std::to_string(i)).c_str(), &curMat._Opacity, 0.f, 1.f) )
+        if ( ImGui::SliderFloat("Opacity", &curMat._Opacity, 0.f, 1.f) )
           _SceneMaterialsModified = true;
       }
     }
@@ -556,23 +584,27 @@ int Test3::DrawUI()
 
       int nbMaterial = Materials.size();
 
-      std::vector<const char*> PrimitiveNamesCSTR;
-      for ( auto primName : _PrimitiveNames )
-        PrimitiveNamesCSTR.push_back(primName -> c_str());
-
-      if ( ImGui::Combo("PrimitiveInstances", &_SelectedPrimitive, PrimitiveNamesCSTR.data(), PrimitiveNamesCSTR.size()) )
+      ImGui::ListBoxHeader("##PrimitivesNames");
+      for (int i = 0; i < _PrimitiveNames.size(); i++)
       {
-        PrimitiveInstance & primInstance = PrimitiveInstances[_SelectedPrimitive];
+        bool is_selected = ( _SelectedPrimitive == i );
+        if (ImGui::Selectable(_PrimitiveNames[i].c_str(), is_selected))
+        {
+          _SelectedPrimitive = i;
 
-        Vec3 scale;
-        glm::quat rotation;
-        Vec3 translation;
-        MathUtil::Decompose(primInstance._Transform, translation, rotation, scale);
+          PrimitiveInstance & primInstance = PrimitiveInstances[_SelectedPrimitive];
 
-        Camera & cam = _Scene -> GetCamera();
-        cam.LookAt(translation);
-        _SceneCameraModified = true;
+          Vec3 scale;
+          glm::quat rotation;
+          Vec3 translation;
+          MathUtil::Decompose(primInstance._Transform, translation, rotation, scale);
+
+          Camera & cam = _Scene -> GetCamera();
+          cam.LookAt(translation);
+          _SceneCameraModified = true;
+        }
       }
+      ImGui::ListBoxFooter();
 
       if ( _SelectedPrimitive >= 0 )
       {
@@ -639,31 +671,8 @@ int Test3::DrawUI()
         }
 
         {
-          static char * MaterialNames[99] = { NULL };
-          static int nbMaterials = 0;
-
-          if ( _SceneMaterialsModified || !nbMaterials )
-          {
-            nbMaterials = 0;
-            for ( int i = 0; i < 99; ++i )
-            {
-              if ( MaterialNames[i] )
-                delete[] MaterialNames[i];
-            }
-
-            for ( auto mat : Materials )
-            {
-              std::string materialName = _Scene ->FindMaterialName((int)mat._ID);
-              MaterialNames[nbMaterials] = new char[materialName.size()+1];
-              strcpy(MaterialNames[nbMaterials], materialName.c_str());
-              nbMaterials++;
-              if ( nbMaterials >= 99 )
-                break;
-            }
-          }
-
           int matID = primInstance._MaterialID;
-          if ( ImGui::Combo("MaterialNames", &matID, MaterialNames, nbMaterials) )
+          if ( ImGui::Combo("MaterialNames", &matID, &VectorOfStringGetter, &_MaterialNames, _MaterialNames.size()) )
           {
             if ( matID >= 0 )
             {
@@ -671,13 +680,6 @@ int Test3::DrawUI()
               _SceneInstancesModified = true;
             }
           }
-
-          // MLK
-          //for ( int i = 0; i < 99; ++i )
-          //{
-          //  if ( MaterialNames[i] )
-          //    delete[] MaterialNames[i];
-          //}
         }
       }
     }
@@ -756,6 +758,7 @@ int Test3::InitializeScene()
     delete _Scene;
 
   std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene.scene";
+  //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
 
   //_Scene = new Scene();
   if ( !Loader::LoadScene(sceneFile, _Scene, _Settings) || !_Scene )
@@ -829,9 +832,13 @@ int Test3::InitializeScene()
     }
   }
 
+  const std::vector<Material> & Materials =  _Scene -> GetMaterials();
+  for ( auto mat : Materials )
+    _MaterialNames.push_back(_Scene -> FindMaterialName(mat._ID));
+
   const std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene -> GetPrimitiveInstances();
   for ( int i = 0; i < PrimitiveInstances.size(); ++i )
-    _PrimitiveNames.push_back(new std::string(_Scene -> FindPrimitiveName(i)));
+    _PrimitiveNames.push_back(_Scene -> FindPrimitiveName(i));
 
   int skyboxID =_Scene -> AddTexture(g_AssetsDir + "skyboxes\\alps_field_2k.hdr", 4, TexFormat::TEX_FLOAT);
   {
