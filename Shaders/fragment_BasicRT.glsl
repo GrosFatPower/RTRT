@@ -300,7 +300,7 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuat
   }
 
   //vec3 F0 = albedo * u_Materials[iClosestHit._MaterialID]._Metallic * u_Materials[iClosestHit._MaterialID]._Opacity; // test : reflectance value
-  vec3 F0 = mix(vec3(0.04), albedo, u_Materials[iClosestHit._MaterialID]._Metallic); // https://www.youtube.com/watch?v=5p0e7YNONr8
+  vec3 F0 = mix(vec3(0.), albedo, u_Materials[iClosestHit._MaterialID]._Metallic); // https://www.youtube.com/watch?v=5p0e7YNONr8
 
   if ( iClosestHit._FrontFace )
   {
@@ -318,7 +318,7 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuat
       vec3 V = normalize(iRay._Orig - iClosestHit._Pos);
       vec3 H = normalize(V + L);
 
-      float attenuation = 1.f;// / ( distToLight * distToLight );
+      float attenuation = 1.f / ( distToLight * distToLight );
       vec3 radiance = u_SphereLight._Emission * attenuation;
 
       // Diffuse
