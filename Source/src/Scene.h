@@ -69,6 +69,8 @@ public:
   const std::vector<Vec3i>         & GetIndices()         const { return _Indices;         }
   const std::vector<int>           & GetTextureArrayIDs() const { return _TextureArrayIDs; }
   const std::vector<unsigned char> & GetTextureArray()    const { return _TextureArray;    }
+  const std::vector<Vec3>          & GetMeshBBoxes()      const { return _MeshBBoxes;      }
+  const std::vector<int>           & GetMeshIdxRange()    const { return _MeshIdxRange;    }
 
 private:
 
@@ -93,6 +95,8 @@ private:
   int                            _NbCompiledTex = 0;
   std::vector<int>               _TextureArrayIDs;
   std::vector<unsigned char>     _TextureArray;
+  std::vector<Vec3>              _MeshBBoxes;
+  std::vector<int>               _MeshIdxRange;
 };
 
 }

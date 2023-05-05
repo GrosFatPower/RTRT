@@ -10,6 +10,7 @@ out vec4 fragColor;
 
 #define PBR_RENDERING
 //#define DIRECT_ILLUMINATION
+#define OPTIM_AABB
 
 // ----------
 // Uniforms
@@ -39,6 +40,7 @@ uniform Plane          u_Planes[MAX_PLANES_COUNT];
 uniform int            u_NbBoxes;
 uniform Box            u_Boxes[MAX_BOX_COUNT];
 uniform int            u_NbTriangles;
+uniform int            u_NbMeshInstances;
 uniform int            u_EnableSkybox;
 uniform float          u_SkyboxRotation;
 uniform sampler2D      u_SkyboxTexture;
@@ -46,8 +48,10 @@ uniform sampler2D      u_ScreenTexture;
 uniform samplerBuffer  u_VtxTexture;
 uniform samplerBuffer  u_VtxNormTexture;
 uniform samplerBuffer  u_VtxUVTexture;
+uniform samplerBuffer  u_MeshBBoxTexture;
 uniform isamplerBuffer u_VtxIndTexture;
 uniform isamplerBuffer u_TexIndTexture;
+uniform isamplerBuffer u_MeshIDRangeTexture;
 uniform sampler2DArray u_TexArrayTexture;
 
 // ----------
@@ -106,6 +110,57 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
     }
   }
 
+#ifdef OPTIM_AABB
+  for ( int i = 0; i < u_NbMeshInstances; ++i )
+  {
+    int ind = i*2;
+    vec3 low  = texelFetch(u_MeshBBoxTexture, ind).xyz;
+    vec3 high = texelFetch(u_MeshBBoxTexture, ind + 1).xyz;
+
+    hitDist = 0.f;
+    mat4 identity = mat4(1.f);
+    if ( BoxIntersection(low, high, identity, iRay, hitDist) && ( hitDist > 0.f ) )
+    //if ( BBoxIntersection(iRay, low, high) )
+    {
+      int startIdx = texelFetch(u_MeshIDRangeTexture, ind).x;
+      int endIdx   = texelFetch(u_MeshIDRangeTexture, ind + 1).x;
+
+      for ( int i = startIdx; i <= endIdx; i += 3 )
+      {
+        ivec3 vInd0 = ivec3(texelFetch(u_VtxIndTexture, i).xyz);
+        ivec3 vInd1 = ivec3(texelFetch(u_VtxIndTexture, i+1).xyz);
+        ivec3 vInd2 = ivec3(texelFetch(u_VtxIndTexture, i+2).xyz);
+
+        vec3 v0 = texelFetch(u_VtxTexture, vInd0.x).xyz;
+        vec3 v1 = texelFetch(u_VtxTexture, vInd1.x).xyz;
+        vec3 v2 = texelFetch(u_VtxTexture, vInd2.x).xyz;
+
+        hitDist = 0.f;
+        vec2 uv;
+        if ( TriangleIntersection(iRay, v0, v1, v2, hitDist, uv) )
+        {
+          if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
+          {
+            vec3 norm0 = texelFetch(u_VtxNormTexture, vInd0.y).xyz;
+            vec3 norm1 = texelFetch(u_VtxNormTexture, vInd1.y).xyz;
+            vec3 norm2 = texelFetch(u_VtxNormTexture, vInd2.y).xyz;
+
+            vec3 uvMatID0 = texelFetch(u_VtxUVTexture, vInd0.z).xyz;
+            vec3 uvMatID1 = texelFetch(u_VtxUVTexture, vInd1.z).xyz;
+            vec3 uvMatID2 = texelFetch(u_VtxUVTexture, vInd2.z).xyz;
+
+            oClosestHit._Dist       = hitDist;
+            oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+            oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
+            oClosestHit._UV         = uvMatID0.xy * ( 1 - uv.x - uv.y ) + uvMatID1.xy * uv.x + uvMatID2.xy * uv.y;
+            oClosestHit._MaterialID = int(uvMatID0.z);
+          }
+        }
+      }
+    }
+  }
+
+#else
   for ( int i = 0; i < u_NbTriangles; ++i )
   {
     ivec3 vInd0 = ivec3(texelFetch(u_VtxIndTexture, i*3).xyz);
@@ -138,6 +193,7 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
       }
     }
   }
+#endif
 
   // Lights
   hitDist = 0.f;
@@ -199,6 +255,43 @@ bool AnyHit( Ray iRay, float iMaxDist )
     }
   }
 
+#ifdef OPTIM_AABB
+  for ( int i = 0; i < u_NbMeshInstances; ++i )
+  {
+    int ind = i*2;
+    vec3 low  = texelFetch(u_MeshBBoxTexture, ind).xyz;
+    vec3 high = texelFetch(u_MeshBBoxTexture, ind + 1).xyz;
+
+    float hitDist = 0.f;
+    mat4 identity = mat4(1.f);
+    if ( BoxIntersection(low, high, identity, iRay, hitDist) && ( hitDist > 0.f ) )
+    //if ( BBoxIntersection(iRay, low, high) )
+    {
+      int startIdx = texelFetch(u_MeshIDRangeTexture, ind).x;
+      int endIdx   = texelFetch(u_MeshIDRangeTexture, ind + 1).x;
+
+      for ( int i = startIdx; i <= endIdx; i += 3 )
+      {
+        ivec3 vInd0 = ivec3(texelFetch(u_VtxIndTexture, i).xyz);
+        ivec3 vInd1 = ivec3(texelFetch(u_VtxIndTexture, i+1).xyz);
+        ivec3 vInd2 = ivec3(texelFetch(u_VtxIndTexture, i+2).xyz);
+
+        vec3 v0 = texelFetch(u_VtxTexture, vInd0.x).xyz;
+        vec3 v1 = texelFetch(u_VtxTexture, vInd1.x).xyz;
+        vec3 v2 = texelFetch(u_VtxTexture, vInd2.x).xyz;
+
+        hitDist = 0.f;
+        vec2 uv;
+        if ( TriangleIntersection(iRay, v0, v1, v2, hitDist, uv) )
+        {
+          if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
+            return true;
+        }
+      }
+    }
+  }
+
+#else
   for ( int i = 0; i < u_NbTriangles; ++i )
   {
     ivec3 vInd0 = ivec3(texelFetch(u_VtxIndTexture, i*3).xyz);
@@ -217,6 +310,7 @@ bool AnyHit( Ray iRay, float iMaxDist )
         return true;
     }
   }
+#endif
 
   return false;
 }

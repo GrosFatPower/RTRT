@@ -58,41 +58,43 @@ private:
   ShaderProgram * _RTTShader = nullptr;
   ShaderProgram * _RTSShader = nullptr;
 
-  GLuint          _FrameBufferID     = 0;
-  GLuint          _ScreenTextureID   = 0;
-  GLuint          _SkyboxTextureID   = 0;
-  GLuint          _VtxBufferID       = 0;
-  GLuint          _VtxNormBufferID   = 0;
-  GLuint          _VtxUVBufferID     = 0;
-  GLuint          _VtxIndBufferID    = 0;
-  GLuint          _TexIndBufferID    = 0;
-  GLuint          _VtxTextureID      = 0;
-  GLuint          _VtxNormTextureID  = 0;
-  GLuint          _VtxUVTextureID    = 0;
-  GLuint          _VtxIndTextureID   = 0;
-  GLuint          _TexIndTextureID   = 0;
-  GLuint          _TexArrayTextureID = 0;
+  GLuint          _FrameBufferID        = 0;
+  GLuint          _ScreenTextureID      = 0;
+  GLuint          _SkyboxTextureID      = 0;
+  GLuint          _VtxBufferID          = 0;
+  GLuint          _VtxNormBufferID      = 0;
+  GLuint          _VtxUVBufferID        = 0;
+  GLuint          _VtxIndBufferID       = 0;
+  GLuint          _TexIndBufferID       = 0;
+  GLuint          _VtxTextureID         = 0;
+  GLuint          _VtxNormTextureID     = 0;
+  GLuint          _VtxUVTextureID       = 0;
+  GLuint          _VtxIndTextureID      = 0;
+  GLuint          _TexIndTextureID      = 0;
+  GLuint          _TexArrayTextureID    = 0;
+  GLuint          _MeshBBoxTextureID    = 0;
+  GLuint          _MeshIdRangeTextureID = 0;
 
-  long            _FrameNum          = 0;
-  int             _AccumulatedFrames = 0;
-  float           _CPULoopTime       = 0.f;
-  float           _FrameRate         = 0.f;
-  float           _TimeDelta         = 0.f;
-  float           _AverageDelta      = 0.f;
+  long            _FrameNum             = 0;
+  int             _AccumulatedFrames    = 0;
+  float           _CPULoopTime          = 0.f;
+  float           _FrameRate            = 0.f;
+  float           _TimeDelta            = 0.f;
+  float           _AverageDelta         = 0.f;
   std::deque<float> _LastDeltas;
 
-  double          _MouseX            = 0.;
-  double          _MouseY            = 0.;
-  double          _OldMouseX         = 0.;
-  double          _OldMouseY         = 0.;
-  bool            _LeftClick         = false;
-  bool            _RightClick        = false;
-  bool            _MiddleClick       = false;
+  double          _MouseX               = 0.;
+  double          _MouseY               = 0.;
+  double          _OldMouseX            = 0.;
+  double          _OldMouseY            = 0.;
+  bool            _LeftClick            = false;
+  bool            _RightClick           = false;
+  bool            _MiddleClick          = false;
 
-  bool            _KeyUp             = false;
-  bool            _KeyDown           = false;
-  bool            _KeyLeft           = false;
-  bool            _KeyRight          = false;
+  bool            _KeyUp                = false;
+  bool            _KeyDown              = false;
+  bool            _KeyLeft              = false;
+  bool            _KeyRight             = false;
 
   Scene         * _Scene                  = nullptr;
   RenderSettings  _Settings;
@@ -107,6 +109,7 @@ private:
   std::vector<std::string> _PrimitiveNames;
   int                      _SelectedPrimitive = -1;
   int                      _NbTriangles = 0;
+  int                      _NbMeshInstances = 0;
 };
 
 }

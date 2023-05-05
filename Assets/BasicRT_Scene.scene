@@ -94,6 +94,71 @@ material Book4
 	albedotexture diningroom/textures/book4.jpg
 }
 
+material Book6
+{
+	albedotexture diningroom/textures/book6.jpg
+}
+
+material Book7
+{
+	albedotexture diningroom/textures/book7.jpg
+}
+
+material Book8
+{
+	albedotexture diningroom/textures/book8.jpg
+}
+
+material Book9
+{
+	albedotexture diningroom/textures/book9.jpg
+}
+
+material Book10
+{
+	albedotexture diningroom/textures/book10.jpg
+}
+
+material Book11
+{
+	albedotexture diningroom/textures/book11.jpg
+}
+
+material Book14
+{
+	albedotexture diningroom/textures/book14.jpg
+}
+
+material Book15
+{
+	albedotexture diningroom/textures/book15.jpg
+}
+
+material Book16
+{
+	albedotexture diningroom/textures/book16.jpg
+}
+
+material Book17
+{
+	albedotexture diningroom/textures/book17.jpg
+}
+
+material Book18
+{
+	albedotexture diningroom/textures/book18.jpg
+}
+
+material ShelfBookCover1
+{
+	albedotexture diningroom/textures/shelfbook1.jpg
+}
+
+material ShelfBookCover2
+{
+	albedotexture diningroom/textures/shelfbook2.jpg
+}
+
 sphere
 {
 	radius .5
@@ -139,26 +204,10 @@ plane
 	position 0.0 0.0 0.0
 }
 
-mesh
-{
-	file misc/TexturedBox.obj
-	material textured_box
-}
-
 #mesh
 #{
-#	file diningroom/book17.obj
-#	material small_box_white
-#	position .1855 .0835 .169
-#	scale 1 1 1
-#}
-
-#mesh
-#{
-#	file cornell_box/cbox_smallbox.obj
-#	material small_box_white
-#	position 5 3 5
-#	scale 0.1 0.1 0.1
+#	file misc/TexturedBox.obj
+#	material textured_box
 #}
 
 mesh
@@ -183,4 +232,88 @@ mesh
 {
 	file diningroom/book4.obj
 	material Book4
+}
+
+mesh
+{
+	file diningroom/book5.obj
+	material ShelfBookCover1
+}
+
+mesh
+{
+	file diningroom/book6.obj
+	material Book6
+}
+
+mesh
+{
+	file diningroom/book7.obj
+	material Book7
+}
+
+mesh
+{
+	file diningroom/book8.obj
+	material Book8
+}
+
+mesh
+{
+	file diningroom/book9.obj
+	material Book9
+}
+
+mesh
+{
+	file diningroom/book10.obj
+	material Book10
+}
+
+mesh
+{
+	file diningroom/book11.obj
+	material Book11
+}
+
+mesh
+{
+	file diningroom/book12.obj
+	material ShelfBookCover2
+}
+
+mesh
+{
+	file diningroom/book13.obj
+	material Book3
+}
+
+mesh
+{
+	file diningroom/book14.obj
+	material Book14
+}
+
+mesh
+{
+	file diningroom/book15.obj
+	material Book15
+}
+
+mesh
+{
+	file diningroom/book16.obj
+	material Book16
+}
+
+mesh
+{
+	file diningroom/book17.obj
+	material Book17
+}
+
+mesh
+{
+	file diningroom/book18.obj
+	material Book18
 }

@@ -165,6 +165,8 @@ Test3::~Test3()
   glDeleteTextures(1, &_VtxIndTextureID);
   glDeleteTextures(1, &_TexIndTextureID);
   glDeleteTextures(1, &_TexArrayTextureID);
+  glDeleteTextures(1, &_MeshBBoxTextureID);
+  glDeleteTextures(1, &_MeshIdRangeTextureID);
   
   if (_Quad)
     delete _Quad;
@@ -365,11 +367,14 @@ int Test3::UpdateUniforms()
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxIndTexture"),   5);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexIndTexture"),   6);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexArrayTexture"), 7);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshBBoxTexture"), 8);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshIDRangeTexture"), 9);
 
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbSpheres"), nbSpheres);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbPlanes"), nbPlanes);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbBoxes"), nbBoxes);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbTriangles"), _NbTriangles);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbMeshInstances"), _NbMeshInstances);
 
         _SceneInstancesModified = false;
       }
@@ -757,8 +762,8 @@ int Test3::InitializeScene()
   if ( _Scene )
     delete _Scene;
 
-  //std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene.scene";
-  std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
+  std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene.scene";
+  //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
 
   //_Scene = new Scene();
   if ( !Loader::LoadScene(sceneFile, _Scene, _Settings) || !_Scene )
@@ -779,6 +784,7 @@ int Test3::InitializeScene()
   _Scene -> CompileMeshData( _Settings._TextureSize );
 
   _NbTriangles = _Scene -> GetNbFaces();
+  _NbMeshInstances = _Scene -> GetNbMeshInstances();
   if ( _NbTriangles )
   {
     glPixelStorei(GL_PACK_ALIGNMENT, 1); // ???
@@ -830,6 +836,20 @@ int Test3::InitializeScene()
       glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
       glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     }
+
+    glGenBuffers(1, &_MeshBBoxTextureID);
+    glBindBuffer(GL_TEXTURE_BUFFER, _MeshBBoxTextureID);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene -> GetMeshBBoxes().size(), &_Scene -> GetMeshBBoxes()[0], GL_STATIC_DRAW);
+    glGenTextures(1, &_MeshBBoxTextureID);
+    glBindTexture(GL_TEXTURE_BUFFER, _MeshBBoxTextureID);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _MeshBBoxTextureID);
+
+    glGenBuffers(1, &_MeshIdRangeTextureID);
+    glBindBuffer(GL_TEXTURE_BUFFER, _MeshIdRangeTextureID);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(int) * _Scene -> GetMeshIdxRange().size(), &_Scene -> GetMeshIdxRange()[0], GL_STATIC_DRAW);
+    glGenTextures(1, &_MeshIdRangeTextureID);
+    glBindTexture(GL_TEXTURE_BUFFER, _MeshIdRangeTextureID);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_R32I, _MeshIdRangeTextureID);
   }
 
   const std::vector<Material> & Materials =  _Scene -> GetMaterials();
@@ -964,6 +984,10 @@ void Test3::RenderToTexture()
   glBindTexture(GL_TEXTURE_BUFFER, _TexIndTextureID);
   glActiveTexture(GL_TEXTURE7);
   glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTextureID);
+  glActiveTexture(GL_TEXTURE8);
+  glBindTexture(GL_TEXTURE_BUFFER, _MeshBBoxTextureID);
+  glActiveTexture(GL_TEXTURE9);
+  glBindTexture(GL_TEXTURE_BUFFER, _MeshIdRangeTextureID);
   
   _Quad -> Render(*_RTTShader);
 }

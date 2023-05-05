@@ -245,10 +245,29 @@ void Scene::CompileMeshData( Vec2i iTextureSize )
     uvMatIDs.resize(curUVs.size());
     offsetIdx.resize(curIndices.size());
 
+    Vec3 low, high;
     for ( int i = 0; i < curVertices.size(); ++i )
     {
       Vec4 transformedVtx = meshInst._Transform * Vec4(curVertices[i], 1.f);
       transformedVertices[i] = { transformedVtx[0], transformedVtx[1], transformedVtx[2] };
+
+      if ( i )
+      {
+        if ( transformedVtx.x < low.x )
+          low.x = transformedVtx.x;
+        if ( transformedVtx.y < low.y )
+          low.y = transformedVtx.y;
+        if ( transformedVtx.z < low.z )
+          low.z = transformedVtx.z;
+        if ( transformedVtx.x > high.x )
+          high.x = transformedVtx.x;
+        if ( transformedVtx.y > high.y )
+          high.y = transformedVtx.y;
+        if ( transformedVtx.z > high.z )
+          high.z = transformedVtx.z;
+      }
+      else
+        low = high = Vec3(transformedVtx);
     }
 
     Mat4x4 trInvTransfo = glm::transpose(glm::inverse(meshInst._Transform));
@@ -277,6 +296,11 @@ void Scene::CompileMeshData( Vec2i iTextureSize )
       else
         offsetIdx[i] = { curIndices[i].x + vtxIndexOffset, curIndices[i].y + normIndexOffset, (uvMatIDs.size()-1)  + uvIndexOffset };
     }
+
+    _MeshBBoxes.push_back(low);
+    _MeshBBoxes.push_back(high);
+    _MeshIdxRange.push_back(_Indices.size());
+    _MeshIdxRange.push_back(_Indices.size() + curIndices.size() - 1);
 
     _Vertices.insert(std::end(_Vertices), std::begin(transformedVertices), std::end(transformedVertices));
     _Normals.insert(std::end(_Normals), std::begin(transformedNormals), std::end(transformedNormals));
