@@ -93,6 +93,23 @@ bool BoxIntersection( vec3 iLow, vec3 iHigh, mat4 iTransfom, Ray iRay, out float
   return true;
 }
 
+// Journal of Computer Graphics Techniques Vol. 7, No. 3, 2018
+// A Ray-Box Intersection Algorithm and Efficient Dynamic Voxel Rendering
+bool BoxIntersection( vec3 iLow, vec3 iHigh, Ray iRay, out float oHitDistance )
+{
+  vec3 invRaydir = 1.f / iRay._Dir;
+
+  vec3 t0 = (iLow  - iRay._Orig) * invRaydir;
+  vec3 t1 = (iHigh - iRay._Orig) * invRaydir;
+
+  vec3 tmin = min(t0,t1);
+  vec3 tmax = max(t0,t1);
+
+  oHitDistance = max(max(tmin.x, tmin.y), tmin.z);
+
+  return oHitDistance <= min(min(tmax.x, tmax.y), tmax.z);
+}
+
 // Adapted from https://gist.github.com/Shtille/1f98c649abeeb7a18c5a56696546d3cf
 vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iTransfom, vec3 iHitPoint )
 {
@@ -187,18 +204,4 @@ bool TriangleIntersection2( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oH
     return false;
 
   return true;
-}
-
-// adapted from intersectCube in https://github.com/evanw/webgl-path-tracing/blob/master/webgl-path-tracing.js
-// compute the near and far intersections of the cube (stored in the x and y components) using the slab method
-// no intersection means vec.x > vec.y (really tNear > tFar)
-bool BBoxIntersection( Ray iRay, vec3 iLow, vec3 iHigh )
-{
-  vec3 tMin = (iLow - iRay._Orig) / iRay._Dir;
-  vec3 tMax = (iHigh - iRay._Orig) / iRay._Dir;
-  vec3 t1 = min(tMin, tMax);
-  vec3 t2 = max(tMin, tMax);
-  float tNear = max(max(t1.x, t1.y), t1.z);
-  float tFar = min(min(t2.x, t2.y), t2.z);
-  return ( tNear <= tFar );
 }

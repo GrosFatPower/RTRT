@@ -118,9 +118,9 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
     vec3 high = texelFetch(u_MeshBBoxTexture, ind + 1).xyz;
 
     hitDist = 0.f;
-    mat4 identity = mat4(1.f);
-    if ( BoxIntersection(low, high, identity, iRay, hitDist) && ( hitDist > 0.f ) )
-    //if ( BBoxIntersection(iRay, low, high) )
+    //mat4 identity = mat4(1.f);
+    //if ( BoxIntersection(low, high, identity, iRay, hitDist) && ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) ) )
+    if ( BoxIntersection(low, high, iRay, hitDist) && ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) ) )
     {
       int startIdx = texelFetch(u_MeshIDRangeTexture, ind).x;
       int endIdx   = texelFetch(u_MeshIDRangeTexture, ind + 1).x;
