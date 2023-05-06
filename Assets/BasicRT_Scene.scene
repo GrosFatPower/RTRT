@@ -16,9 +16,9 @@ camera
 light
 {
 	type sphere
-	position 2 10 5
+	position 2 3 3
 	emission 4. 4. 4.
-	radius .5
+	radius .2
 }
 
 material Green
@@ -62,6 +62,12 @@ material Yellow
 	color .8 .8 .0
 	metallic 0.7
 	roughness 0.001
+}
+
+material StainlessSteel
+{
+	roughness 0.0
+	metallic 1.0
 }
 
 material small_box_white
@@ -159,50 +165,73 @@ material ShelfBookCover2
 	albedotexture diningroom/textures/shelfbook2.jpg
 }
 
-sphere
+material WoodenFloor
 {
-	radius .5
-	material Green
-	position 0.0 0.0 0.0
+	albedotexture diningroom/textures/floor.jpg
+	roughness 0.05
 }
 
-sphere
+material WoodenBox
 {
-	radius 1.0
-	material Orange
-	position 2.0 2.0 -3.0
+	albedotexture diningroom/textures/box.jpg
+	roughness 0.1
 }
 
-sphere
+material Painting
 {
-	radius 2.0
-	material Blue
-	position -5.0 3.0 4.0
+	albedotexture diningroom/textures/painting.jpg
 }
 
-box
+material BlackPlastic
 {
-	low -1.0 -1.0 -1.0
-	hight 1.0 1.0 1.0
-	material Yellow
-	position -3.0 1.0 -2.0
+	color 0.005	0.005 0.005
+	roughness 0.2
 }
 
-box
-{
-	low -1.0 -2.0 -1.0
-	hight 1.0 2.0 1.0
-	material Red
-	position 4.0 1.5 2.0
-}
-
-plane
-{
-	origin 0.0 -1 0.0
-	normal 0.0 1.0 0.0
-	material White
-	position 0.0 0.0 0.0
-}
+#sphere
+#{
+#	radius .5
+#	material Green
+#	position 0.0 0.0 0.0
+#}
+#
+#sphere
+#{
+#	radius 1.0
+#	material Orange
+#	position 2.0 2.0 -3.0
+#}
+#
+#sphere
+#{
+#	radius 2.0
+#	material Blue
+#	position -5.0 3.0 4.0
+#}
+#
+#box
+#{
+#	low -1.0 -1.0 -1.0
+#	hight 1.0 1.0 1.0
+#	material Yellow
+#	position -3.0 1.0 -2.0
+#}
+#
+#box
+#{
+#	low -1.0 -2.0 -1.0
+#	hight 1.0 2.0 1.0
+#	material Red
+#	position 4.0 1.5 2.0
+#}
+#
+#plane
+#{
+#	origin 0.0 -1 0.0
+#	normal 0.0 1.0 0.0
+#	material White
+#	position 0.0 0.0 0.0
+#}
 
 #mesh
 #{
@@ -317,3 +346,51 @@ mesh
 	file diningroom/book18.obj
 	material Book18
 }
+
+mesh
+{
+	file diningroom/bucket1.obj
+	material WoodenBox
+}
+
+mesh
+{
+	file diningroom/bucket2.obj
+	material WoodenBox
+}
+
+mesh
+{
+	file diningroom/bucket3.obj
+	material WoodenBox
+}
+
+mesh
+{
+	file diningroom/bucket4.obj
+	material WoodenBox
+}
+
+#mesh
+#{
+#	file diningroom/chair_legs.obj
+#	material StainlessSteel
+#}
+
+#mesh
+#{
+#	file diningroom/chair_nuts.obj
+#	material StainlessSteel
+#}
+
+#mesh
+#{
+#	file diningroom/chair_rubber_pegs.obj
+#	material BlackPlastic
+#}
+
+#mesh
+#{
+#	file diningroom/chair_seats.obj
+#	material BlackPlastic
+#}

@@ -1,12 +1,20 @@
+#renderer
+#{
+#	resolution 1280 720
+#	maxdepth 2
+#	#tilewidth 320
+#	#tileheight 180
+#	#envmapfile HDR/sunset.hdr
+#	#envmapintensity 5.0
+#}
+
 renderer
 {
 	resolution 1280 720
-	maxdepth 2
-	#tilewidth 320
-	#tileheight 180
-	#envmapfile HDR/sunset.hdr
-	#envmapintensity 5.0
+	enablebackground true
+	bounces 2
 }
+
 camera
 {
 	position 20 12 0
@@ -38,11 +46,11 @@ mesh
 	material white
 }
 
-mesh
-{
-	file teapot/Mesh050.obj
-	material checker
-}
+#mesh
+#{
+#	file teapot/Mesh050.obj
+#	material checker
+#}
 
 light
 {

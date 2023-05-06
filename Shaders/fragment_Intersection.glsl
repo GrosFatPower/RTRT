@@ -97,7 +97,7 @@ bool BoxIntersection( vec3 iLow, vec3 iHigh, mat4 iTransfom, Ray iRay, out float
 // A Ray-Box Intersection Algorithm and Efficient Dynamic Voxel Rendering
 bool BoxIntersection( vec3 iLow, vec3 iHigh, Ray iRay, out float oHitDistance )
 {
-  vec3 invRaydir = 1.f / iRay._Dir;
+  vec3 invRaydir = 1.f / iRay._Dir; // Safe ???
 
   vec3 t0 = (iLow  - iRay._Orig) * invRaydir;
   vec3 t1 = (iHigh - iRay._Orig) * invRaydir;
