@@ -1,7 +1,7 @@
 #ifndef _Mesh_
 #define _Mesh_
 
-#include "Math.h"
+#include "MathUtil.h"
 #include <vector>
 #include <string>
 

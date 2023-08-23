@@ -1,4 +1,4 @@
-#include "Bvh.h"
+#include "GpuBvh.h"
 #include "Mesh.h"
 #include <iostream>
 #include <memory>
@@ -6,17 +6,17 @@
 namespace RTRT
 {
 
-Bvh::~Bvh()
+GpuBvh::~GpuBvh()
 {
 
 }
 
-BLAS::~BLAS()
+GpuBLAS::~GpuBLAS()
 {
 
 }
 
-int BLAS::Build( Mesh * iMesh )
+int GpuBLAS::Build( Mesh * iMesh )
 {
   if ( !iMesh )
     return 1;
@@ -71,7 +71,7 @@ int BLAS::Build( Mesh * iMesh )
   return 0;
 }
 
-int BLAS::ProcessNodes(RadeonRays::Bvh::Node * iNode)
+int GpuBLAS::ProcessNodes(RadeonRays::Bvh::Node * iNode)
 {
   RadeonRays::bbox bbox = iNode -> bounds;
 

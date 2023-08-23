@@ -24,6 +24,7 @@
 #include <cassert>
 #include <cmath>
 #include "split_bvh.h"
+#include "MathUtil.h"
 
 using namespace std;
 
@@ -235,7 +236,7 @@ namespace RadeonRays
         // PerformObjectSplit simply splits in half
         // in this case
         Vec3 centroid_extents = req.centroid_bounds.extents();
-        if (Dot(centroid_extents, centroid_extents) == 0.f)
+        if (MathUtil::Dot(centroid_extents, centroid_extents) == 0.f)
         {
             return split;
         }
@@ -354,7 +355,7 @@ namespace RadeonRays
         auto invarea = 1.f / req.bounds.surface_area();
 
         // If there are too few primitives don't split them
-        if (Dot(extents, extents) == 0.f)
+        if (MathUtil::Dot(extents, extents) == 0.f)
         {
             return split;
         }
@@ -390,9 +391,9 @@ namespace RadeonRays
         {
             PrimRef const& primref(refs[i]);
             // Determine starting bin for this primitive
-            Vec3 firstbin = Clamp((primref.bounds.pmin - origin) * invbinsize, Vec3(0, 0, 0), Vec3(kNumBins - 1, kNumBins - 1, kNumBins - 1));
+            Vec3 firstbin = MathUtil::Clamp((primref.bounds.pmin - origin) * invbinsize, Vec3(0, 0, 0), Vec3(kNumBins - 1, kNumBins - 1, kNumBins - 1));
             // Determine finishing bin
-            Vec3 lastbin = Clamp((primref.bounds.pmax - origin) * invbinsize, firstbin, Vec3(kNumBins - 1, kNumBins - 1, kNumBins - 1));
+            Vec3 lastbin = MathUtil::Clamp((primref.bounds.pmax - origin) * invbinsize, firstbin, Vec3(kNumBins - 1, kNumBins - 1, kNumBins - 1));
             // Iterate over axis
             for (int axis = 0; axis < 3; ++axis)
             {

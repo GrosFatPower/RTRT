@@ -9,7 +9,7 @@
 #include "Mesh.h"
 #include "MeshInstance.h"
 #include "Texture.h"
-#include "Math.h"
+#include "MathUtil.h"
 #include "Loader.h"
 
 #include "imgui.h"
@@ -157,6 +157,7 @@ Test3::~Test3()
   glDeleteBuffers(1, &_VtxUVBufferID);
   glDeleteBuffers(1, &_VtxIndBufferID);
   glDeleteBuffers(1, &_TexIndBufferID);
+  glDeleteBuffers(1, &_BLASBufferID);
 
   glDeleteTextures(1, &_ScreenTextureID);
   glDeleteTextures(1, &_VtxTextureID);
@@ -164,6 +165,7 @@ Test3::~Test3()
   glDeleteTextures(1, &_VtxUVTextureID);
   glDeleteTextures(1, &_VtxIndTextureID);
   glDeleteTextures(1, &_TexIndTextureID);
+  glDeleteTextures(1, &_BLASTextureID);
   glDeleteTextures(1, &_TexArrayTextureID);
   glDeleteTextures(1, &_MeshBBoxTextureID);
   glDeleteTextures(1, &_MeshIdRangeTextureID);
@@ -361,14 +363,15 @@ int Test3::UpdateUniforms()
           }
         }
 
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxTexture"),      2);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxNormTexture"),  3);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxUVTexture"),    4);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxIndTexture"),   5);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexIndTexture"),   6);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexArrayTexture"), 7);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshBBoxTexture"), 8);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxTexture"),         2);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxNormTexture"),     3);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxUVTexture"),       4);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxIndTexture"),      5);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexIndTexture"),      6);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexArrayTexture"),    7);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshBBoxTexture"),    8);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshIDRangeTexture"), 9);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASNodesTexture"),  10);
 
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbSpheres"), nbSpheres);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbPlanes"), nbPlanes);
@@ -838,6 +841,13 @@ int Test3::InitializeScene()
       glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     }
 
+    glGenBuffers(1, &_BLASBufferID);
+    glBindBuffer(GL_TEXTURE_BUFFER, _BLASBufferID);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(GpuBvh::Node) * _Scene -> GetBLASNode().size(), &_Scene -> GetBLASNode()[0], GL_STATIC_DRAW);
+    glGenTextures(1, &_BLASTextureID);
+    glBindTexture(GL_TEXTURE_BUFFER, _BLASTextureID);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32I, _VtxIndBufferID);
+
     glGenBuffers(1, &_MeshBBoxTextureID);
     glBindBuffer(GL_TEXTURE_BUFFER, _MeshBBoxTextureID);
     glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene -> GetMeshBBoxes().size(), &_Scene -> GetMeshBBoxes()[0], GL_STATIC_DRAW);
@@ -989,6 +999,8 @@ void Test3::RenderToTexture()
   glBindTexture(GL_TEXTURE_BUFFER, _MeshBBoxTextureID);
   glActiveTexture(GL_TEXTURE9);
   glBindTexture(GL_TEXTURE_BUFFER, _MeshIdRangeTextureID);
+  glActiveTexture(GL_TEXTURE10);
+  glBindTexture(GL_TEXTURE_BUFFER, _BLASTextureID);
   
   _Quad -> Render(*_RTTShader);
 }

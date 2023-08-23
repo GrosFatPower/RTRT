@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 project(RTRT
   LANGUAGES CXX
   VERSION 1.0
@@ -34,6 +34,7 @@ source_group("header" FILES ${CORE_HEADER})
 source_group("shaders" FILES ${SHADERS})
 
 target_include_directories(RTRT
+  PUBLIC ${CMAKE_SOURCE_DIR}/Source/src
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glfw/include
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/imgui
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/stb
@@ -57,6 +58,7 @@ target_link_libraries(RTRT
 
 target_compile_definitions(RTRT
   PUBLIC GLEW_STATIC
+  PUBLIC NOMINMAX
 )
 
 target_compile_features(RTRT

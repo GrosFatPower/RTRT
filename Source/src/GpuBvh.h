@@ -1,7 +1,7 @@
-#ifndef _Bvh_
-#define _Bvh_
+#ifndef _GpuBvh_
+#define _GpuBvh_
 
-#include "Math.h"
+#include "MathUtil.h"
 #include "split_bvh.h"
 #include <vector>
 
@@ -10,7 +10,7 @@ namespace RTRT
 
 class Mesh;
 
-class Bvh
+class GpuBvh
 {
 public:
 
@@ -23,11 +23,11 @@ public:
 
   virtual int ProcessNodes(RadeonRays::Bvh::Node * iNode) = 0;
 
-  const std::vector<Node> GetNodes() const { return _Nodes; }
+  const std::vector<Node> & GetNodes() const { return _Nodes; }
 
 public:
-  Bvh() {}
-  virtual ~Bvh();
+  GpuBvh() {}
+  virtual ~GpuBvh();
 
 protected:
 
@@ -35,21 +35,21 @@ protected:
   std::vector<Node> _Nodes;
 };
 
-class TLAS : public Bvh
+class GpuTLAS : public GpuBvh
 {
 public:
-  TLAS() {}
-  virtual ~TLAS();
+  GpuTLAS() {}
+  virtual ~GpuTLAS();
 
 private:
 
 };
 
-class BLAS : public Bvh
+class GpuBLAS : public GpuBvh
 {
 public:
-  BLAS() {}
-  virtual ~BLAS();
+  GpuBLAS() {}
+  virtual ~GpuBLAS();
 
   int Build( Mesh * iMesh );
 
@@ -64,4 +64,4 @@ private:
 
 }
 
-#endif /* _Bvh_ */
+#endif /* _GpuBvh_ */

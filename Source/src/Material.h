@@ -1,7 +1,7 @@
 #ifndef _Material_
 #define _Material_
 
-#include "Math.h"
+#include "MathUtil.h"
 
 namespace RTRT
 {

@@ -1,7 +1,7 @@
 #ifndef _MeshInstance_
 #define _MeshInstance_
 
-#include "Math.h"
+#include "MathUtil.h"
 #include <string>
 
 namespace RTRT

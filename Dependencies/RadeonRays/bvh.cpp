@@ -260,7 +260,7 @@ namespace RadeonRays
         // PerformObjectSplit simply splits in half
         // in this case
         Vec3 centroid_extents = req.centroid_bounds.extents();
-        if (Dot(centroid_extents, centroid_extents) == 0.f)
+        if (MathUtil::Dot(centroid_extents, centroid_extents) == 0.f)
         {
             return split;
         }

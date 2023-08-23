@@ -1,9 +1,9 @@
-#ifndef _Math_
-#define _Math_
+#ifndef _MathUtil_
+#define _MathUtil_
 
 #define _USE_MATH_DEFINES
 
-#include <math.h>
+#include <Math.h>
 #include <cmath>
 #include <algorithm>
 
@@ -38,6 +38,38 @@ public:
 
   template <typename T>
   static T Clamp(T x, T lower, T upper) { return std::min(upper, std::max(x, lower)); };
+
+  static Vec3 Min(const Vec3 & a, const Vec3 & b)
+  {
+    Vec3 out;
+    out.x = std::min(a.x, b.x);
+    out.y = std::min(a.y, b.y);
+    out.z = std::min(a.z, b.z);
+    return out;
+  };
+
+  static Vec3 Max(const Vec3& a, const Vec3& b)
+  {
+    Vec3 out;
+    out.x = std::max(a.x, b.x);
+    out.y = std::max(a.y, b.y);
+    out.z = std::max(a.z, b.z);
+    return out;
+  };
+
+  static float Dot(const Vec3& a, const Vec3& b)
+  {
+    return (a.x * b.x + a.y * b.y + a.z * b.z);
+  };
+
+  static Vec3 Clamp(const Vec3& a, const Vec3& lower, const Vec3& upper)
+  {
+    return Vec3(
+        Clamp(a.x, lower.x, upper.x),
+        Clamp(a.y, lower.y, upper.y),
+        Clamp(a.z, lower.z, upper.z)
+    );
+  }
 
   static Mat4x4 QuatToMatrix( float x, float y, float z, float s ) // q = s + ix + jy + kz
   {
@@ -95,4 +127,4 @@ public:
   }
 };
 
-#endif /* _Math_ */
+#endif /* _MathUtil_ */

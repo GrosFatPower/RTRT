@@ -36,14 +36,14 @@ namespace RadeonRays
 	// Grow the bounding box by a point
 	void bbox::grow(Vec3 const& p)
 	{
-		pmin = Min(pmin, p);
-		pmax = Max(pmax, p);
+		pmin = MathUtil::Min(pmin, p);
+		pmax = MathUtil::Max(pmax, p);
 	}
 	// Grow the bounding box by a box
 	void bbox::grow(bbox const& b)
 	{
-		pmin = Min(pmin, b.pmin);
-		pmax = Max(pmax, b.pmax);
+		pmin = MathUtil::Min(pmin, b.pmin);
+		pmax = MathUtil::Max(pmax, b.pmax);
 	}
 
 	bool bbox::contains(Vec3 const& p) const
@@ -57,20 +57,20 @@ namespace RadeonRays
 	bbox bboxunion(bbox const& box1, bbox const& box2)
 	{
 		bbox res;
-		res.pmin = Min(box1.pmin, box2.pmin);
-		res.pmax = Max(box1.pmax, box2.pmax);
+		res.pmin = MathUtil::Min(box1.pmin, box2.pmin);
+		res.pmax = MathUtil::Max(box1.pmax, box2.pmax);
 		return res;
 	}
 
 	bbox intersection(bbox const& box1, bbox const& box2)
 	{
-		return bbox(Max(box1.pmin, box2.pmin), Min(box1.pmax, box2.pmax));
+		return bbox(MathUtil::Max(box1.pmin, box2.pmin), MathUtil::Min(box1.pmax, box2.pmax));
 	}
 
 	void intersection(bbox const& box1, bbox const& box2, bbox& box)
 	{
-		box.pmin = Max(box1.pmin, box2.pmin);
-		box.pmax = Min(box1.pmax, box2.pmax);
+		box.pmin = MathUtil::Max(box1.pmin, box2.pmin);
+		box.pmax = MathUtil::Min(box1.pmax, box2.pmax);
 	}
 
 	#define BBOX_INTERSECTION_EPS 0.f

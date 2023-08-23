@@ -1,7 +1,6 @@
 #include "Scene.h"
 #include "Mesh.h"
 #include "Texture.h"
-#include "Bvh.h"
 #include "stb_image.h"
 #include "stb_image_resize.h"
 #include <iostream>
@@ -232,7 +231,6 @@ void Scene::CompileMeshData( Vec2i iTextureSize )
     if ( !curMesh || !curMesh -> GetNbFaces() )
       continue;
 
-   BLAS _BVH;
    _BVH.Build(curMesh);
 
     const std::vector<Vec3>  & curVertices = curMesh -> GetVertices();

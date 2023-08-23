@@ -8,7 +8,7 @@
 #include "Primitive.h"
 #include "PrimitiveInstance.h"
 #include "Texture.h"
-//#include "Bvh.h"
+#include "GpuBvh.h"
 #include <vector>
 #include <map>
 
@@ -72,6 +72,7 @@ public:
   const std::vector<unsigned char> & GetTextureArray()    const { return _TextureArray;    }
   const std::vector<Vec3>          & GetMeshBBoxes()      const { return _MeshBBoxes;      }
   const std::vector<int>           & GetMeshIdxRange()    const { return _MeshIdxRange;    }
+  const std::vector<GpuBvh::Node>  & GetBLASNode()        const { return _BVH.GetNodes();  }
 
 private:
 
@@ -99,7 +100,7 @@ private:
   std::vector<Vec3>              _MeshBBoxes;
   std::vector<int>               _MeshIdxRange;
 
-  //BLAS                           _BVH;
+  GpuBLAS                        _BVH;
 };
 
 }

@@ -66,11 +66,13 @@ private:
   GLuint          _VtxUVBufferID        = 0;
   GLuint          _VtxIndBufferID       = 0;
   GLuint          _TexIndBufferID       = 0;
+  GLuint          _BLASBufferID         = 0;
   GLuint          _VtxTextureID         = 0;
   GLuint          _VtxNormTextureID     = 0;
   GLuint          _VtxUVTextureID       = 0;
   GLuint          _VtxIndTextureID      = 0;
   GLuint          _TexIndTextureID      = 0;
+  GLuint          _BLASTextureID        = 0;
   GLuint          _TexArrayTextureID    = 0;
   GLuint          _MeshBBoxTextureID    = 0;
   GLuint          _MeshIdRangeTextureID = 0;

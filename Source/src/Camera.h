@@ -1,7 +1,7 @@
 #ifndef _Camera_
 #define _Camera_
 
-#include "Math.h"
+#include "MathUtil.h"
 
 namespace RTRT
 {

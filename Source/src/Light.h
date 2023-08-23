@@ -1,7 +1,7 @@
 #ifndef _Light_
 #define _Light_
 
-#include "Math.h"
+#include "MathUtil.h"
 
 namespace RTRT
 {

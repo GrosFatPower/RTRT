@@ -10,7 +10,7 @@
 #include "Light.h"
 #include "Camera.h"
 #include "RenderSettings.h"
-#include "Math.h"
+#include "MathUtil.h"
 #include <map>
 #include <vector>
 #include <iostream>

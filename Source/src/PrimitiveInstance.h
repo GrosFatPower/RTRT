@@ -1,7 +1,7 @@
 #ifndef _ObjectInstance_
 #define _ObjectInstance_
 
-#include "Math.h"
+#include "MathUtil.h"
 #include "Primitive.h"
 
 namespace RTRT

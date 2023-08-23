@@ -49,6 +49,7 @@ uniform samplerBuffer  u_VtxTexture;
 uniform samplerBuffer  u_VtxNormTexture;
 uniform samplerBuffer  u_VtxUVTexture;
 uniform samplerBuffer  u_MeshBBoxTexture;
+uniform samplerBuffer  u_BLASNodesTexture;
 uniform isamplerBuffer u_VtxIndTexture;
 uniform isamplerBuffer u_TexIndTexture;
 uniform isamplerBuffer u_MeshIDRangeTexture;

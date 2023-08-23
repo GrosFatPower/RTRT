@@ -1,7 +1,7 @@
 #ifndef _RenderSettings_
 #define _RenderSettings_
 
-#include "Math.h"
+#include "MathUtil.h"
 
 namespace RTRT
 {
