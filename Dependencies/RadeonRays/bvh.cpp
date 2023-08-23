@@ -79,7 +79,7 @@ namespace RadeonRays
 #ifdef USE_TBB
             primitive_mutex_.lock();
 #endif
-            node->type = kLeaf;
+            node->type = NodeType::kLeaf;
             node->startidx = static_cast<int>(m_packed_indices.size());
             node->numprims = req.numprims;
 
@@ -108,7 +108,7 @@ namespace RadeonRays
 
                     if (req.numprims < ss.sah && req.numprims < kMaxPrimitivesPerLeaf)
                     {
-                        node->type = kLeaf;
+                        node->type = NodeType::kLeaf;
                         node->startidx = static_cast<int>(m_packed_indices.size());
                         node->numprims = req.numprims;
 
@@ -123,7 +123,7 @@ namespace RadeonRays
                 }
             }
 
-            node->type = kInternal;
+            node->type = NodeType::kInternal;
 
             // Start partitioning and updating extents for children at the same time
             bbox leftbounds, rightbounds, leftcentroid_bounds, rightcentroid_bounds;
@@ -260,7 +260,7 @@ namespace RadeonRays
         // PerformObjectSplit simply splits in half
         // in this case
         Vec3 centroid_extents = req.centroid_bounds.extents();
-        if (Vec3::Dot(centroid_extents, centroid_extents) == 0.f)
+        if (Dot(centroid_extents, centroid_extents) == 0.f)
         {
             return split;
         }

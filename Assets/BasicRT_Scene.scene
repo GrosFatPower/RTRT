@@ -233,143 +233,143 @@ material BlackPlastic
 #	position 0.0 0.0 0.0
 #}
 
+mesh
+{
+	file misc/TexturedBox.obj
+	material textured_box
+}
+
 #mesh
 #{
-#	file misc/TexturedBox.obj
-#	material textured_box
+#	file diningroom/book1.obj
+#	material Book1
 #}
-
-mesh
-{
-	file diningroom/book1.obj
-	material Book1
-}
-
-mesh
-{
-	file diningroom/book2.obj
-	material Book2
-}
-
-mesh
-{
-	file diningroom/book3.obj
-	material Book3
-}
-
-mesh
-{
-	file diningroom/book4.obj
-	material Book4
-}
-
-mesh
-{
-	file diningroom/book5.obj
-	material ShelfBookCover1
-}
-
-mesh
-{
-	file diningroom/book6.obj
-	material Book6
-}
-
-mesh
-{
-	file diningroom/book7.obj
-	material Book7
-}
-
-mesh
-{
-	file diningroom/book8.obj
-	material Book8
-}
-
-mesh
-{
-	file diningroom/book9.obj
-	material Book9
-}
-
-mesh
-{
-	file diningroom/book10.obj
-	material Book10
-}
-
-mesh
-{
-	file diningroom/book11.obj
-	material Book11
-}
-
-mesh
-{
-	file diningroom/book12.obj
-	material ShelfBookCover2
-}
-
-mesh
-{
-	file diningroom/book13.obj
-	material Book3
-}
-
-mesh
-{
-	file diningroom/book14.obj
-	material Book14
-}
-
-mesh
-{
-	file diningroom/book15.obj
-	material Book15
-}
-
-mesh
-{
-	file diningroom/book16.obj
-	material Book16
-}
-
-mesh
-{
-	file diningroom/book17.obj
-	material Book17
-}
-
-mesh
-{
-	file diningroom/book18.obj
-	material Book18
-}
-
-mesh
-{
-	file diningroom/bucket1.obj
-	material WoodenBox
-}
-
-mesh
-{
-	file diningroom/bucket2.obj
-	material WoodenBox
-}
-
-mesh
-{
-	file diningroom/bucket3.obj
-	material WoodenBox
-}
-
-mesh
-{
-	file diningroom/bucket4.obj
-	material WoodenBox
-}
+#
+#mesh
+#{
+#	file diningroom/book2.obj
+#	material Book2
+#}
+#
+#mesh
+#{
+#	file diningroom/book3.obj
+#	material Book3
+#}
+#
+#mesh
+#{
+#	file diningroom/book4.obj
+#	material Book4
+#}
+#
+#mesh
+#{
+#	file diningroom/book5.obj
+#	material ShelfBookCover1
+#}
+#
+#mesh
+#{
+#	file diningroom/book6.obj
+#	material Book6
+#}
+#
+#mesh
+#{
+#	file diningroom/book7.obj
+#	material Book7
+#}
+#
+#mesh
+#{
+#	file diningroom/book8.obj
+#	material Book8
+#}
+#
+#mesh
+#{
+#	file diningroom/book9.obj
+#	material Book9
+#}
+#
+#mesh
+#{
+#	file diningroom/book10.obj
+#	material Book10
+#}
+#
+#mesh
+#{
+#	file diningroom/book11.obj
+#	material Book11
+#}
+#
+#mesh
+#{
+#	file diningroom/book12.obj
+#	material ShelfBookCover2
+#}
+#
+#mesh
+#{
+#	file diningroom/book13.obj
+#	material Book3
+#}
+#
+#mesh
+#{
+#	file diningroom/book14.obj
+#	material Book14
+#}
+#
+#mesh
+#{
+#	file diningroom/book15.obj
+#	material Book15
+#}
+#
+#mesh
+#{
+#	file diningroom/book16.obj
+#	material Book16
+#}
+#
+#mesh
+#{
+#	file diningroom/book17.obj
+#	material Book17
+#}
+#
+#mesh
+#{
+#	file diningroom/book18.obj
+#	material Book18
+#}
+#
+#mesh
+#{
+#	file diningroom/bucket1.obj
+#	material WoodenBox
+#}
+#
+#mesh
+#{
+#	file diningroom/bucket2.obj
+#	material WoodenBox
+#}
+#
+#mesh
+#{
+#	file diningroom/bucket3.obj
+#	material WoodenBox
+#}
+#
+#mesh
+#{
+#	file diningroom/bucket4.obj
+#	material WoodenBox
+#}
 
 #mesh
 #{

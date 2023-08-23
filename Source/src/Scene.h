@@ -8,6 +8,7 @@
 #include "Primitive.h"
 #include "PrimitiveInstance.h"
 #include "Texture.h"
+//#include "Bvh.h"
 #include <vector>
 #include <map>
 
@@ -97,6 +98,8 @@ private:
   std::vector<unsigned char>     _TextureArray;
   std::vector<Vec3>              _MeshBBoxes;
   std::vector<int>               _MeshIdxRange;
+
+  //BLAS                           _BVH;
 };
 
 }

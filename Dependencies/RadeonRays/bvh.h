@@ -39,6 +39,42 @@ namespace RadeonRays
     class Bvh
     {
     public:
+
+      // Enum for node type
+      enum class NodeType
+      {
+          kInternal,
+          kLeaf
+      };
+
+      struct Bvh::Node
+      {
+          // Node bounds in world space
+          bbox bounds;
+          // Type of the node
+          NodeType type;
+          // Node index in a complete tree
+          int index;
+
+          union
+          {
+              // For internal nodes: left and right children
+              struct
+              {
+                  Node* lc;
+                  Node* rc;
+              };
+
+              // For leaves: starting primitive index and number of primitives
+              struct
+              {
+                  int startidx;
+                  int numprims;
+              };
+          };
+      };
+
+    public:
         Bvh(float traversal_cost, int num_bins = 64, bool usesah = false)
             : m_root(nullptr)
             , m_num_bins(num_bins)
@@ -67,6 +103,10 @@ namespace RadeonRays
         // This number can differ from numbounds passed to Build function for
         // some BVH implementations (like SBVH)
         virtual size_t GetNumIndices() const;
+
+        Node * GetRootNode() const;
+         
+        int GetNodeCount() const;
 
         // Print BVH statistics
         virtual void PrintStatistics(std::ostream& os) const;
@@ -109,13 +149,6 @@ namespace RadeonRays
 
         SahSplit FindSahSplit(SplitRequest const& req, bbox const* bounds, Vec3 const* centroids, int* primindices) const;
 
-        // Enum for node type
-        enum NodeType
-        {
-            kInternal,
-            kLeaf
-        };
-
         // Bvh nodes
         std::vector<Node> m_nodes;
         // Identifiers of leaf primitives
@@ -144,34 +177,6 @@ namespace RadeonRays
         Bvh(Bvh const&) = delete;
         Bvh& operator = (Bvh const&) = delete;
 
-		friend class BvhTranslator;
-    };
-
-    struct Bvh::Node
-    {
-        // Node bounds in world space
-        bbox bounds;
-        // Type of the node
-        NodeType type;
-        // Node index in a complete tree
-        int index;
-
-        union
-        {
-            // For internal nodes: left and right children
-            struct
-            {
-                Node* lc;
-                Node* rc;
-            };
-
-            // For leaves: starting primitive index and number of primitives
-            struct
-            {
-                int startidx;
-                int numprims;
-            };
-        };
     };
 
     inline int const* Bvh::GetIndices() const
@@ -187,6 +192,16 @@ namespace RadeonRays
     inline int Bvh::GetHeight() const
     {
         return m_height;
+    }
+
+    inline Bvh::Node * Bvh::GetRootNode() const
+    {
+      return m_root;
+    }
+
+    inline int Bvh::GetNodeCount() const
+    {
+      return m_nodecnt;
     }
 }
 

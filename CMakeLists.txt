@@ -21,6 +21,18 @@ set(GLEW_LIBRARIES "glew32s.lib")
 
 find_package(OpenGL REQUIRED)
 
+file(GLOB_RECURSE CORE_SOURCE ./Source/src/*.cpp)
+file(GLOB_RECURSE CORE_HEADER ./Source/src/*.h)
+file(GLOB_RECURSE EXT_SOURCE ./Dependencies/RadeonRays/*.cpp)
+file(GLOB_RECURSE EXT_HEADER ./Dependencies/RadeonRays/*.h)
+file(GLOB_RECURSE SHADERS ./Shaders/*.glsl)
+
+add_executable(RTRT ${CORE_SOURCE} ${CORE_HEADER} ${EXT_SOURCE} ${EXT_HEADER} ${SHADERS})
+
+source_group("src"    FILES ${CORE_SOURCE})
+source_group("header" FILES ${CORE_HEADER})
+source_group("shaders" FILES ${SHADERS})
+
 target_include_directories(RTRT
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glfw/include
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/imgui
@@ -28,6 +40,7 @@ target_include_directories(RTRT
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glm
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinyobjloader
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinydir
+  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/RadeonRays
   PUBLIC ${GLEW_INCLUDE_DIRS}
 )
 
@@ -38,7 +51,6 @@ target_link_directories(RTRT
 target_link_libraries(RTRT
   glfw
   imgui
-  
   ${GLEW_LIBRARIES}
   ${OPENGL_LIBRARIES}
 )
@@ -50,3 +62,4 @@ target_compile_definitions(RTRT
 target_compile_features(RTRT
  PRIVATE cxx_std_17
 )
+

@@ -69,7 +69,7 @@ namespace RadeonRays
         // Create leaf node if we have enough prims
         if (req.numprims < 4)
         {
-            node->type = kLeaf;
+            node->type = NodeType::kLeaf;
             node->startidx = (int)m_packed_indices.size();
             node->numprims = req.numprims;
 
@@ -80,7 +80,7 @@ namespace RadeonRays
         }
         else
         {
-            node->type = kInternal;
+            node->type = NodeType::kInternal;
 
             // Choose the maximum extent
             int axis = req.centroid_bounds.maxdim();
@@ -235,7 +235,7 @@ namespace RadeonRays
         // PerformObjectSplit simply splits in half
         // in this case
         Vec3 centroid_extents = req.centroid_bounds.extents();
-        if (Vec3::Dot(centroid_extents, centroid_extents) == 0.f)
+        if (Dot(centroid_extents, centroid_extents) == 0.f)
         {
             return split;
         }
@@ -354,7 +354,7 @@ namespace RadeonRays
         auto invarea = 1.f / req.bounds.surface_area();
 
         // If there are too few primitives don't split them
-        if (Vec3::Dot(extents, extents) == 0.f)
+        if (Dot(extents, extents) == 0.f)
         {
             return split;
         }
@@ -390,9 +390,9 @@ namespace RadeonRays
         {
             PrimRef const& primref(refs[i]);
             // Determine starting bin for this primitive
-            Vec3 firstbin = Vec3::Clamp((primref.bounds.pmin - origin) * invbinsize, Vec3(0, 0, 0), Vec3(kNumBins - 1, kNumBins - 1, kNumBins - 1));
+            Vec3 firstbin = Clamp((primref.bounds.pmin - origin) * invbinsize, Vec3(0, 0, 0), Vec3(kNumBins - 1, kNumBins - 1, kNumBins - 1));
             // Determine finishing bin
-            Vec3 lastbin = Vec3::Clamp((primref.bounds.pmax - origin) * invbinsize, firstbin, Vec3(kNumBins - 1, kNumBins - 1, kNumBins - 1));
+            Vec3 lastbin = Clamp((primref.bounds.pmax - origin) * invbinsize, firstbin, Vec3(kNumBins - 1, kNumBins - 1, kNumBins - 1));
             // Iterate over axis
             for (int axis = 0; axis < 3; ++axis)
             {

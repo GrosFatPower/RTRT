@@ -1,4 +1,5 @@
 #include "Mesh.h"
+#include "Bvh.h"
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 #include <iostream>

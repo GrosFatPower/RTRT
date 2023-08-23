@@ -19,24 +19,60 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
-#pragma once
-
 #ifndef BBOX_H
 #define BBOX_H
 
+#include "Math.h"
 #include <cmath>
 #include <algorithm>
 #include <limits>
-#include "Config.h"
-#include "Mat4.h"
-#include "Vec2.h"
-#include "Vec3.h"
-#include "Vec4.h"
+#include "glm/vec2.hpp"
+#include "glm/vec3.hpp"
+#include "glm/vec4.hpp"
 
-using namespace GLSLPT;
+typedef glm::vec2  Vec2;
+typedef glm::vec3  Vec3;
+typedef glm::vec4  Vec4;
 
 namespace RadeonRays
 {
+    inline float Clamp(float x, float lower, float upper)
+    {
+      return std::min(upper, std::max(x, lower));
+    };
+
+    inline Vec3 Min(const Vec3 & a, const Vec3 & b)
+    {
+      Vec3 out;
+      out.x = std::min(a.x, b.x);
+      out.y = std::min(a.y, b.y);
+      out.z = std::min(a.z, b.z);
+      return out;
+    };
+
+    inline Vec3 Max(const Vec3& a, const Vec3& b)
+    {
+      Vec3 out;
+      out.x = std::max(a.x, b.x);
+      out.y = std::max(a.y, b.y);
+      out.z = std::max(a.z, b.z);
+      return out;
+    };
+
+    inline float Dot(const Vec3& a, const Vec3& b)
+    {
+        return (a.x * b.x + a.y * b.y + a.z * b.z);
+    };
+
+    inline Vec3 Clamp(const Vec3& a, const Vec3& min, const Vec3& max)
+    {
+      return Vec3(
+          Clamp(a.x, min.x, max.x),
+          Clamp(a.y, min.y, max.y),
+          Clamp(a.z, min.z, max.z)
+      );
+    }
+
     class bbox
     {
     public:
@@ -57,8 +93,8 @@ namespace RadeonRays
         }
 
         bbox(Vec3 const& p1, Vec3 const& p2)
-            : pmin(Vec3::Min(p1, p2))
-            , pmax(Vec3::Max(p1, p2))
+            : pmin(Min(p1, p2))
+            , pmax(Min(p1, p2))
         {
         }
 
