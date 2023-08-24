@@ -18,7 +18,7 @@ public:
   {
     Vec3 _BBoxMin;
     Vec3 _BBoxMax;
-    Vec3 _LcRcLeaf; // LeftChildren/RightChildren/Leaf=0  FirstPrimitiveIdx/NbPrimitives/Leaf=1
+    Vec3 _LcRcLeaf; // LeftChildren/RightChildren/Leaf=0  FirstPrimitiveIdx/NbPrimitives/Leaf=-1 (TLAS) FirstTriangleIdx/NbTriangles/Leaf=1 (BLAS)
   };
 
   virtual int ProcessNodes(RadeonRays::Bvh::Node * iNode) = 0;

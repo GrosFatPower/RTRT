@@ -64,123 +64,123 @@ material Yellow
 	roughness 0.001
 }
 
-material StainlessSteel
-{
-	roughness 0.0
-	metallic 1.0
-}
+#material StainlessSteel
+#{
+#	roughness 0.0
+#	metallic 1.0
+#}
 
-material small_box_white
-{
-	color 0.725 0.71 0.68
-}
+#material small_box_white
+#{
+#	color 0.725 0.71 0.68
+#}
 
-material textured_box
-{
-	albedotexture misc/textures/box.jpg
-}
+#material textured_box
+#{
+#	albedotexture misc/textures/box.jpg
+#}
 
 material Book1
 {
 	albedotexture diningroom/textures/book1.jpg
 }
-
-material Book2
-{
-	albedotexture diningroom/textures/book2.jpg
-}
-
-material Book3
-{
-	albedotexture diningroom/textures/book3.jpg
-}
-
-material Book4
-{
-	albedotexture diningroom/textures/book4.jpg
-}
-
-material Book6
-{
-	albedotexture diningroom/textures/book6.jpg
-}
-
-material Book7
-{
-	albedotexture diningroom/textures/book7.jpg
-}
-
-material Book8
-{
-	albedotexture diningroom/textures/book8.jpg
-}
-
-material Book9
-{
-	albedotexture diningroom/textures/book9.jpg
-}
-
-material Book10
-{
-	albedotexture diningroom/textures/book10.jpg
-}
-
-material Book11
-{
-	albedotexture diningroom/textures/book11.jpg
-}
-
-material Book14
-{
-	albedotexture diningroom/textures/book14.jpg
-}
-
-material Book15
-{
-	albedotexture diningroom/textures/book15.jpg
-}
-
-material Book16
-{
-	albedotexture diningroom/textures/book16.jpg
-}
-
-material Book17
-{
-	albedotexture diningroom/textures/book17.jpg
-}
-
-material Book18
-{
-	albedotexture diningroom/textures/book18.jpg
-}
-
-material ShelfBookCover1
-{
-	albedotexture diningroom/textures/shelfbook1.jpg
-}
-
-material ShelfBookCover2
-{
-	albedotexture diningroom/textures/shelfbook2.jpg
-}
-
-material WoodenFloor
-{
-	albedotexture diningroom/textures/floor.jpg
-	roughness 0.05
-}
-
+#
+#material Book2
+#{
+#	albedotexture diningroom/textures/book2.jpg
+#}
+#
+#material Book3
+#{
+#	albedotexture diningroom/textures/book3.jpg
+#}
+#
+#material Book4
+#{
+#	albedotexture diningroom/textures/book4.jpg
+#}
+#
+#material Book6
+#{
+#	albedotexture diningroom/textures/book6.jpg
+#}
+#
+#material Book7
+#{
+#	albedotexture diningroom/textures/book7.jpg
+#}
+#
+#material Book8
+#{
+#	albedotexture diningroom/textures/book8.jpg
+#}
+#
+#material Book9
+#{
+#	albedotexture diningroom/textures/book9.jpg
+#}
+#
+#material Book10
+#{
+#	albedotexture diningroom/textures/book10.jpg
+#}
+#
+#material Book11
+#{
+#	albedotexture diningroom/textures/book11.jpg
+#}
+#
+#material Book14
+#{
+#	albedotexture diningroom/textures/book14.jpg
+#}
+#
+#material Book15
+#{
+#	albedotexture diningroom/textures/book15.jpg
+#}
+#
+#material Book16
+#{
+#	albedotexture diningroom/textures/book16.jpg
+#}
+#
+#material Book17
+#{
+#	albedotexture diningroom/textures/book17.jpg
+#}
+#
+#material Book18
+#{
+#	albedotexture diningroom/textures/book18.jpg
+#}
+#
+#material ShelfBookCover1
+#{
+#	albedotexture diningroom/textures/shelfbook1.jpg
+#}
+#
+#material ShelfBookCover2
+#{
+#	albedotexture diningroom/textures/shelfbook2.jpg
+#}
+#
+#material WoodenFloor
+#{
+#	albedotexture diningroom/textures/floor.jpg
+#	roughness 0.05
+#}
+#
 material WoodenBox
 {
 	albedotexture diningroom/textures/box.jpg
 	roughness 0.1
 }
-
-material Painting
-{
-	albedotexture diningroom/textures/painting.jpg
-}
+#
+#material Painting
+#{
+#	albedotexture diningroom/textures/painting.jpg
+#}
 
 material BlackPlastic
 {
@@ -233,17 +233,17 @@ material BlackPlastic
 #	position 0.0 0.0 0.0
 #}
 
-mesh
-{
-	file misc/TexturedBox.obj
-	material textured_box
-}
-
 #mesh
 #{
-#	file diningroom/book1.obj
-#	material Book1
+#	file misc/TexturedBox.obj
+#	material textured_box
 #}
+
+mesh
+{
+	file diningroom/book1.obj
+	material Book1
+}
 #
 #mesh
 #{

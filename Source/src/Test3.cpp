@@ -765,9 +765,9 @@ int Test3::InitializeScene()
   if ( _Scene )
     delete _Scene;
 
-  std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene.scene";
+  //std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene.scene";
   //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
-  //std::string sceneFile = "..\\..\\Assets\\teapot.scene";
+  std::string sceneFile = "..\\..\\Assets\\teapot.scene";
 
   //_Scene = new Scene();
   if ( !Loader::LoadScene(sceneFile, _Scene, _Settings) || !_Scene )
@@ -846,7 +846,7 @@ int Test3::InitializeScene()
     glBufferData(GL_TEXTURE_BUFFER, sizeof(GpuBvh::Node) * _Scene -> GetBLASNode().size(), &_Scene -> GetBLASNode()[0], GL_STATIC_DRAW);
     glGenTextures(1, &_BLASTextureID);
     glBindTexture(GL_TEXTURE_BUFFER, _BLASTextureID);
-    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32I, _VtxIndBufferID);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _BLASBufferID);
 
     glGenBuffers(1, &_MeshBBoxTextureID);
     glBindBuffer(GL_TEXTURE_BUFFER, _MeshBBoxTextureID);

@@ -34,11 +34,11 @@ material white
 	roughness 0.0
 }
 
-mesh
-{
-	file teapot/Mesh000.obj
-	material white
-}
+#mesh
+#{
+#	file teapot/Mesh000.obj
+#	material white
+#}
 
 mesh
 {

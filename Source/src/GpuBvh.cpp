@@ -31,7 +31,7 @@ int GpuBLAS::Build( Mesh * iMesh )
   {
     for ( int j = 0; j < 3; ++j )
     {
-      Vec3i indices = iMesh -> GetIndices()[i];
+      Vec3i indices = iMesh -> GetIndices()[i*3+j];
       bounds[i].grow(iMesh -> GetVertices()[indices.x]);
     }
   }
@@ -48,14 +48,14 @@ int GpuBLAS::Build( Mesh * iMesh )
 
   // 3. Remplissage de _TriangleIdx
 
-  size_t nbTriangles = bvh -> GetNumIndices();
+  size_t nbPackedTriangles = bvh -> GetNumIndices();
   _TriangleIdx.clear();
-  _TriangleIdx.reserve(nbTriangles * 3);
+  _TriangleIdx.reserve(nbPackedTriangles * 3);
 
   const int * TrianglesIdx = bvh -> GetIndices();
   if ( TrianglesIdx )
   {
-    for ( int i = 0; i < nbTriangles; ++i )
+    for ( int i = 0; i < nbPackedTriangles; ++i )
     {
       int triangleIdx = TrianglesIdx[i];
 
