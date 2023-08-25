@@ -191,7 +191,7 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
               oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
               oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
               oClosestHit._UV         = uvMatID0 * ( 1 - uv.x - uv.y ) + uvMatID1 * uv.x + uvMatID2 * uv.y;
-              oClosestHit._MaterialID = 0; // TMP
+              oClosestHit._MaterialID = texelFetch(u_TLASMeshMatIDTexture, ind).y;
             }
           }
         }
