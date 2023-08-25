@@ -130,6 +130,7 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
     ivec2 triRange  = texelFetch(u_BLASPackedIndicesRangeTexture, ind).xy;
     blasRange.x *= 3;
 
+    ivec2 meshMatID = texelFetch(u_TLASMeshMatIDTexture, ind).xy;
     vec4 right   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 0, 0), 0).xyzw;
     vec4 up      = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 1, 0), 0).xyzw;
     vec4 forward = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 2, 0), 0).xyzw;
@@ -202,7 +203,7 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
               oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
               oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
               oClosestHit._UV         = uvID0 * ( 1 - uv.x - uv.y ) + uvID1 * uv.x + uvID2 * uv.y;
-              oClosestHit._MaterialID = texelFetch(u_TLASMeshMatIDTexture, ind).y;
+              oClosestHit._MaterialID = meshMatID.y;
             }
           }
         }

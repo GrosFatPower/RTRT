@@ -464,14 +464,14 @@ int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, cons
     else if ( "alphamode" == tokens[0] )
     {
       if ( 2 == nbTokens )
-        alphaMode = std::stof(tokens[1]);
+        alphaMode = tokens[1];
       else
         parsingError++;
     }
     else if ( "mediumtype" == tokens[0] )
     {
       if ( 2 == nbTokens )
-        mediumType = std::stof(tokens[1]);
+        mediumType = tokens[1];
       else
         parsingError++;
     }
