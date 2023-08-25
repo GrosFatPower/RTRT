@@ -183,14 +183,14 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
               vec3 norm1 = texelFetch(u_BLASPackedNormTexture, vInd1.y).xyz;
               vec3 norm2 = texelFetch(u_BLASPackedNormTexture, vInd2.y).xyz;
 
-              vec2 uvMatID0 = texelFetch(u_BLASPackedUVTexture, vInd0.z).xy;
-              vec2 uvMatID1 = texelFetch(u_BLASPackedUVTexture, vInd1.z).xy;
-              vec2 uvMatID2 = texelFetch(u_BLASPackedUVTexture, vInd2.z).xy;
+              vec2 uvID0 = texelFetch(u_BLASPackedUVTexture, vInd0.z).xy;
+              vec2 uvID1 = texelFetch(u_BLASPackedUVTexture, vInd1.z).xy;
+              vec2 uvID2 = texelFetch(u_BLASPackedUVTexture, vInd2.z).xy;
 
               oClosestHit._Dist       = hitDist;
               oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
               oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
-              oClosestHit._UV         = uvMatID0 * ( 1 - uv.x - uv.y ) + uvMatID1 * uv.x + uvMatID2 * uv.y;
+              oClosestHit._UV         = uvID0 * ( 1 - uv.x - uv.y ) + uvID1 * uv.x + uvID2 * uv.y;
               oClosestHit._MaterialID = texelFetch(u_TLASMeshMatIDTexture, ind).y;
             }
           }
