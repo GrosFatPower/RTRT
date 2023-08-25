@@ -125,6 +125,14 @@ public:
         Vec3(iMat[2]) / oScale[2]);
     oRotation = glm::quat_cast(rotMtx);
   }
+
+  static void Decompose(const Mat4x4 & iMat, Vec3 & oRight, Vec3 & oUp, Vec3 & oForward, Vec3 & oPos)
+  {
+    oRight   = Vec3(iMat[0][0], iMat[0][1], iMat[0][2]);
+    oUp      = Vec3(iMat[1][0], iMat[1][1], iMat[1][2]);
+    oForward = Vec3(iMat[2][0], iMat[2][1], iMat[2][2]);
+    oPos     = Vec3(iMat[3][0], iMat[3][1], iMat[3][2]);
+  }
 };
 
 #endif /* _MathUtil_ */

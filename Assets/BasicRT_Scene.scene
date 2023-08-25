@@ -75,35 +75,35 @@ material Yellow
 #	color 0.725 0.71 0.68
 #}
 
-#material textured_box
-#{
-#	albedotexture misc/textures/box.jpg
-#}
+material textured_box
+{
+	albedotexture misc/textures/box.jpg
+}
 
 material Book1
 {
 	albedotexture diningroom/textures/book1.jpg
 }
-#
-#material Book2
-#{
-#	albedotexture diningroom/textures/book2.jpg
-#}
-#
-#material Book3
-#{
-#	albedotexture diningroom/textures/book3.jpg
-#}
-#
-#material Book4
-#{
-#	albedotexture diningroom/textures/book4.jpg
-#}
-#
-#material Book6
-#{
-#	albedotexture diningroom/textures/book6.jpg
-#}
+
+material Book2
+{
+	albedotexture diningroom/textures/book2.jpg
+}
+
+material Book3
+{
+	albedotexture diningroom/textures/book3.jpg
+}
+
+material Book4
+{
+	albedotexture diningroom/textures/book4.jpg
+}
+
+material Book6
+{
+	albedotexture diningroom/textures/book6.jpg
+}
 #
 #material Book7
 #{
@@ -155,10 +155,10 @@ material Book1
 #	albedotexture diningroom/textures/book18.jpg
 #}
 #
-#material ShelfBookCover1
-#{
-#	albedotexture diningroom/textures/shelfbook1.jpg
-#}
+material ShelfBookCover1
+{
+	albedotexture diningroom/textures/shelfbook1.jpg
+}
 #
 #material ShelfBookCover2
 #{
@@ -233,48 +233,48 @@ material BlackPlastic
 #	position 0.0 0.0 0.0
 #}
 
-#mesh
-#{
-#	file misc/TexturedBox.obj
-#	material textured_box
-#}
-
 mesh
 {
 	file diningroom/book1.obj
 	material Book1
 }
-#
-#mesh
-#{
-#	file diningroom/book2.obj
-#	material Book2
-#}
-#
-#mesh
-#{
-#	file diningroom/book3.obj
-#	material Book3
-#}
-#
-#mesh
-#{
-#	file diningroom/book4.obj
-#	material Book4
-#}
-#
-#mesh
-#{
-#	file diningroom/book5.obj
-#	material ShelfBookCover1
-#}
-#
-#mesh
-#{
-#	file diningroom/book6.obj
-#	material Book6
-#}
-#
+
+mesh
+{
+	file misc/TexturedBox.obj
+	material textured_box
+}
+
+mesh
+{
+	file diningroom/book2.obj
+	material Book2
+}
+
+mesh
+{
+	file diningroom/book3.obj
+	material Book3
+}
+
+mesh
+{
+	file diningroom/book4.obj
+	material Book4
+}
+
+mesh
+{
+	file diningroom/book5.obj
+	material ShelfBookCover1
+}
+
+mesh
+{
+	file diningroom/book6.obj
+	material Book6
+}
+
 #mesh
 #{
 #	file diningroom/book7.obj
@@ -347,17 +347,17 @@ mesh
 #	material Book18
 #}
 #
-#mesh
-#{
-#	file diningroom/bucket1.obj
-#	material WoodenBox
-#}
-#
-#mesh
-#{
-#	file diningroom/bucket2.obj
-#	material WoodenBox
-#}
+mesh
+{
+	file diningroom/bucket1.obj
+	material WoodenBox
+}
+
+mesh
+{
+	file diningroom/bucket2.obj
+	material WoodenBox
+}
 #
 #mesh
 #{

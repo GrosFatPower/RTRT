@@ -1,0 +1,52 @@
+renderer
+{
+	resolution 1920 1080
+	enablebackground true
+	#background skyboxes/alps_field_2k.hdr
+	bounces 3
+}
+
+camera
+{
+	position 5.0 2.0 8.0
+	lookat 0.0 0.0 0.0
+	fov 80
+}
+
+light
+{
+	type sphere
+	position 2 3 3
+	emission 4. 4. 4.
+	radius .2
+}
+
+material Green
+{
+	color .1 .8 .1 
+	metallic 0.4
+	roughness 0.01
+}
+
+material textured_box
+{
+	albedotexture misc/textures/box.jpg
+}
+
+mesh
+{
+	file misc/TexturedBox.obj
+	material textured_box
+}
+
+mesh
+{
+	file misc/TexturedBox2.obj
+	material textured_box
+}
+
+mesh
+{
+	file misc/TexturedBox3.obj
+	material textured_box
+}

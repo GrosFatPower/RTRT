@@ -1,11 +1,24 @@
 #include "Mesh.h"
-#include "Bvh.h"
+#include "GpuBvh.h"
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 #include <iostream>
+#include <limits>
 
 namespace RTRT
 {
+
+Mesh::Mesh()
+{
+  _Bvh = std::make_shared<GpuBLAS>();
+
+  _BoundingBox._Low  = Vec3( std::numeric_limits<float>::max(),
+                             std::numeric_limits<float>::max(),
+                             std::numeric_limits<float>::max());
+  _BoundingBox._High = Vec3(-std::numeric_limits<float>::max(),
+                            -std::numeric_limits<float>::max(),
+                            -std::numeric_limits<float>::max());
+}
 
 Mesh::~Mesh()
 {
@@ -46,6 +59,19 @@ bool Mesh::Load( const std::string & iFilename )
     coords.z = attrib.vertices[3 * i + 2];
 
     _Vertices.push_back(coords);
+
+    if ( coords.x < _BoundingBox._Low.x )
+      _BoundingBox._Low.x = coords.x;
+    if ( coords.y < _BoundingBox._Low.y )
+      _BoundingBox._Low.y = coords.y;
+    if ( coords.z < _BoundingBox._Low.z )
+      _BoundingBox._Low.z = coords.z;
+    if ( coords.x > _BoundingBox._High.x )
+      _BoundingBox._High.x = coords.x;
+    if ( coords.y > _BoundingBox._High.y )
+      _BoundingBox._High.y = coords.y;
+    if ( coords.z > _BoundingBox._High.z )
+      _BoundingBox._High.z = coords.z;
   }
 
   size_t nbNormals = attrib.normals.size() / 3;
@@ -98,5 +124,9 @@ bool Mesh::Load( const std::string & iFilename )
   return true;
 }
 
+int Mesh::BuildBvh()
+{
+  return _Bvh -> Build(*this);
+}
 
 }

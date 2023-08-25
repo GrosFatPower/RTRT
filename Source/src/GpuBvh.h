@@ -2,6 +2,7 @@
 #define _GpuBvh_
 
 #include "MathUtil.h"
+#include "MeshInstance.h"
 #include "split_bvh.h"
 #include <vector>
 
@@ -21,8 +22,6 @@ public:
     Vec3 _LcRcLeaf; // LeftChildren/RightChildren/Leaf=0  FirstPrimitiveIdx/NbPrimitives/Leaf=-1 (TLAS) FirstTriangleIdx/NbTriangles/Leaf=1 (BLAS)
   };
 
-  virtual int ProcessNodes(RadeonRays::Bvh::Node * iNode) = 0;
-
   const std::vector<Node> & GetNodes() const { return _Nodes; }
 
 public:
@@ -30,6 +29,8 @@ public:
   virtual ~GpuBvh();
 
 protected:
+
+  virtual int ProcessNodes(RadeonRays::Bvh::Node * iNode) = 0;
 
   int               _CurNode = 0;
   std::vector<Node> _Nodes;
@@ -41,8 +42,15 @@ public:
   GpuTLAS() {}
   virtual ~GpuTLAS();
 
+  int Build( std::vector<Mesh*> & iMeshes , std::vector<MeshInstance> & iMeshInstances );
+
+  const std::vector<MeshInstance> & GetPackedMeshInstances() const { return _PackedMeshInstances; }
+
 private:
 
+  int ProcessNodes(RadeonRays::Bvh::Node * iNode);
+
+  std::vector<MeshInstance> _PackedMeshInstances;
 };
 
 class GpuBLAS : public GpuBvh
@@ -51,15 +59,15 @@ public:
   GpuBLAS() {}
   virtual ~GpuBLAS();
 
-  int Build( Mesh * iMesh );
+  int Build( Mesh & iMesh );
 
-  int ProcessNodes(RadeonRays::Bvh::Node * iNode);
-
-  const std::vector<Vec3i> GetTriangleIdx() const { return _TriangleIdx; }
+  const std::vector<Vec3i> & GetPackedTriangleIdx() const { return _PackedTriangleIdx; }
 
 private:
 
-  std::vector<Vec3i> _TriangleIdx;
+  int ProcessNodes(RadeonRays::Bvh::Node * iNode);
+
+  std::vector<Vec3i> _PackedTriangleIdx;
 };
 
 }

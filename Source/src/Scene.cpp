@@ -4,6 +4,7 @@
 #include "stb_image.h"
 #include "stb_image_resize.h"
 #include <iostream>
+#include <memory>
 
 namespace RTRT
 {
@@ -231,13 +232,10 @@ void Scene::CompileMeshData( Vec2i iTextureSize )
     if ( !curMesh || !curMesh -> GetNbFaces() )
       continue;
 
-   _BVH.Build(curMesh);
-
     const std::vector<Vec3>  & curVertices = curMesh -> GetVertices();
     const std::vector<Vec3>  & curNormals  = curMesh -> GetNormals();
     const std::vector<Vec2>  & curUVs      = curMesh -> GetUVs();
-    //const std::vector<Vec3i> & curIndices  = curMesh -> GetIndices();
-    const std::vector<Vec3i> & curIndices  = _BVH.GetTriangleIdx();
+    const std::vector<Vec3i> & curIndices  = curMesh -> GetIndices();
 
     std::vector<Vec3> transformedVertices;
     std::vector<Vec3> transformedNormals;
@@ -382,6 +380,42 @@ void Scene::CompileMeshData( Vec2i iTextureSize )
       _TextureArrayIDs[texID] = _NbCompiledTex;
       _NbCompiledTex++;
     }
+  }
+
+  // BVH
+  _TLAS.Build(_Meshes, _MeshInstances);
+
+  for ( auto meshInst : _MeshInstances )
+  {
+    _TLASPackedTransforms.emplace_back(meshInst._Transform);
+    _TLASPackedMeshMatID.emplace_back(meshInst._MeshID, meshInst._MaterialID);
+  }
+
+  for (auto & mesh : _Meshes)
+  {
+    mesh -> BuildBvh();
+
+    std::shared_ptr<GpuBLAS> curBLAS = mesh -> GetBvh();
+
+    int nbNodes = curBLAS -> GetNodes().size();
+    int startIdx = _BLASNodes.size();
+    _BLASNodes.insert(_BLASNodes.end(), curBLAS -> GetNodes().begin(), curBLAS -> GetNodes().end());
+    _BLASNodesRange.emplace_back(startIdx, nbNodes);
+
+    const std::vector<Vec3>  & curVertices = mesh -> GetVertices();
+    const std::vector<Vec3>  & curNormals  = mesh -> GetNormals();
+    const std::vector<Vec2>  & curUVs      = mesh -> GetUVs();
+  
+    const Vec3i offset(_BLASPackedVertices.size(), _BLASPackedNormals.size(), _BLASPackedUVs.size());
+    _BLASPackedVertices.insert(_BLASPackedVertices.end(), curVertices.begin(), curVertices.end());
+    _BLASPackedNormals. insert(_BLASPackedNormals.end(),  curNormals.begin(),  curNormals.end());
+    _BLASPackedUVs.     insert(_BLASPackedUVs.end(),      curUVs.begin(),      curUVs.end());
+
+    int nbIndices = curBLAS -> GetPackedTriangleIdx().size();
+    startIdx = _BLASPackedIndices.size();
+    for (auto & indices : curBLAS -> GetPackedTriangleIdx())
+      _BLASPackedIndices.emplace_back(indices + offset);
+    _BLASPackedIndicesRange.emplace_back(startIdx, nbIndices);
   }
 
 }

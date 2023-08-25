@@ -11,6 +11,7 @@
 #include "GpuBvh.h"
 #include <vector>
 #include <map>
+#include <memory>
 
 namespace RTRT
 {
@@ -64,15 +65,24 @@ public:
   void CompileMeshData( Vec2i iTextureSize );
   int GetNbFaces() const { return _NbFaces; }
   int GetNbCompiledTex() const { return _NbCompiledTex; }
-  const std::vector<Vec3>          & GetVertices()        const { return _Vertices;        }
-  const std::vector<Vec3>          & GetNormals()         const { return _Normals;         }
-  const std::vector<Vec3>          & GetUVMatID()         const { return _UVMatID;         }
-  const std::vector<Vec3i>         & GetIndices()         const { return _Indices;         }
-  const std::vector<int>           & GetTextureArrayIDs() const { return _TextureArrayIDs; }
-  const std::vector<unsigned char> & GetTextureArray()    const { return _TextureArray;    }
-  const std::vector<Vec3>          & GetMeshBBoxes()      const { return _MeshBBoxes;      }
-  const std::vector<int>           & GetMeshIdxRange()    const { return _MeshIdxRange;    }
-  const std::vector<GpuBvh::Node>  & GetBLASNode()        const { return _BVH.GetNodes();  }
+  const std::vector<Vec3>          & GetVertices()               const { return _Vertices;                }
+  const std::vector<Vec3>          & GetNormals()                const { return _Normals;                 }
+  const std::vector<Vec3>          & GetUVMatID()                const { return _UVMatID;                 }
+  const std::vector<Vec3i>         & GetIndices()                const { return _Indices;                 }
+  const std::vector<int>           & GetTextureArrayIDs()        const { return _TextureArrayIDs;         }
+  const std::vector<unsigned char> & GetTextureArray()           const { return _TextureArray;            }
+  const std::vector<Vec3>          & GetMeshBBoxes()             const { return _MeshBBoxes;              }
+  const std::vector<int>           & GetMeshIdxRange()           const { return _MeshIdxRange;            }
+  const std::vector<GpuBvh::Node>  & GetTLASNode()               const { return _TLAS.GetNodes();         }
+  const std::vector<Mat4x4>        & GetTLASPackedTransforms()   const { return _TLASPackedTransforms;    }
+  const std::vector<Vec2i>         & GetTLASPackedMeshMatID()    const { return _TLASPackedMeshMatID;     }
+  const std::vector<GpuBvh::Node>  & GetBLASNode()               const { return _BLASNodes;               }
+  const std::vector<Vec2i>         & GetBLASNodeRange()          const { return _BLASNodesRange;          }
+  const std::vector<Vec3i>         & GetBLASPackedIndices()      const { return _BLASPackedIndices;       }
+  const std::vector<Vec2i>         & GetBLASPackedIndicesRange() const { return _BLASPackedIndicesRange;  }
+  const std::vector<Vec3>          & GetBLASPackedVertices()     const { return _BLASPackedVertices;      }
+  const std::vector<Vec3>          & GetBLASPackedNormals()      const { return _BLASPackedNormals;       }
+  const std::vector<Vec2>          & GetBLASPackedUVs()          const { return _BLASPackedUVs;           }
 
 private:
 
@@ -100,7 +110,17 @@ private:
   std::vector<Vec3>              _MeshBBoxes;
   std::vector<int>               _MeshIdxRange;
 
-  GpuBLAS                        _BVH;
+  // BVH
+  GpuTLAS                        _TLAS;
+  std::vector<Mat4x4>            _TLASPackedTransforms;
+  std::vector<Vec2i>             _TLASPackedMeshMatID;    // (MeshID, MathID)
+  std::vector<GpuBvh::Node>      _BLASNodes;
+  std::vector<Vec2i>             _BLASNodesRange;         // (StartIdx, Length)
+  std::vector<Vec3i>             _BLASPackedIndices;      // (VertIdx, NormIdx, UVsIdx)
+  std::vector<Vec2i>             _BLASPackedIndicesRange; // (StartIdx, Length)
+  std::vector<Vec3>              _BLASPackedVertices;
+  std::vector<Vec3>              _BLASPackedNormals;
+  std::vector<Vec2>              _BLASPackedUVs;
 };
 
 }

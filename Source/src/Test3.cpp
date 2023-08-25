@@ -157,19 +157,40 @@ Test3::~Test3()
   glDeleteBuffers(1, &_VtxUVBufferID);
   glDeleteBuffers(1, &_VtxIndBufferID);
   glDeleteBuffers(1, &_TexIndBufferID);
-  glDeleteBuffers(1, &_BLASBufferID);
+  glDeleteBuffers(1, &_MeshBBoxBufferID);
+  glDeleteBuffers(1, &_MeshIdRangeBufferID);
+  // BVH
+  glDeleteBuffers(1, &_TLASNodesBufferID);
+  glDeleteBuffers(1, &_TLASMeshMatIDBufferID);
+  glDeleteBuffers(1, &_BLASNodesBufferID);
+  glDeleteBuffers(1, &_BLASNodesRangeBufferID);
+  glDeleteBuffers(1, &_BLASPackedIndicesBufferID);
+  glDeleteBuffers(1, &_BLASPackedIndicesRangeBufferID);
+  glDeleteBuffers(1, &_BLASPackedVerticesBufferID);
+  glDeleteBuffers(1, &_BLASPackedNormalsBufferID);
+  glDeleteBuffers(1, &_BLASPackedUVsBufferID);
 
   glDeleteTextures(1, &_ScreenTextureID);
+  glDeleteTextures(1, &_SkyboxTextureID);
   glDeleteTextures(1, &_VtxTextureID);
   glDeleteTextures(1, &_VtxNormTextureID);
   glDeleteTextures(1, &_VtxUVTextureID);
   glDeleteTextures(1, &_VtxIndTextureID);
   glDeleteTextures(1, &_TexIndTextureID);
-  glDeleteTextures(1, &_BLASTextureID);
   glDeleteTextures(1, &_TexArrayTextureID);
   glDeleteTextures(1, &_MeshBBoxTextureID);
   glDeleteTextures(1, &_MeshIdRangeTextureID);
-  
+  glDeleteTextures(1, &_TLASNodesTextureID);
+  glDeleteTextures(1, &_TLASMeshMatIDTextureID);
+  glDeleteTextures(1, &_TLASTransformsIDTextureID);
+  glDeleteTextures(1, &_BLASNodesTextureID);
+  glDeleteTextures(1, &_BLASNodesRangeTextureID);
+  glDeleteTextures(1, &_BLASPackedIndicesTextureID);
+  glDeleteTextures(1, &_BLASPackedIndicesRangeTextureID);
+  glDeleteTextures(1, &_BLASPackedVerticesTextureID);
+  glDeleteTextures(1, &_BLASPackedNormalsTextureID);
+  glDeleteTextures(1, &_BLASPackedUVsTextureID);
+ 
   if (_Quad)
     delete _Quad;
   _Quad = nullptr;
@@ -363,15 +384,24 @@ int Test3::UpdateUniforms()
           }
         }
 
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxTexture"),         2);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxNormTexture"),     3);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxUVTexture"),       4);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxIndTexture"),      5);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexIndTexture"),      6);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexArrayTexture"),    7);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshBBoxTexture"),    8);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshIDRangeTexture"), 9);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASNodesTexture"),  10);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxTexture"),                      2);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxNormTexture"),                  3);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxUVTexture"),                    4);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxIndTexture"),                   5);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexIndTexture"),                   6);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexArrayTexture"),                 7);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshBBoxTexture"),                 8);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshIDRangeTexture"),              9);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASNodesTexture"),               10);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASTransformsTexture"),          11);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASMeshMatIDTexture"),           12);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASNodesTexture"),               13);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASNodesRangeTexture"),          14);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedIndicesTexture"),       15);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedIndicesRangeTexture"),  16);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedVtxTexture"),           17);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedNormTexture"),          18);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedUVTexture"),            19);
 
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbSpheres"), nbSpheres);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbPlanes"), nbPlanes);
@@ -765,9 +795,10 @@ int Test3::InitializeScene()
   if ( _Scene )
     delete _Scene;
 
-  //std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene.scene";
+  std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene.scene";
+  //std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene2.scene";
   //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
-  std::string sceneFile = "..\\..\\Assets\\teapot.scene";
+  //std::string sceneFile = "..\\..\\Assets\\teapot.scene";
 
   //_Scene = new Scene();
   if ( !Loader::LoadScene(sceneFile, _Scene, _Settings) || !_Scene )
@@ -841,26 +872,91 @@ int Test3::InitializeScene()
       glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     }
 
-    glGenBuffers(1, &_BLASBufferID);
-    glBindBuffer(GL_TEXTURE_BUFFER, _BLASBufferID);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(GpuBvh::Node) * _Scene -> GetBLASNode().size(), &_Scene -> GetBLASNode()[0], GL_STATIC_DRAW);
-    glGenTextures(1, &_BLASTextureID);
-    glBindTexture(GL_TEXTURE_BUFFER, _BLASTextureID);
-    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _BLASBufferID);
-
-    glGenBuffers(1, &_MeshBBoxTextureID);
-    glBindBuffer(GL_TEXTURE_BUFFER, _MeshBBoxTextureID);
+    glGenBuffers(1, &_MeshBBoxBufferID);
+    glBindBuffer(GL_TEXTURE_BUFFER, _MeshBBoxBufferID);
     glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene -> GetMeshBBoxes().size(), &_Scene -> GetMeshBBoxes()[0], GL_STATIC_DRAW);
     glGenTextures(1, &_MeshBBoxTextureID);
     glBindTexture(GL_TEXTURE_BUFFER, _MeshBBoxTextureID);
-    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _MeshBBoxTextureID);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _MeshBBoxBufferID);
 
-    glGenBuffers(1, &_MeshIdRangeTextureID);
-    glBindBuffer(GL_TEXTURE_BUFFER, _MeshIdRangeTextureID);
+    glGenBuffers(1, &_MeshIdRangeBufferID);
+    glBindBuffer(GL_TEXTURE_BUFFER, _MeshIdRangeBufferID);
     glBufferData(GL_TEXTURE_BUFFER, sizeof(int) * _Scene -> GetMeshIdxRange().size(), &_Scene -> GetMeshIdxRange()[0], GL_STATIC_DRAW);
     glGenTextures(1, &_MeshIdRangeTextureID);
     glBindTexture(GL_TEXTURE_BUFFER, _MeshIdRangeTextureID);
-    glTexBuffer(GL_TEXTURE_BUFFER, GL_R32I, _MeshIdRangeTextureID);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_R32I, _MeshIdRangeBufferID);
+
+    // BVH
+    glGenBuffers(1, &_TLASNodesBufferID);
+    glBindBuffer(GL_TEXTURE_BUFFER, _TLASNodesBufferID);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(GpuBvh::Node) * _Scene -> GetTLASNode().size(), &_Scene -> GetTLASNode()[0], GL_STATIC_DRAW);
+    glGenTextures(1, &_TLASNodesTextureID);
+    glBindTexture(GL_TEXTURE_BUFFER, _TLASNodesTextureID);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _TLASNodesBufferID);
+
+    glGenTextures(1, &_TLASTransformsIDTextureID);
+    glBindTexture(GL_TEXTURE_2D, _TLASTransformsIDTextureID);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, (sizeof(Mat4x4) / sizeof(Vec4)) * _Scene -> GetTLASPackedTransforms().size(), 1, 0, GL_RGBA, GL_FLOAT, &_Scene -> GetTLASPackedTransforms()[0]);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glGenBuffers(1, &_TLASMeshMatIDBufferID);
+    glBindBuffer(GL_TEXTURE_BUFFER, _TLASMeshMatIDBufferID);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec2i) * _Scene -> GetTLASPackedMeshMatID().size(), &_Scene -> GetTLASPackedMeshMatID()[0], GL_STATIC_DRAW);
+    glGenTextures(1, &_TLASMeshMatIDTextureID);
+    glBindTexture(GL_TEXTURE_BUFFER, _TLASMeshMatIDTextureID);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32I, _TLASMeshMatIDBufferID);
+
+    glGenBuffers(1, &_BLASNodesBufferID);
+    glBindBuffer(GL_TEXTURE_BUFFER, _BLASNodesBufferID);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(GpuBvh::Node) * _Scene -> GetBLASNode().size(), &_Scene -> GetBLASNode()[0], GL_STATIC_DRAW);
+    glGenTextures(1, &_BLASNodesTextureID);
+    glBindTexture(GL_TEXTURE_BUFFER, _BLASNodesTextureID);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _BLASNodesBufferID);
+
+    glGenBuffers(1, &_BLASNodesRangeBufferID);
+    glBindBuffer(GL_TEXTURE_BUFFER, _BLASNodesRangeBufferID);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec2i) * _Scene -> GetBLASNodeRange().size(), &_Scene -> GetBLASNodeRange()[0], GL_STATIC_DRAW);
+    glGenTextures(1, &_BLASNodesRangeTextureID);
+    glBindTexture(GL_TEXTURE_BUFFER, _BLASNodesRangeTextureID);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32I, _BLASNodesRangeBufferID);
+
+    glGenBuffers(1, &_BLASPackedIndicesBufferID);
+    glBindBuffer(GL_TEXTURE_BUFFER, _BLASPackedIndicesBufferID);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3i) * _Scene -> GetBLASPackedIndices().size(), &_Scene -> GetBLASPackedIndices()[0], GL_STATIC_DRAW);
+    glGenTextures(1, &_BLASPackedIndicesTextureID);
+    glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedIndicesTextureID);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32I, _BLASPackedIndicesBufferID);
+
+    glGenBuffers(1, &_BLASPackedIndicesRangeBufferID);
+    glBindBuffer(GL_TEXTURE_BUFFER, _BLASPackedIndicesRangeBufferID);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec2i) * _Scene -> GetBLASPackedIndicesRange().size(), &_Scene -> GetBLASPackedIndicesRange()[0], GL_STATIC_DRAW);
+    glGenTextures(1, &_BLASPackedIndicesRangeTextureID);
+    glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedIndicesRangeTextureID);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32I, _BLASPackedIndicesRangeBufferID);
+
+    glGenBuffers(1, &_BLASPackedVerticesBufferID);
+    glBindBuffer(GL_TEXTURE_BUFFER, _BLASPackedVerticesBufferID);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene -> GetBLASPackedVertices().size(), &_Scene -> GetBLASPackedVertices()[0], GL_STATIC_DRAW);
+    glGenTextures(1, &_BLASPackedVerticesTextureID);
+    glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedVerticesTextureID);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _BLASPackedVerticesBufferID);
+
+    glGenBuffers(1, &_BLASPackedNormalsBufferID);
+    glBindBuffer(GL_TEXTURE_BUFFER, _BLASPackedNormalsBufferID);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene -> GetBLASPackedNormals().size(), &_Scene -> GetBLASPackedNormals()[0], GL_STATIC_DRAW);
+    glGenTextures(1, &_BLASPackedNormalsTextureID);
+    glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedNormalsTextureID);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _BLASPackedNormalsBufferID);
+
+    glGenBuffers(1, &_BLASPackedUVsBufferID);
+    glBindBuffer(GL_TEXTURE_BUFFER, _BLASPackedUVsBufferID);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec2) * _Scene -> GetBLASPackedUVs().size(), &_Scene -> GetBLASPackedUVs()[0], GL_STATIC_DRAW);
+    glGenTextures(1, &_BLASPackedUVsTextureID);
+    glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedUVsTextureID);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32F, _BLASPackedUVsBufferID);
+
   }
 
   const std::vector<Material> & Materials =  _Scene -> GetMaterials();
@@ -927,9 +1023,14 @@ int Test3::UpdateScene()
     }
     if ( _MiddleClick )
     {
-      float newRadius = _Scene -> GetCamera().GetRadius() + MouseSensitivity[4] * deltaY;
-      if ( newRadius > 0.f )
-        _Scene -> GetCamera().SetRadius(newRadius);
+      if ( std::abs(deltaX) > std::abs(deltaY) )
+        _Scene -> GetCamera().Strafe(MouseSensitivity[2] * deltaX, 0.f);
+      else
+      {
+        float newRadius = _Scene -> GetCamera().GetRadius() + MouseSensitivity[4] * deltaY;
+        if ( newRadius > 0.f )
+          _Scene -> GetCamera().SetRadius(newRadius);
+      }
       _SceneCameraModified = true;
     }
 
@@ -1000,7 +1101,25 @@ void Test3::RenderToTexture()
   glActiveTexture(GL_TEXTURE9);
   glBindTexture(GL_TEXTURE_BUFFER, _MeshIdRangeTextureID);
   glActiveTexture(GL_TEXTURE10);
-  glBindTexture(GL_TEXTURE_BUFFER, _BLASTextureID);
+  glBindTexture(GL_TEXTURE_BUFFER, _TLASNodesTextureID);
+  glActiveTexture(GL_TEXTURE11);
+  glBindTexture(GL_TEXTURE_2D, _TLASTransformsIDTextureID);
+  glActiveTexture(GL_TEXTURE12);
+  glBindTexture(GL_TEXTURE_BUFFER, _TLASMeshMatIDTextureID);
+  glActiveTexture(GL_TEXTURE13);
+  glBindTexture(GL_TEXTURE_BUFFER, _BLASNodesTextureID);
+  glActiveTexture(GL_TEXTURE14);
+  glBindTexture(GL_TEXTURE_BUFFER, _BLASNodesRangeTextureID);
+  glActiveTexture(GL_TEXTURE15);
+  glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedIndicesTextureID);
+  glActiveTexture(GL_TEXTURE16);
+  glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedIndicesRangeTextureID);
+  glActiveTexture(GL_TEXTURE17);
+  glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedVerticesTextureID);
+  glActiveTexture(GL_TEXTURE18);
+  glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedNormalsTextureID);
+  glActiveTexture(GL_TEXTURE19);
+  glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedUVsTextureID);
   
   _Quad -> Render(*_RTTShader);
 }
