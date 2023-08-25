@@ -243,6 +243,7 @@ mesh
 {
 	file misc/TexturedBox.obj
 	material textured_box
+  matrix 1 0 0 -1 0 1 0 -1 0 0 1 -1 0 0 0 1
 }
 
 mesh

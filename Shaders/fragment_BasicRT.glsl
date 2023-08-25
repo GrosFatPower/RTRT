@@ -130,6 +130,17 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
     ivec2 triRange  = texelFetch(u_BLASPackedIndicesRangeTexture, ind).xy;
     blasRange.x *= 3;
 
+    vec4 right   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 0, 0), 0).xyzw;
+    vec4 up      = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 1, 0), 0).xyzw;
+    vec4 forward = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 2, 0), 0).xyzw;
+    vec4 trans   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 3, 0), 0).xyzw;
+
+    mat4 invTransform = inverse(mat4(right, up, forward, trans));
+
+    Ray transRay;
+    transRay._Orig = (invTransform * vec4(iRay._Orig, 1.0)).xyz;
+    transRay._Dir  = (invTransform * vec4(iRay._Dir, 0.0)).xyz;
+
     int   index       = 0; // Root
     bool  leftHit     = false;
     bool  rightHit    = false;
@@ -141,13 +152,13 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
     vec3 rightBboxMin;
     vec3 rightBboxMax;
 
-    int   Stack[64]; // BLAS Max depth = 64
-    int   topPtr = 0;
-    Stack[topPtr++] = -1;
+    int   BlasStack[64]; // BLAS Max depth = 64
+    int   blasTopPtr = 0;
+    BlasStack[blasTopPtr++] = -1;
 
     leftBboxMin  = texelFetch(u_BLASNodesTexture, blasRange.x + index * 3 ).xyz;
     leftBboxMax  = texelFetch(u_BLASNodesTexture, blasRange.x + index * 3 + 1).xyz;
-    leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, iRay, leftDist);
+    leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
     if ( !leftHit )
       index = -1;
 
@@ -175,7 +186,7 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
 
           hitDist = 0.f;
           vec2 uv;
-          if ( TriangleIntersection(iRay, v0, v1, v2, hitDist, uv) )
+          if ( TriangleIntersection(transRay, v0, v1, v2, hitDist, uv) )
           {
             if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
             {
@@ -203,8 +214,8 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
         rightBboxMin = texelFetch(u_BLASNodesTexture, blasRange.x + rightIndex * 3    ).xyz;
         rightBboxMax = texelFetch(u_BLASNodesTexture, blasRange.x + rightIndex * 3 + 1).xyz;
       
-        leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, iRay, leftDist);
-        rightHit  = BoxIntersection(rightBboxMin, rightBboxMax, iRay, rightDist);
+        leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
+        rightHit  = BoxIntersection(rightBboxMin, rightBboxMax, transRay, rightDist);
 
         if ( oClosestHit._Dist > 0 )
         {
@@ -219,12 +230,12 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
           if ( leftDist > rightDist )
           {
             index = rightIndex;
-            Stack[topPtr++] = leftIndex;
+            BlasStack[blasTopPtr++] = leftIndex;
           }
           else
           {
             index = leftIndex;
-            Stack[topPtr++] = rightIndex;
+            BlasStack[blasTopPtr++] = rightIndex;
           }
           continue;
         }
@@ -240,7 +251,7 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
         }
       }
 
-      index = Stack[--topPtr];
+      index = BlasStack[--blasTopPtr];
     }
   }
 #elif defined(OPTIM_AABB)
@@ -395,6 +406,17 @@ bool AnyHit( Ray iRay, float iMaxDist )
     ivec2 triRange  = texelFetch(u_BLASPackedIndicesRangeTexture, ind).xy;
     blasRange.x *= 3;
 
+    vec4 right   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 0, 0), 0).xyzw;
+    vec4 up      = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 1, 0), 0).xyzw;
+    vec4 forward = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 2, 0), 0).xyzw;
+    vec4 trans   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 3, 0), 0).xyzw;
+
+    mat4 invTransform = inverse(mat4(right, up, forward, trans));
+
+    Ray transRay;
+    transRay._Orig = (invTransform * vec4(iRay._Orig, 1.0)).xyz;
+    transRay._Dir  = (invTransform * vec4(iRay._Dir, 0.0)).xyz;
+
     int   index       = 0; // Root
     bool  leftHit     = false;
     bool  rightHit    = false;
@@ -407,13 +429,13 @@ bool AnyHit( Ray iRay, float iMaxDist )
     vec3 rightBboxMin;
     vec3 rightBboxMax;
 
-    int   Stack[64]; // BLAS Max depth = 64
-    int   topPtr = 0;
-    Stack[topPtr++] = -1;
+    int   BlasStack[64]; // BLAS Max depth = 64
+    int   blasStackTop = 0;
+    BlasStack[blasStackTop++] = -1;
 
     leftBboxMin  = texelFetch(u_BLASNodesTexture, blasRange.x + index * 3 ).xyz;
     leftBboxMax  = texelFetch(u_BLASNodesTexture, blasRange.x + index * 3 + 1).xyz;
-    leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, iRay, leftDist);
+    leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
     if ( !leftHit )
       index = -1;
 
@@ -441,7 +463,7 @@ bool AnyHit( Ray iRay, float iMaxDist )
 
           hitDist = 0.f;
           vec2 uv;
-          if ( TriangleIntersection(iRay, v0, v1, v2, hitDist, uv) )
+          if ( TriangleIntersection(transRay, v0, v1, v2, hitDist, uv) )
           {
             if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
               return true;
@@ -455,20 +477,20 @@ bool AnyHit( Ray iRay, float iMaxDist )
         rightBboxMin = texelFetch(u_BLASNodesTexture, blasRange.x + rightIndex * 3    ).xyz;
         rightBboxMax = texelFetch(u_BLASNodesTexture, blasRange.x + rightIndex * 3 + 1).xyz;
       
-        leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, iRay, leftDist);
-        rightHit  = BoxIntersection(rightBboxMin, rightBboxMax, iRay, rightDist);
+        leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
+        rightHit  = BoxIntersection(rightBboxMin, rightBboxMax, transRay, rightDist);
 
         if ( leftHit && rightHit )
         {
           if ( leftDist > rightDist )
           {
             index = rightIndex;
-            Stack[topPtr++] = leftIndex;
+            BlasStack[blasStackTop++] = leftIndex;
           }
           else
           {
             index = leftIndex;
-            Stack[topPtr++] = rightIndex;
+            BlasStack[blasStackTop++] = rightIndex;
           }
           continue;
         }
@@ -484,7 +506,7 @@ bool AnyHit( Ray iRay, float iMaxDist )
         }
       }
 
-      index = Stack[--topPtr];
+      index = BlasStack[--blasStackTop];
     }
   }
 #elif defined(OPTIM_AABB)
