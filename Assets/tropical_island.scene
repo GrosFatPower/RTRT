@@ -15,6 +15,14 @@
 #	envmapintensity 1.0
 #}  
 
+light
+{
+	type sphere
+	position  2 4 2
+	emission 1 1 1
+	radius .5
+}
+
 renderer
 {
 	resolution 800 800

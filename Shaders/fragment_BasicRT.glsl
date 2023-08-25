@@ -11,7 +11,8 @@ out vec4 fragColor;
 #define PBR_RENDERING
 //#define DIRECT_ILLUMINATION
 #define OPTIM_AABB
-#define BVH_TRAVERSAL
+#define BLAS_TRAVERSAL
+//#define TLAS_TRAVERSAL
 
 // ----------
 // Uniforms
@@ -123,7 +124,209 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
     }
   }
 
-#ifdef BVH_TRAVERSAL
+#ifdef TLAS_TRAVERSAL
+  int   tlasIndex = 0; // TLAS Root
+
+  bool  leftHit   = false;
+  bool  rightHit  = false;
+  float leftDist  = 0.f;
+  float rightDist = 0.f;
+
+  vec3 leftBboxMin;
+  vec3 leftBboxMax;
+  vec3 rightBboxMin;
+  vec3 rightBboxMax;
+
+  int   TlasStack[32];
+  int   tlasTopPtr = 0;
+  TlasStack[tlasTopPtr++] = -1;
+
+  leftBboxMin = texelFetch(u_TLASNodesTexture, 0).xyz;
+  leftBboxMax = texelFetch(u_TLASNodesTexture, 1).xyz;
+  leftHit     = BoxIntersection(leftBboxMin, leftBboxMax, iRay, leftDist);
+  if ( !leftHit )
+    tlasIndex = -1;
+
+  while ( tlasIndex >= 0 )
+  {
+    ivec3 LcRcLeaf = ivec3(texelFetch(u_TLASNodesTexture, tlasIndex * 3 + 2).xyz);
+
+    int tlasLeftIndex  = int(LcRcLeaf.x); // or first MeshInstance
+    int tlasRightIndex = int(LcRcLeaf.y); // or nb Mesh instances
+    int tlasLeaf       = int(LcRcLeaf.z);
+
+    if ( tlasLeaf < 0 ) // TLAS Leaf node
+    {
+      for ( int j = 0; j < tlasRightIndex; j++ ) // tlasRightIndex == nbMeshesInstances
+      {
+        int ind = tlasLeftIndex + j;
+        ivec2 meshMatID = texelFetch(u_TLASMeshMatIDTexture, ind).xy;
+
+        vec4 right   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 0, 0), 0).xyzw;
+        vec4 up      = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 1, 0), 0).xyzw;
+        vec4 forward = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 2, 0), 0).xyzw;
+        vec4 trans   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 3, 0), 0).xyzw;
+        mat4 invTransform = inverse(mat4(right, up, forward, trans));
+
+        Ray transRay;
+        transRay._Orig = (invTransform * vec4(iRay._Orig, 1.0)).xyz;
+        transRay._Dir  = (invTransform * vec4(iRay._Dir, 0.0)).xyz;
+
+        ivec2 blasRange = texelFetch(u_BLASNodesRangeTexture, meshMatID.x).xy;
+        ivec2 triRange  = texelFetch(u_BLASPackedIndicesRangeTexture, meshMatID.x).xy;
+        blasRange.x *= 3;
+
+        int   blasIndex   = 0; // BLAS Root
+
+        int   BlasStack[64]; // BLAS Max depth = 64
+        int   blasTopPtr = 0;
+        BlasStack[blasTopPtr++] = -1;
+
+        leftBboxMin  = texelFetch(u_BLASNodesTexture, blasRange.x + blasIndex * 3 ).xyz;
+        leftBboxMax  = texelFetch(u_BLASNodesTexture, blasRange.x + blasIndex * 3 + 1).xyz;
+        leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
+        if ( !leftHit )
+          blasIndex = -1;
+
+        while ( blasIndex != -1 )
+        {
+          LcRcLeaf = ivec3(texelFetch(u_BLASNodesTexture, blasRange.x + blasIndex * 3 + 2).xyz);
+
+          int blasLeftIndex  = int(LcRcLeaf.x); // or firstPrimitiveIdx
+          int blasRightIndex = int(LcRcLeaf.y); // or nbPrimitives
+          int blasLeaf       = int(LcRcLeaf.z);
+
+          if ( blasLeaf > 0 ) // BLAS Leaf node
+          {
+            int firstTriIdx = blasLeftIndex * 3;
+
+            for ( int i = 0; i < blasRightIndex; i++ ) // blasRightIndex == nbPrimitives
+            {
+              ivec3 vInd0 = ivec3(texelFetch(u_BLASPackedIndicesTexture, triRange.x + firstTriIdx + i * 3     ).xyz);
+              ivec3 vInd1 = ivec3(texelFetch(u_BLASPackedIndicesTexture, triRange.x + firstTriIdx + i * 3 + 1 ).xyz);
+              ivec3 vInd2 = ivec3(texelFetch(u_BLASPackedIndicesTexture, triRange.x + firstTriIdx + i * 3 + 2 ).xyz);
+
+              vec3 v0 = texelFetch(u_BLASPackedVtxTexture, vInd0.x).xyz;
+              vec3 v1 = texelFetch(u_BLASPackedVtxTexture, vInd1.x).xyz;
+              vec3 v2 = texelFetch(u_BLASPackedVtxTexture, vInd2.x).xyz;
+
+              hitDist = 0.f;
+              vec2 uv;
+              if ( TriangleIntersection(transRay, v0, v1, v2, hitDist, uv) )
+              {
+                if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
+                {
+                  vec3 norm0 = texelFetch(u_BLASPackedNormTexture, vInd0.y).xyz;
+                  vec3 norm1 = texelFetch(u_BLASPackedNormTexture, vInd1.y).xyz;
+                  vec3 norm2 = texelFetch(u_BLASPackedNormTexture, vInd2.y).xyz;
+
+                  vec2 uvID0 = texelFetch(u_BLASPackedUVTexture, vInd0.z).xy;
+                  vec2 uvID1 = texelFetch(u_BLASPackedUVTexture, vInd1.z).xy;
+                  vec2 uvID2 = texelFetch(u_BLASPackedUVTexture, vInd2.z).xy;
+
+                  oClosestHit._Dist       = hitDist;
+                  oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+                  oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
+                  oClosestHit._UV         = uvID0 * ( 1 - uv.x - uv.y ) + uvID1 * uv.x + uvID2 * uv.y;
+                  oClosestHit._MaterialID = meshMatID.y;
+                }
+              }
+            }
+          }
+          else
+          {
+            leftBboxMin  = texelFetch(u_BLASNodesTexture, blasRange.x + blasLeftIndex  * 3    ).xyz;
+            leftBboxMax  = texelFetch(u_BLASNodesTexture, blasRange.x + blasLeftIndex  * 3 + 1).xyz;
+            rightBboxMin = texelFetch(u_BLASNodesTexture, blasRange.x + blasRightIndex * 3    ).xyz;
+            rightBboxMax = texelFetch(u_BLASNodesTexture, blasRange.x + blasRightIndex * 3 + 1).xyz;
+      
+            leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
+            rightHit  = BoxIntersection(rightBboxMin, rightBboxMax, transRay, rightDist);
+
+            if ( oClosestHit._Dist > 0 )
+            {
+              if ( leftHit && ( leftDist > oClosestHit._Dist  ) )
+                leftHit = false;
+              if ( rightHit && ( rightDist > oClosestHit._Dist  ) )
+                rightHit = false;
+            }
+
+            if ( leftHit && rightHit )
+            {
+              if ( leftDist > rightDist )
+              {
+                blasIndex = blasRightIndex;
+                BlasStack[blasTopPtr++] = blasLeftIndex;
+              }
+              else
+              {
+                blasIndex = blasLeftIndex;
+                BlasStack[blasTopPtr++] = blasRightIndex;
+              }
+              continue;
+            }
+            else if ( leftHit )
+            {
+              blasIndex = blasLeftIndex;
+              continue;
+            }
+            else if ( rightHit )
+            {
+              blasIndex = blasRightIndex;
+              continue;
+            }
+          }
+
+          blasIndex = BlasStack[--blasTopPtr];
+        }
+      }
+    }
+    else
+    {
+      leftBboxMin  = texelFetch(u_TLASNodesTexture, tlasLeftIndex  * 3    ).xyz;
+      leftBboxMax  = texelFetch(u_TLASNodesTexture, tlasLeftIndex  * 3 + 1).xyz;
+      rightBboxMin = texelFetch(u_TLASNodesTexture, tlasRightIndex * 3    ).xyz;
+      rightBboxMax = texelFetch(u_TLASNodesTexture, tlasRightIndex * 3 + 1).xyz;
+      
+      leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, iRay, leftDist);
+      rightHit  = BoxIntersection(rightBboxMin, rightBboxMax, iRay, rightDist);
+
+      if ( oClosestHit._Dist > 0.f )
+      {
+        if ( leftHit && ( leftDist > oClosestHit._Dist  ) )
+          leftHit = false;
+        if ( rightHit && ( rightDist > oClosestHit._Dist  ) )
+          rightHit = false;
+      }
+
+      if ( leftHit && rightHit )
+      {
+        if ( leftDist > rightDist )
+        {
+          tlasIndex = tlasRightIndex;
+          TlasStack[tlasTopPtr++] = tlasLeftIndex;
+        }
+        else
+        {
+          tlasIndex = tlasLeftIndex;
+          TlasStack[tlasTopPtr++] = tlasRightIndex;
+        }
+        continue;
+      }
+      else if ( leftHit )
+      {
+        tlasIndex = tlasLeftIndex;
+        continue;
+      }
+      else if ( rightHit )
+      {
+        tlasIndex = tlasRightIndex;
+        continue;
+      }
+    }
+    tlasIndex = TlasStack[--tlasTopPtr];
+  }
+#elif defined(BLAS_TRAVERSAL)
   for ( int ind = 0; ind < u_NbMeshInstances; ++ind )
   {
     ivec2 blasRange = texelFetch(u_BLASNodesRangeTexture, ind).xy;
@@ -142,7 +345,7 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
     transRay._Orig = (invTransform * vec4(iRay._Orig, 1.0)).xyz;
     transRay._Dir  = (invTransform * vec4(iRay._Dir, 0.0)).xyz;
 
-    int   index       = 0; // Root
+    int   blasIndex   = 0; // BLAS Root
     bool  leftHit     = false;
     bool  rightHit    = false;
     float leftDist    = 0.f;
@@ -157,25 +360,25 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
     int   blasTopPtr = 0;
     BlasStack[blasTopPtr++] = -1;
 
-    leftBboxMin  = texelFetch(u_BLASNodesTexture, blasRange.x + index * 3 ).xyz;
-    leftBboxMax  = texelFetch(u_BLASNodesTexture, blasRange.x + index * 3 + 1).xyz;
+    leftBboxMin  = texelFetch(u_BLASNodesTexture, blasRange.x + blasIndex * 3 ).xyz;
+    leftBboxMax  = texelFetch(u_BLASNodesTexture, blasRange.x + blasIndex * 3 + 1).xyz;
     leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
     if ( !leftHit )
-      index = -1;
+      blasIndex = -1;
 
-    while ( index != -1 )
+    while ( blasIndex != -1 )
     {
-      ivec3 LcRcLeaf = ivec3(texelFetch(u_BLASNodesTexture, blasRange.x + index * 3 + 2).xyz);
+      ivec3 LcRcLeaf = ivec3(texelFetch(u_BLASNodesTexture, blasRange.x + blasIndex * 3 + 2).xyz);
 
-      int leftIndex  = int(LcRcLeaf.x); // or firstPrimitiveIdx
-      int rightIndex = int(LcRcLeaf.y); // or nbPrimitives
-      int leaf       = int(LcRcLeaf.z);
+      int blasLeftIndex  = int(LcRcLeaf.x); // or firstPrimitiveIdx
+      int blasRightIndex = int(LcRcLeaf.y); // or nbPrimitives
+      int blasLeaf       = int(LcRcLeaf.z);
 
-      if ( leaf > 0 ) // BLAS Leaf node
+      if ( blasLeaf > 0 ) // BLAS Leaf node
       {
-        int firstTriIdx = leftIndex * 3;
+        int firstTriIdx = blasLeftIndex * 3;
 
-        for ( int i = 0; i < rightIndex; i++ ) // rightIndex == nbPrimitives
+        for ( int i = 0; i < blasRightIndex; i++ ) // blasRightIndex == nbPrimitives
         {
           ivec3 vInd0 = ivec3(texelFetch(u_BLASPackedIndicesTexture, triRange.x + firstTriIdx + i * 3     ).xyz);
           ivec3 vInd1 = ivec3(texelFetch(u_BLASPackedIndicesTexture, triRange.x + firstTriIdx + i * 3 + 1 ).xyz);
@@ -210,10 +413,10 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
       }
       else
       {
-        leftBboxMin  = texelFetch(u_BLASNodesTexture, blasRange.x + leftIndex  * 3    ).xyz;
-        leftBboxMax  = texelFetch(u_BLASNodesTexture, blasRange.x + leftIndex  * 3 + 1).xyz;
-        rightBboxMin = texelFetch(u_BLASNodesTexture, blasRange.x + rightIndex * 3    ).xyz;
-        rightBboxMax = texelFetch(u_BLASNodesTexture, blasRange.x + rightIndex * 3 + 1).xyz;
+        leftBboxMin  = texelFetch(u_BLASNodesTexture, blasRange.x + blasLeftIndex  * 3    ).xyz;
+        leftBboxMax  = texelFetch(u_BLASNodesTexture, blasRange.x + blasLeftIndex  * 3 + 1).xyz;
+        rightBboxMin = texelFetch(u_BLASNodesTexture, blasRange.x + blasRightIndex * 3    ).xyz;
+        rightBboxMax = texelFetch(u_BLASNodesTexture, blasRange.x + blasRightIndex * 3 + 1).xyz;
       
         leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
         rightHit  = BoxIntersection(rightBboxMin, rightBboxMax, transRay, rightDist);
@@ -230,29 +433,29 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
         {
           if ( leftDist > rightDist )
           {
-            index = rightIndex;
-            BlasStack[blasTopPtr++] = leftIndex;
+            blasIndex = blasRightIndex;
+            BlasStack[blasTopPtr++] = blasLeftIndex;
           }
           else
           {
-            index = leftIndex;
-            BlasStack[blasTopPtr++] = rightIndex;
+            blasIndex = blasLeftIndex;
+            BlasStack[blasTopPtr++] = blasRightIndex;
           }
           continue;
         }
         else if ( leftHit )
         {
-          index = leftIndex;
+          blasIndex = blasLeftIndex;
           continue;
         }
         else if ( rightHit )
         {
-          index = rightIndex;
+          blasIndex = blasRightIndex;
           continue;
         }
       }
 
-      index = BlasStack[--blasTopPtr];
+      blasIndex = BlasStack[--blasTopPtr];
     }
   }
 #elif defined(OPTIM_AABB)
@@ -400,7 +603,179 @@ bool AnyHit( Ray iRay, float iMaxDist )
     }
   }
 
-#ifdef BVH_TRAVERSAL
+#ifdef TLAS_TRAVERSAL
+  int   tlasIndex = 0; // TLAS Root
+
+  bool  leftHit   = false;
+  bool  rightHit  = false;
+  float leftDist  = 0.f;
+  float rightDist = 0.f;
+
+  vec3 leftBboxMin;
+  vec3 leftBboxMax;
+  vec3 rightBboxMin;
+  vec3 rightBboxMax;
+
+  int   TlasStack[32];
+  int   tlasTopPtr = 0;
+  TlasStack[tlasTopPtr++] = -1;
+
+  leftBboxMin = texelFetch(u_TLASNodesTexture, 0).xyz;
+  leftBboxMax = texelFetch(u_TLASNodesTexture, 1).xyz;
+  leftHit     = BoxIntersection(leftBboxMin, leftBboxMax, iRay, leftDist);
+  if ( !leftHit )
+    tlasIndex = -1;
+
+  while ( tlasIndex >= 0 )
+  {
+    ivec3 LcRcLeaf = ivec3(texelFetch(u_TLASNodesTexture, tlasIndex * 3 + 2).xyz);
+
+    int tlasLeftIndex  = int(LcRcLeaf.x); // or firstPrimitiveIdx
+    int tlasRightIndex = int(LcRcLeaf.y); // or nbPrimitives
+    int tlasLeaf       = int(LcRcLeaf.z);
+
+    if ( tlasLeaf < 0 ) // TLAS Leaf node
+    {
+      for ( int j = 0; j < tlasRightIndex; j++ ) // tlasRightIndex == nbMeshesInstances
+      {
+        int ind = tlasLeftIndex + j;
+        ivec2 meshMatID = texelFetch(u_TLASMeshMatIDTexture, ind).xy;
+
+        vec4 right   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 0, 0), 0).xyzw;
+        vec4 up      = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 1, 0), 0).xyzw;
+        vec4 forward = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 2, 0), 0).xyzw;
+        vec4 trans   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 3, 0), 0).xyzw;
+        mat4 invTransform = inverse(mat4(right, up, forward, trans));
+
+        Ray transRay;
+        transRay._Orig = (invTransform * vec4(iRay._Orig, 1.0)).xyz;
+        transRay._Dir  = (invTransform * vec4(iRay._Dir, 0.0)).xyz;
+
+        ivec2 blasRange = texelFetch(u_BLASNodesRangeTexture, meshMatID.x).xy;
+        ivec2 triRange  = texelFetch(u_BLASPackedIndicesRangeTexture, meshMatID.x).xy;
+        blasRange.x *= 3;
+
+        int   blasIndex   = 0; // BLAS Root
+
+        int   BlasStack[64]; // BLAS Max depth = 64
+        int   blasTopPtr = 0;
+        BlasStack[blasTopPtr++] = -1;
+
+        leftBboxMin  = texelFetch(u_BLASNodesTexture, blasRange.x + blasIndex * 3 ).xyz;
+        leftBboxMax  = texelFetch(u_BLASNodesTexture, blasRange.x + blasIndex * 3 + 1).xyz;
+        leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
+        if ( !leftHit )
+          blasIndex = -1;
+
+        while ( blasIndex != -1 )
+        {
+          LcRcLeaf = ivec3(texelFetch(u_BLASNodesTexture, blasRange.x + blasIndex * 3 + 2).xyz);
+
+          int blasLeftIndex  = int(LcRcLeaf.x); // or firstPrimitiveIdx
+          int blasRightIndex = int(LcRcLeaf.y); // or nbPrimitives
+          int blasLeaf       = int(LcRcLeaf.z);
+
+          if ( blasLeaf > 0 ) // BLAS Leaf node
+          {
+            int firstTriIdx = blasLeftIndex * 3;
+
+            for ( int i = 0; i < blasRightIndex; i++ ) // blasRightIndex == nbPrimitives
+            {
+              ivec3 vInd0 = ivec3(texelFetch(u_BLASPackedIndicesTexture, triRange.x + firstTriIdx + i * 3     ).xyz);
+              ivec3 vInd1 = ivec3(texelFetch(u_BLASPackedIndicesTexture, triRange.x + firstTriIdx + i * 3 + 1 ).xyz);
+              ivec3 vInd2 = ivec3(texelFetch(u_BLASPackedIndicesTexture, triRange.x + firstTriIdx + i * 3 + 2 ).xyz);
+
+              vec3 v0 = texelFetch(u_BLASPackedVtxTexture, vInd0.x).xyz;
+              vec3 v1 = texelFetch(u_BLASPackedVtxTexture, vInd1.x).xyz;
+              vec3 v2 = texelFetch(u_BLASPackedVtxTexture, vInd2.x).xyz;
+
+              float hitDist = 0.f;
+              vec2 uv;
+              if ( TriangleIntersection(transRay, v0, v1, v2, hitDist, uv) )
+              {
+                if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
+                  return true;
+              }
+            }
+          }
+          else
+          {
+            leftBboxMin  = texelFetch(u_BLASNodesTexture, blasRange.x + blasLeftIndex  * 3    ).xyz;
+            leftBboxMax  = texelFetch(u_BLASNodesTexture, blasRange.x + blasLeftIndex  * 3 + 1).xyz;
+            rightBboxMin = texelFetch(u_BLASNodesTexture, blasRange.x + blasRightIndex * 3    ).xyz;
+            rightBboxMax = texelFetch(u_BLASNodesTexture, blasRange.x + blasRightIndex * 3 + 1).xyz;
+      
+            leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
+            rightHit  = BoxIntersection(rightBboxMin, rightBboxMax, transRay, rightDist);
+
+            if ( leftHit && rightHit )
+            {
+              if ( leftDist > rightDist )
+              {
+                blasIndex = blasRightIndex;
+                BlasStack[blasTopPtr++] = blasLeftIndex;
+              }
+              else
+              {
+                blasIndex = blasLeftIndex;
+                BlasStack[blasTopPtr++] = blasRightIndex;
+              }
+              continue;
+            }
+            else if ( leftHit )
+            {
+              blasIndex = blasLeftIndex;
+              continue;
+            }
+            else if ( rightHit )
+            {
+              blasIndex = blasRightIndex;
+              continue;
+            }
+          }
+
+          blasIndex = BlasStack[--blasTopPtr];
+        }
+      }
+    }
+    else
+    {
+      leftBboxMin  = texelFetch(u_TLASNodesTexture, tlasLeftIndex  * 3    ).xyz;
+      leftBboxMax  = texelFetch(u_TLASNodesTexture, tlasLeftIndex  * 3 + 1).xyz;
+      rightBboxMin = texelFetch(u_TLASNodesTexture, tlasRightIndex * 3    ).xyz;
+      rightBboxMax = texelFetch(u_TLASNodesTexture, tlasRightIndex * 3 + 1).xyz;
+      
+      leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, iRay, leftDist);
+      rightHit  = BoxIntersection(rightBboxMin, rightBboxMax, iRay, rightDist);
+
+      if ( leftHit && rightHit )
+      {
+        if ( leftDist > rightDist )
+        {
+          tlasIndex = tlasRightIndex;
+          TlasStack[tlasTopPtr++] = tlasLeftIndex;
+        }
+        else
+        {
+          tlasIndex = tlasLeftIndex;
+          TlasStack[tlasTopPtr++] = tlasRightIndex;
+        }
+        continue;
+      }
+      else if ( leftHit )
+      {
+        tlasIndex = tlasLeftIndex;
+        continue;
+      }
+      else if ( rightHit )
+      {
+        tlasIndex = tlasRightIndex;
+        continue;
+      }
+    }
+    tlasIndex = TlasStack[--tlasTopPtr];
+  }
+#elif defined(BLAS_TRAVERSAL)
   for ( int ind = 0; ind < u_NbMeshInstances; ++ind )
   {
     ivec2 blasRange = texelFetch(u_BLASNodesRangeTexture, ind).xy;
@@ -418,7 +793,7 @@ bool AnyHit( Ray iRay, float iMaxDist )
     transRay._Orig = (invTransform * vec4(iRay._Orig, 1.0)).xyz;
     transRay._Dir  = (invTransform * vec4(iRay._Dir, 0.0)).xyz;
 
-    int   index       = 0; // Root
+    int   blasIndex   = 0; // BLAS Root
     bool  leftHit     = false;
     bool  rightHit    = false;
     float leftDist    = 0.f;
@@ -434,25 +809,25 @@ bool AnyHit( Ray iRay, float iMaxDist )
     int   blasStackTop = 0;
     BlasStack[blasStackTop++] = -1;
 
-    leftBboxMin  = texelFetch(u_BLASNodesTexture, blasRange.x + index * 3 ).xyz;
-    leftBboxMax  = texelFetch(u_BLASNodesTexture, blasRange.x + index * 3 + 1).xyz;
+    leftBboxMin  = texelFetch(u_BLASNodesTexture, blasRange.x + blasIndex * 3 ).xyz;
+    leftBboxMax  = texelFetch(u_BLASNodesTexture, blasRange.x + blasIndex * 3 + 1).xyz;
     leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
     if ( !leftHit )
-      index = -1;
+      blasIndex = -1;
 
-    while ( index != -1 )
+    while ( blasIndex != -1 )
     {
-      ivec3 LcRcLeaf = ivec3(texelFetch(u_BLASNodesTexture, blasRange.x + index * 3 + 2).xyz);
+      ivec3 LcRcLeaf = ivec3(texelFetch(u_BLASNodesTexture, blasRange.x + blasIndex * 3 + 2).xyz);
 
-      int leftIndex  = int(LcRcLeaf.x); // or firstPrimitiveIdx
-      int rightIndex = int(LcRcLeaf.y); // or nbPrimitives
-      int leaf       = int(LcRcLeaf.z);
+      int blasLeftIndex  = int(LcRcLeaf.x); // or firstPrimitiveIdx
+      int blasRightIndex = int(LcRcLeaf.y); // or nbPrimitives
+      int blasLeaf       = int(LcRcLeaf.z);
 
-      if ( leaf > 0 ) // BLAS Leaf node
+      if ( blasLeaf > 0 ) // BLAS Leaf node
       {
-        int firstTriIdx = leftIndex * 3;
+        int firstTriIdx = blasLeftIndex * 3;
 
-        for ( int i = 0; i < rightIndex; i++ ) // rightIndex == nbPrimitives
+        for ( int i = 0; i < blasRightIndex; i++ ) // blasRightIndex == nbPrimitives
         {
           ivec3 vInd0 = ivec3(texelFetch(u_BLASPackedIndicesTexture, triRange.x + firstTriIdx + i * 3     ).xyz);
           ivec3 vInd1 = ivec3(texelFetch(u_BLASPackedIndicesTexture, triRange.x + firstTriIdx + i * 3 + 1 ).xyz);
@@ -473,10 +848,10 @@ bool AnyHit( Ray iRay, float iMaxDist )
       }
       else
       {
-        leftBboxMin  = texelFetch(u_BLASNodesTexture, blasRange.x + leftIndex  * 3    ).xyz;
-        leftBboxMax  = texelFetch(u_BLASNodesTexture, blasRange.x + leftIndex  * 3 + 1).xyz;
-        rightBboxMin = texelFetch(u_BLASNodesTexture, blasRange.x + rightIndex * 3    ).xyz;
-        rightBboxMax = texelFetch(u_BLASNodesTexture, blasRange.x + rightIndex * 3 + 1).xyz;
+        leftBboxMin  = texelFetch(u_BLASNodesTexture, blasRange.x + blasLeftIndex  * 3    ).xyz;
+        leftBboxMax  = texelFetch(u_BLASNodesTexture, blasRange.x + blasLeftIndex  * 3 + 1).xyz;
+        rightBboxMin = texelFetch(u_BLASNodesTexture, blasRange.x + blasRightIndex * 3    ).xyz;
+        rightBboxMax = texelFetch(u_BLASNodesTexture, blasRange.x + blasRightIndex * 3 + 1).xyz;
       
         leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
         rightHit  = BoxIntersection(rightBboxMin, rightBboxMax, transRay, rightDist);
@@ -485,29 +860,29 @@ bool AnyHit( Ray iRay, float iMaxDist )
         {
           if ( leftDist > rightDist )
           {
-            index = rightIndex;
-            BlasStack[blasStackTop++] = leftIndex;
+            blasIndex = blasRightIndex;
+            BlasStack[blasStackTop++] = blasLeftIndex;
           }
           else
           {
-            index = leftIndex;
-            BlasStack[blasStackTop++] = rightIndex;
+            blasIndex = blasLeftIndex;
+            BlasStack[blasStackTop++] = blasRightIndex;
           }
           continue;
         }
         else if ( leftHit )
         {
-          index = leftIndex;
+          blasIndex = blasLeftIndex;
           continue;
         }
         else if ( rightHit )
         {
-          index = rightIndex;
+          blasIndex = blasRightIndex;
           continue;
         }
       }
 
-      index = BlasStack[--blasStackTop];
+      blasIndex = BlasStack[--blasStackTop];
     }
   }
 #elif defined(OPTIM_AABB)

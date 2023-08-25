@@ -37,19 +37,19 @@ bool PlaneIntersection( vec3 iOrig, vec3 iNormal, Ray iRay, out float oHitDistan
 }
 
 // Intersection method from Real-Time Rendering and Essential Mathematics for Games (p. 581)
-bool BoxIntersection( vec3 iLow, vec3 iHigh, mat4 iTransfom, Ray iRay, out float oHitDistance )
+bool BoxIntersection( vec3 iLow, vec3 iHigh, mat4 iTransform, Ray iRay, out float oHitDistance )
 {
   float tMin = -INFINITY;
   float tMax = INFINITY;
 
-  vec3 boxOrig = vec3(iTransfom[3][0], iTransfom[3][1], iTransfom[3][2]);
+  vec3 boxOrig = vec3(iTransform[3][0], iTransform[3][1], iTransform[3][2]);
 
   vec3 delta = boxOrig - iRay._Orig;
 
   for ( int i = 0; i < 3; ++i )
   {
     // Test intersection with the 2 planes perpendicular to the OBB's axis
-    vec3 axis = vec3(iTransfom[i][0],iTransfom[i][1], iTransfom[i][2]);
+    vec3 axis = vec3(iTransform[i][0],iTransform[i][1], iTransform[i][2]);
     float e = dot(axis, delta);
     float f = dot(iRay._Dir, axis);
 
@@ -111,10 +111,10 @@ bool BoxIntersection( vec3 iLow, vec3 iHigh, Ray iRay, out float oHitDistance )
 }
 
 // Adapted from https://gist.github.com/Shtille/1f98c649abeeb7a18c5a56696546d3cf
-vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iTransfom, vec3 iHitPoint )
+vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iTransform, vec3 iHitPoint )
 {
   // Resolution in local space
-  mat4 invTransfo = inverse(iTransfom);
+  mat4 invTransfo = inverse(iTransform);
   vec3 localHitP = (invTransfo * vec4(iHitPoint, 1.f)).xyz;
   
   vec3 center = (iLow + iHigh) * .5f;
