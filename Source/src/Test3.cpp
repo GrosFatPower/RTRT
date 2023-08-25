@@ -795,10 +795,10 @@ int Test3::InitializeScene()
   if ( _Scene )
     delete _Scene;
 
-  std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene.scene";
+  //std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene.scene";
   //std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene2.scene";
   //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
-  //std::string sceneFile = "..\\..\\Assets\\teapot.scene";
+  std::string sceneFile = "..\\..\\Assets\\teapot.scene";
 
   //_Scene = new Scene();
   if ( !Loader::LoadScene(sceneFile, _Scene, _Settings) || !_Scene )
