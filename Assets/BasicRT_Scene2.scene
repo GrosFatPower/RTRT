@@ -31,6 +31,7 @@ material Green
 material textured_box
 {
 	albedotexture misc/textures/box.jpg
+  metallic 0.3
 }
 
 mesh
