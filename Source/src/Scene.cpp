@@ -385,7 +385,7 @@ void Scene::CompileMeshData( Vec2i iTextureSize )
   // BVH
   _TLAS.Build(_Meshes, _MeshInstances);
 
-  for ( auto meshInst : _MeshInstances )
+  for ( auto meshInst : _TLAS.GetPackedMeshInstances() )
   {
     _TLASPackedTransforms.emplace_back(meshInst._Transform);
     _TLASPackedMeshMatID.emplace_back(meshInst._MeshID, meshInst._MaterialID);
