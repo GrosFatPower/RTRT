@@ -1,6 +1,7 @@
 #include "Test1.h"
 #include "Test2.h"
 #include "Test3.h"
+#include "Test4.h"
 
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
@@ -75,7 +76,8 @@ int main(int, char**)
   // Our state
   const char * TestNames[] = { "Test 1 : Render to texture",
                                "Test 2 : Scene loader",
-                               "Test 3 : Basic ray tracing" };
+                               "Test 3 : Basic ray tracing",
+                               "Test 4 : CPU Rasterizer" };
   int selectedTest = 0;
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
@@ -92,7 +94,7 @@ int main(int, char**)
       ImGui::Begin("Test selection");
 
       int comboSelection = 0;
-      if ( ImGui::Combo("Test selection", &comboSelection, TestNames, 3) )
+      if ( ImGui::Combo("Test selection", &comboSelection, TestNames, 4) )
       {
         if ( 0 == comboSelection )
           selectedTest = 1;
@@ -100,6 +102,8 @@ int main(int, char**)
           selectedTest = 2;
         else if ( 2 == comboSelection )
           selectedTest = 3;
+        else if ( 3 == comboSelection )
+          selectedTest = 4;
       }
 
       ImGui::End();
@@ -139,6 +143,12 @@ int main(int, char**)
   {
     RTRT::Test3 test3(mainWindow, g_ScreenWidth, g_ScreenHeight);
     failure = test3.Run();
+  }
+
+  else if ( 4 == selectedTest )
+  {
+    RTRT::Test4 test4(mainWindow, g_ScreenWidth, g_ScreenHeight);
+    failure = test4.Run();
   }
 
   glfwDestroyWindow(mainWindow);
