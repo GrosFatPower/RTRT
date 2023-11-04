@@ -100,6 +100,39 @@ int Test4::UpdateCPUTime()
   return 0;
 }
 
+// ----------------------------------------------------------------------------
+// DrawUI
+// ----------------------------------------------------------------------------
+int Test4::DrawUI()
+{
+  // Start the Dear ImGui frame
+  ImGui_ImplOpenGL3_NewFrame();
+  ImGui_ImplGlfw_NewFrame();
+  ImGui::NewFrame();
+
+  // Frame info
+  {
+    ImGui::Begin("Test 4");
+
+    ImGui::Text("Render time %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
+
+    ImGui::Text("Window width %d: height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+    ImGui::Text("Render width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
+
+    ImGui::End();
+  }
+
+  // Rendering
+  ImGui::Render();
+
+  ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateCPUTime
+// ----------------------------------------------------------------------------
 int Test4::Run()
 {
   int ret = 0;
@@ -154,37 +187,16 @@ int Test4::Run()
   _CPULoopTime = glfwGetTime();
   while (!glfwWindowShouldClose(_MainWindow))
   {
-    _FrameNum++;
-
     UpdateCPUTime();
 
     glfwPollEvents();
-
-    // Start the Dear ImGui frame
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-
-    {
-      ImGui::Begin("Test 4");
-
-      ImGui::Text("Render time %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
-
-      ImGui::Text("Window width %d: height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
-      ImGui::Text("Render width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
-
-      ImGui::End();
-    }
-
-    // Rendering
-    ImGui::Render();
 
     glfwGetFramebufferSize(_MainWindow, &_Settings._WindowResolution.x, &_Settings._WindowResolution.y);
     glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
     glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    DrawUI();
 
     glfwSwapBuffers(_MainWindow);
   }
