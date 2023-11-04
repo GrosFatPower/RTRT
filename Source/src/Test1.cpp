@@ -143,7 +143,7 @@ static int RecompileShaders()
   switch ( g_FragShaderNum )
   {
   case 1 :
-    fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Drawtexture.glsl");
+    fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_DrawWarpedTexture.glsl");
     break;
   case 2 :
     fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_RayMarching.glsl");
