@@ -33,16 +33,22 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
   {
     std::cout << "EVENT : KEY RELEASE" << std::endl;
 
+    bool updateFrameBuffer = false;
+
     switch ( key )
     {
     case GLFW_KEY_DOWN:
-      g_StepY -= 5; break;
+      g_StepY -= 5; this_ -> _UpdateImageTex = true; break;
     case GLFW_KEY_UP:
-      g_StepY += 5; break;
+      g_StepY += 5; this_ -> _UpdateImageTex = true; break;
     case GLFW_KEY_LEFT:
-      g_StepX -= 5; break;
+      g_StepX -= 5; this_ -> _UpdateImageTex = true; break;
     case GLFW_KEY_RIGHT:
-      g_StepX += 5; break;
+      g_StepX += 5; this_ -> _UpdateImageTex = true; break;
+    case GLFW_KEY_PAGE_DOWN:
+      this_ -> _Settings._RenderScale -= 5; updateFrameBuffer = true; this_ -> _UpdateImageTex = true; break;
+    case GLFW_KEY_PAGE_UP:
+      this_ -> _Settings._RenderScale += 5; updateFrameBuffer = true; this_ -> _UpdateImageTex = true; break;
     default :
       break;
     }
@@ -51,9 +57,26 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
       g_StepX = 5;
     if ( g_StepY <= 0 )
       g_StepY = 5;
+    if ( this_ -> _Settings._RenderScale <= 0 )
+      this_ -> _Settings._RenderScale = 5;
 
     std::cout << "STEPX = " << g_StepX << std::endl;
     std::cout << "STEPY = " << g_StepY << std::endl;
+    std::cout << "SCALE = " << this_ -> _Settings._RenderScale << std::endl;
+
+    if ( updateFrameBuffer )
+    {
+      this_ -> _Settings._RenderResolution.x = this_ -> _Settings._WindowResolution.x * ( this_ -> _Settings._RenderScale * 0.01f );
+      this_ -> _Settings._RenderResolution.y = this_ -> _Settings._WindowResolution.y * ( this_ -> _Settings._RenderScale * 0.01f );
+
+      this_ -> _Image.resize(this_ -> _Settings._RenderResolution.x  * this_ -> _Settings._RenderResolution.y);
+      Vec4 backgroundColor(this_ -> _Settings._BackgroundColor.x, this_ -> _Settings._BackgroundColor.y, this_ -> _Settings._BackgroundColor.z, 1.f);
+      fill(this_ -> _Image.begin(), this_ -> _Image.end(), backgroundColor);
+
+      glBindTexture(GL_TEXTURE_2D, this_->_ScreenTextureID);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, this_ -> _Settings._RenderResolution.x, this_ -> _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
+      glBindTexture(GL_TEXTURE_2D, 0);
+    }
   }
 }
 
@@ -371,24 +394,25 @@ void Test4::DrawUI()
 // ----------------------------------------------------------------------------
 int Test4::UpdateImage()
 {
-  int witdh  = _Settings._RenderResolution.x;
-  int height = _Settings._RenderResolution.y;
-  int size = witdh * height;
+  if ( _UpdateImageTex )
+  {
+    int witdh  = _Settings._RenderResolution.x;
+    int height = _Settings._RenderResolution.y;
+    int size = witdh * height;
 
-  Vec4 colors[3] = { { 1.f, 1.f, 1.f, 1.f }, { 0.f, 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 1.f } };
+    Vec4 colors[3] = { { 1.f, 1.f, 1.f, 1.f }, { 0.f, 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 1.f } };
 
 #pragma omp parallel for
-  for ( int i = 0; i < size; ++i )
-  {
-    int line = i / witdh;
-    int col  = i % witdh;
+    for ( int i = 0; i < size; ++i )
+    {
+      int line = i / witdh;
+      int col  = i % witdh;
 
-    int curInd = abs(( line / g_StepY ) % 2  - ( col / g_StepX ) % 2);
+      int curInd = abs(( line / g_StepY ) % 2  - ( col / g_StepX ) % 2);
 
-    _Image[i] = colors[curInd];
+      _Image[i] = colors[curInd];
+    }
   }
-
-  _UpdateImageTex = true;
 
   return 0;
 }
