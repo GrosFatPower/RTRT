@@ -160,19 +160,6 @@ Test4::~Test4()
 
   glDeleteTextures(1, &_ScreenTextureID);
   glDeleteTextures(1, &_ImageTextureID);
-
-  if (_Quad)
-    delete _Quad;
-  _Quad = nullptr;
-  if (_RTTShader)
-    delete _RTTShader;
-  _RTTShader = nullptr;
-  if (_RTSShader)
-    delete _RTSShader;
-  _RTSShader = nullptr;
-  if ( _Scene )
-    delete _Scene;
-  _Scene = nullptr;
 }
 
 // ----------------------------------------------------------------------------
@@ -241,24 +228,19 @@ int Test4::InitializeFrameBuffer()
 // ----------------------------------------------------------------------------
 int Test4::RecompileShaders()
 {
-  if (_RTTShader)
-    delete _RTTShader;
-  _RTTShader = nullptr;
-  if (_RTSShader)
-    delete _RTSShader;
-  _RTSShader = nullptr;
-
   ShaderSource vertexShaderSrc = Shader::LoadShader("..\\..\\shaders\\vertex_Default.glsl");
   ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_drawTexture.glsl");
 
-  _RTTShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
-  if ( !_RTTShader )
+  ShaderProgram * newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
+  if ( !newShader )
     return 1;
+  _RTTShader.reset(newShader);
 
   fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Output.glsl");
-  _RTSShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
-  if ( !_RTSShader )
+  newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
+  if ( !newShader )
     return 1;
+  _RTSShader.reset(newShader);
 
   return 0;
 }
@@ -432,17 +414,15 @@ int Test4::UpdateImage()
 // ----------------------------------------------------------------------------
 int Test4::InitializeScene()
 {
-  if ( _Scene )
-    delete _Scene;
-
   std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
 
-  //_Scene = new Scene();
-  if ( !Loader::LoadScene(sceneFile, _Scene, _Settings) || !_Scene )
+  Scene * newScene = nullptr;
+  if ( !Loader::LoadScene(sceneFile, newScene, _Settings) || !newScene )
   {
     std::cout << "Failed to load scene : " << sceneFile << std::endl;
     return 1;
   }
+  _Scene.reset(newScene);
 
   // Scene should contain at least one light
   Light * firstLight = _Scene -> GetLight(0);
@@ -511,7 +491,7 @@ int Test4::Run()
   }
 
   // Quad
-  _Quad = new QuadMesh();
+  _Quad = std::make_unique<QuadMesh>();
 
   // Frame buffer
   if ( 0 != InitializeFrameBuffer() )

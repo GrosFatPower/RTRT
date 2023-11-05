@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 #include <deque>
+#include <memory>
 #include "GL/glew.h"
 
 struct GLFWwindow;
@@ -46,28 +47,29 @@ private:
   void RenderToSceen();
   void DrawUI();
 
-  GLFWwindow    * _MainWindow;
+  GLFWwindow       * _MainWindow;
 
-  QuadMesh      * _Quad      = nullptr;
-  ShaderProgram * _RTTShader = nullptr;
-  ShaderProgram * _RTSShader = nullptr;
+  std::unique_ptr<QuadMesh> _Quad;
+  std::unique_ptr<Scene>    _Scene;
 
-  GLuint          _FrameBufferID   = 0;
-  GLuint          _ImageTextureID  = 0;
-  GLuint          _ScreenTextureID = 0;
+  std::unique_ptr<ShaderProgram> _RTTShader;
+  std::unique_ptr<ShaderProgram> _RTSShader;
 
-  RenderSettings  _Settings;
+  GLuint             _FrameBufferID   = 0;
+  GLuint             _ImageTextureID  = 0;
+  GLuint             _ScreenTextureID = 0;
 
-  bool              _UpdateImageTex = true;
-  std::vector<Vec4> _Image;
+  RenderSettings     _Settings;
 
-  Scene         * _Scene = nullptr;
+  bool               _UpdateImageTex = true;
+  std::vector<Vec4>  _Image;
+
 
   // Frame rate
-  float           _CPULoopTime          = 0.f;
-  float           _FrameRate            = 0.f;
-  float           _TimeDelta            = 0.f;
-  float           _AverageDelta         = 0.f;
+  float             _CPULoopTime          = 0.f;
+  float             _FrameRate            = 0.f;
+  float             _TimeDelta            = 0.f;
+  float             _AverageDelta         = 0.f;
   std::deque<float> _LastDeltas;
 };
 
