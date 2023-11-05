@@ -798,12 +798,13 @@ int Test3::InitializeScene()
   //std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene.scene";
   //std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene2.scene";
   //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
-  std::string sceneFile = "..\\..\\Assets\\teapot.scene";
+  //std::string sceneFile = "..\\..\\Assets\\teapot.scene";
   //std::string sceneFile = "..\\..\\Assets\\test_veach.scene";
   //std::string sceneFile = "..\\..\\Assets\\diningroom.scene";
   //std::string sceneFile = "..\\..\\Assets\\tropical_island.scene";
   //std::string sceneFile = "..\\..\\Assets\\tropical_island2.scene";
   //std::string sceneFile = "..\\..\\Assets\\bedroom.scene";
+  std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
 
   //_Scene = new Scene();
   if ( !Loader::LoadScene(sceneFile, _Scene, _Settings) || !_Scene )

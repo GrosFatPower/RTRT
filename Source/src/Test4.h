@@ -15,6 +15,7 @@ namespace RTRT
 
 class QuadMesh;
 class ShaderProgram;
+class Scene;
 
 class Test4
 {
@@ -33,10 +34,13 @@ private:
   int UpdateCPUTime();
   int InitializeUI();
   int InitializeFrameBuffer();
+  int InitializeScene();
+
   int RecompileShaders();
   int UpdateUniforms();
   int UpdateImage();
   int UpdateTextures();
+  int UpdateScene();
 
   void RenderToTexture();
   void RenderToSceen();
@@ -56,6 +60,8 @@ private:
 
   bool              _UpdateImageTex = true;
   std::vector<Vec4> _Image;
+
+  Scene         * _Scene = nullptr;
 
   // Frame rate
   float           _CPULoopTime          = 0.f;

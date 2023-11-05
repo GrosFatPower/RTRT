@@ -3,6 +3,10 @@
 #include "QuadMesh.h"
 #include "ShaderProgram.h"
 #include "Texture.h"
+#include "Scene.h"
+#include "Camera.h"
+#include "Light.h"
+#include "Loader.h"
 
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
@@ -123,6 +127,8 @@ void Test4::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
   glBindTexture(GL_TEXTURE_2D, this_->_ScreenTextureID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, this_ -> _Settings._RenderResolution.x, this_ -> _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
   glBindTexture(GL_TEXTURE_2D, 0);
+
+   this_ -> _UpdateImageTex = true;
 }
 
 // ----------------------------------------------------------------------------
@@ -164,6 +170,9 @@ Test4::~Test4()
   if (_RTSShader)
     delete _RTSShader;
   _RTSShader = nullptr;
+  if ( _Scene )
+    delete _Scene;
+  _Scene = nullptr;
 }
 
 // ----------------------------------------------------------------------------
@@ -379,6 +388,7 @@ void Test4::DrawUI()
 
     ImGui::Text("Window width %d: height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
     ImGui::Text("Render width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
+    ImGui::Text("Render scale : %d %%", _Settings._RenderScale);
 
     ImGui::End();
   }
@@ -413,6 +423,45 @@ int Test4::UpdateImage()
       _Image[i] = colors[curInd];
     }
   }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeScene
+// ----------------------------------------------------------------------------
+int Test4::InitializeScene()
+{
+  if ( _Scene )
+    delete _Scene;
+
+  std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
+
+  //_Scene = new Scene();
+  if ( !Loader::LoadScene(sceneFile, _Scene, _Settings) || !_Scene )
+  {
+    std::cout << "Failed to load scene : " << sceneFile << std::endl;
+    return 1;
+  }
+
+  // Scene should contain at least one light
+  Light * firstLight = _Scene -> GetLight(0);
+  if ( !firstLight )
+  {
+    Light newLight;
+    _Scene -> AddLight(newLight);
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateScene
+// ----------------------------------------------------------------------------
+int Test4::UpdateScene()
+{
+  if ( !_Scene )
+    return 1;
 
   return 0;
 }
@@ -468,6 +517,13 @@ int Test4::Run()
   if ( 0 != InitializeFrameBuffer() )
   {
     std::cout << "ERROR: Framebuffer is not complete!" << std::endl;
+    return 1;
+  }
+
+  // Initialize the scene
+  if ( 0 != InitializeScene() )
+  {
+    std::cout << "ERROR: Scene initialization failed!" << std::endl;
     return 1;
   }
 
