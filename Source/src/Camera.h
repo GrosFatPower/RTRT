@@ -42,6 +42,8 @@ public:
 
   void LookAt( Vec3 iPivot );
 
+  void ComputeLookAtMatrix( Mat4x4 & oM ); // Model view matrix
+
 private:
 
   void Update();

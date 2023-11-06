@@ -115,4 +115,19 @@ void Camera::LookAt( Vec3 iPivot )
   Update();
 }
 
+void Camera::ComputeLookAtMatrix( Mat4x4 & oM )
+{
+  Vec3 Z = glm::normalize(_Pos - _Pivot);
+  Vec3 X = glm::normalize(glm::cross(_WorldUp, Z));
+  Vec3 Y = glm::normalize(glm::cross(Z, X));
+
+  oM[0][0] = X.x;                oM[0][1] = Y.x;                oM[0][2] = Z.x;                oM[0][3] = 0.f;
+  oM[1][0] = X.y;                oM[1][1] = Y.y;                oM[1][2] = Z.y;                oM[1][3] = 0.f;
+  oM[2][0] = X.z;                oM[2][1] = Y.z;                oM[2][2] = Z.z;                oM[2][3] = 0.f;
+  oM[3][0] = -glm::dot(X, _Pos); oM[3][1] = -glm::dot(Y, _Pos); oM[3][2] = -glm::dot(Z, _Pos); oM[3][3] = 1.f;
+
+  // OR
+  //oM = glm::lookAt(_Pos, _Pivot, _WorldUp);
+}
+
 }
