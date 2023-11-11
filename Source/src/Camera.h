@@ -42,7 +42,14 @@ public:
 
   void LookAt( Vec3 iPivot );
 
-  void ComputeLookAtMatrix( Mat4x4 & oM ); // Model view matrix
+  // Model view matrix, column-major
+  void ComputeLookAtMatrix( Mat4x4 & oM );
+
+  // Perspective projection matrix, column-major / RH / vertival fov in degrees / Z [-1,1]
+  void ComputePerspectiveProjMatrix( float iFov, float iAspectRatio, float iZNear, float iZFar, Mat4x4 & oM );
+
+  // Frustum matrix, column-major / RH / vertival fov in degrees / Z [-1,1]
+  void ComputeFrustum( float iLeft, float iRight, float iBottom, float iTop, float iZNear, float iZFar, Mat4x4 & oM );
 
 private:
 

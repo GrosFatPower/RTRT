@@ -130,4 +130,43 @@ void Camera::ComputeLookAtMatrix( Mat4x4 & oM )
   //oM = glm::lookAt(_Pos, _Pivot, _WorldUp);
 }
 
+void Camera::ComputePerspectiveProjMatrix( float iFov, float iAspectRatio, float iZNear, float iZFar, Mat4x4 & oM )
+{
+  float top = iZNear * tanf( MathUtil::ToRadians(iFov) );
+  float right = top * iAspectRatio;
+
+  ComputeFrustum(-right, right, -top, top, iZNear, iZFar, oM);
+}
+
+
+void Camera::ComputeFrustum( float iLeft, float iRight, float iBottom, float iTop, float iZNear, float iZFar, Mat4x4 & oM )
+{
+  float width  = iRight - iLeft;
+  float height = iTop - iBottom;
+  float depth  = iZFar - iZNear;
+
+  oM[0][0] = 2.f * iZNear / width;
+  oM[0][1] = 0.f;
+  oM[0][2] = 0.f;
+  oM[0][3] = 0.f;
+
+  oM[1][0] = 0.f;
+  oM[1][1] = 2.f * iZNear / height;
+  oM[1][2] = 0.f;
+  oM[1][3] = 0.f;
+
+  oM[2][0] = ( iLeft + iRight ) / width;
+  oM[2][1] = ( iBottom + iTop ) / height;
+  oM[2][2] = (-iZFar -iZNear) / depth;
+  oM[2][3] = -1.f;
+
+  oM[3][0] = 0.f;
+  oM[3][1] = 0.f;
+  oM[3][2] = -2.f * iZNear * iZFar / depth;
+  oM[3][3] = 0.f;
+
+  // OR
+  //oM = glm::frustum(iLeft, iRight, iBottom, iTop, iZNear, iZFar);
+}
+
 }
