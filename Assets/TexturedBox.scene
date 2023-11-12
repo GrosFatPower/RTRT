@@ -5,7 +5,7 @@ renderer
 
 camera
 {
-	position 5.0 2.0 8.0
+	position 0.0 0.0 -5.0
 	lookat 0.0 0.0 0.0
 	fov 80
 }
@@ -13,7 +13,7 @@ camera
 light
 {
 	type sphere
-	position 2 3 3
+	position 2 3 -3
 	emission 4. 4. 4.
 	radius .2
 }
@@ -27,5 +27,4 @@ mesh
 {
 	file misc/TexturedBox.obj
 	material textured_box
-  matrix 1 0 0 -1 0 1 0 -1 0 0 1 -1 0 0 0 1
 }

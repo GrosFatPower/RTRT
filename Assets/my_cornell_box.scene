@@ -13,7 +13,7 @@ camera
 {
 	position .276 .275 -.75
 	lookat .276 .275 .10
-	fov 40
+	fov 50
 }
 
 material ceiling_white

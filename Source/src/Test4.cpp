@@ -21,9 +21,6 @@
 namespace RTRT
 {
 
-int g_StepX = 10;
-int g_StepY = 10;
-
 // ----------------------------------------------------------------------------
 // KeyCallback
 // ----------------------------------------------------------------------------
@@ -33,6 +30,25 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
   if ( !this_ )
     return;
 
+  if ( action == GLFW_PRESS )
+  {
+    std::cout << "EVENT : KEY PRESS" << std::endl;
+
+    switch ( key )
+    {
+    case GLFW_KEY_W:
+      this_ -> _KeyState._KeyUp =    ( action == GLFW_PRESS ); this_ -> _UpdateImageTex = true; break;
+    case GLFW_KEY_S:
+      this_ -> _KeyState._KeyDown =  ( action == GLFW_PRESS ); this_ -> _UpdateImageTex = true; break;
+    case GLFW_KEY_A:
+      this_ -> _KeyState._KeyLeft =  ( action == GLFW_PRESS ); this_ -> _UpdateImageTex = true; break;
+    case GLFW_KEY_D:
+      this_ -> _KeyState._KeyRight = ( action == GLFW_PRESS ); this_ -> _UpdateImageTex = true; break;
+    default :
+      break;
+    }
+  }
+
   if ( action == GLFW_RELEASE )
   {
     std::cout << "EVENT : KEY RELEASE" << std::endl;
@@ -41,14 +57,14 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
 
     switch ( key )
     {
-    case GLFW_KEY_DOWN:
-      g_StepY -= 5; this_ -> _UpdateImageTex = true; break;
-    case GLFW_KEY_UP:
-      g_StepY += 5; this_ -> _UpdateImageTex = true; break;
-    case GLFW_KEY_LEFT:
-      g_StepX -= 5; this_ -> _UpdateImageTex = true; break;
-    case GLFW_KEY_RIGHT:
-      g_StepX += 5; this_ -> _UpdateImageTex = true; break;
+    case GLFW_KEY_W:
+      this_ -> _KeyState._KeyUp =    ( action == GLFW_PRESS ); this_ -> _UpdateImageTex = true; break;
+    case GLFW_KEY_S:
+      this_ -> _KeyState._KeyDown =  ( action == GLFW_PRESS ); this_ -> _UpdateImageTex = true; break;
+    case GLFW_KEY_A:
+      this_ -> _KeyState._KeyLeft =  ( action == GLFW_PRESS ); this_ -> _UpdateImageTex = true; break;
+    case GLFW_KEY_D:
+      this_ -> _KeyState._KeyRight = ( action == GLFW_PRESS ); this_ -> _UpdateImageTex = true; break;
     case GLFW_KEY_PAGE_DOWN:
       this_ -> _Settings._RenderScale -= 5; updateFrameBuffer = true; this_ -> _UpdateImageTex = true; break;
     case GLFW_KEY_PAGE_UP:
@@ -57,15 +73,9 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
       break;
     }
 
-    if ( g_StepX <= 0 )
-      g_StepX = 5;
-    if ( g_StepY <= 0 )
-      g_StepY = 5;
     if ( this_ -> _Settings._RenderScale <= 0 )
       this_ -> _Settings._RenderScale = 5;
 
-    std::cout << "STEPX = " << g_StepX << std::endl;
-    std::cout << "STEPY = " << g_StepY << std::endl;
     std::cout << "SCALE = " << this_ -> _Settings._RenderScale << std::endl;
 
     if ( updateFrameBuffer )
@@ -95,7 +105,32 @@ void Test4::MousebuttonCallback(GLFWwindow* window, int button, int action, int 
     if ( !this_ )
       return;
 
-    // ToDo
+    double mouseX = 0.f, mouseY = 0.f;
+    glfwGetCursorPos(window, &mouseX, &mouseY);
+
+    if ( ( GLFW_MOUSE_BUTTON_1 == button ) && ( GLFW_PRESS == action ) )
+    {
+      std::cout << "EVENT : LEFT CLICK (" << mouseX << "," << mouseY << ")" << std::endl;
+      this_->_MouseState._LeftClick = true;
+    }
+    else
+      this_->_MouseState._LeftClick = false;
+
+    if ( ( GLFW_MOUSE_BUTTON_2 == button ) && ( GLFW_PRESS == action ) )
+    {
+      std::cout << "EVENT : RIGHT CLICK (" << mouseX << "," << mouseY << ")" << std::endl;
+      this_->_MouseState._RightClick = true;
+    }
+    else
+      this_->_MouseState._RightClick = false;
+
+    if ( ( GLFW_MOUSE_BUTTON_3 == button ) && ( GLFW_PRESS == action ) )
+    {
+      std::cout << "EVENT : MIDDLE CLICK (" << mouseX << "," << mouseY << ")" << std::endl;
+      this_->_MouseState._MiddleClick = true;
+    }
+    else
+      this_->_MouseState._MiddleClick = false;
   }
 }
 
@@ -288,7 +323,7 @@ int Test4::UpdateTextures()
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, &_Image[0]);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    _UpdateImageTex = false;
+    //_UpdateImageTex = false;
   }
 
   return 0;
@@ -388,22 +423,54 @@ int Test4::UpdateImage()
 {
   if ( _UpdateImageTex )
   {
-    int witdh  = _Settings._RenderResolution.x;
+    int width  = _Settings._RenderResolution.x;
     int height = _Settings._RenderResolution.y;
-    int size = witdh * height;
+    int size = width * height;
+    float ratio = width / float(height);
 
-    Vec4 colors[3] = { { 1.f, 1.f, 1.f, 1.f }, { 0.f, 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 1.f } };
+    Mat4x4 MV;
+    _Scene -> GetCamera().ComputeLookAtMatrix(MV);
 
-#pragma omp parallel for
-    for ( int i = 0; i < size; ++i )
+    Mat4x4 P;
+    _Scene -> GetCamera().ComputePerspectiveProjMatrix(ratio, 1.f, 10000.f, P);
+
+    Mat4x4 MVP = P * MV;
+
+    const std::vector<Vec3> & vertices = _Scene -> GetVertices();
+
+    const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
+    fill(_Image.begin(), _Image.end(), backgroundColor);
+
+    for ( auto vertex : vertices )
     {
-      int line = i / witdh;
-      int col  = i % witdh;
+      Vec4 projVect = MVP * Vec4(vertex, 1.f);
+      projVect /= projVect.w;
 
-      int curInd = abs(( line / g_StepY ) % 2  - ( col / g_StepX ) % 2);
+      if ( ( projVect.x < -ratio )
+        || ( projVect.x >  ratio )
+        || ( projVect.y < -1.f )
+        || ( projVect.y >  1.f ) )
+        //|| ( projVect.z < -1.f )
+        //|| ( projVect.z >  1.f ) )
+        continue;
 
-      _Image[i] = colors[curInd];
+      // Convert to raster space
+      int x = std::min(width - 1, (int)((projVect.x + 1) * 0.5 * width));
+      int y = std::min(height - 1, (int)((projVect.y + 1) * 0.5 * height));
+
+      for ( int i = -1; i <=1; ++i )
+      {
+        for ( int j = -1; j <=1; ++j )
+        {
+          int indX = x + i;
+          int indY = y + j;
+          if ( ( indX >= 0 ) && ( indX < width )
+            && ( indY >= 0 ) && ( indY < height ) )
+            _Image[indX + width * indY] = Vec4(1.f, 1.f, 1.f, 1.f);
+        }
+      }
     }
+
   }
 
   return 0;
@@ -414,6 +481,7 @@ int Test4::UpdateImage()
 // ----------------------------------------------------------------------------
 int Test4::InitializeScene()
 {
+  //std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
   std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
 
   Scene * newScene = nullptr;
@@ -432,6 +500,8 @@ int Test4::InitializeScene()
     _Scene -> AddLight(newLight);
   }
 
+  _Scene -> CompileMeshData(_Settings._TextureSize);
+
   return 0;
 }
 
@@ -442,6 +512,68 @@ int Test4::UpdateScene()
 {
   if ( !_Scene )
     return 1;
+
+  // Mouse input
+  {
+    const float MouseSensitivity[5] = { 1.f, 0.5f, 0.01f, 0.01f, 0.01f }; // Yaw, Pitch, StafeRight, StrafeUp, ZoomIn
+
+    double oldMouseX = _MouseState._MouseX;
+    double oldMouseY = _MouseState._MouseY;
+    glfwGetCursorPos(_MainWindow, &_MouseState._MouseX, &_MouseState._MouseY);
+
+    double deltaX = _MouseState._MouseX - oldMouseX;
+    double deltaY = _MouseState._MouseY - oldMouseY;
+
+    if ( _MouseState._LeftClick )
+    {
+      _Scene -> GetCamera().OffsetOrientations(MouseSensitivity[0] * deltaX, MouseSensitivity[1] * -deltaY);
+    }
+    if ( _MouseState._RightClick )
+    {
+      _Scene -> GetCamera().Strafe(MouseSensitivity[2] * deltaX, MouseSensitivity[3] * deltaY);
+    }
+    if ( _MouseState._MiddleClick )
+    {
+      if ( std::abs(deltaX) > std::abs(deltaY) )
+        _Scene -> GetCamera().Strafe(MouseSensitivity[2] * deltaX, 0.f);
+      else
+      {
+        float newRadius = _Scene -> GetCamera().GetRadius() + MouseSensitivity[4] * deltaY;
+        if ( newRadius > 0.f )
+          _Scene -> GetCamera().SetRadius(newRadius);
+      }
+    }
+  }
+
+  // Keyboard input
+  {
+    const float velocity = 100.f;
+
+    if ( _KeyState._KeyUp )
+    {
+      float newRadius = _Scene -> GetCamera().GetRadius() - _TimeDelta;
+      if ( newRadius > 0.f )
+      {
+        _Scene -> GetCamera().SetRadius(newRadius);
+      }
+    }
+    if ( _KeyState._KeyDown )
+    {
+      float newRadius = _Scene -> GetCamera().GetRadius() + _TimeDelta;
+      if ( newRadius > 0.f )
+      {
+        _Scene -> GetCamera().SetRadius(newRadius);
+      }
+    }
+    if ( _KeyState._KeyLeft )
+    {
+      _Scene -> GetCamera().OffsetOrientations(_TimeDelta * velocity, 0.f);
+    }
+    if ( _KeyState._KeyRight )
+    {
+      _Scene -> GetCamera().OffsetOrientations(-_TimeDelta * velocity, 0.f);
+    }
+  }
 
   return 0;
 }
@@ -524,6 +656,8 @@ int Test4::Run()
     UpdateCPUTime();
 
     glfwPollEvents();
+
+    UpdateScene();
 
     UpdateImage();
 

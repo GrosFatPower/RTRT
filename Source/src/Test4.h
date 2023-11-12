@@ -28,6 +28,25 @@ public:
 
 private:
 
+  struct KeyState
+  {
+    bool _KeyUp    = false;
+    bool _KeyDown  = false;
+    bool _KeyLeft  = false;
+    bool _KeyRight = false;
+  };
+
+  struct MouseState
+  {
+    double _MouseX      = 0.;
+    double _MouseY      = 0.;
+    double _OldMouseX   = 0.;
+    double _OldMouseY   = 0.;
+    bool   _LeftClick   = false;
+    bool   _RightClick  = false;
+    bool   _MiddleClick = false;
+  };
+
   static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
   static void MousebuttonCallback(GLFWwindow * window, int button, int action, int mods);
   static void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
@@ -64,6 +83,8 @@ private:
   bool               _UpdateImageTex = true;
   std::vector<Vec4>  _Image;
 
+  KeyState          _KeyState;
+  MouseState        _MouseState;
 
   // Frame rate
   float             _CPULoopTime          = 0.f;

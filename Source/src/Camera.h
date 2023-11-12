@@ -46,7 +46,7 @@ public:
   void ComputeLookAtMatrix( Mat4x4 & oM );
 
   // Perspective projection matrix, column-major / RH / vertival fov in degrees / Z [-1,1]
-  void ComputePerspectiveProjMatrix( float iFov, float iAspectRatio, float iZNear, float iZFar, Mat4x4 & oM );
+  void ComputePerspectiveProjMatrix( float iAspectRatio, float iZNear, float iZFar, Mat4x4 & oM );
 
   // Frustum matrix, column-major / RH / vertival fov in degrees / Z [-1,1]
   void ComputeFrustum( float iLeft, float iRight, float iBottom, float iTop, float iZNear, float iZFar, Mat4x4 & oM );
@@ -55,6 +55,8 @@ private:
 
   void Update();
 
+  float ComputeVerticalFOV( float iAspectRatio ) const;
+
   Vec3 _Pos;
   Vec3 _Up;
   Vec3 _Right;
@@ -62,7 +64,7 @@ private:
   Vec3 _WorldUp;
   Vec3 _Pivot;
 
-  float _FOV;   // radian
+  float _FOV;   // horizontal / radian
   float _Pitch; // degrees
   float _Yaw;   // degrees
   float _Radius;
