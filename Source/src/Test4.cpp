@@ -127,6 +127,7 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
       this_ -> _Settings._RenderResolution.y = this_ -> _Settings._WindowResolution.y * ( this_ -> _Settings._RenderScale * 0.01f );
 
       this_ -> _Image.resize(this_ -> _Settings._RenderResolution.x  * this_ -> _Settings._RenderResolution.y);
+      this_ -> _DepthBuffer.resize(this_ -> _Settings._RenderResolution.x  * this_ -> _Settings._RenderResolution.y);
       Vec4 backgroundColor(this_ -> _Settings._BackgroundColor.x, this_ -> _Settings._BackgroundColor.y, this_ -> _Settings._BackgroundColor.z, 1.f);
       fill(this_ -> _Image.begin(), this_ -> _Image.end(), backgroundColor);
 
@@ -197,6 +198,7 @@ void Test4::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
   this_ -> _Settings._RenderResolution.y = height * ( this_ -> _Settings._RenderScale * 0.01f );
 
   this_ -> _Image.resize(this_ -> _Settings._RenderResolution.x  * this_ -> _Settings._RenderResolution.y);
+  this_ -> _DepthBuffer.resize(this_ -> _Settings._RenderResolution.x  * this_ -> _Settings._RenderResolution.y);
   Vec4 backgroundColor(this_ -> _Settings._BackgroundColor.x, this_ -> _Settings._BackgroundColor.y, this_ -> _Settings._BackgroundColor.z, 1.f);
   fill(this_ -> _Image.begin(), this_ -> _Image.end(), backgroundColor);
 
@@ -223,6 +225,7 @@ Test4::Test4( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
   _Settings._RenderResolution.y = iScreenHeight * ( _Settings._RenderScale * 0.01f );
 
   _Image.resize(_Settings._RenderResolution.x  * _Settings._RenderResolution.y);
+  _DepthBuffer.resize(_Settings._RenderResolution.x  * _Settings._RenderResolution.y);
 
   //Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
   Vec4 backgroundColor(1.f, 0.f, 0.f, 1.f);
@@ -483,8 +486,13 @@ int Test4::UpdateImage()
     const std::vector<Vec3i> & indices = _Scene -> GetIndices();
     const int nbTris = indices.size() / 3;
 
+    const Vec3 R = { 1.f, 0.f, 0.f };
+    const Vec3 G = { 0.f, 1.f, 0.f };
+    const Vec3 B = { 0.f, 0.f, 1.f };
+
     const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
     fill(_Image.begin(), _Image.end(), backgroundColor);
+    fill(_DepthBuffer.begin(), _DepthBuffer.end(), 1.f);
 
     Vec2 bboxMin(std::numeric_limits<float>::infinity());
     Vec2 bboxMax = -bboxMin;
@@ -523,7 +531,7 @@ int Test4::UpdateImage()
       int xMax = std::max(0, std::min((int)std::floor(bboxMax.x), width  - 1)); 
       int yMax = std::max(0, std::min((int)std::floor(bboxMax.y), height - 1));
 
-      //float area = EdgeFunction(ProjVec[0], ProjVec[1], ProjVec[2]);
+      float area = EdgeFunction(ProjVec[0], ProjVec[1], ProjVec[2]);
 
       for ( int y = yMin; y <= yMax; ++y )
       {
@@ -540,10 +548,22 @@ int Test4::UpdateImage()
             && ( W[1] >= 0.f )
             && ( W[2] >= 0.f ) )
           {
-            //W[0] /= area;
-            //W[2] /= area;
-            //W[1] /= area;
-            _Image[x + width * y] = Vec4(1.f, 1.f, 1.f, 1.f);
+            W[0] /= area;
+            W[1] /= area;
+            W[2] /= area;
+
+            float depth = W[0] * ProjVec[0].z + W[1] * ProjVec[1].z + W[2] * ProjVec[2].z;
+            
+            if ( depth < _DepthBuffer[x + width * y] )
+            {
+              Vec4 pixelColor(1.f);
+              pixelColor.x = W[0] * R[0] + W[1] * G[0] + W[2] * B[0];
+              pixelColor.y = W[0] * R[1] + W[1] * G[1] + W[2] * B[1];
+              pixelColor.z = W[0] * R[2] + W[1] * G[2] + W[2] * B[2];
+
+              _Image[x + width * y] = pixelColor;
+              _DepthBuffer[x + width * y] = depth;
+            }
           }
         }
       }
@@ -558,8 +578,8 @@ int Test4::UpdateImage()
 // ----------------------------------------------------------------------------
 int Test4::InitializeScene()
 {
-  std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
-  //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
+  //std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
+  std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
 
   Scene * newScene = nullptr;
   if ( !Loader::LoadScene(sceneFile, newScene, _Settings) || !newScene )

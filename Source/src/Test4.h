@@ -84,6 +84,7 @@ private:
 
   bool               _UpdateImageTex = true;
   std::vector<Vec4>  _Image;
+  std::vector<float> _DepthBuffer;
 
   KeyState          _KeyState;
   MouseState        _MouseState;
@@ -96,8 +97,10 @@ private:
   std::deque<float> _LastDeltas;
 };
 
-inline float Test4::EdgeFunction(const Vec3 & iV1, const Vec3 & iV2, const Vec3 & iV3) {
-  return (iV3.x - iV1.x) * (iV2.y - iV1.y) - (iV3.y - iV1.y) * (iV2.x - iV1.x); }
+
+inline float Test4::EdgeFunction(const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2) { 
+  return (iV1.x - iV0.x) * (iV2.y - iV0.y) - (iV1.y - iV0.y) * (iV2.x - iV0.x); } // Counter-Clockwise edge function
+//  return (iV2.x - iV0.x) * (iV1.y - iV0.y) - (iV2.y - iV0.y) * (iV1.x - iV0.x); } // Clockwise edge function
 
 }
 
