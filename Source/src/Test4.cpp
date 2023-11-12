@@ -66,17 +66,60 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
     case GLFW_KEY_D:
       this_ -> _KeyState._KeyRight = ( action == GLFW_PRESS ); this_ -> _UpdateImageTex = true; break;
     case GLFW_KEY_PAGE_DOWN:
-      this_ -> _Settings._RenderScale -= 5; updateFrameBuffer = true; this_ -> _UpdateImageTex = true; break;
+    {
+      this_ -> _Settings._RenderScale = std::max(this_ -> _Settings._RenderScale - 5, 5);
+      std::cout << "SCALE = " << this_ -> _Settings._RenderScale << std::endl;
+      updateFrameBuffer = true;
+      this_ -> _UpdateImageTex = true;
+      break;
+    }
     case GLFW_KEY_PAGE_UP:
-      this_ -> _Settings._RenderScale += 5; updateFrameBuffer = true; this_ -> _UpdateImageTex = true; break;
+    {
+      this_ -> _Settings._RenderScale = std::min(this_ -> _Settings._RenderScale + 5, 300);
+      std::cout << "SCALE = " << this_ -> _Settings._RenderScale << std::endl;
+      updateFrameBuffer = true;
+      this_ -> _UpdateImageTex = true;
+      break;
+    }
+    case GLFW_KEY_LEFT:
+    {
+      float fov = std::max(this_ -> _Scene -> GetCamera().GetFOVInDegrees() - 5.f, 10.f);
+      this_ -> _Scene -> GetCamera().SetFOVInDegrees(fov);
+      std::cout << "FOV = " << this_ -> _Scene -> GetCamera().GetFOVInDegrees() << std::endl;
+      this_ -> _UpdateImageTex = true;
+      break;
+    }
+    case GLFW_KEY_RIGHT:
+    {
+      float fov = std::min(this_ -> _Scene -> GetCamera().GetFOVInDegrees() + 5.f, 150.f);
+      this_ -> _Scene -> GetCamera().SetFOVInDegrees(fov);
+      std::cout << "FOV = " << this_ -> _Scene -> GetCamera().GetFOVInDegrees() << std::endl;
+      this_ -> _UpdateImageTex = true;
+      break;
+    }
+    case GLFW_KEY_DOWN:
+    {
+      float zNear, zFar;
+      this_ -> _Scene -> GetCamera().GetZNearFar(zNear, zFar);
+      zNear = std::max(zNear - 1.f, 1.f);
+      this_ -> _Scene -> GetCamera().SetZNearFar(zNear, zFar);
+      std::cout << "ZNEAR = " << zNear << std::endl;
+      this_ -> _UpdateImageTex = true;
+      break;
+    }
+    case GLFW_KEY_UP:
+    {
+      float zNear, zFar;
+      this_ -> _Scene -> GetCamera().GetZNearFar(zNear, zFar);
+      zNear = std::min(zNear + 1.f, zFar - 1.f);
+      this_ -> _Scene -> GetCamera().SetZNearFar(zNear, zFar);
+      std::cout << "ZNEAR = " << zNear << std::endl;
+      this_ -> _UpdateImageTex = true;
+      break;
+    }
     default :
       break;
     }
-
-    if ( this_ -> _Settings._RenderScale <= 0 )
-      this_ -> _Settings._RenderScale = 5;
-
-    std::cout << "SCALE = " << this_ -> _Settings._RenderScale << std::endl;
 
     if ( updateFrameBuffer )
     {
@@ -432,45 +475,79 @@ int Test4::UpdateImage()
     _Scene -> GetCamera().ComputeLookAtMatrix(MV);
 
     Mat4x4 P;
-    _Scene -> GetCamera().ComputePerspectiveProjMatrix(ratio, 1.f, 10000.f, P);
+    _Scene -> GetCamera().ComputePerspectiveProjMatrix(ratio, P);
 
     Mat4x4 MVP = P * MV;
 
     const std::vector<Vec3> & vertices = _Scene -> GetVertices();
+    const std::vector<Vec3i> & indices = _Scene -> GetIndices();
+    const int nbTris = indices.size() / 3;
 
     const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
     fill(_Image.begin(), _Image.end(), backgroundColor);
 
-    for ( auto vertex : vertices )
+    Vec2 bboxMin(std::numeric_limits<float>::infinity());
+    Vec2 bboxMax = -bboxMin;
+
+    for ( int i = 0; i < nbTris; ++i )
     {
-      Vec4 projVect = MVP * Vec4(vertex, 1.f);
-      projVect /= projVect.w;
+      Vec3i Index[3];
+      Index[0] = indices[i*3];
+      Index[1] = indices[i*3+1];
+      Index[2] = indices[i*3+2];
 
-      if ( ( projVect.x < -ratio )
-        || ( projVect.x >  ratio )
-        || ( projVect.y < -1.f )
-        || ( projVect.y >  1.f ) )
-        //|| ( projVect.z < -1.f )
-        //|| ( projVect.z >  1.f ) )
-        continue;
-
-      // Convert to raster space
-      int x = std::min(width - 1, (int)((projVect.x + 1) * 0.5 * width));
-      int y = std::min(height - 1, (int)((projVect.y + 1) * 0.5 * height));
-
-      for ( int i = -1; i <=1; ++i )
+      Vec3 ProjVec[3];
+      int j;
+      for ( int j = 0; j < 3; ++j )
       {
-        for ( int j = -1; j <=1; ++j )
+        Vec4 projV4 = MVP * Vec4(vertices[Index[j].x], 1.f);
+        ProjVec[j].x = projV4.x / projV4.w;
+        ProjVec[j].y = projV4.y / projV4.w;
+        ProjVec[j].z = projV4.z / projV4.w;
+
+        ProjVec[j].x = ((ProjVec[j].x + 1.f) * .5f * width);
+        ProjVec[j].y = ((ProjVec[j].y + 1.f) * .5f * height);
+        
+        if ( ProjVec[j].x < bboxMin.x )
+          bboxMin.x = ProjVec[j].x;
+        if ( ProjVec[j].y < bboxMin.y )
+          bboxMin.y = ProjVec[j].y;
+        if ( ProjVec[j].x > bboxMax.x )
+          bboxMax.x = ProjVec[j].x;
+        if ( ProjVec[j].y > bboxMax.y )
+          bboxMax.y = ProjVec[j].y;
+      }
+
+      int xMin = std::max(0, std::min((int)std::floor(bboxMin.x), width  - 1));
+      int yMin = std::max(0, std::min((int)std::floor(bboxMin.y), height - 1));
+      int xMax = std::max(0, std::min((int)std::floor(bboxMax.x), width  - 1)); 
+      int yMax = std::max(0, std::min((int)std::floor(bboxMax.y), height - 1));
+
+      //float area = EdgeFunction(ProjVec[0], ProjVec[1], ProjVec[2]);
+
+      for ( int y = yMin; y <= yMax; ++y )
+      {
+        for ( int x = xMin; x <= xMax; ++x  )
         {
-          int indX = x + i;
-          int indY = y + j;
-          if ( ( indX >= 0 ) && ( indX < width )
-            && ( indY >= 0 ) && ( indY < height ) )
-            _Image[indX + width * indY] = Vec4(1.f, 1.f, 1.f, 1.f);
+          Vec3 p(x, y, 1.f);
+
+          float W[3];
+          W[0] = EdgeFunction(ProjVec[1], ProjVec[2], p);
+          W[1] = EdgeFunction(ProjVec[2], ProjVec[0], p);
+          W[2] = EdgeFunction(ProjVec[0], ProjVec[1], p);
+
+          if ( ( W[0] >= 0.f )
+            && ( W[1] >= 0.f )
+            && ( W[2] >= 0.f ) )
+          {
+            //W[0] /= area;
+            //W[2] /= area;
+            //W[1] /= area;
+            _Image[x + width * y] = Vec4(1.f, 1.f, 1.f, 1.f);
+          }
         }
       }
     }
-
   }
 
   return 0;
@@ -481,8 +558,8 @@ int Test4::UpdateImage()
 // ----------------------------------------------------------------------------
 int Test4::InitializeScene()
 {
-  //std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
-  std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
+  std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
+  //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
 
   Scene * newScene = nullptr;
   if ( !Loader::LoadScene(sceneFile, newScene, _Settings) || !newScene )

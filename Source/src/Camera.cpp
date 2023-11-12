@@ -1,5 +1,7 @@
 #include "Camera.h"
 
+//#define USE_GLM_MATRIX_FUNC
+
 namespace RTRT
 {
 
@@ -64,6 +66,16 @@ void Camera::SetFOV( float iFOV )
   _FOV = MathUtil::ToRadians(iFOV);
 }
 
+void Camera::SetFOVInDegrees( float iFOV )
+{
+  _FOV = MathUtil::ToRadians(iFOV);
+}
+
+float Camera::GetFOVInDegrees() const
+{
+  return MathUtil::ToDegrees(_FOV);
+}
+
 void Camera::SetRadius( float iRadius )
 {
   _Radius = iRadius;
@@ -117,6 +129,9 @@ void Camera::LookAt( Vec3 iPivot )
 
 void Camera::ComputeLookAtMatrix( Mat4x4 & oM )
 {
+#ifdef USE_GLM_MATRIX_FUNC
+  oM = glm::lookAt(_Pos, _Pivot, _WorldUp);
+#else
   Vec3 Z = glm::normalize(_Pos - _Pivot);
   Vec3 X = glm::normalize(glm::cross(_WorldUp, Z));
   Vec3 Y = glm::normalize(glm::cross(Z, X));
@@ -125,23 +140,24 @@ void Camera::ComputeLookAtMatrix( Mat4x4 & oM )
   oM[1][0] = X.y;                oM[1][1] = Y.y;                oM[1][2] = Z.y;                oM[1][3] = 0.f;
   oM[2][0] = X.z;                oM[2][1] = Y.z;                oM[2][2] = Z.z;                oM[2][3] = 0.f;
   oM[3][0] = -glm::dot(X, _Pos); oM[3][1] = -glm::dot(Y, _Pos); oM[3][2] = -glm::dot(Z, _Pos); oM[3][3] = 1.f;
-
-  // OR
-  //oM = glm::lookAt(_Pos, _Pivot, _WorldUp);
+#endif
 }
 
-void Camera::ComputePerspectiveProjMatrix( float iAspectRatio, float iZNear, float iZFar, Mat4x4 & oM )
+void Camera::ComputePerspectiveProjMatrix( float iAspectRatio, Mat4x4 & oM )
 {
   float vFOV = ComputeVerticalFOV(iAspectRatio);
-  float top = iZNear * tanf(vFOV);
+  float top = _ZNear * tanf(vFOV);
   float right = top * iAspectRatio;
 
-  ComputeFrustum(-right, right, -top, top, iZNear, iZFar, oM);
+  ComputeFrustum(-right, right, -top, top, _ZNear, _ZFar, oM);
 }
 
 
 void Camera::ComputeFrustum( float iLeft, float iRight, float iBottom, float iTop, float iZNear, float iZFar, Mat4x4 & oM )
 {
+#ifdef USE_GLM_MATRIX_FUNC
+  oM = glm::frustum(iLeft, iRight, iBottom, iTop, iZNear, iZFar);
+#else
   float width  = iRight - iLeft;
   float height = iTop - iBottom;
   float depth  = iZFar - iZNear;
@@ -165,9 +181,7 @@ void Camera::ComputeFrustum( float iLeft, float iRight, float iBottom, float iTo
   oM[3][1] = 0.f;
   oM[3][2] = -2.f * iZNear * iZFar / depth;
   oM[3][3] = 0.f;
-
-  // OR
-  //oM = glm::frustum(iLeft, iRight, iBottom, iTop, iZNear, iZFar);
+#endif
 }
 
 

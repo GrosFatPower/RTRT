@@ -29,6 +29,12 @@ public:
   void SetFOV( float iFOV );
   float GetFOV() const { return _FOV; } // radian
 
+  void SetFOVInDegrees( float iFOV );
+  float GetFOVInDegrees() const;
+
+  void SetZNearFar( float iZNear, float iZFar);
+  void GetZNearFar( float & oZNear, float & oZFar) const;
+
   void SetFocalDist( float iFocalDist ) { _FocalDist = iFocalDist; }
   float GetFocalDist() const { return _FocalDist; }
 
@@ -46,7 +52,7 @@ public:
   void ComputeLookAtMatrix( Mat4x4 & oM );
 
   // Perspective projection matrix, column-major / RH / vertival fov in degrees / Z [-1,1]
-  void ComputePerspectiveProjMatrix( float iAspectRatio, float iZNear, float iZFar, Mat4x4 & oM );
+  void ComputePerspectiveProjMatrix( float iAspectRatio, Mat4x4 & oM );
 
   // Frustum matrix, column-major / RH / vertival fov in degrees / Z [-1,1]
   void ComputeFrustum( float iLeft, float iRight, float iBottom, float iTop, float iZNear, float iZFar, Mat4x4 & oM );
@@ -71,7 +77,16 @@ private:
 
   float _FocalDist = .1f;
   float _Aperture  = 0.f;
+
+  float _ZNear = 1.f;
+  float _ZFar  = 10000.f;
 };
+
+inline void Camera::SetZNearFar( float iZNear, float iZFar) {
+  _ZNear = iZNear; _ZFar = iZFar; }
+
+inline void Camera::GetZNearFar( float & oZNear, float & oZFar) const {
+  oZNear = _ZNear; oZFar = _ZFar; }
 
 }
 

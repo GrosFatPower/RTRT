@@ -66,6 +66,8 @@ private:
   void RenderToSceen();
   void DrawUI();
 
+  float EdgeFunction(const Vec3 & iV1, const Vec3 & iV2, const Vec3 & iV3);
+
   GLFWwindow       * _MainWindow;
 
   std::unique_ptr<QuadMesh> _Quad;
@@ -93,6 +95,9 @@ private:
   float             _AverageDelta         = 0.f;
   std::deque<float> _LastDeltas;
 };
+
+inline float Test4::EdgeFunction(const Vec3 & iV1, const Vec3 & iV2, const Vec3 & iV3) {
+  return (iV3.x - iV1.x) * (iV2.y - iV1.y) - (iV3.y - iV1.y) * (iV2.x - iV1.x); }
 
 }
 
