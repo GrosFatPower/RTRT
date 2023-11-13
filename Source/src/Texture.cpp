@@ -84,4 +84,50 @@ bool Texture::Resize( int iWidth, int iHeight )
   return false;
 }
 
+Vec4 Texture::Sample( float iU, float iV )
+{
+  Vec4 sample(0.f);
+
+  if ( _TexData )
+  {
+    float u = ( iU - std::floor(iU) ) * ( _Width - 1 );
+    float v = ( iV - std::floor(iV) ) * ( _Height - 1 );
+
+    int x = (int)std::floor(u);
+    int y = (int)std::floor(v);
+
+    int index = x * _NbComponents + y * _Width * _NbComponents;
+    if ( _NbComponents >= 1 )
+    {
+      if ( _Format == TexFormat::TEX_FLOAT )
+        sample.x = ((float*)_TexData)[ index ];
+      else if ( _Format == TexFormat::TEX_UNSIGNED_BYTE)
+        sample.x = ((unsigned char *)_TexData)[ index ] / 255;
+    }
+    if ( _NbComponents >= 2 )
+    {
+      if ( _Format == TexFormat::TEX_FLOAT )
+        sample.y = ((float*)_TexData)[ index + 1 ];
+      else if ( _Format == TexFormat::TEX_UNSIGNED_BYTE)
+        sample.y = ((unsigned char *)_TexData)[ index + 1 ] / 255;
+    }
+    if ( _NbComponents >= 3 )
+    {
+      if ( _Format == TexFormat::TEX_FLOAT )
+        sample.z = ((float*)_TexData)[ index + 2 ];
+      else if ( _Format == TexFormat::TEX_UNSIGNED_BYTE)
+        sample.z = ((unsigned char *)_TexData)[ index + 2 ] / 255;
+    }
+    if ( _NbComponents >= 4 )
+    {
+      if ( _Format == TexFormat::TEX_FLOAT )
+        sample.w = ((float*)_TexData)[ index + 3 ];
+      else if ( _Format == TexFormat::TEX_UNSIGNED_BYTE)
+        sample.w = ((unsigned char *)_TexData)[ index + 3 ] / 255;
+    }
+  }
+
+  return sample;
+}
+
 }

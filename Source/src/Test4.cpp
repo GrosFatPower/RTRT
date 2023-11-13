@@ -482,8 +482,10 @@ int Test4::UpdateImage()
 
     Mat4x4 MVP = P * MV;
 
-    const std::vector<Vec3> & vertices = _Scene -> GetVertices();
-    const std::vector<Vec3i> & indices = _Scene -> GetIndices();
+    const std::vector<Vec3>     & vertices = _Scene -> GetVertices();
+    const std::vector<Vec3i>    & indices  = _Scene -> GetIndices();
+    //const std::vector<Vec3>     & uvMatIDs = _Scene -> GetUVMatID();
+    //const std::vector<Texture*> & textures = _Scene -> GetTetxures();
     const int nbTris = indices.size() / 3;
 
     const Vec3 R = { 1.f, 0.f, 0.f };
@@ -526,10 +528,10 @@ int Test4::UpdateImage()
           bboxMax.y = ProjVec[j].y;
       }
 
-      int xMin = std::max(0, std::min((int)std::floor(bboxMin.x), width  - 1));
-      int yMin = std::max(0, std::min((int)std::floor(bboxMin.y), height - 1));
-      int xMax = std::max(0, std::min((int)std::floor(bboxMax.x), width  - 1)); 
-      int yMax = std::max(0, std::min((int)std::floor(bboxMax.y), height - 1));
+      int xMin = std::max(0, std::min((int)std::floorf(bboxMin.x), width  - 1));
+      int yMin = std::max(0, std::min((int)std::floorf(bboxMin.y), height - 1));
+      int xMax = std::max(0, std::min((int)std::floorf(bboxMax.x), width  - 1)); 
+      int yMax = std::max(0, std::min((int)std::floorf(bboxMax.y), height - 1));
 
       float area = EdgeFunction(ProjVec[0], ProjVec[1], ProjVec[2]);
 
@@ -557,9 +559,30 @@ int Test4::UpdateImage()
             if ( depth < _DepthBuffer[x + width * y] )
             {
               Vec4 pixelColor(1.f);
-              pixelColor.x = W[0] * R[0] + W[1] * G[0] + W[2] * B[0];
-              pixelColor.y = W[0] * R[1] + W[1] * G[1] + W[2] * B[1];
-              pixelColor.z = W[0] * R[2] + W[1] * G[2] + W[2] * B[2];
+
+              //if ( Index[0].z >=0 )
+              //{
+              //  Vec3 UVMatID[3];
+              //  UVMatID[0] = uvMatIDs[Index[0].z];
+              //  UVMatID[1] = uvMatIDs[Index[1].z];
+              //  UVMatID[2] = uvMatIDs[Index[2].z];
+              //
+              //  if ( UVMatID[0].z >= 0 )
+              //  {
+              //    float u = W[0] * UVMatID[0].x + W[1] * UVMatID[1].x + W[2] * UVMatID[2].x;
+              //    float v = W[0] * UVMatID[0].y + W[1] * UVMatID[1].y + W[2] * UVMatID[2].y;
+              //
+              //    Texture * tex = textures[UVMatID[0].z];
+              //    if ( tex )
+              //      pixelColor = tex -> Sample(u, v);
+              //  }
+              //}
+              //else
+              {
+                pixelColor.x = W[0] * R[0] + W[1] * G[0] + W[2] * B[0];
+                pixelColor.y = W[0] * R[1] + W[1] * G[1] + W[2] * B[1];
+                pixelColor.z = W[0] * R[2] + W[1] * G[2] + W[2] * B[2];
+              }
 
               _Image[x + width * y] = pixelColor;
               _DepthBuffer[x + width * y] = depth;
@@ -578,8 +601,8 @@ int Test4::UpdateImage()
 // ----------------------------------------------------------------------------
 int Test4::InitializeScene()
 {
-  //std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
-  std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
+  std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
+  //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
 
   Scene * newScene = nullptr;
   if ( !Loader::LoadScene(sceneFile, newScene, _Settings) || !newScene )

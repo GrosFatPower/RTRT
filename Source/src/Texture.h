@@ -2,6 +2,7 @@
 #define _Texture_
 
 #include <string>
+#include "MathUtil.h"
 
 namespace RTRT
 {
@@ -32,6 +33,8 @@ public:
   void SetTexID( int iTextID ) { _TexID = iTextID; }
 
   const std::string & Filename() const { return _Filename; }
+
+  Vec4 Sample( float iU, float iV );
 
 private:
   int             _TexID        = -1;

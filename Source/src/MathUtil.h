@@ -71,6 +71,30 @@ public:
     );
   }
 
+  static float Lerp( float iStart, float iEnd, float iT )
+  {
+    return ( iStart + ( iEnd - iStart ) * iT );
+  }
+
+  static Vec3 Lerp( Vec3 iStart, Vec3 iEnd, float iT )
+  {
+    return Vec3(
+        Lerp(iStart.x, iEnd.x, iT),
+        Lerp(iStart.y, iEnd.y, iT),
+        Lerp(iStart.z, iEnd.z, iT)
+    );
+  }
+
+  static Vec4 Lerp( Vec4 iStart, Vec4 iEnd, float iT )
+  {
+    return Vec4(
+        Lerp(iStart.x, iEnd.x, iT),
+        Lerp(iStart.y, iEnd.y, iT),
+        Lerp(iStart.z, iEnd.z, iT),
+        Lerp(iStart.w, iEnd.w, iT)
+    );
+  }
+
   static Mat4x4 QuatToMatrix( float x, float y, float z, float s ) // q = s + ix + jy + kz
   {
     Mat4x4 out;
