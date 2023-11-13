@@ -123,13 +123,7 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
 
     if ( updateFrameBuffer )
     {
-      this_ -> _Settings._RenderResolution.x = this_ -> _Settings._WindowResolution.x * ( this_ -> _Settings._RenderScale * 0.01f );
-      this_ -> _Settings._RenderResolution.y = this_ -> _Settings._WindowResolution.y * ( this_ -> _Settings._RenderScale * 0.01f );
-
-      this_ -> _Image.resize(this_ -> _Settings._RenderResolution.x  * this_ -> _Settings._RenderResolution.y);
-      this_ -> _DepthBuffer.resize(this_ -> _Settings._RenderResolution.x  * this_ -> _Settings._RenderResolution.y);
-      Vec4 backgroundColor(this_ -> _Settings._BackgroundColor.x, this_ -> _Settings._BackgroundColor.y, this_ -> _Settings._BackgroundColor.z, 1.f);
-      fill(this_ -> _Image.begin(), this_ -> _Image.end(), backgroundColor);
+      this_ -> ResizeImageBuffers();
 
       glBindTexture(GL_TEXTURE_2D, this_->_ScreenTextureID);
       glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, this_ -> _Settings._RenderResolution.x, this_ -> _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
@@ -197,10 +191,7 @@ void Test4::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
   this_ -> _Settings._RenderResolution.x = width  * ( this_ -> _Settings._RenderScale * 0.01f );
   this_ -> _Settings._RenderResolution.y = height * ( this_ -> _Settings._RenderScale * 0.01f );
 
-  this_ -> _Image.resize(this_ -> _Settings._RenderResolution.x  * this_ -> _Settings._RenderResolution.y);
-  this_ -> _DepthBuffer.resize(this_ -> _Settings._RenderResolution.x  * this_ -> _Settings._RenderResolution.y);
-  Vec4 backgroundColor(this_ -> _Settings._BackgroundColor.x, this_ -> _Settings._BackgroundColor.y, this_ -> _Settings._BackgroundColor.z, 1.f);
-  fill(this_ -> _Image.begin(), this_ -> _Image.end(), backgroundColor);
+  this_ -> ResizeImageBuffers();
 
   glViewport(0, 0, this_ -> _Settings._WindowResolution.x, this_ -> _Settings._WindowResolution.y);
 
@@ -224,12 +215,7 @@ Test4::Test4( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
   _Settings._RenderResolution.x = iScreenWidth  * ( _Settings._RenderScale * 0.01f );
   _Settings._RenderResolution.y = iScreenHeight * ( _Settings._RenderScale * 0.01f );
 
-  _Image.resize(_Settings._RenderResolution.x  * _Settings._RenderResolution.y);
-  _DepthBuffer.resize(_Settings._RenderResolution.x  * _Settings._RenderResolution.y);
-
-  //Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
-  Vec4 backgroundColor(1.f, 0.f, 0.f, 1.f);
-  fill(_Image.begin(), _Image.end(), backgroundColor);
+  ResizeImageBuffers();
 }
 
 // ----------------------------------------------------------------------------
@@ -241,6 +227,18 @@ Test4::~Test4()
 
   glDeleteTextures(1, &_ScreenTextureID);
   glDeleteTextures(1, &_ImageTextureID);
+}
+
+// ----------------------------------------------------------------------------
+// UpdateCPUTime
+// ----------------------------------------------------------------------------
+void Test4::ResizeImageBuffers()
+{
+  _Settings._RenderResolution.x = _Settings._WindowResolution.x * ( _Settings._RenderScale * 0.01f );
+  _Settings._RenderResolution.y = _Settings._WindowResolution.y * ( _Settings._RenderScale * 0.01f );
+
+  _Image.resize(_Settings._RenderResolution.x  * _Settings._RenderResolution.y);
+  _DepthBuffer.resize(_Settings._RenderResolution.x  * _Settings._RenderResolution.y);
 }
 
 // ----------------------------------------------------------------------------
@@ -484,8 +482,8 @@ int Test4::UpdateImage()
 
     const std::vector<Vec3>     & vertices = _Scene -> GetVertices();
     const std::vector<Vec3i>    & indices  = _Scene -> GetIndices();
-    //const std::vector<Vec3>     & uvMatIDs = _Scene -> GetUVMatID();
-    //const std::vector<Texture*> & textures = _Scene -> GetTetxures();
+    const std::vector<Vec3>     & uvMatIDs = _Scene -> GetUVMatID();
+    const std::vector<Texture*> & textures = _Scene -> GetTetxures();
     const int nbTris = indices.size() / 3;
 
     const Vec3 R = { 1.f, 0.f, 0.f };
@@ -560,24 +558,24 @@ int Test4::UpdateImage()
             {
               Vec4 pixelColor(1.f);
 
-              //if ( Index[0].z >=0 )
-              //{
-              //  Vec3 UVMatID[3];
-              //  UVMatID[0] = uvMatIDs[Index[0].z];
-              //  UVMatID[1] = uvMatIDs[Index[1].z];
-              //  UVMatID[2] = uvMatIDs[Index[2].z];
-              //
-              //  if ( UVMatID[0].z >= 0 )
-              //  {
-              //    float u = W[0] * UVMatID[0].x + W[1] * UVMatID[1].x + W[2] * UVMatID[2].x;
-              //    float v = W[0] * UVMatID[0].y + W[1] * UVMatID[1].y + W[2] * UVMatID[2].y;
-              //
-              //    Texture * tex = textures[UVMatID[0].z];
-              //    if ( tex )
-              //      pixelColor = tex -> Sample(u, v);
-              //  }
-              //}
-              //else
+              if ( Index[0].z >=0 )
+              {
+                Vec3 UVMatID[3];
+                UVMatID[0] = uvMatIDs[Index[0].z];
+                UVMatID[1] = uvMatIDs[Index[1].z];
+                UVMatID[2] = uvMatIDs[Index[2].z];
+              
+                if ( UVMatID[0].z >= 0 )
+                {
+                  float u = W[0] * UVMatID[0].x + W[1] * UVMatID[1].x + W[2] * UVMatID[2].x;
+                  float v = W[0] * UVMatID[0].y + W[1] * UVMatID[1].y + W[2] * UVMatID[2].y;
+              
+                  Texture * tex = textures[UVMatID[0].z];
+                  if ( tex )
+                    pixelColor = tex -> Sample(u, v);
+                }
+              }
+              else
               {
                 pixelColor.x = W[0] * R[0] + W[1] * G[0] + W[2] * B[0];
                 pixelColor.y = W[0] * R[1] + W[1] * G[1] + W[2] * B[1];
@@ -621,6 +619,9 @@ int Test4::InitializeScene()
   }
 
   _Scene -> CompileMeshData(_Settings._TextureSize);
+
+  // Resize Image Buffer
+  this -> ResizeImageBuffers();
 
   return 0;
 }
@@ -735,6 +736,13 @@ int Test4::Run()
     return 1;
   }
 
+  // Initialize the scene
+  if ( 0 != InitializeScene() )
+  {
+    std::cout << "ERROR: Scene initialization failed!" << std::endl;
+    return 1;
+  }
+
   // Shader compilation
   if ( ( 0 != RecompileShaders() ) || !_RTTShader || !_RTSShader )
   {
@@ -749,13 +757,6 @@ int Test4::Run()
   if ( 0 != InitializeFrameBuffer() )
   {
     std::cout << "ERROR: Framebuffer is not complete!" << std::endl;
-    return 1;
-  }
-
-  // Initialize the scene
-  if ( 0 != InitializeScene() )
-  {
-    std::cout << "ERROR: Scene initialization failed!" << std::endl;
     return 1;
   }
 

@@ -66,6 +66,8 @@ private:
   void RenderToSceen();
   void DrawUI();
 
+  void ResizeImageBuffers();
+
   float EdgeFunction(const Vec3 & iV1, const Vec3 & iV2, const Vec3 & iV3);
 
   GLFWwindow       * _MainWindow;

@@ -96,34 +96,34 @@ Vec4 Texture::Sample( float iU, float iV )
     int x = (int)std::floor(u);
     int y = (int)std::floor(v);
 
-    int index = x * _NbComponents + y * _Width * _NbComponents;
+    int index = ( x + y * _Width ) * _NbComponents;
     if ( _NbComponents >= 1 )
     {
       if ( _Format == TexFormat::TEX_FLOAT )
         sample.x = ((float*)_TexData)[ index ];
       else if ( _Format == TexFormat::TEX_UNSIGNED_BYTE)
-        sample.x = ((unsigned char *)_TexData)[ index ] / 255;
+        sample.x = ((unsigned char *)_TexData)[ index ] / 255.f;
     }
     if ( _NbComponents >= 2 )
     {
       if ( _Format == TexFormat::TEX_FLOAT )
         sample.y = ((float*)_TexData)[ index + 1 ];
       else if ( _Format == TexFormat::TEX_UNSIGNED_BYTE)
-        sample.y = ((unsigned char *)_TexData)[ index + 1 ] / 255;
+        sample.y = ((unsigned char *)_TexData)[ index + 1 ] / 255.f;
     }
     if ( _NbComponents >= 3 )
     {
       if ( _Format == TexFormat::TEX_FLOAT )
         sample.z = ((float*)_TexData)[ index + 2 ];
       else if ( _Format == TexFormat::TEX_UNSIGNED_BYTE)
-        sample.z = ((unsigned char *)_TexData)[ index + 2 ] / 255;
+        sample.z = ((unsigned char *)_TexData)[ index + 2 ] / 255.f;
     }
     if ( _NbComponents >= 4 )
     {
       if ( _Format == TexFormat::TEX_FLOAT )
         sample.w = ((float*)_TexData)[ index + 3 ];
       else if ( _Format == TexFormat::TEX_UNSIGNED_BYTE)
-        sample.w = ((unsigned char *)_TexData)[ index + 3 ] / 255;
+        sample.w = ((unsigned char *)_TexData)[ index + 3 ] / 255.f;
     }
   }
 
