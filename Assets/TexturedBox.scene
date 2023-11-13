@@ -1,6 +1,6 @@
 renderer
 {
-	resolution 1920 1080
+	resolution 800 600
 }
 
 camera
