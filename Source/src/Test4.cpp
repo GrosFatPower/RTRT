@@ -505,7 +505,6 @@ int Test4::UpdateImage()
       Index[2] = indices[i*3+2];
 
       Vec4 ProjVec[3];
-      int j;
       for ( int j = 0; j < 3; ++j )
       {
         Vec4 projV4 = MVP * Vec4(vertices[Index[j].x], 1.f);
@@ -553,7 +552,7 @@ int Test4::UpdateImage()
             W[1] /= area;
             W[2] /= area;
 
-            // pertspective correction
+            // perspective correction
             W[0] *= ProjVec[0].w;
             W[1] *= ProjVec[1].w;
             W[2] *= ProjVec[2].w;
@@ -566,7 +565,7 @@ int Test4::UpdateImage()
             {
               Vec4 pixelColor(1.f);
 
-              if ( Index[0].z >=0 )
+              if ( ( Index[0].z >=0 ) && textures.size() )
               {
                 Vec3 UVMatID[3];
                 UVMatID[0] = uvMatIDs[Index[0].z];
@@ -590,6 +589,9 @@ int Test4::UpdateImage()
                 pixelColor.x = W[0] * R[0] + W[1] * G[0] + W[2] * B[0];
                 pixelColor.y = W[0] * R[1] + W[1] * G[1] + W[2] * B[1];
                 pixelColor.z = W[0] * R[2] + W[1] * G[2] + W[2] * B[2];
+                pixelColor.x *= perspFactor;
+                pixelColor.y *= perspFactor;
+                pixelColor.z *= perspFactor;
               }
 
               _Image[x + width * y] = pixelColor;
