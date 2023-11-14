@@ -504,14 +504,15 @@ int Test4::UpdateImage()
       Index[1] = indices[i*3+1];
       Index[2] = indices[i*3+2];
 
-      Vec3 ProjVec[3];
+      Vec4 ProjVec[3];
       int j;
       for ( int j = 0; j < 3; ++j )
       {
         Vec4 projV4 = MVP * Vec4(vertices[Index[j].x], 1.f);
-        ProjVec[j].x = projV4.x / projV4.w;
-        ProjVec[j].y = projV4.y / projV4.w;
-        ProjVec[j].z = projV4.z / projV4.w;
+        ProjVec[j].w = 1.f / projV4.w;
+        ProjVec[j].x = projV4.x * ProjVec[j].w;
+        ProjVec[j].y = projV4.y * ProjVec[j].w;
+        ProjVec[j].z = projV4.z * ProjVec[j].w;
 
         ProjVec[j].x = ((ProjVec[j].x + 1.f) * .5f * width);
         ProjVec[j].y = ((ProjVec[j].y + 1.f) * .5f * height);
@@ -552,7 +553,14 @@ int Test4::UpdateImage()
             W[1] /= area;
             W[2] /= area;
 
+            // pertspective correction
+            W[0] *= ProjVec[0].w;
+            W[1] *= ProjVec[1].w;
+            W[2] *= ProjVec[2].w;
+            float perspFactor = 1.f / (W[0] + W[1] + W[2]);
+
             float depth = W[0] * ProjVec[0].z + W[1] * ProjVec[1].z + W[2] * ProjVec[2].z;
+            depth *= perspFactor;
             
             if ( depth < _DepthBuffer[x + width * y] )
             {
@@ -569,6 +577,8 @@ int Test4::UpdateImage()
                 {
                   float u = W[0] * UVMatID[0].x + W[1] * UVMatID[1].x + W[2] * UVMatID[2].x;
                   float v = W[0] * UVMatID[0].y + W[1] * UVMatID[1].y + W[2] * UVMatID[2].y;
+                  u *= perspFactor;
+                  v *= perspFactor;
               
                   Texture * tex = textures[UVMatID[0].z];
                   if ( tex )
