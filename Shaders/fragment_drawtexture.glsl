@@ -8,9 +8,9 @@ uniform vec3      u_Resolution;
 
 void RenderToTexture()
 {
-  vec2 textUV = { fragUV.x, 1.0 - fragUV.y };
+  //vec2 textUV = { fragUV.x, 1.0 - fragUV.y };
  
-  fragColor = texture(u_ImageTexture, textUV);
+  fragColor = texture(u_ImageTexture, fragUV);
 }
 
 void main()

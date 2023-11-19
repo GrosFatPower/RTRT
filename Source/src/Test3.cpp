@@ -975,7 +975,7 @@ int Test3::InitializeScene()
 
   int skyboxID =_Scene -> AddTexture(g_AssetsDir + "skyboxes\\alps_field_2k.hdr", 4, TexFormat::TEX_FLOAT);
   {
-    std::vector<Texture*> & textures = _Scene -> GetTetxures();
+    std::vector<Texture*> & textures = _Scene -> GetTextures();
 
     Texture * skyboxTexture = textures[skyboxID];
     if ( skyboxTexture )

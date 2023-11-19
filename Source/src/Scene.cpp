@@ -275,7 +275,10 @@ void Scene::CompileMeshData( Vec2i iTextureSize )
     for ( int i = 0; i < curNormals.size(); ++i )
     {
       Vec4 transformedNormal = trInvTransfo * Vec4(curNormals[i], 1.f);
-      transformedNormals[i] = { transformedNormal[0], transformedNormal[1], transformedNormal[2] };
+      if ( transformedNormal.w != 0.f )
+        transformedNormal /= transformedNormal.w;
+      transformedNormals[i] = transformedNormal;
+      transformedNormals[i] = glm::normalize(transformedNormals[i]);
     }
 
     if ( curUVs.size() )

@@ -101,7 +101,7 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
     {
       float zNear, zFar;
       this_ -> _Scene -> GetCamera().GetZNearFar(zNear, zFar);
-      zNear = std::max(zNear - 1.f, 1.f);
+      zNear = std::max(zNear - 0.1f, 0.1f);
       this_ -> _Scene -> GetCamera().SetZNearFar(zNear, zFar);
       std::cout << "ZNEAR = " << zNear << std::endl;
       this_ -> _UpdateImageTex = true;
@@ -111,7 +111,7 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
     {
       float zNear, zFar;
       this_ -> _Scene -> GetCamera().GetZNearFar(zNear, zFar);
-      zNear = std::min(zNear + 1.f, zFar - 1.f);
+      zNear = std::min(zNear + 0.1f, zFar - 0.1f);
       this_ -> _Scene -> GetCamera().SetZNearFar(zNear, zFar);
       std::cout << "ZNEAR = " << zNear << std::endl;
       this_ -> _UpdateImageTex = true;
@@ -478,12 +478,16 @@ int Test4::UpdateImage()
     Mat4x4 P;
     _Scene -> GetCamera().ComputePerspectiveProjMatrix(ratio, P);
 
+    Mat4x4 MVTrInv = glm::transpose(glm::inverse(MV));
+
     Mat4x4 MVP = P * MV;
 
-    const std::vector<Vec3>     & vertices = _Scene -> GetVertices();
-    const std::vector<Vec3i>    & indices  = _Scene -> GetIndices();
-    const std::vector<Vec3>     & uvMatIDs = _Scene -> GetUVMatID();
-    const std::vector<Texture*> & textures = _Scene -> GetTetxures();
+    const std::vector<Vec3>     & vertices  = _Scene -> GetVertices();
+    const std::vector<Vec3i>    & indices   = _Scene -> GetIndices();
+    const std::vector<Vec3>     & uvMatIDs  = _Scene -> GetUVMatID();
+    const std::vector<Vec3>     & normals   = _Scene -> GetNormals();
+    const std::vector<Material> & materials = _Scene -> GetMaterials();
+    const std::vector<Texture*> & textures  = _Scene -> GetTextures();
     const int nbTris = indices.size() / 3;
 
     const Vec3 R = { 1.f, 0.f, 0.f };
@@ -504,10 +508,14 @@ int Test4::UpdateImage()
       Index[1] = indices[i*3+1];
       Index[2] = indices[i*3+2];
 
+      Vec4 CamVec[3];
+      for ( int j = 0; j < 3; ++j )
+        CamVec[j] = MV * Vec4(vertices[Index[j].x], 1.f);
+
       Vec4 ProjVec[3];
       for ( int j = 0; j < 3; ++j )
       {
-        Vec4 projV4 = MVP * Vec4(vertices[Index[j].x], 1.f);
+        Vec4 projV4 = P * CamVec[j];
         ProjVec[j].w = 1.f / projV4.w;
         ProjVec[j].x = projV4.x * ProjVec[j].w;
         ProjVec[j].y = projV4.y * ProjVec[j].w;
@@ -556,45 +564,82 @@ int Test4::UpdateImage()
             W[0] *= ProjVec[0].w;
             W[1] *= ProjVec[1].w;
             W[2] *= ProjVec[2].w;
-            float perspFactor = 1.f / (W[0] + W[1] + W[2]);
+            {
+              float perspFactor = 1.f / (W[0] + W[1] + W[2]);
+              W[0] *= perspFactor;
+              W[1] *= perspFactor;
+              W[2] *= perspFactor;
+            }
 
             float depth = W[0] * ProjVec[0].z + W[1] * ProjVec[1].z + W[2] * ProjVec[2].z;
-            depth *= perspFactor;
             
-            if ( depth < _DepthBuffer[x + width * y] )
+            if ( depth < _DepthBuffer[x + width * y] && ( depth > -1.f ) )
             {
-              Vec4 pixelColor(1.f);
+              Vec3 color(1.f);
 
-              if ( ( Index[0].z >=0 ) && textures.size() )
+              if ( Index[0].z >=0 )
               {
                 Vec3 UVMatID[3];
                 UVMatID[0] = uvMatIDs[Index[0].z];
                 UVMatID[1] = uvMatIDs[Index[1].z];
                 UVMatID[2] = uvMatIDs[Index[2].z];
               
-                if ( UVMatID[0].z >= 0 )
+                if ( UVMatID[0].z >= 0 && materials.size() )
                 {
-                  float u = W[0] * UVMatID[0].x + W[1] * UVMatID[1].x + W[2] * UVMatID[2].x;
-                  float v = W[0] * UVMatID[0].y + W[1] * UVMatID[1].y + W[2] * UVMatID[2].y;
-                  u *= perspFactor;
-                  v *= perspFactor;
+                  Material Mat[3] = { materials[UVMatID[0].z], materials[UVMatID[1].z], materials[UVMatID[1].z] };
+
+                  if ( Mat[0]._BaseColorTexId >= 0 )
+                  {
+                    float u = W[0] * UVMatID[0].x + W[1] * UVMatID[1].x + W[2] * UVMatID[2].x;
+                    float v = W[0] * UVMatID[0].y + W[1] * UVMatID[1].y + W[2] * UVMatID[2].y;
               
-                  Texture * tex = textures[UVMatID[0].z];
-                  if ( tex )
-                    pixelColor = tex -> Sample(u, v);
+                    Texture * tex = textures[Mat[0]._BaseColorTexId];
+                    if ( tex )
+                      color = tex -> Sample(u, v);
+                  }
+                  else
+                  {
+                    color = Mat[0]._Albedo * W[0] +  Mat[1]._Albedo * W[1] + Mat[2]._Albedo * W[2];
+                  }
                 }
               }
               else
               {
-                pixelColor.x = W[0] * R[0] + W[1] * G[0] + W[2] * B[0];
-                pixelColor.y = W[0] * R[1] + W[1] * G[1] + W[2] * B[1];
-                pixelColor.z = W[0] * R[2] + W[1] * G[2] + W[2] * B[2];
-                pixelColor.x *= perspFactor;
-                pixelColor.y *= perspFactor;
-                pixelColor.z *= perspFactor;
+                color = W[0] * R + W[1] * G + W[2] * B;
               }
 
-              _Image[x + width * y] = pixelColor;
+              if ( ( Index[0].y >=0 )
+                && ( Index[1].y >=0 )
+                && ( Index[2].y >=0 ) )
+              {
+                Vec3 worldP = CamVec[0] * W[0] + CamVec[1] * W[1] + CamVec[2] * W[2];
+
+                float ambient = .1f;
+                float diffuse = 1.f;
+                Light * firstLight = _Scene -> GetLight(0);
+                if ( firstLight )
+                {
+                  Vec3 normal = normals[Index[0].y] * W[0] + normals[Index[1].y] * W[1] + normals[Index[2].y] * W[2];
+                  normal = glm::normalize(normal);
+
+                  Vec3 dirToLight = glm::normalize(firstLight ->_Pos - worldP);
+                  diffuse = std::max(0.f, glm::dot(normal, dirToLight));
+                }
+                else
+                {
+                  Vec3 V1V0 = CamVec[1] - CamVec[0];
+                  Vec3 V2V0 = CamVec[2] - CamVec[0];
+                  Vec3 normal = glm::cross(V1V0, V2V0);
+                  normal = glm::normalize(normal);
+
+                  Vec3 viewDir =  glm::normalize(-worldP);
+                  diffuse =  std::max(0.f, glm::dot(normal,viewDir));
+                }
+
+                color *= std::min(diffuse+ambient, 1.f);
+              }
+
+              _Image[x + width * y] = Vec4(color, 1.f);
               _DepthBuffer[x + width * y] = depth;
             }
           }
@@ -611,8 +656,8 @@ int Test4::UpdateImage()
 // ----------------------------------------------------------------------------
 int Test4::InitializeScene()
 {
-  std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
-  //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
+  //std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
+  std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
 
   Scene * newScene = nullptr;
   if ( !Loader::LoadScene(sceneFile, newScene, _Settings) || !newScene )

@@ -57,7 +57,7 @@ public:
   std::vector<MeshInstance>      & GetMeshInstances()      { return _MeshInstances;      }
   std::vector<PrimitiveInstance> & GetPrimitiveInstances() { return _PrimitiveInstances; }
   std::vector<Material>          & GetMaterials()          { return _Materials;          }
-  std::vector<Texture*>          & GetTetxures()           { return _Textures;           }
+  std::vector<Texture*>          & GetTextures()           { return _Textures;           }
   std::vector<Mesh*>             & GetMeshes()             { return _Meshes;             }
   std::vector<Primitive*>        & GetPrimitives()         { return _Primitives;         }
 
