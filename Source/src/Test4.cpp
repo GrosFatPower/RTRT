@@ -450,6 +450,12 @@ void Test4::DrawUI()
     ImGui::Text("Window width %d: height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
     ImGui::Text("Render width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
     ImGui::Text("Render scale : %d %%", _Settings._RenderScale);
+    ImGui::Text("FOV : %3.0f deg", _Scene -> GetCamera().GetFOVInDegrees());
+    
+    float near, far;
+    _Scene -> GetCamera().GetZNearFar(near, far);
+    ImGui::Text("Near : %f", near);
+    ImGui::Text("Far : %f", far);
 
     ImGui::End();
   }
@@ -555,7 +561,7 @@ int Test4::UpdateImage()
       int xMax = std::max(0, std::min((int)std::floorf(bboxMax.x), width  - 1)); 
       int yMax = std::max(0, std::min((int)std::floorf(bboxMax.y), height - 1));
 
-      float area = EdgeFunction(ProjVec[0], ProjVec[1], ProjVec[2]);
+      float invArea = 1.f / EdgeFunction(ProjVec[0], ProjVec[1], ProjVec[2]);
 
       for ( int y = yMin; y <= yMax; ++y )
       {
@@ -572,9 +578,9 @@ int Test4::UpdateImage()
             && ( W[1] >= 0.f )
             && ( W[2] >= 0.f ) )
           {
-            W[0] /= area;
-            W[1] /= area;
-            W[2] /= area;
+            W[0] *= invArea;
+            W[1] *= invArea;
+            W[2] *= invArea;
 
             // perspective correction
             W[0] *= ProjVec[0].w;
@@ -672,8 +678,8 @@ int Test4::UpdateImage()
 // ----------------------------------------------------------------------------
 int Test4::InitializeScene()
 {
-  //std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
-  std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
+  std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
+  //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
 
   Scene * newScene = nullptr;
   if ( !Loader::LoadScene(sceneFile, newScene, _Settings) || !newScene )
