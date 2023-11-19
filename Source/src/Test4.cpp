@@ -488,6 +488,7 @@ int Test4::UpdateImage()
     const std::vector<Vec3>     & normals   = _Scene -> GetNormals();
     const std::vector<Material> & materials = _Scene -> GetMaterials();
     const std::vector<Texture*> & textures  = _Scene -> GetTextures();
+    const int nbVertices = vertices.size();
     const int nbTris = indices.size() / 3;
 
     const Vec3 R = { 1.f, 0.f, 0.f };
@@ -501,6 +502,30 @@ int Test4::UpdateImage()
     Vec2 bboxMin(std::numeric_limits<float>::infinity());
     Vec2 bboxMax = -bboxMin;
 
+    std::vector<Vec4> CamVerts;
+    std::vector<Vec4> ProjVerts;
+    CamVerts.resize(nbVertices);
+    ProjVerts.resize(nbVertices);
+
+//#pragma omp parallel
+    { 
+      //#pragma omp for
+      for ( int i = 0; i < nbVertices; ++i )
+      {
+        CamVerts[i] = MV * Vec4(vertices[i], 1.f);
+
+        Vec4 projVert = P * CamVerts[i];
+        projVert.w = 1.f / projVert.w;
+        projVert.x *= projVert.w;
+        projVert.y *= projVert.w;
+        projVert.z *= projVert.w;
+
+        projVert.x = ((projVert.x + 1.f) * .5f * width);
+        projVert.y = ((projVert.y + 1.f) * .5f * height);
+        ProjVerts[i] = projVert;
+      }
+    }
+
     for ( int i = 0; i < nbTris; ++i )
     {
       Vec3i Index[3];
@@ -509,20 +534,11 @@ int Test4::UpdateImage()
       Index[2] = indices[i*3+2];
 
       Vec4 CamVec[3];
-      for ( int j = 0; j < 3; ++j )
-        CamVec[j] = MV * Vec4(vertices[Index[j].x], 1.f);
-
       Vec4 ProjVec[3];
       for ( int j = 0; j < 3; ++j )
       {
-        Vec4 projV4 = P * CamVec[j];
-        ProjVec[j].w = 1.f / projV4.w;
-        ProjVec[j].x = projV4.x * ProjVec[j].w;
-        ProjVec[j].y = projV4.y * ProjVec[j].w;
-        ProjVec[j].z = projV4.z * ProjVec[j].w;
-
-        ProjVec[j].x = ((ProjVec[j].x + 1.f) * .5f * width);
-        ProjVec[j].y = ((ProjVec[j].y + 1.f) * .5f * height);
+        CamVec[j] = CamVerts[Index[j].x];
+        ProjVec[j] = ProjVerts[Index[j].x];
         
         if ( ProjVec[j].x < bboxMin.x )
           bboxMin.x = ProjVec[j].x;
