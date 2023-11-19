@@ -85,7 +85,7 @@ private:
   RenderSettings     _Settings;
 
   bool               _UpdateImageTex = true;
-  std::vector<Vec4>  _Image;
+  std::vector<Vec4>  _ColorBuffer;
   std::vector<float> _DepthBuffer;
 
   KeyState          _KeyState;

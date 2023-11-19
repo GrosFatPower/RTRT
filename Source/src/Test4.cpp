@@ -16,7 +16,15 @@
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
 
 #include <iostream>
+#include <execution>
 #include <omp.h>
+
+#define PARALLEL
+#ifdef PARALLEL
+constexpr std::execution::parallel_policy policy = std::execution::par;
+#else
+constexpr std::execution::sequenced_policy policy = std::execution::seq;
+#endif
 
 namespace RTRT
 {
@@ -199,7 +207,7 @@ void Test4::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, this_ -> _Settings._RenderResolution.x, this_ -> _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
   glBindTexture(GL_TEXTURE_2D, 0);
 
-   this_ -> _UpdateImageTex = true;
+  this_ -> _UpdateImageTex = true;
 }
 
 // ----------------------------------------------------------------------------
@@ -237,7 +245,7 @@ void Test4::ResizeImageBuffers()
   _Settings._RenderResolution.x = _Settings._WindowResolution.x * ( _Settings._RenderScale * 0.01f );
   _Settings._RenderResolution.y = _Settings._WindowResolution.y * ( _Settings._RenderScale * 0.01f );
 
-  _Image.resize(_Settings._RenderResolution.x  * _Settings._RenderResolution.y);
+  _ColorBuffer.resize(_Settings._RenderResolution.x  * _Settings._RenderResolution.y);
   _DepthBuffer.resize(_Settings._RenderResolution.x  * _Settings._RenderResolution.y);
 }
 
@@ -287,7 +295,7 @@ int Test4::InitializeFrameBuffer()
   glGenTextures(1, &_ImageTextureID);
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, _ImageTextureID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, &_Image[0]);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, &_ColorBuffer[0]);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -364,7 +372,7 @@ int Test4::UpdateTextures()
   if ( _UpdateImageTex )
   {
     glBindTexture(GL_TEXTURE_2D, _ImageTextureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, &_Image[0]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, &_ColorBuffer[0]);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     //_UpdateImageTex = false;
@@ -502,11 +510,8 @@ int Test4::UpdateImage()
     const Vec3 B = { 0.f, 0.f, 1.f };
 
     const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
-    fill(_Image.begin(), _Image.end(), backgroundColor);
-    fill(_DepthBuffer.begin(), _DepthBuffer.end(), 1.f);
-
-    Vec2 bboxMin(std::numeric_limits<float>::infinity());
-    Vec2 bboxMax = -bboxMin;
+    std::fill(policy, _ColorBuffer.begin(), _ColorBuffer.end(), backgroundColor);
+    std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), 1.f);
 
     std::vector<Vec4> CamVerts;
     std::vector<Vec4> ProjVerts;
@@ -531,6 +536,9 @@ int Test4::UpdateImage()
         ProjVerts[i] = projVert;
       }
     }
+
+    Vec2 bboxMin(std::numeric_limits<float>::infinity());
+    Vec2 bboxMax = -bboxMin;
 
     for ( int i = 0; i < nbTris; ++i )
     {
@@ -574,96 +582,96 @@ int Test4::UpdateImage()
           W[1] = EdgeFunction(ProjVec[2], ProjVec[0], p);
           W[2] = EdgeFunction(ProjVec[0], ProjVec[1], p);
 
-          if ( ( W[0] >= 0.f )
-            && ( W[1] >= 0.f )
-            && ( W[2] >= 0.f ) )
+          if ( ( W[0] < 0.f )
+            || ( W[1] < 0.f )
+            || ( W[2] < 0.f ) )
+             continue;
+
+          W[0] *= invArea;
+          W[1] *= invArea;
+          W[2] *= invArea;
+
+          // perspective correction
+          W[0] *= ProjVec[0].w;
+          W[1] *= ProjVec[1].w;
+          W[2] *= ProjVec[2].w;
           {
-            W[0] *= invArea;
-            W[1] *= invArea;
-            W[2] *= invArea;
+            float perspFactor = 1.f / (W[0] + W[1] + W[2]);
+            W[0] *= perspFactor;
+            W[1] *= perspFactor;
+            W[2] *= perspFactor;
+          }
 
-            // perspective correction
-            W[0] *= ProjVec[0].w;
-            W[1] *= ProjVec[1].w;
-            W[2] *= ProjVec[2].w;
+          float depth = W[0] * ProjVec[0].z + W[1] * ProjVec[1].z + W[2] * ProjVec[2].z;
+
+          if ( depth < _DepthBuffer[x + width * y] && ( depth > -1.f ) )
+          {
+            Vec3 color(1.f);
+
+            if ( Index[0].z >=0 )
             {
-              float perspFactor = 1.f / (W[0] + W[1] + W[2]);
-              W[0] *= perspFactor;
-              W[1] *= perspFactor;
-              W[2] *= perspFactor;
-            }
-
-            float depth = W[0] * ProjVec[0].z + W[1] * ProjVec[1].z + W[2] * ProjVec[2].z;
-            
-            if ( depth < _DepthBuffer[x + width * y] && ( depth > -1.f ) )
-            {
-              Vec3 color(1.f);
-
-              if ( Index[0].z >=0 )
-              {
-                Vec3 UVMatID[3];
-                UVMatID[0] = uvMatIDs[Index[0].z];
-                UVMatID[1] = uvMatIDs[Index[1].z];
-                UVMatID[2] = uvMatIDs[Index[2].z];
+              Vec3 UVMatID[3];
+              UVMatID[0] = uvMatIDs[Index[0].z];
+              UVMatID[1] = uvMatIDs[Index[1].z];
+              UVMatID[2] = uvMatIDs[Index[2].z];
               
-                if ( UVMatID[0].z >= 0 && materials.size() )
-                {
-                  Material Mat[3] = { materials[UVMatID[0].z], materials[UVMatID[1].z], materials[UVMatID[1].z] };
+              if ( UVMatID[0].z >= 0 && materials.size() )
+              {
+                Material Mat[3] = { materials[UVMatID[0].z], materials[UVMatID[1].z], materials[UVMatID[1].z] };
 
-                  if ( Mat[0]._BaseColorTexId >= 0 )
-                  {
-                    float u = W[0] * UVMatID[0].x + W[1] * UVMatID[1].x + W[2] * UVMatID[2].x;
-                    float v = W[0] * UVMatID[0].y + W[1] * UVMatID[1].y + W[2] * UVMatID[2].y;
+                if ( Mat[0]._BaseColorTexId >= 0 )
+                {
+                  float u = W[0] * UVMatID[0].x + W[1] * UVMatID[1].x + W[2] * UVMatID[2].x;
+                  float v = W[0] * UVMatID[0].y + W[1] * UVMatID[1].y + W[2] * UVMatID[2].y;
               
-                    Texture * tex = textures[Mat[0]._BaseColorTexId];
-                    if ( tex )
-                      color = tex -> Sample(u, v);
-                  }
-                  else
-                  {
-                    color = Mat[0]._Albedo * W[0] +  Mat[1]._Albedo * W[1] + Mat[2]._Albedo * W[2];
-                  }
-                }
-              }
-              else
-              {
-                color = W[0] * R + W[1] * G + W[2] * B;
-              }
-
-              if ( ( Index[0].y >=0 )
-                && ( Index[1].y >=0 )
-                && ( Index[2].y >=0 ) )
-              {
-                Vec3 worldP = CamVec[0] * W[0] + CamVec[1] * W[1] + CamVec[2] * W[2];
-
-                float ambient = .1f;
-                float diffuse = 1.f;
-                Light * firstLight = _Scene -> GetLight(0);
-                if ( firstLight )
-                {
-                  Vec3 normal = normals[Index[0].y] * W[0] + normals[Index[1].y] * W[1] + normals[Index[2].y] * W[2];
-                  normal = glm::normalize(normal);
-
-                  Vec3 dirToLight = glm::normalize(firstLight ->_Pos - worldP);
-                  diffuse = std::max(0.f, glm::dot(normal, dirToLight));
+                  Texture * tex = textures[Mat[0]._BaseColorTexId];
+                  if ( tex )
+                    color = tex -> Sample(u, v);
                 }
                 else
                 {
-                  Vec3 V1V0 = CamVec[1] - CamVec[0];
-                  Vec3 V2V0 = CamVec[2] - CamVec[0];
-                  Vec3 normal = glm::cross(V1V0, V2V0);
-                  normal = glm::normalize(normal);
-
-                  Vec3 viewDir =  glm::normalize(-worldP);
-                  diffuse =  std::max(0.f, glm::dot(normal,viewDir));
+                  color = Mat[0]._Albedo * W[0] +  Mat[1]._Albedo * W[1] + Mat[2]._Albedo * W[2];
                 }
+              }
+            }
+            else
+            {
+              color = W[0] * R + W[1] * G + W[2] * B;
+            }
 
-                color *= std::min(diffuse+ambient, 1.f);
+            if ( ( Index[0].y >=0 )
+              && ( Index[1].y >=0 )
+              && ( Index[2].y >=0 ) )
+            {
+              Vec3 worldP = CamVec[0] * W[0] + CamVec[1] * W[1] + CamVec[2] * W[2];
+
+              float ambient = .1f;
+              float diffuse = 1.f;
+              Light * firstLight = _Scene -> GetLight(0);
+              if ( firstLight )
+              {
+                Vec3 normal = normals[Index[0].y] * W[0] + normals[Index[1].y] * W[1] + normals[Index[2].y] * W[2];
+                normal = glm::normalize(normal);
+
+                Vec3 dirToLight = glm::normalize(firstLight ->_Pos - worldP);
+                diffuse = std::max(0.f, glm::dot(normal, dirToLight));
+              }
+              else
+              {
+                Vec3 V1V0 = CamVec[1] - CamVec[0];
+                Vec3 V2V0 = CamVec[2] - CamVec[0];
+                Vec3 normal = glm::cross(V1V0, V2V0);
+                normal = glm::normalize(normal);
+
+                Vec3 viewDir =  glm::normalize(-worldP);
+                diffuse =  std::max(0.f, glm::dot(normal,viewDir));
               }
 
-              _Image[x + width * y] = Vec4(color, 1.f);
-              _DepthBuffer[x + width * y] = depth;
+              color *= std::min(diffuse+ambient, 1.f);
             }
+
+            _ColorBuffer[x + width * y] = Vec4(color, 1.f);
+            _DepthBuffer[x + width * y] = depth;
           }
         }
       }
