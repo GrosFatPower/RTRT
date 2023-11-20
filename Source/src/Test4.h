@@ -88,15 +88,18 @@ private:
   std::vector<Vec4>  _ColorBuffer;
   std::vector<float> _DepthBuffer;
 
-  KeyState          _KeyState;
-  MouseState        _MouseState;
+  KeyState           _KeyState;
+  MouseState         _MouseState;
 
   // Frame rate
-  float             _CPULoopTime          = 0.f;
-  float             _FrameRate            = 0.f;
-  float             _TimeDelta            = 0.f;
-  float             _AverageDelta         = 0.f;
-  std::deque<float> _LastDeltas;
+  double             _CPULoopTime          = 0.f;
+  double             _RenderImgElapsed     = 0.f;
+  double             _RTTElapsed           = 0.f;
+  double             _RTSElapsed           = 0.f;
+  double             _FrameRate            = 0.f;
+  double             _TimeDelta            = 0.f;
+  double             _AverageDelta         = 0.f;
+  std::deque<double> _LastDeltas;
 };
 
 

@@ -386,6 +386,8 @@ int Test4::UpdateTextures()
 // ----------------------------------------------------------------------------
 void Test4::RenderToTexture()
 {
+  double startTime = glfwGetTime();
+
   glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
   glViewport(0, 0, _Settings._RenderResolution.x, _Settings._RenderResolution.y);
 
@@ -396,6 +398,8 @@ void Test4::RenderToTexture()
   glBindTexture(GL_TEXTURE_2D, _ImageTextureID);
   
   _Quad -> Render(*_RTTShader);
+
+  _RTTElapsed = glfwGetTime() - startTime;
 }
 
 // ----------------------------------------------------------------------------
@@ -403,6 +407,8 @@ void Test4::RenderToTexture()
 // ----------------------------------------------------------------------------
 void Test4::RenderToSceen()
 {
+  double startTime = glfwGetTime();
+
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glActiveTexture(GL_TEXTURE0);
   
@@ -411,6 +417,8 @@ void Test4::RenderToSceen()
   glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
 
   _Quad -> Render(*_RTSShader);
+
+  _RTSElapsed = glfwGetTime() - startTime;
 }
 
 // ----------------------------------------------------------------------------
@@ -453,7 +461,10 @@ void Test4::DrawUI()
   {
     ImGui::Begin("Test 4");
 
-    ImGui::Text("Render time %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
+    ImGui::Text("Render time : %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
+    ImGui::Text("Render image : %.3f ms/frame", _RenderImgElapsed * 1000.f);
+    ImGui::Text("Render to texture : %.3f ms/frame", _RTTElapsed * 1000.f);
+    ImGui::Text("Render to screen : %.3f ms/frame", _RTSElapsed * 1000.f);
 
     ImGui::Text("Window width %d: height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
     ImGui::Text("Render width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
@@ -479,6 +490,8 @@ void Test4::DrawUI()
 // ----------------------------------------------------------------------------
 int Test4::UpdateImage()
 {
+  double startTime = glfwGetTime();
+
   if ( _UpdateImageTex )
   {
     int width  = _Settings._RenderResolution.x;
@@ -685,6 +698,8 @@ int Test4::UpdateImage()
       }
     }
   }
+
+  _RenderImgElapsed = glfwGetTime() - startTime;
 
   return 0;
 }
