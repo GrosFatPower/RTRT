@@ -669,7 +669,7 @@ int Test4::UpdateImage()
             {
               Vec3 worldP = vertices[Index[0].x] * W[0] + vertices[Index[1].x] * W[1] + vertices[Index[2].x] * W[2];
 
-              float ambient = .1f;
+              float ambientStrength = .1f;
               float diffuse = 0.f;
               float specular = 0.f;
               Light * firstLight = _Scene -> GetLight(0);
@@ -686,6 +686,9 @@ int Test4::UpdateImage()
 
                 static float specularStrength = 0.5f;
                 specular = pow(std::max(glm::dot(viewDir, reflectDir), 0.f), 32) * specularStrength;
+
+                color *= std::min(diffuse+ambientStrength+specular, 1.f) * glm::normalize(firstLight -> _Emission);
+                color = MathUtil::Min(color, Vec3(1.f));
               }
               else
               {
@@ -696,9 +699,9 @@ int Test4::UpdateImage()
 
                 Vec3 viewDir =  glm::normalize(-worldP);
                 diffuse =  std::max(0.f, glm::dot(normal,viewDir));
-              }
 
-              color *= std::min(diffuse+ambient+specular, 1.f);
+                color *= std::min(diffuse+ambientStrength, 1.f);
+              }
             }
 
             _ColorBuffer[x + width * y] = Vec4(color, 1.f);
@@ -719,9 +722,9 @@ int Test4::UpdateImage()
 // ----------------------------------------------------------------------------
 int Test4::InitializeScene()
 {
-  //std::string sceneFile = "..\\..\\Assets\\TexturedBoxes.scene";
+  std::string sceneFile = "..\\..\\Assets\\TexturedBoxes.scene";
   //std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
-  std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
+  //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
 
   Scene * newScene = nullptr;
   if ( !Loader::LoadScene(sceneFile, newScene, _Settings) || !newScene )
