@@ -45,19 +45,21 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
     switch ( key )
     {
     case GLFW_KEY_W:
-      this_ -> _KeyState._KeyUp =    ( action == GLFW_PRESS ); this_ -> _UpdateImageTex = true; break;
+      this_ -> _KeyState._KeyUp =    true; this_ -> _UpdateImageTex = true; break;
     case GLFW_KEY_S:
-      this_ -> _KeyState._KeyDown =  ( action == GLFW_PRESS ); this_ -> _UpdateImageTex = true; break;
+      this_ -> _KeyState._KeyDown =  true; this_ -> _UpdateImageTex = true; break;
     case GLFW_KEY_A:
-      this_ -> _KeyState._KeyLeft =  ( action == GLFW_PRESS ); this_ -> _UpdateImageTex = true; break;
+      this_ -> _KeyState._KeyLeft =  true; this_ -> _UpdateImageTex = true; break;
     case GLFW_KEY_D:
-      this_ -> _KeyState._KeyRight = ( action == GLFW_PRESS ); this_ -> _UpdateImageTex = true; break;
+      this_ -> _KeyState._KeyRight = true; this_ -> _UpdateImageTex = true; break;
+    case GLFW_KEY_LEFT_CONTROL:
+      this_ -> _KeyState._KeyLeftCTRL = true; break;
     default :
       break;
     }
   }
 
-  if ( action == GLFW_RELEASE )
+  else if ( action == GLFW_RELEASE )
   {
     std::cout << "EVENT : KEY RELEASE" << std::endl;
 
@@ -66,13 +68,15 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
     switch ( key )
     {
     case GLFW_KEY_W:
-      this_ -> _KeyState._KeyUp =    ( action == GLFW_PRESS ); this_ -> _UpdateImageTex = true; break;
+      this_ -> _KeyState._KeyUp =    false; this_ -> _UpdateImageTex = true; break;
     case GLFW_KEY_S:
-      this_ -> _KeyState._KeyDown =  ( action == GLFW_PRESS ); this_ -> _UpdateImageTex = true; break;
+      this_ -> _KeyState._KeyDown =  false; this_ -> _UpdateImageTex = true; break;
     case GLFW_KEY_A:
-      this_ -> _KeyState._KeyLeft =  ( action == GLFW_PRESS ); this_ -> _UpdateImageTex = true; break;
+      this_ -> _KeyState._KeyLeft =  false; this_ -> _UpdateImageTex = true; break;
     case GLFW_KEY_D:
-      this_ -> _KeyState._KeyRight = ( action == GLFW_PRESS ); this_ -> _UpdateImageTex = true; break;
+      this_ -> _KeyState._KeyRight = false; this_ -> _UpdateImageTex = true; break;
+    case GLFW_KEY_LEFT_CONTROL:
+      this_ -> _KeyState._KeyLeftCTRL = false; break;
     case GLFW_KEY_PAGE_DOWN:
     {
       this_ -> _Settings._RenderScale = std::max(this_ -> _Settings._RenderScale - 5, 5);
@@ -109,7 +113,10 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
     {
       float zNear, zFar;
       this_ -> _Scene -> GetCamera().GetZNearFar(zNear, zFar);
-      zNear = std::max(zNear - 0.1f, 0.1f);
+      if ( this_ -> _KeyState._KeyLeftCTRL )
+        zFar = std::max(zFar - 1.f, zNear + 0.1f);
+      else
+        zNear = std::max(zNear - 0.1f, 0.1f);
       this_ -> _Scene -> GetCamera().SetZNearFar(zNear, zFar);
       std::cout << "ZNEAR = " << zNear << std::endl;
       this_ -> _UpdateImageTex = true;
@@ -119,7 +126,10 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
     {
       float zNear, zFar;
       this_ -> _Scene -> GetCamera().GetZNearFar(zNear, zFar);
-      zNear = std::min(zNear + 0.1f, zFar - 0.1f);
+      if ( this_ -> _KeyState._KeyLeftCTRL )
+        zFar += 1.f;
+      else
+        zNear = std::min(zNear + 0.1f, zFar - 0.1f);
       this_ -> _Scene -> GetCamera().SetZNearFar(zNear, zFar);
       std::cout << "ZNEAR = " << zNear << std::endl;
       this_ -> _UpdateImageTex = true;
@@ -709,9 +719,9 @@ int Test4::UpdateImage()
 // ----------------------------------------------------------------------------
 int Test4::InitializeScene()
 {
-  std::string sceneFile = "..\\..\\Assets\\TexturedBoxes.scene";
+  //std::string sceneFile = "..\\..\\Assets\\TexturedBoxes.scene";
   //std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
-  //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
+  std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
 
   Scene * newScene = nullptr;
   if ( !Loader::LoadScene(sceneFile, newScene, _Settings) || !newScene )

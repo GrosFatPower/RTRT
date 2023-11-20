@@ -79,7 +79,7 @@ private:
   float _Aperture  = 0.f;
 
   float _ZNear = 1.f;
-  float _ZFar  = 10000.f;
+  float _ZFar  = 1000.f;
 };
 
 inline void Camera::SetZNearFar( float iZNear, float iZFar) {

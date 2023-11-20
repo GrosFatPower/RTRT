@@ -30,10 +30,11 @@ private:
 
   struct KeyState
   {
-    bool _KeyUp    = false;
-    bool _KeyDown  = false;
-    bool _KeyLeft  = false;
-    bool _KeyRight = false;
+    bool _KeyUp       = false;
+    bool _KeyDown     = false;
+    bool _KeyLeft     = false;
+    bool _KeyRight    = false;
+    bool _KeyLeftCTRL = false;
   };
 
   struct MouseState
