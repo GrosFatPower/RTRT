@@ -639,14 +639,16 @@ int Test4::UpdateImage()
               color = W[0] * R + W[1] * G + W[2] * B;
             }
 
+            // Shading
             if ( ( Index[0].y >=0 )
               && ( Index[1].y >=0 )
               && ( Index[2].y >=0 ) )
             {
-              Vec3 worldP = CamVec[0] * W[0] + CamVec[1] * W[1] + CamVec[2] * W[2];
+              Vec3 worldP = vertices[Index[0].x] * W[0] + vertices[Index[1].x] * W[1] + vertices[Index[2].x] * W[2];
 
               float ambient = .1f;
-              float diffuse = 1.f;
+              float diffuse = 0.f;
+              float specular = 0.f;
               Light * firstLight = _Scene -> GetLight(0);
               if ( firstLight )
               {
@@ -655,6 +657,12 @@ int Test4::UpdateImage()
 
                 Vec3 dirToLight = glm::normalize(firstLight ->_Pos - worldP);
                 diffuse = std::max(0.f, glm::dot(normal, dirToLight));
+
+                Vec3 viewDir =  glm::normalize(_Scene -> GetCamera().GetPos() - worldP);
+                Vec3 reflectDir = glm::reflect(-dirToLight, normal);
+
+                static float specularStrength = 0.5f;
+                specular = pow(std::max(glm::dot(viewDir, reflectDir), 0.f), 32) * specularStrength;
               }
               else
               {
@@ -667,7 +675,7 @@ int Test4::UpdateImage()
                 diffuse =  std::max(0.f, glm::dot(normal,viewDir));
               }
 
-              color *= std::min(diffuse+ambient, 1.f);
+              color *= std::min(diffuse+ambient+specular, 1.f);
             }
 
             _ColorBuffer[x + width * y] = Vec4(color, 1.f);
@@ -686,7 +694,8 @@ int Test4::UpdateImage()
 // ----------------------------------------------------------------------------
 int Test4::InitializeScene()
 {
-  std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
+  std::string sceneFile = "..\\..\\Assets\\TexturedBoxes.scene";
+  //std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
   //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
 
   Scene * newScene = nullptr;

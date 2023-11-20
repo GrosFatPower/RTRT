@@ -1,0 +1,92 @@
+renderer
+{
+	resolution 800 600
+}
+
+camera
+{
+	position 0.0 0.0 -5.0
+	lookat 0.0 0.0 0.0
+	fov 80
+}
+
+light
+{
+	type sphere
+	position 2 3 -3
+	emission 4. 4. 4.
+	radius .2
+}
+
+material textured_box
+{
+	albedotexture misc/textures/box.jpg
+}
+
+material textured_box_2
+{
+	albedotexture misc/textures/box.old.jpg
+}
+
+mesh
+{
+	file misc/TexturedBox.obj
+	material textured_box
+}
+
+
+mesh
+{
+	file misc/TexturedBox.obj
+	material textured_box
+	position -5 0 0
+}
+
+mesh
+{
+	file misc/TexturedBox.obj
+	material textured_box
+	position 5 0 0
+}
+
+mesh
+{
+	file misc/TexturedBox.obj
+	material textured_box
+	position 0 -5 0
+}
+
+mesh
+{
+	file misc/TexturedBox.obj
+	material textured_box
+	position 0 5 0
+}
+
+mesh
+{
+	file misc/TexturedBox.obj
+	material textured_box_2
+	position -5 -5 0
+}
+
+mesh
+{
+	file misc/TexturedBox.obj
+	material textured_box_2
+	position 5 5 0
+}
+
+mesh
+{
+	file misc/TexturedBox.obj
+	material textured_box_2
+	position 5 -5 0
+}
+
+mesh
+{
+	file misc/TexturedBox.obj
+	material textured_box_2
+	position -5 5 0
+}
