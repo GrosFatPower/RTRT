@@ -519,6 +519,9 @@ int Test4::UpdateImage()
 
     Mat4x4 MVP = P * MV;
 
+    float near, far;
+    _Scene -> GetCamera().GetZNearFar(near, far);
+
     const std::vector<Vec3>     & vertices  = _Scene -> GetVertices();
     const std::vector<Vec3i>    & indices   = _Scene -> GetIndices();
     const std::vector<Vec3>     & uvMatIDs  = _Scene -> GetUVMatID();
@@ -534,7 +537,8 @@ int Test4::UpdateImage()
 
     const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
     std::fill(policy, _ColorBuffer.begin(), _ColorBuffer.end(), backgroundColor);
-    std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), 1.f);
+    //std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), 1.f);
+    std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), far);
 
     std::vector<Vec4> CamVerts;
     std::vector<Vec4> ProjVerts;
@@ -598,7 +602,7 @@ int Test4::UpdateImage()
       {
         for ( int x = xMin; x <= xMax; ++x  )
         {
-          Vec3 p(x, y, 1.f);
+          Vec3 p(x + .5f, y + .5f, 0.f);
 
           float W[3];
           W[0] = EdgeFunction(ProjVec[1], ProjVec[2], p);
@@ -618,16 +622,18 @@ int Test4::UpdateImage()
           W[0] *= ProjVec[0].w;
           W[1] *= ProjVec[1].w;
           W[2] *= ProjVec[2].w;
-          {
+          //{
             float perspFactor = 1.f / (W[0] + W[1] + W[2]);
             W[0] *= perspFactor;
             W[1] *= perspFactor;
             W[2] *= perspFactor;
-          }
+          //}
 
-          float depth = W[0] * ProjVec[0].z + W[1] * ProjVec[1].z + W[2] * ProjVec[2].z;
+          //float depth = W[0] * ProjVec[0].z + W[1] * ProjVec[1].z + W[2] * ProjVec[2].z;
+          float depth = perspFactor;
 
-          if ( depth < _DepthBuffer[x + width * y] && ( depth > -1.f ) )
+          //if ( depth < _DepthBuffer[x + width * y] && ( depth > -1.f ) )
+          if ( depth < _DepthBuffer[x + width * y] && ( depth > near) )
           {
             Vec3 color(1.f);
 
