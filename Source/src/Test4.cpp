@@ -553,10 +553,10 @@ int Test4::UpdateImage()
         CamVerts[i] = MV * Vec4(vertices[i], 1.f);
 
         Vec4 projVert = P * CamVerts[i];
-        projVert.w = 1.f / projVert.w;
-        projVert.x *= projVert.w;
-        projVert.y *= projVert.w;
-        projVert.z *= projVert.w;
+        projVert.w = 1.f / projVert.w; // 1.f / -z
+        projVert.x *= projVert.w;      // X / -z
+        projVert.y *= projVert.w;      // Y / -z
+        projVert.z *= projVert.w;      // Z / -z
 
         projVert.x = ((projVert.x + 1.f) * .5f * width);
         projVert.y = ((projVert.y + 1.f) * .5f * height);
@@ -619,21 +619,20 @@ int Test4::UpdateImage()
           W[2] *= invArea;
 
           // perspective correction
-          W[0] *= ProjVec[0].w;
-          W[1] *= ProjVec[1].w;
-          W[2] *= ProjVec[2].w;
-          //{
-            float perspFactor = 1.f / (W[0] + W[1] + W[2]);
-            W[0] *= perspFactor;
-            W[1] *= perspFactor;
-            W[2] *= perspFactor;
-          //}
+          W[0] *= ProjVec[0].w; // W0 / z0
+          W[1] *= ProjVec[1].w; // W1 / z1
+          W[2] *= ProjVec[2].w; // W2 / z2
 
-          //float depth = W[0] * ProjVec[0].z + W[1] * ProjVec[1].z + W[2] * ProjVec[2].z;
-          float depth = perspFactor;
+          float Z = 1.f / (W[0] + W[1] + W[2]);
+          W[0] *= Z;
+          W[1] *= Z;
+          W[2] *= Z;
 
-          //if ( depth < _DepthBuffer[x + width * y] && ( depth > -1.f ) )
-          if ( depth < _DepthBuffer[x + width * y] && ( depth > near) )
+          float z = W[0] * ProjVec[0].z + W[1] * ProjVec[1].z + W[2] * ProjVec[2].z;
+          if ( ( z < -1.f ) || ( z > 1.f ) )
+            continue;
+
+          if ( Z < _DepthBuffer[x + width * y] && ( Z > near) )
           {
             Vec3 color(1.f);
 
@@ -711,7 +710,7 @@ int Test4::UpdateImage()
             }
 
             _ColorBuffer[x + width * y] = Vec4(color, 1.f);
-            _DepthBuffer[x + width * y] = depth;
+            _DepthBuffer[x + width * y] = Z;
           }
         }
       }
@@ -728,9 +727,9 @@ int Test4::UpdateImage()
 // ----------------------------------------------------------------------------
 int Test4::InitializeScene()
 {
-  std::string sceneFile = "..\\..\\Assets\\TexturedBoxes.scene";
+  //std::string sceneFile = "..\\..\\Assets\\TexturedBoxes.scene";
   //std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
-  //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
+  std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
 
   Scene * newScene = nullptr;
   if ( !Loader::LoadScene(sceneFile, newScene, _Settings) || !newScene )
