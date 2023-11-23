@@ -26,6 +26,8 @@ constexpr std::execution::parallel_policy policy = std::execution::par;
 constexpr std::execution::sequenced_policy policy = std::execution::seq;
 #endif
 
+//#define SIMUL_RENDERING_PIPELINE
+
 namespace RTRT
 {
 
@@ -45,13 +47,13 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
     switch ( key )
     {
     case GLFW_KEY_W:
-      this_ -> _KeyState._KeyUp =    true; this_ -> _UpdateImageTex = true; break;
+      this_ -> _KeyState._KeyUp =    true; break;
     case GLFW_KEY_S:
-      this_ -> _KeyState._KeyDown =  true; this_ -> _UpdateImageTex = true; break;
+      this_ -> _KeyState._KeyDown =  true; break;
     case GLFW_KEY_A:
-      this_ -> _KeyState._KeyLeft =  true; this_ -> _UpdateImageTex = true; break;
+      this_ -> _KeyState._KeyLeft =  true; break;
     case GLFW_KEY_D:
-      this_ -> _KeyState._KeyRight = true; this_ -> _UpdateImageTex = true; break;
+      this_ -> _KeyState._KeyRight = true; break;
     case GLFW_KEY_LEFT_CONTROL:
       this_ -> _KeyState._KeyLeftCTRL = true; break;
     default :
@@ -68,13 +70,15 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
     switch ( key )
     {
     case GLFW_KEY_W:
-      this_ -> _KeyState._KeyUp =    false; this_ -> _UpdateImageTex = true; break;
+      this_ -> _KeyState._KeyUp =    false; break;
     case GLFW_KEY_S:
-      this_ -> _KeyState._KeyDown =  false; this_ -> _UpdateImageTex = true; break;
+      this_ -> _KeyState._KeyDown =  false; break;
     case GLFW_KEY_A:
-      this_ -> _KeyState._KeyLeft =  false; this_ -> _UpdateImageTex = true; break;
+      this_ -> _KeyState._KeyLeft =  false; break;
     case GLFW_KEY_D:
-      this_ -> _KeyState._KeyRight = false; this_ -> _UpdateImageTex = true; break;
+      this_ -> _KeyState._KeyRight = false; break;
+    case GLFW_KEY_Y:
+      this_ -> _ViewDepthBuffer = !this_ -> _ViewDepthBuffer; break;
     case GLFW_KEY_LEFT_CONTROL:
       this_ -> _KeyState._KeyLeftCTRL = false; break;
     case GLFW_KEY_PAGE_DOWN:
@@ -82,7 +86,6 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
       this_ -> _Settings._RenderScale = std::max(this_ -> _Settings._RenderScale - 5, 5);
       std::cout << "SCALE = " << this_ -> _Settings._RenderScale << std::endl;
       updateFrameBuffer = true;
-      this_ -> _UpdateImageTex = true;
       break;
     }
     case GLFW_KEY_PAGE_UP:
@@ -90,7 +93,6 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
       this_ -> _Settings._RenderScale = std::min(this_ -> _Settings._RenderScale + 5, 300);
       std::cout << "SCALE = " << this_ -> _Settings._RenderScale << std::endl;
       updateFrameBuffer = true;
-      this_ -> _UpdateImageTex = true;
       break;
     }
     case GLFW_KEY_LEFT:
@@ -98,7 +100,6 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
       float fov = std::max(this_ -> _Scene -> GetCamera().GetFOVInDegrees() - 5.f, 10.f);
       this_ -> _Scene -> GetCamera().SetFOVInDegrees(fov);
       std::cout << "FOV = " << this_ -> _Scene -> GetCamera().GetFOVInDegrees() << std::endl;
-      this_ -> _UpdateImageTex = true;
       break;
     }
     case GLFW_KEY_RIGHT:
@@ -106,7 +107,6 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
       float fov = std::min(this_ -> _Scene -> GetCamera().GetFOVInDegrees() + 5.f, 150.f);
       this_ -> _Scene -> GetCamera().SetFOVInDegrees(fov);
       std::cout << "FOV = " << this_ -> _Scene -> GetCamera().GetFOVInDegrees() << std::endl;
-      this_ -> _UpdateImageTex = true;
       break;
     }
     case GLFW_KEY_DOWN:
@@ -119,7 +119,6 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
         zNear = std::max(zNear - 0.1f, 0.1f);
       this_ -> _Scene -> GetCamera().SetZNearFar(zNear, zFar);
       std::cout << "ZNEAR = " << zNear << std::endl;
-      this_ -> _UpdateImageTex = true;
       break;
     }
     case GLFW_KEY_UP:
@@ -132,7 +131,6 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
         zNear = std::min(zNear + 0.1f, zFar - 0.1f);
       this_ -> _Scene -> GetCamera().SetZNearFar(zNear, zFar);
       std::cout << "ZNEAR = " << zNear << std::endl;
-      this_ -> _UpdateImageTex = true;
       break;
     }
     default :
@@ -216,8 +214,6 @@ void Test4::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
   glBindTexture(GL_TEXTURE_2D, this_->_ScreenTextureID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, this_ -> _Settings._RenderResolution.x, this_ -> _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
   glBindTexture(GL_TEXTURE_2D, 0);
-
-  this_ -> _UpdateImageTex = true;
 }
 
 // ----------------------------------------------------------------------------
@@ -379,14 +375,9 @@ int Test4::UpdateUniforms()
 // ----------------------------------------------------------------------------
 int Test4::UpdateTextures()
 {
-  if ( _UpdateImageTex )
-  {
-    glBindTexture(GL_TEXTURE_2D, _ImageTextureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, &_ColorBuffer[0]);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    //_UpdateImageTex = false;
-  }
+  glBindTexture(GL_TEXTURE_2D, _ImageTextureID);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, &_ColorBuffer[0]);
+  glBindTexture(GL_TEXTURE_2D, 0);
 
   return 0;
 }
@@ -498,220 +489,278 @@ void Test4::DrawUI()
 // ----------------------------------------------------------------------------
 // UpdateImage
 // ----------------------------------------------------------------------------
+#ifdef SIMUL_RENDERING_PIPELINE
 int Test4::UpdateImage()
 {
   double startTime = glfwGetTime();
 
-  if ( _UpdateImageTex )
+  int width  = _Settings._RenderResolution.x;
+  int height = _Settings._RenderResolution.y;
+  int size = width * height;
+  float ratio = width / float(height);
+
+  Mat4x4 MV;
+  _Scene -> GetCamera().ComputeLookAtMatrix(MV);
+
+  Mat4x4 P;
+  _Scene -> GetCamera().ComputePerspectiveProjMatrix(ratio, P);
+
+  Mat4x4 MVP = P * MV;
+
+  float near, far;
+  _Scene -> GetCamera().GetZNearFar(near, far);
+
+  const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
+  std::fill(policy, _ColorBuffer.begin(), _ColorBuffer.end(), backgroundColor);
+  std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), far);
+
+  const std::vector<Vec3i>    & Indices   = _Scene -> GetIndices();
+  const std::vector<Vec3>     & Vertices  = _Scene -> GetVertices();
+  const std::vector<Vec3>     & UVMatIDs  = _Scene -> GetUVMatID();
+  const int nbTris = Indices.size() / 3;
+
+  for ( int i = 0; i < nbTris; ++i )
   {
-    int width  = _Settings._RenderResolution.x;
-    int height = _Settings._RenderResolution.y;
-    int size = width * height;
-    float ratio = width / float(height);
+    Vec3i Index[3];
+    Index[0] = Indices[i*3];
+    Index[1] = Indices[i*3+1];
+    Index[2] = Indices[i*3+2];
 
-    Mat4x4 MV;
-    _Scene -> GetCamera().ComputeLookAtMatrix(MV);
-
-    Mat4x4 P;
-    _Scene -> GetCamera().ComputePerspectiveProjMatrix(ratio, P);
-
-    Mat4x4 MVTrInv = glm::transpose(glm::inverse(MV));
-
-    Mat4x4 MVP = P * MV;
-
-    float near, far;
-    _Scene -> GetCamera().GetZNearFar(near, far);
-
-    const std::vector<Vec3>     & vertices  = _Scene -> GetVertices();
-    const std::vector<Vec3i>    & indices   = _Scene -> GetIndices();
-    const std::vector<Vec3>     & uvMatIDs  = _Scene -> GetUVMatID();
-    const std::vector<Vec3>     & normals   = _Scene -> GetNormals();
-    const std::vector<Material> & materials = _Scene -> GetMaterials();
-    const std::vector<Texture*> & textures  = _Scene -> GetTextures();
-    const int nbVertices = vertices.size();
-    const int nbTris = indices.size() / 3;
-
-    const Vec3 R = { 1.f, 0.f, 0.f };
-    const Vec3 G = { 0.f, 1.f, 0.f };
-    const Vec3 B = { 0.f, 0.f, 1.f };
-
-    const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
-    std::fill(policy, _ColorBuffer.begin(), _ColorBuffer.end(), backgroundColor);
-    //std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), 1.f);
-    std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), far);
-
-    std::vector<Vec4> CamVerts;
-    std::vector<Vec4> ProjVerts;
-    CamVerts.resize(nbVertices);
-    ProjVerts.resize(nbVertices);
-
-//#pragma omp parallel
-    { 
-      //#pragma omp for
-      for ( int i = 0; i < nbVertices; ++i )
-      {
-        CamVerts[i] = MV * Vec4(vertices[i], 1.f);
-
-        Vec4 projVert = P * CamVerts[i];
-        projVert.w = 1.f / projVert.w; // 1.f / -z
-        projVert.x *= projVert.w;      // X / -z
-        projVert.y *= projVert.w;      // Y / -z
-        projVert.z *= projVert.w;      // Z / -z
-
-        projVert.x = ((projVert.x + 1.f) * .5f * width);
-        projVert.y = ((projVert.y + 1.f) * .5f * height);
-        ProjVerts[i] = projVert;
-      }
+    Vertex Vert[3];
+    for ( int j = 0; j < 3; ++j )
+    {
+      Vert[j]._Position = Vec4(Vertices[Index[j].x], 1.f);
+      Vert[j]._UV       = Vec2(UVMatIDs[Index[j].z].x, UVMatIDs[Index[j].z].y);
+      Vert[j]._MatID    = (int)UVMatIDs[Index[j].z].z;
+      // ToDo
     }
 
-    Vec2 bboxMin(std::numeric_limits<float>::infinity());
-    Vec2 bboxMax = -bboxMin;
+    // ToDo
 
-    for ( int i = 0; i < nbTris; ++i )
+
+  }
+
+
+  _RenderImgElapsed = glfwGetTime() - startTime;
+
+  return 0;
+}
+#else
+int Test4::UpdateImage()
+{
+  double startTime = glfwGetTime();
+
+  int width  = _Settings._RenderResolution.x;
+  int height = _Settings._RenderResolution.y;
+  int size = width * height;
+  float ratio = width / float(height);
+
+  Mat4x4 MV;
+  _Scene -> GetCamera().ComputeLookAtMatrix(MV);
+
+  Mat4x4 P;
+  _Scene -> GetCamera().ComputePerspectiveProjMatrix(ratio, P);
+
+  Mat4x4 MVTrInv = glm::transpose(glm::inverse(MV));
+
+  Mat4x4 MVP = P * MV;
+
+  float near, far;
+  _Scene -> GetCamera().GetZNearFar(near, far);
+
+  const std::vector<Vec3>     & vertices  = _Scene -> GetVertices();
+  const std::vector<Vec3i>    & indices   = _Scene -> GetIndices();
+  const std::vector<Vec3>     & uvMatIDs  = _Scene -> GetUVMatID();
+  const std::vector<Vec3>     & normals   = _Scene -> GetNormals();
+  const std::vector<Material> & materials = _Scene -> GetMaterials();
+  const std::vector<Texture*> & textures  = _Scene -> GetTextures();
+  const int nbVertices = vertices.size();
+  const int nbTris = indices.size() / 3;
+
+  const Vec3 R = { 1.f, 0.f, 0.f };
+  const Vec3 G = { 0.f, 1.f, 0.f };
+  const Vec3 B = { 0.f, 0.f, 1.f };
+
+  const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
+  std::fill(policy, _ColorBuffer.begin(), _ColorBuffer.end(), backgroundColor);
+  //std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), 1.f);
+  std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), far);
+
+  std::vector<Vec4> CamVerts;
+  std::vector<Vec4> ProjVerts;
+  CamVerts.resize(nbVertices);
+  ProjVerts.resize(nbVertices);
+
+//#pragma omp parallel
+  { 
+    //#pragma omp for
+    for ( int i = 0; i < nbVertices; ++i )
     {
-      Vec3i Index[3];
-      Index[0] = indices[i*3];
-      Index[1] = indices[i*3+1];
-      Index[2] = indices[i*3+2];
+      CamVerts[i] = MV * Vec4(vertices[i], 1.f);
 
-      Vec4 CamVec[3];
-      Vec4 ProjVec[3];
-      for ( int j = 0; j < 3; ++j )
-      {
-        CamVec[j] = CamVerts[Index[j].x];
-        ProjVec[j] = ProjVerts[Index[j].x];
+      Vec4 projVert = P * CamVerts[i];
+      projVert.w = 1.f / projVert.w; // 1.f / -z
+      projVert.x *= projVert.w;      // X / -z
+      projVert.y *= projVert.w;      // Y / -z
+      projVert.z *= projVert.w;      // Z / -z
+
+      projVert.x = ((projVert.x + 1.f) * .5f * width);
+      projVert.y = ((projVert.y + 1.f) * .5f * height);
+      ProjVerts[i] = projVert;
+    }
+  }
+
+  Vec2 bboxMin(std::numeric_limits<float>::infinity());
+  Vec2 bboxMax = -bboxMin;
+
+  for ( int i = 0; i < nbTris; ++i )
+  {
+    Vec3i Index[3];
+    Index[0] = indices[i*3];
+    Index[1] = indices[i*3+1];
+    Index[2] = indices[i*3+2];
+
+    Vec4 CamVec[3];
+    Vec4 ProjVec[3];
+    for ( int j = 0; j < 3; ++j )
+    {
+      CamVec[j] = CamVerts[Index[j].x];
+      ProjVec[j] = ProjVerts[Index[j].x];
         
-        if ( ProjVec[j].x < bboxMin.x )
-          bboxMin.x = ProjVec[j].x;
-        if ( ProjVec[j].y < bboxMin.y )
-          bboxMin.y = ProjVec[j].y;
-        if ( ProjVec[j].x > bboxMax.x )
-          bboxMax.x = ProjVec[j].x;
-        if ( ProjVec[j].y > bboxMax.y )
-          bboxMax.y = ProjVec[j].y;
-      }
+      if ( ProjVec[j].x < bboxMin.x )
+        bboxMin.x = ProjVec[j].x;
+      if ( ProjVec[j].y < bboxMin.y )
+        bboxMin.y = ProjVec[j].y;
+      if ( ProjVec[j].x > bboxMax.x )
+        bboxMax.x = ProjVec[j].x;
+      if ( ProjVec[j].y > bboxMax.y )
+        bboxMax.y = ProjVec[j].y;
+    }
 
-      int xMin = std::max(0, std::min((int)std::floorf(bboxMin.x), width  - 1));
-      int yMin = std::max(0, std::min((int)std::floorf(bboxMin.y), height - 1));
-      int xMax = std::max(0, std::min((int)std::floorf(bboxMax.x), width  - 1)); 
-      int yMax = std::max(0, std::min((int)std::floorf(bboxMax.y), height - 1));
+    int xMin = std::max(0, std::min((int)std::floorf(bboxMin.x), width  - 1));
+    int yMin = std::max(0, std::min((int)std::floorf(bboxMin.y), height - 1));
+    int xMax = std::max(0, std::min((int)std::floorf(bboxMax.x), width  - 1)); 
+    int yMax = std::max(0, std::min((int)std::floorf(bboxMax.y), height - 1));
 
-      float invArea = 1.f / EdgeFunction(ProjVec[0], ProjVec[1], ProjVec[2]);
+    float invArea = 1.f / EdgeFunction(ProjVec[0], ProjVec[1], ProjVec[2]);
 
-      for ( int y = yMin; y <= yMax; ++y )
+    for ( int y = yMin; y <= yMax; ++y )
+    {
+      for ( int x = xMin; x <= xMax; ++x  )
       {
-        for ( int x = xMin; x <= xMax; ++x  )
-        {
-          Vec3 p(x + .5f, y + .5f, 0.f);
+        Vec3 p(x + .5f, y + .5f, 0.f);
 
-          float W[3];
-          W[0] = EdgeFunction(ProjVec[1], ProjVec[2], p);
-          W[1] = EdgeFunction(ProjVec[2], ProjVec[0], p);
-          W[2] = EdgeFunction(ProjVec[0], ProjVec[1], p);
+        float W[3];
+        W[0] = EdgeFunction(ProjVec[1], ProjVec[2], p);
+        W[1] = EdgeFunction(ProjVec[2], ProjVec[0], p);
+        W[2] = EdgeFunction(ProjVec[0], ProjVec[1], p);
 
-          if ( ( W[0] < 0.f )
-            || ( W[1] < 0.f )
-            || ( W[2] < 0.f ) )
-             continue;
-
-          W[0] *= invArea;
-          W[1] *= invArea;
-          W[2] *= invArea;
-
-          // perspective correction
-          W[0] *= ProjVec[0].w; // W0 / z0
-          W[1] *= ProjVec[1].w; // W1 / z1
-          W[2] *= ProjVec[2].w; // W2 / z2
-
-          float Z = 1.f / (W[0] + W[1] + W[2]);
-          W[0] *= Z;
-          W[1] *= Z;
-          W[2] *= Z;
-
-          float z = W[0] * ProjVec[0].z + W[1] * ProjVec[1].z + W[2] * ProjVec[2].z;
-          if ( ( z < -1.f ) || ( z > 1.f ) )
+        if ( ( W[0] < 0.f )
+          || ( W[1] < 0.f )
+          || ( W[2] < 0.f ) )
             continue;
 
-          if ( Z < _DepthBuffer[x + width * y] && ( Z > near) )
+        W[0] *= invArea;
+        W[1] *= invArea;
+        W[2] *= invArea;
+
+        // perspective correction
+        W[0] *= ProjVec[0].w; // W0 / z0
+        W[1] *= ProjVec[1].w; // W1 / z1
+        W[2] *= ProjVec[2].w; // W2 / z2
+
+        float Z = 1.f / (W[0] + W[1] + W[2]);
+        W[0] *= Z;
+        W[1] *= Z;
+        W[2] *= Z;
+
+        float z = W[0] * ProjVec[0].z + W[1] * ProjVec[1].z + W[2] * ProjVec[2].z;
+        z = ( z + 1.f ) * .5f;
+        if ( ( z < 0.f ) || ( z > 1.f ) )
+          continue;
+
+        if ( Z < _DepthBuffer[x + width * y] && ( Z > near) )
+        {
+          Vec3 color(1.f);
+
+          if ( Index[0].z >=0 )
           {
-            Vec3 color(1.f);
-
-            if ( Index[0].z >=0 )
-            {
-              Vec3 UVMatID[3];
-              UVMatID[0] = uvMatIDs[Index[0].z];
-              UVMatID[1] = uvMatIDs[Index[1].z];
-              UVMatID[2] = uvMatIDs[Index[2].z];
+            Vec3 UVMatID[3];
+            UVMatID[0] = uvMatIDs[Index[0].z];
+            UVMatID[1] = uvMatIDs[Index[1].z];
+            UVMatID[2] = uvMatIDs[Index[2].z];
               
-              if ( UVMatID[0].z >= 0 && materials.size() )
-              {
-                Material Mat[3] = { materials[UVMatID[0].z], materials[UVMatID[1].z], materials[UVMatID[1].z] };
+            if ( UVMatID[0].z >= 0 && materials.size() )
+            {
+              Material Mat[3] = { materials[UVMatID[0].z], materials[UVMatID[1].z], materials[UVMatID[1].z] };
 
-                if ( Mat[0]._BaseColorTexId >= 0 )
-                {
-                  float u = W[0] * UVMatID[0].x + W[1] * UVMatID[1].x + W[2] * UVMatID[2].x;
-                  float v = W[0] * UVMatID[0].y + W[1] * UVMatID[1].y + W[2] * UVMatID[2].y;
+              if ( Mat[0]._BaseColorTexId >= 0 )
+              {
+                float u = W[0] * UVMatID[0].x + W[1] * UVMatID[1].x + W[2] * UVMatID[2].x;
+                float v = W[0] * UVMatID[0].y + W[1] * UVMatID[1].y + W[2] * UVMatID[2].y;
               
-                  Texture * tex = textures[Mat[0]._BaseColorTexId];
-                  if ( tex )
-                    color = tex -> Sample(u, v);
-                }
-                else
-                {
-                  color = Mat[0]._Albedo * W[0] +  Mat[1]._Albedo * W[1] + Mat[2]._Albedo * W[2];
-                }
-              }
-            }
-            else
-            {
-              color = W[0] * R + W[1] * G + W[2] * B;
-            }
-
-            // Shading
-            if ( ( Index[0].y >=0 )
-              && ( Index[1].y >=0 )
-              && ( Index[2].y >=0 ) )
-            {
-              Vec3 worldP = vertices[Index[0].x] * W[0] + vertices[Index[1].x] * W[1] + vertices[Index[2].x] * W[2];
-
-              float ambientStrength = .1f;
-              float diffuse = 0.f;
-              float specular = 0.f;
-              Light * firstLight = _Scene -> GetLight(0);
-              if ( firstLight )
-              {
-                Vec3 normal = normals[Index[0].y] * W[0] + normals[Index[1].y] * W[1] + normals[Index[2].y] * W[2];
-                normal = glm::normalize(normal);
-
-                Vec3 dirToLight = glm::normalize(firstLight ->_Pos - worldP);
-                diffuse = std::max(0.f, glm::dot(normal, dirToLight));
-
-                Vec3 viewDir =  glm::normalize(_Scene -> GetCamera().GetPos() - worldP);
-                Vec3 reflectDir = glm::reflect(-dirToLight, normal);
-
-                static float specularStrength = 0.5f;
-                specular = pow(std::max(glm::dot(viewDir, reflectDir), 0.f), 32) * specularStrength;
-
-                color *= std::min(diffuse+ambientStrength+specular, 1.f) * glm::normalize(firstLight -> _Emission);
-                color = MathUtil::Min(color, Vec3(1.f));
+                Texture * tex = textures[Mat[0]._BaseColorTexId];
+                if ( tex )
+                  color = tex -> Sample(u, v);
               }
               else
               {
-                Vec3 V1V0 = CamVec[1] - CamVec[0];
-                Vec3 V2V0 = CamVec[2] - CamVec[0];
-                Vec3 normal = glm::cross(V1V0, V2V0);
-                normal = glm::normalize(normal);
-
-                Vec3 viewDir =  glm::normalize(-worldP);
-                diffuse =  std::max(0.f, glm::dot(normal,viewDir));
-
-                color *= std::min(diffuse+ambientStrength, 1.f);
+                color = Mat[0]._Albedo * W[0] +  Mat[1]._Albedo * W[1] + Mat[2]._Albedo * W[2];
               }
             }
-
-            _ColorBuffer[x + width * y] = Vec4(color, 1.f);
-            _DepthBuffer[x + width * y] = Z;
           }
+          else
+          {
+            color = W[0] * R + W[1] * G + W[2] * B;
+          }
+
+          // Shading
+          if ( ( Index[0].y >=0 )
+            && ( Index[1].y >=0 )
+            && ( Index[2].y >=0 ) )
+          {
+            Vec3 worldP = vertices[Index[0].x] * W[0] + vertices[Index[1].x] * W[1] + vertices[Index[2].x] * W[2];
+
+            float ambientStrength = .1f;
+            float diffuse = 0.f;
+            float specular = 0.f;
+            Light * firstLight = _Scene -> GetLight(0);
+            if ( firstLight )
+            {
+              Vec3 normal = normals[Index[0].y] * W[0] + normals[Index[1].y] * W[1] + normals[Index[2].y] * W[2];
+              normal = glm::normalize(normal);
+
+              Vec3 dirToLight = glm::normalize(firstLight ->_Pos - worldP);
+              diffuse = std::max(0.f, glm::dot(normal, dirToLight));
+
+              Vec3 viewDir =  glm::normalize(_Scene -> GetCamera().GetPos() - worldP);
+              Vec3 reflectDir = glm::reflect(-dirToLight, normal);
+
+              static float specularStrength = 0.5f;
+              specular = pow(std::max(glm::dot(viewDir, reflectDir), 0.f), 32) * specularStrength;
+
+              color *= std::min(diffuse+ambientStrength+specular, 1.f) * glm::normalize(firstLight -> _Emission);
+              color = MathUtil::Min(color, Vec3(1.f));
+            }
+            else
+            {
+              Vec3 V1V0 = CamVec[1] - CamVec[0];
+              Vec3 V2V0 = CamVec[2] - CamVec[0];
+              Vec3 normal = glm::cross(V1V0, V2V0);
+              normal = glm::normalize(normal);
+
+              Vec3 viewDir =  glm::normalize(-worldP);
+              diffuse =  std::max(0.f, glm::dot(normal,viewDir));
+
+              color *= std::min(diffuse+ambientStrength, 1.f);
+            }
+          }
+
+          if ( _ViewDepthBuffer )
+            _ColorBuffer[x + width * y] = Vec4(Vec3(1.f - z), 1.f);
+          else
+            _ColorBuffer[x + width * y] = Vec4(color, 1.f);
+          _DepthBuffer[x + width * y] = Z;
         }
       }
     }
@@ -720,6 +769,26 @@ int Test4::UpdateImage()
   _RenderImgElapsed = glfwGetTime() - startTime;
 
   return 0;
+}
+#endif
+
+// ----------------------------------------------------------------------------
+// VertexShader
+// ----------------------------------------------------------------------------
+void Test4::VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Vec4 & oVertexPosition, Attributes & oAttrib )
+{
+  oVertexPosition = iMVP * iVertex._Position;
+  oAttrib._UV     = iVertex._UV;
+  oAttrib._Color  = iVertex._Color;
+  oAttrib._MatID  = iVertex._MatID;
+}
+
+// ----------------------------------------------------------------------------
+// FragmentShader
+// ----------------------------------------------------------------------------
+void Test4::FragmentShader( const Vec4 & iCoord, const Attributes & iAttrib, Vec4 & oColor )
+{
+
 }
 
 // ----------------------------------------------------------------------------
@@ -753,6 +822,14 @@ int Test4::InitializeScene()
   this -> ResizeImageBuffers();
 
   return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ProcessInput
+// ----------------------------------------------------------------------------
+void Test4::ProcessInput()
+{
+
 }
 
 // ----------------------------------------------------------------------------
@@ -906,6 +983,8 @@ int Test4::Run()
     UpdateCPUTime();
 
     glfwPollEvents();
+
+    ProcessInput();
 
     UpdateScene();
 

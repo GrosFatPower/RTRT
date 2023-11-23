@@ -48,6 +48,21 @@ private:
     bool   _MiddleClick = false;
   };
 
+  struct Vertex
+  {
+    Vec4 _Position;
+    Vec2 _UV;
+    Vec4 _Color;
+    int  _MatID;
+  };
+
+  struct Attributes
+  {
+    Vec2 _UV;
+    Vec4 _Color;
+    int  _MatID;
+  };
+
   static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
   static void MousebuttonCallback(GLFWwindow * window, int button, int action, int mods);
   static void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
@@ -67,9 +82,15 @@ private:
   void RenderToSceen();
   void DrawUI();
 
+  void ProcessInput();
+
   void ResizeImageBuffers();
 
   float EdgeFunction(const Vec3 & iV1, const Vec3 & iV2, const Vec3 & iV3);
+
+  void VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Vec4 & oVertexPosition, Attributes & oAttrib );
+
+  void FragmentShader( const Vec4 & iCoord, const Attributes & iAttrib, Vec4 & oColor );
 
   GLFWwindow       * _MainWindow;
 
@@ -85,7 +106,7 @@ private:
 
   RenderSettings     _Settings;
 
-  bool               _UpdateImageTex = true;
+  bool               _ViewDepthBuffer = false;
   std::vector<Vec4>  _ColorBuffer;
   std::vector<float> _DepthBuffer;
 
