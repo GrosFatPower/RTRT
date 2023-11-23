@@ -48,12 +48,32 @@ public:
     return out;
   };
 
+  static Vec4 Min(const Vec4 & a, const Vec4 & b)
+  {
+    Vec4 out;
+    out.x = std::min(a.x, b.x);
+    out.y = std::min(a.y, b.y);
+    out.z = std::min(a.z, b.z);
+    out.w = std::min(a.w, b.w);
+    return out;
+  };
+
   static Vec3 Max(const Vec3& a, const Vec3& b)
   {
     Vec3 out;
     out.x = std::max(a.x, b.x);
     out.y = std::max(a.y, b.y);
     out.z = std::max(a.z, b.z);
+    return out;
+  };
+
+  static Vec4 Max(const Vec4& a, const Vec4& b)
+  {
+    Vec4 out;
+    out.x = std::max(a.x, b.x);
+    out.y = std::max(a.y, b.y);
+    out.z = std::max(a.z, b.z);
+    out.w = std::max(a.w, b.w);
     return out;
   };
 

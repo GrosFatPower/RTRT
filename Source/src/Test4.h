@@ -17,6 +17,7 @@ namespace RTRT
 class QuadMesh;
 class ShaderProgram;
 class Scene;
+class Material;
 
 class Test4
 {
@@ -50,17 +51,20 @@ private:
 
   struct Vertex
   {
-    Vec4 _Position;
-    Vec2 _UV;
-    Vec4 _Color;
-    int  _MatID;
+    Vec4             _Position;
+    Vec3             _Normal;
+    Vec2             _UV;
+    Vec4             _Color;
+    const Material * _Material = nullptr;
   };
 
   struct Attributes
   {
-    Vec2 _UV;
-    Vec4 _Color;
-    int  _MatID;
+    Vec3             _WorldPos;
+    Vec2             _UV;
+    Vec3             _Normal;
+    Vec4             _Color;
+    const Material * _Material = nullptr;
   };
 
   static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
@@ -90,7 +94,7 @@ private:
 
   void VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Vec4 & oVertexPosition, Attributes & oAttrib );
 
-  void FragmentShader( const Vec4 & iCoord, const Attributes & iAttrib, Vec4 & oColor );
+  void FragmentShader( const Vec4 & iFragCoord, const Attributes & iAttrib, Vec4 & oColor );
 
   GLFWwindow       * _MainWindow;
 

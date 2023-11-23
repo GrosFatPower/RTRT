@@ -26,7 +26,7 @@ constexpr std::execution::parallel_policy policy = std::execution::par;
 constexpr std::execution::sequenced_policy policy = std::execution::seq;
 #endif
 
-//#define SIMUL_RENDERING_PIPELINE
+#define SIMUL_RENDERING_PIPELINE
 
 namespace RTRT
 {
@@ -516,7 +516,9 @@ int Test4::UpdateImage()
 
   const std::vector<Vec3i>    & Indices   = _Scene -> GetIndices();
   const std::vector<Vec3>     & Vertices  = _Scene -> GetVertices();
+  const std::vector<Vec3>     & Normals   = _Scene -> GetNormals();
   const std::vector<Vec3>     & UVMatIDs  = _Scene -> GetUVMatID();
+  const std::vector<Material> & Materials = _Scene -> GetMaterials();
   const int nbTris = Indices.size() / 3;
 
   for ( int i = 0; i < nbTris; ++i )
@@ -526,20 +528,119 @@ int Test4::UpdateImage()
     Index[1] = Indices[i*3+1];
     Index[2] = Indices[i*3+2];
 
-    Vertex Vert[3];
+    Vec4 VertexPos[3];
+    Attributes Attrib[3];
+    Vec2 bboxMin(std::numeric_limits<float>::infinity());
+    Vec2 bboxMax = -bboxMin;
     for ( int j = 0; j < 3; ++j )
     {
-      Vert[j]._Position = Vec4(Vertices[Index[j].x], 1.f);
-      Vert[j]._UV       = Vec2(UVMatIDs[Index[j].z].x, UVMatIDs[Index[j].z].y);
-      Vert[j]._MatID    = (int)UVMatIDs[Index[j].z].z;
-      // ToDo
+      Vertex Vert;
+      Vert._Position = Vec4(Vertices[Index[j].x], 1.f);
+
+      if ( Index[j].y >= 0 )
+        Vert._Normal = Normals[Index[j].y];
+
+      if ( Index[j].z >= 0 )
+        Vert._UV = Vec2(UVMatIDs[Index[j].z].x, UVMatIDs[Index[j].z].y);
+
+      int matID = (int)UVMatIDs[Index[j].z].z;
+      if ( matID >= 0 )
+      {
+        Vert._Color    = Vec4(Materials[matID]._Albedo, 1.f);
+        Vert._Material = &Materials[matID];
+      }
+      else
+        Vert._Color    = Vec4(0.f);
+
+      VertexShader(Vert, MVP, VertexPos[j], Attrib[j]);
+
+      VertexPos[j].w = 1.f / VertexPos[j].w; // 1.f / -z
+      VertexPos[j].x *= VertexPos[j].w;      // X / -z
+      VertexPos[j].y *= VertexPos[j].w;      // Y / -z
+      VertexPos[j].z *= VertexPos[j].w;      // Z / -z
+
+      // Convert to raster space
+      VertexPos[j].x = ((VertexPos[j].x + 1.f) * .5f * width);
+      VertexPos[j].y = ((VertexPos[j].y + 1.f) * .5f * height);
+
+      if ( VertexPos[j].x < bboxMin.x )
+        bboxMin.x = VertexPos[j].x;
+      if ( VertexPos[j].y < bboxMin.y )
+        bboxMin.y = VertexPos[j].y;
+      if ( VertexPos[j].x > bboxMax.x )
+        bboxMax.x = VertexPos[j].x;
+      if ( VertexPos[j].y > bboxMax.y )
+        bboxMax.y = VertexPos[j].y;
     }
 
-    // ToDo
+    int xMin = std::max(0, std::min((int)std::floorf(bboxMin.x), width  - 1));
+    int yMin = std::max(0, std::min((int)std::floorf(bboxMin.y), height - 1));
+    int xMax = std::max(0, std::min((int)std::floorf(bboxMax.x), width  - 1)); 
+    int yMax = std::max(0, std::min((int)std::floorf(bboxMax.y), height - 1));
 
+    float invArea = 1.f / EdgeFunction(VertexPos[0], VertexPos[1], VertexPos[2]);
 
+    for ( int y = yMin; y <= yMax; ++y )
+    {
+      for ( int x = xMin; x <= xMax; ++x  )
+      {
+        Vec3 coord(x + .5f, y + .5f, 0.f);
+
+        float W[3];
+        W[0] = EdgeFunction(VertexPos[1], VertexPos[2], coord);
+        W[1] = EdgeFunction(VertexPos[2], VertexPos[0], coord);
+        W[2] = EdgeFunction(VertexPos[0], VertexPos[1], coord);
+
+        if ( ( W[0] < 0.f )
+          || ( W[1] < 0.f )
+          || ( W[2] < 0.f ) )
+            continue;
+
+        W[0] *= invArea;
+        W[1] *= invArea;
+        W[2] *= invArea;
+
+        // Perspective correction
+        W[0] *= VertexPos[0].w; // W0 / z0
+        W[1] *= VertexPos[1].w; // W1 / z1
+        W[2] *= VertexPos[2].w; // W2 / z2
+
+        float Z = 1.f / (W[0] + W[1] + W[2]);
+        if ( Z > _DepthBuffer[x + width * y] || ( Z < near) )
+          continue;
+
+        W[0] *= Z;
+        W[1] *= Z;
+        W[2] *= Z;
+
+        coord.z = W[0] * VertexPos[0].z + W[1] * VertexPos[1].z + W[2] * VertexPos[2].z;
+        coord.z = ( coord.z + 1.f ) * .5f;
+        if ( ( coord.z < 0.f ) || ( coord.z > 1.f ) )
+          continue;
+
+        // Interpolation
+        Vec4 fragCoord(coord, 1.f);
+        Attributes fragAttrib;
+        fragAttrib._Material = Attrib[0]._Material;
+        for ( int j = 0; j < 3; ++j )
+        {
+          fragCoord.w          = W[0] * VertexPos[0].w         + W[1] * VertexPos[1].w          + W[2] * VertexPos[2].w;
+          fragAttrib._WorldPos = W[0] * Attrib   [0]._WorldPos + W[1] * Attrib   [1]._WorldPos  + W[2] * Attrib   [2]._WorldPos;
+          fragAttrib._Normal   = W[0] * Attrib   [0]._Normal   + W[1] * Attrib   [1]._Normal    + W[2] * Attrib   [2]._Normal;
+          fragAttrib._UV       = W[0] * Attrib   [0]._UV       + W[1] * Attrib   [1]._UV        + W[2] * Attrib   [2]._UV;
+          fragAttrib._Color    = W[0] * Attrib   [0]._Color    + W[1] * Attrib   [1]._Color     + W[2] * Attrib   [2]._Color;
+
+          fragAttrib._Normal = glm::normalize(fragAttrib._Normal);
+        }
+
+        Vec4 fragColor(1.f);
+        FragmentShader(fragCoord, fragAttrib, fragColor);
+
+        _ColorBuffer[x + width * y] = fragColor;
+        _DepthBuffer[x + width * y] = Z;
+      }
+    }
   }
-
 
   _RenderImgElapsed = glfwGetTime() - startTime;
 
@@ -777,18 +878,58 @@ int Test4::UpdateImage()
 // ----------------------------------------------------------------------------
 void Test4::VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Vec4 & oVertexPosition, Attributes & oAttrib )
 {
-  oVertexPosition = iMVP * iVertex._Position;
-  oAttrib._UV     = iVertex._UV;
-  oAttrib._Color  = iVertex._Color;
-  oAttrib._MatID  = iVertex._MatID;
+  oVertexPosition   = iMVP * iVertex._Position;
+  oAttrib._WorldPos = iVertex._Position;
+  oAttrib._Normal   = iVertex._Normal;
+  oAttrib._UV       = iVertex._UV;
+  oAttrib._Color    = iVertex._Color;
+  oAttrib._Material = iVertex._Material;
 }
 
 // ----------------------------------------------------------------------------
 // FragmentShader
 // ----------------------------------------------------------------------------
-void Test4::FragmentShader( const Vec4 & iCoord, const Attributes & iAttrib, Vec4 & oColor )
+void Test4::FragmentShader( const Vec4 & iFragCoord, const Attributes & iAttrib, Vec4 & oColor )
 {
+  if ( _ViewDepthBuffer )
+  {
+    oColor = Vec4(Vec3(1.f - iFragCoord.z), 1.f);
+    return;
+  }
 
+  if ( iAttrib._Material )
+  {
+    const std::vector<Texture*> & Textures  = _Scene -> GetTextures();
+
+    Texture * tex = Textures[iAttrib._Material -> _BaseColorTexId];
+    if ( tex )
+      oColor = tex -> Sample(iAttrib._UV.x, iAttrib._UV.y);
+  }
+  else
+  {
+    oColor = iAttrib._Color;
+  }
+
+  // Shading
+  Light * light = _Scene -> GetLight(0);
+  if ( light )
+  {
+    float ambientStrength = .1f;
+    float diffuse = 0.f;
+    float specular = 0.f;
+
+    Vec3 dirToLight = glm::normalize(light ->_Pos - iAttrib._WorldPos);
+    diffuse = std::max(0.f, glm::dot(iAttrib._Normal, dirToLight));
+
+    Vec3 viewDir =  glm::normalize(_Scene -> GetCamera().GetPos() - iAttrib._WorldPos);
+    Vec3 reflectDir = glm::reflect(-dirToLight, iAttrib._Normal);
+
+    static float specularStrength = 0.5f;
+    specular = pow(std::max(glm::dot(viewDir, reflectDir), 0.f), 32) * specularStrength;
+
+    oColor *= std::min(diffuse+ambientStrength+specular, 1.f) * Vec4(glm::normalize(light -> _Emission), 1.f);
+    oColor = MathUtil::Min(oColor, Vec4(1.f));
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -796,9 +937,9 @@ void Test4::FragmentShader( const Vec4 & iCoord, const Attributes & iAttrib, Vec
 // ----------------------------------------------------------------------------
 int Test4::InitializeScene()
 {
-  //std::string sceneFile = "..\\..\\Assets\\TexturedBoxes.scene";
+  std::string sceneFile = "..\\..\\Assets\\TexturedBoxes.scene";
   //std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
-  std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
+  //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
 
   Scene * newScene = nullptr;
   if ( !Loader::LoadScene(sceneFile, newScene, _Settings) || !newScene )
