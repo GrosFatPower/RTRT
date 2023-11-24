@@ -510,6 +510,8 @@ int Test4::UpdateImage()
   float near, far;
   _Scene -> GetCamera().GetZNearFar(near, far);
 
+  _Uniforms._Light = _Scene -> GetLight(0);
+
   const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
   std::fill(policy, _ColorBuffer.begin(), _ColorBuffer.end(), backgroundColor);
   std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), far);
@@ -519,6 +521,7 @@ int Test4::UpdateImage()
   const std::vector<Vec3>     & Normals   = _Scene -> GetNormals();
   const std::vector<Vec3>     & UVMatIDs  = _Scene -> GetUVMatID();
   const std::vector<Material> & Materials = _Scene -> GetMaterials();
+  const std::vector<Texture*> & Textures  = _Scene -> GetTextures();
   const int nbTris = Indices.size() / 3;
 
   for ( int i = 0; i < nbTris; ++i )
@@ -528,8 +531,20 @@ int Test4::UpdateImage()
     Index[1] = Indices[i*3+1];
     Index[2] = Indices[i*3+2];
 
+    // Update uniforms
+    _Uniforms._Material = nullptr;
+    _Uniforms._Texture  = nullptr;
+
+    int matID = (int)UVMatIDs[Index[0].z].z;
+    if ( matID >= 0 )
+    {
+      _Uniforms._Material = &Materials[matID];
+      if ( _Uniforms._Material && ( _Uniforms._Material -> _BaseColorTexId >= 0 ) )
+        _Uniforms._Texture = Textures[(int)_Uniforms._Material -> _BaseColorTexId];
+    }
+
     Vec4 VertexPos[3];
-    Attributes Attrib[3];
+    Varying Attrib[3];
     Vec2 bboxMin(std::numeric_limits<float>::infinity());
     Vec2 bboxMax = -bboxMin;
     for ( int j = 0; j < 3; ++j )
@@ -545,10 +560,7 @@ int Test4::UpdateImage()
 
       int matID = (int)UVMatIDs[Index[j].z].z;
       if ( matID >= 0 )
-      {
         Vert._Color    = Vec4(Materials[matID]._Albedo, 1.f);
-        Vert._Material = &Materials[matID];
-      }
       else
         Vert._Color    = Vec4(0.f);
 
@@ -620,8 +632,7 @@ int Test4::UpdateImage()
 
         // Interpolation
         Vec4 fragCoord(coord, 1.f);
-        Attributes fragAttrib;
-        fragAttrib._Material = Attrib[0]._Material;
+        Varying fragAttrib;
         for ( int j = 0; j < 3; ++j )
         {
           fragCoord.w          = W[0] * VertexPos[0].w         + W[1] * VertexPos[1].w          + W[2] * VertexPos[2].w;
@@ -876,20 +887,19 @@ int Test4::UpdateImage()
 // ----------------------------------------------------------------------------
 // VertexShader
 // ----------------------------------------------------------------------------
-void Test4::VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Vec4 & oVertexPosition, Attributes & oAttrib )
+void Test4::VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Vec4 & oVertexPosition, Varying & oAttrib )
 {
   oVertexPosition   = iMVP * iVertex._Position;
   oAttrib._WorldPos = iVertex._Position;
   oAttrib._Normal   = iVertex._Normal;
   oAttrib._UV       = iVertex._UV;
   oAttrib._Color    = iVertex._Color;
-  oAttrib._Material = iVertex._Material;
 }
 
 // ----------------------------------------------------------------------------
 // FragmentShader
 // ----------------------------------------------------------------------------
-void Test4::FragmentShader( const Vec4 & iFragCoord, const Attributes & iAttrib, Vec4 & oColor )
+void Test4::FragmentShader( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor )
 {
   if ( _ViewDepthBuffer )
   {
@@ -897,13 +907,9 @@ void Test4::FragmentShader( const Vec4 & iFragCoord, const Attributes & iAttrib,
     return;
   }
 
-  if ( iAttrib._Material )
+  if ( _Uniforms._Texture )
   {
-    const std::vector<Texture*> & Textures  = _Scene -> GetTextures();
-
-    Texture * tex = Textures[iAttrib._Material -> _BaseColorTexId];
-    if ( tex )
-      oColor = tex -> Sample(iAttrib._UV.x, iAttrib._UV.y);
+    oColor = _Uniforms._Texture -> Sample(iAttrib._UV.x, iAttrib._UV.y);
   }
   else
   {
@@ -911,14 +917,13 @@ void Test4::FragmentShader( const Vec4 & iFragCoord, const Attributes & iAttrib,
   }
 
   // Shading
-  Light * light = _Scene -> GetLight(0);
-  if ( light )
+  if ( _Uniforms._Light )
   {
     float ambientStrength = .1f;
     float diffuse = 0.f;
     float specular = 0.f;
 
-    Vec3 dirToLight = glm::normalize(light ->_Pos - iAttrib._WorldPos);
+    Vec3 dirToLight = glm::normalize(_Uniforms._Light ->_Pos - iAttrib._WorldPos);
     diffuse = std::max(0.f, glm::dot(iAttrib._Normal, dirToLight));
 
     Vec3 viewDir =  glm::normalize(_Scene -> GetCamera().GetPos() - iAttrib._WorldPos);
@@ -927,7 +932,7 @@ void Test4::FragmentShader( const Vec4 & iFragCoord, const Attributes & iAttrib,
     static float specularStrength = 0.5f;
     specular = pow(std::max(glm::dot(viewDir, reflectDir), 0.f), 32) * specularStrength;
 
-    oColor *= std::min(diffuse+ambientStrength+specular, 1.f) * Vec4(glm::normalize(light -> _Emission), 1.f);
+    oColor *= std::min(diffuse+ambientStrength+specular, 1.f) * Vec4(glm::normalize(_Uniforms._Light -> _Emission), 1.f);
     oColor = MathUtil::Min(oColor, Vec4(1.f));
   }
 }
@@ -938,8 +943,10 @@ void Test4::FragmentShader( const Vec4 & iFragCoord, const Attributes & iAttrib,
 int Test4::InitializeScene()
 {
   std::string sceneFile = "..\\..\\Assets\\TexturedBoxes.scene";
+  //std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene.scene";
   //std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
   //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
+  //std::string sceneFile = "..\\..\\Assets\\teapot.scene";
 
   Scene * newScene = nullptr;
   if ( !Loader::LoadScene(sceneFile, newScene, _Settings) || !newScene )

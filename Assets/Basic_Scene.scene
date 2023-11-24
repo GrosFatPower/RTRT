@@ -1,0 +1,45 @@
+renderer
+{
+	resolution 800 800
+	enablebackground true
+	#background skyboxes/alps_field_2k.hdr
+	bounces 3
+}
+
+camera
+{
+	position 5.0 2.0 8.0
+	lookat 0.0 0.0 0.0
+	fov 80
+}
+
+light
+{
+	type sphere
+	position 2 3 3
+	emission 4. 4. 4.
+	radius .2
+}
+
+material Book1
+{
+	albedotexture diningroom/textures/book1.jpg
+}
+
+material WoodenBox
+{
+	albedotexture diningroom/textures/box.jpg
+	roughness 0.1
+}
+
+mesh
+{
+	file diningroom/book1.obj
+	material Book1
+}
+
+mesh
+{
+	file diningroom/bucket1.obj
+	material WoodenBox
+}

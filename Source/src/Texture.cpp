@@ -84,7 +84,7 @@ bool Texture::Resize( int iWidth, int iHeight )
   return false;
 }
 
-Vec4 Texture::Sample( float iU, float iV )
+Vec4 Texture::Sample( float iU, float iV ) const
 {
   Vec4 sample(0.f);
 
