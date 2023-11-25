@@ -14,6 +14,8 @@ camera
 	position .276 .275 -.75
 	lookat .276 .275 .10
 	fov 50
+  near 0.1
+  far 100
 }
 
 material ceiling_white

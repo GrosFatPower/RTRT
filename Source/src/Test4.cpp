@@ -942,10 +942,10 @@ void Test4::FragmentShader( const Vec4 & iFragCoord, const Varying & iAttrib, Ve
 // ----------------------------------------------------------------------------
 int Test4::InitializeScene()
 {
-  std::string sceneFile = "..\\..\\Assets\\TexturedBoxes.scene";
+  //std::string sceneFile = "..\\..\\Assets\\TexturedBoxes.scene";
   //std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene.scene";
   //std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
-  //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
+  std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
   //std::string sceneFile = "..\\..\\Assets\\teapot.scene";
 
   Scene * newScene = nullptr;

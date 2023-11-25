@@ -634,6 +634,8 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
   float fov = 80.f;
   float focalDist = -1.f;
   float aperture  = -1.f;
+  float near = -1.f;
+  float far  = -1.f;
 
   Mat4x4 xform;
   bool hasMatrix = false;
@@ -706,6 +708,20 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
       else
         parsingError++;
     }
+    else if ( "near" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        near = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( "far" == tokens[0] )
+    {
+      if ( 2 == nbTokens )
+        far = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
     else if ( "matrix" == tokens[0] )
     {
       if ( 17 == nbTokens )
@@ -750,6 +766,19 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
       newCamera.SetAperture(aperture);
     if ( focalDist >= 0 )
       newCamera.SetFocalDist(focalDist);
+
+    if ( ( near > 0.f ) || ( far > 0.f ) )
+    {
+      float nNear, nFar;
+      newCamera.GetZNearFar(nNear, nFar);
+
+      if ( near > 0.f )
+        nNear = near;
+      if ( far > 0.f )
+        nFar = far;
+
+      newCamera.SetZNearFar(nNear, nFar);
+    }
 
     ioScene.SetCamera(newCamera);
   }
