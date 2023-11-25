@@ -143,15 +143,19 @@ void Camera::ComputeLookAtMatrix( Mat4x4 & oM )
 #endif
 }
 
-void Camera::ComputePerspectiveProjMatrix( float iAspectRatio, Mat4x4 & oM )
+void Camera::ComputePerspectiveProjMatrix( float iAspectRatio, Mat4x4 & oM, float * oTop, float * oRight )
 {
   float vFOV = ComputeVerticalFOV(iAspectRatio);
   float top = _ZNear * tanf(vFOV);
   float right = top * iAspectRatio;
 
   ComputeFrustum(-right, right, -top, top, _ZNear, _ZFar, oM);
-}
 
+  if ( oTop )
+    *oTop = top;
+  if ( oRight )
+    *oRight = right;
+}
 
 void Camera::ComputeFrustum( float iLeft, float iRight, float iBottom, float iTop, float iZNear, float iZFar, Mat4x4 & oM )
 {

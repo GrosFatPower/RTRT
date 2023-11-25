@@ -69,9 +69,11 @@ private:
 
   struct Uniform
   {
-    const Material * _Material = nullptr;
-    const Texture  * _Texture  = nullptr;
-    const Light    * _Light    = nullptr;
+    const Material * _Material       = nullptr;
+    const Texture  * _Texture        = nullptr;
+    const Light    * _Light          = nullptr;
+    const Texture  * _SkyBox         = nullptr;
+    float            _SkyBoxRotation = 0.f;
   };
 
   static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
@@ -101,7 +103,9 @@ private:
 
   void VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Vec4 & oVertexPosition, Varying & oAttrib );
 
-  void FragmentShader( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor );
+  void FragmentShader_Scene( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor );
+
+  Vec4 SampleSkybox( const Vec3 & iDir );
 
   GLFWwindow       * _MainWindow;
 

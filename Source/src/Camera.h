@@ -52,7 +52,7 @@ public:
   void ComputeLookAtMatrix( Mat4x4 & oM );
 
   // Perspective projection matrix, column-major / RH / vertival fov in degrees / Z [-1,1]
-  void ComputePerspectiveProjMatrix( float iAspectRatio, Mat4x4 & oM );
+  void ComputePerspectiveProjMatrix( float iAspectRatio, Mat4x4 & oM, float * oTop = nullptr, float * oRight = nullptr );
 
   // Frustum matrix, column-major / RH / vertival fov in degrees / Z [-1,1]
   void ComputeFrustum( float iLeft, float iRight, float iBottom, float iTop, float iZNear, float iZFar, Mat4x4 & oM );

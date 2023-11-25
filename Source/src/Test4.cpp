@@ -30,6 +30,10 @@ constexpr std::execution::sequenced_policy policy = std::execution::seq;
 
 namespace RTRT
 {
+// ----------------------------------------------------------------------------
+// Global variables
+// ----------------------------------------------------------------------------
+static std::string g_AssetsDir = "..\\..\\Assets\\";
 
 // ----------------------------------------------------------------------------
 // KeyCallback
@@ -79,6 +83,8 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
       this_ -> _KeyState._KeyRight = false; break;
     case GLFW_KEY_Y:
       this_ -> _ViewDepthBuffer = !this_ -> _ViewDepthBuffer; break;
+    case GLFW_KEY_B:
+      this_ -> _Settings._EnableBackGround = !this_ -> _Settings._EnableBackGround; break;
     case GLFW_KEY_LEFT_CONTROL:
       this_ -> _KeyState._KeyLeftCTRL = false; break;
     case GLFW_KEY_PAGE_DOWN:
@@ -502,8 +508,9 @@ int Test4::UpdateImage()
   Mat4x4 MV;
   _Scene -> GetCamera().ComputeLookAtMatrix(MV);
 
+  float top, right;
   Mat4x4 P;
-  _Scene -> GetCamera().ComputePerspectiveProjMatrix(ratio, P);
+  _Scene -> GetCamera().ComputePerspectiveProjMatrix(ratio, P, &top, &right);
 
   Mat4x4 MVP = P * MV;
 
@@ -515,6 +522,23 @@ int Test4::UpdateImage()
   const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
   std::fill(policy, _ColorBuffer.begin(), _ColorBuffer.end(), backgroundColor);
   std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), far);
+
+  if ( _Settings._EnableBackGround )
+  {
+    Vec3 bottomLeft = _Scene -> GetCamera().GetForward() * near - right * _Scene -> GetCamera().GetRight() - top * _Scene -> GetCamera().GetUp();
+    Vec3 dX = _Scene -> GetCamera().GetRight() * ( 2 * right / width );
+    Vec3 dY = _Scene -> GetCamera().GetUp() * ( 2 * top / height );
+
+    for ( int y = 0; y < height; ++y )
+    {
+      //#pragma omp parallel for
+      for ( int x = 0; x < width; ++x  )
+      {
+        Vec3 worldP = glm::normalize(bottomLeft + dX * (float)x + dY * (float)y);
+        _ColorBuffer[x + width * y] = SampleSkybox(worldP);
+      }
+    }
+  }
 
   const std::vector<Vec3i>    & Indices   = _Scene -> GetIndices();
   const std::vector<Vec3>     & Vertices  = _Scene -> GetVertices();
@@ -645,7 +669,7 @@ int Test4::UpdateImage()
         }
 
         Vec4 fragColor(1.f);
-        FragmentShader(fragCoord, fragAttrib, fragColor);
+        FragmentShader_Scene(fragCoord, fragAttrib, fragColor);
 
         _ColorBuffer[x + width * y] = fragColor;
         _DepthBuffer[x + width * y] = Z;
@@ -897,9 +921,9 @@ void Test4::VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Vec4 & oVer
 }
 
 // ----------------------------------------------------------------------------
-// FragmentShader
+// FragmentShader_Scene
 // ----------------------------------------------------------------------------
-void Test4::FragmentShader( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor )
+void Test4::FragmentShader_Scene( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor )
 {
   if ( _ViewDepthBuffer )
   {
@@ -938,15 +962,32 @@ void Test4::FragmentShader( const Vec4 & iFragCoord, const Varying & iAttrib, Ve
 }
 
 // ----------------------------------------------------------------------------
+// FragmentShader_Scene
+// ----------------------------------------------------------------------------
+Vec4 Test4::SampleSkybox( const Vec3 & iDir )
+{
+  if ( _Uniforms._SkyBox )
+  {
+    float theta = std::asin(iDir.y);
+    float phi   = std::atan2(iDir.z, iDir.x);
+    Vec2 uv = Vec2(.5f + phi * M_1_PI * .5f, .5f - theta * M_1_PI) + Vec2(_Uniforms._SkyBoxRotation, 0.0);
+
+    return _Uniforms._SkyBox -> Sample(uv.x, uv.y);
+  }
+
+  return Vec4(0.f);
+}
+
+// ----------------------------------------------------------------------------
 // InitializeScene
 // ----------------------------------------------------------------------------
 int Test4::InitializeScene()
 {
-  //std::string sceneFile = "..\\..\\Assets\\TexturedBoxes.scene";
-  //std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene.scene";
-  //std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
-  std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
-  //std::string sceneFile = "..\\..\\Assets\\teapot.scene";
+  //std::string sceneFile = g_AssetsDir + "TexturedBoxes.scene";
+  //std::string sceneFile = g_AssetsDir + "BasicRT_Scene.scene";
+  //std::string sceneFile = g_AssetsDir + "TexturedBox.scene";
+  std::string sceneFile = g_AssetsDir + "my_cornell_box.scene";
+  //std::string sceneFile = g_AssetsDir + "teapot.scene";
 
   Scene * newScene = nullptr;
   if ( !Loader::LoadScene(sceneFile, newScene, _Settings) || !newScene )
@@ -962,6 +1003,21 @@ int Test4::InitializeScene()
   {
     Light newLight;
     _Scene -> AddLight(newLight);
+  }
+
+  // Loading sky box
+  int skyboxID =_Scene -> AddTexture(g_AssetsDir + "skyboxes\\alps_field_2k.hdr", 4, TexFormat::TEX_FLOAT);
+  {
+    std::vector<Texture*> & textures = _Scene -> GetTextures();
+
+    Texture * skyboxTexture = textures[skyboxID];
+    if ( skyboxTexture )
+    {
+      _Uniforms._SkyBox = skyboxTexture;
+      _Uniforms._SkyBoxRotation = _Settings._SkyBoxRotation;
+    }
+    else
+      return 1;
   }
 
   _Scene -> CompileMeshData(_Settings._TextureSize);
