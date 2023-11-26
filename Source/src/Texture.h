@@ -34,7 +34,9 @@ public:
 
   const std::string & Filename() const { return _Filename; }
 
-  Vec4 Sample( float iU, float iV ) const;
+  Vec4 Sample( int iX, int iY ) const;
+  Vec4 Sample( Vec2 iUV ) const;
+  Vec4 BiLinearSample( Vec2 iUV ) const;
 
 private:
   int             _TexID        = -1;

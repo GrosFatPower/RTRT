@@ -91,6 +91,9 @@ private:
   int UpdateTextures();
   int UpdateScene();
 
+  int RenderBackground( float iTop, float iRight );
+  int RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP );
+
   void RenderToTexture();
   void RenderToSceen();
   void DrawUI();
@@ -121,7 +124,8 @@ private:
 
   RenderSettings     _Settings;
 
-  bool               _ViewDepthBuffer = false;
+  bool               _ViewDepthBuffer  = false;
+  bool               _BilinearSampling = true;
   std::vector<Vec4>  _ColorBuffer;
   std::vector<float> _DepthBuffer;
 
@@ -133,6 +137,8 @@ private:
   // Frame rate
   double             _CPULoopTime          = 0.f;
   double             _RenderImgElapsed     = 0.f;
+  double             _RenderBgdElapsed     = 0.f;
+  double             _RenderScnElapsed     = 0.f;
   double             _RTTElapsed           = 0.f;
   double             _RTSElapsed           = 0.f;
   double             _FrameRate            = 0.f;

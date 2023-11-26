@@ -84,19 +84,13 @@ bool Texture::Resize( int iWidth, int iHeight )
   return false;
 }
 
-Vec4 Texture::Sample( float iU, float iV ) const
+Vec4 Texture::Sample( int iX, int iY ) const
 {
-  Vec4 sample(0.f);
+  Vec4 sample(1.f);
 
   if ( _TexData )
   {
-    float u = ( iU - std::floor(iU) ) * ( _Width - 1 );
-    float v = ( iV - std::floor(iV) ) * ( _Height - 1 );
-
-    int x = (int)std::floor(u);
-    int y = (int)std::floor(v);
-
-    int index = ( x + y * _Width ) * _NbComponents;
+    int index = ( iX + iY * _Width ) * _NbComponents;
     if ( _NbComponents >= 1 )
     {
       if ( _Format == TexFormat::TEX_FLOAT )
@@ -128,6 +122,37 @@ Vec4 Texture::Sample( float iU, float iV ) const
   }
 
   return sample;
+}
+
+Vec4 Texture::Sample( Vec2 iUV ) const
+{
+  iUV.x = ( iUV.x - std::floor(iUV.x) ) * ( _Width - 1 );
+  iUV.y = ( iUV.y - std::floor(iUV.y) ) * ( _Height - 1 );
+
+  int x = (int)std::floor(iUV.x);
+  int y = (int)std::floor(iUV.y);
+
+  return Sample(x, y);
+}
+
+Vec4 Texture::BiLinearSample( Vec2 iUV ) const
+{
+  iUV.x = ( iUV.x - std::floor(iUV.x) ) * ( _Width - 1 );
+  iUV.y = ( iUV.y - std::floor(iUV.y) ) * ( _Height - 1 );
+
+  int x = (int)std::floor(iUV.x);
+  int y = (int)std::floor(iUV.y);
+
+  float uf = iUV.x - x;
+  float vf = iUV.y - y;
+
+  Vec4 Samples[4];
+  Samples[0] = Sample(x, y);
+  Samples[1] = Sample(std::min(x+1,_Width-1), y);
+  Samples[2] = Sample(x, std::min(y+1,_Height-1));
+  Samples[3] = Sample(std::min(x+1,_Width-1), std::min(y+1,_Height-1));
+
+  return glm::mix( glm::mix(Samples[0], Samples[1], uf), glm::mix(Samples[2], Samples[3], uf), vf );
 }
 
 }

@@ -83,6 +83,8 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
       this_ -> _KeyState._KeyRight = false; break;
     case GLFW_KEY_Y:
       this_ -> _ViewDepthBuffer = !this_ -> _ViewDepthBuffer; break;
+    case GLFW_KEY_T:
+      this_ -> _BilinearSampling = !this_ -> _BilinearSampling; break;
     case GLFW_KEY_B:
       this_ -> _Settings._EnableBackGround = !this_ -> _Settings._EnableBackGround; break;
     case GLFW_KEY_LEFT_CONTROL:
@@ -470,6 +472,8 @@ void Test4::DrawUI()
 
     ImGui::Text("Render time : %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
     ImGui::Text("Render image : %.3f ms/frame", _RenderImgElapsed * 1000.f);
+    ImGui::Text("Render background : %.3f ms/frame", _RenderBgdElapsed * 1000.f);
+    ImGui::Text("Render scene : %.3f ms/frame", _RenderScnElapsed * 1000.f);
     ImGui::Text("Render to texture : %.3f ms/frame", _RTTElapsed * 1000.f);
     ImGui::Text("Render to screen : %.3f ms/frame", _RTSElapsed * 1000.f);
 
@@ -493,41 +497,23 @@ void Test4::DrawUI()
 }
 
 // ----------------------------------------------------------------------------
-// UpdateImage
+// RenderBackground
 // ----------------------------------------------------------------------------
-#ifdef SIMUL_RENDERING_PIPELINE
-int Test4::UpdateImage()
+int Test4::RenderBackground( float iTop, float iRight )
 {
   double startTime = glfwGetTime();
 
   int width  = _Settings._RenderResolution.x;
   int height = _Settings._RenderResolution.y;
-  int size = width * height;
-  float ratio = width / float(height);
-
-  Mat4x4 MV;
-  _Scene -> GetCamera().ComputeLookAtMatrix(MV);
-
-  float top, right;
-  Mat4x4 P;
-  _Scene -> GetCamera().ComputePerspectiveProjMatrix(ratio, P, &top, &right);
-
-  Mat4x4 MVP = P * MV;
 
   float near, far;
   _Scene -> GetCamera().GetZNearFar(near, far);
 
-  _Uniforms._Light = _Scene -> GetLight(0);
-
-  const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
-  std::fill(policy, _ColorBuffer.begin(), _ColorBuffer.end(), backgroundColor);
-  std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), far);
-
   if ( _Settings._EnableBackGround )
   {
-    Vec3 bottomLeft = _Scene -> GetCamera().GetForward() * near - right * _Scene -> GetCamera().GetRight() - top * _Scene -> GetCamera().GetUp();
-    Vec3 dX = _Scene -> GetCamera().GetRight() * ( 2 * right / width );
-    Vec3 dY = _Scene -> GetCamera().GetUp() * ( 2 * top / height );
+    Vec3 bottomLeft = _Scene -> GetCamera().GetForward() * near - iRight * _Scene -> GetCamera().GetRight() - iTop * _Scene -> GetCamera().GetUp();
+    Vec3 dX = _Scene -> GetCamera().GetRight() * ( 2 * iRight / width );
+    Vec3 dY = _Scene -> GetCamera().GetUp() * ( 2 * iTop / height );
 
     for ( int y = 0; y < height; ++y )
     {
@@ -539,6 +525,33 @@ int Test4::UpdateImage()
       }
     }
   }
+  else
+  {
+    const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
+    std::fill(policy, _ColorBuffer.begin(), _ColorBuffer.end(), backgroundColor);
+  }
+
+  _RenderBgdElapsed = glfwGetTime() - startTime;
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// RenderScene
+// ----------------------------------------------------------------------------
+#ifdef SIMUL_RENDERING_PIPELINE
+int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
+{
+  double startTime = glfwGetTime();
+
+  int width  = _Settings._RenderResolution.x;
+  int height = _Settings._RenderResolution.y;
+  float ratio = width / float(height);
+
+  Mat4x4 MVP = iP * iMV;
+
+  float near, far;
+  _Scene -> GetCamera().GetZNearFar(near, far);
 
   const std::vector<Vec3i>    & Indices   = _Scene -> GetIndices();
   const std::vector<Vec3>     & Vertices  = _Scene -> GetVertices();
@@ -547,6 +560,8 @@ int Test4::UpdateImage()
   const std::vector<Material> & Materials = _Scene -> GetMaterials();
   const std::vector<Texture*> & Textures  = _Scene -> GetTextures();
   const int nbTris = Indices.size() / 3;
+
+  std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), far);
 
   for ( int i = 0; i < nbTris; ++i )
   {
@@ -677,29 +692,20 @@ int Test4::UpdateImage()
     }
   }
 
-  _RenderImgElapsed = glfwGetTime() - startTime;
+  _RenderScnElapsed = glfwGetTime() - startTime;
 
   return 0;
 }
 #else
-int Test4::UpdateImage()
+int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
 {
   double startTime = glfwGetTime();
 
   int width  = _Settings._RenderResolution.x;
   int height = _Settings._RenderResolution.y;
-  int size = width * height;
   float ratio = width / float(height);
 
-  Mat4x4 MV;
-  _Scene -> GetCamera().ComputeLookAtMatrix(MV);
-
-  Mat4x4 P;
-  _Scene -> GetCamera().ComputePerspectiveProjMatrix(ratio, P);
-
-  Mat4x4 MVTrInv = glm::transpose(glm::inverse(MV));
-
-  Mat4x4 MVP = P * MV;
+  Mat4x4 MVP = iP * iMV;
 
   float near, far;
   _Scene -> GetCamera().GetZNearFar(near, far);
@@ -717,8 +723,6 @@ int Test4::UpdateImage()
   const Vec3 G = { 0.f, 1.f, 0.f };
   const Vec3 B = { 0.f, 0.f, 1.f };
 
-  const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
-  std::fill(policy, _ColorBuffer.begin(), _ColorBuffer.end(), backgroundColor);
   //std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), 1.f);
   std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), far);
 
@@ -732,9 +736,9 @@ int Test4::UpdateImage()
     //#pragma omp for
     for ( int i = 0; i < nbVertices; ++i )
     {
-      CamVerts[i] = MV * Vec4(vertices[i], 1.f);
+      CamVerts[i] = iMV * Vec4(vertices[i], 1.f);
 
-      Vec4 projVert = P * CamVerts[i];
+      Vec4 projVert = iP * CamVerts[i];
       projVert.w = 1.f / projVert.w; // 1.f / -z
       projVert.x *= projVert.w;      // X / -z
       projVert.y *= projVert.w;      // Y / -z
@@ -832,12 +836,18 @@ int Test4::UpdateImage()
 
               if ( Mat[0]._BaseColorTexId >= 0 )
               {
-                float u = W[0] * UVMatID[0].x + W[1] * UVMatID[1].x + W[2] * UVMatID[2].x;
-                float v = W[0] * UVMatID[0].y + W[1] * UVMatID[1].y + W[2] * UVMatID[2].y;
+                Vec2 uv;
+                uv.x = W[0] * UVMatID[0].x + W[1] * UVMatID[1].x + W[2] * UVMatID[2].x;
+                uv.y = W[0] * UVMatID[0].y + W[1] * UVMatID[1].y + W[2] * UVMatID[2].y;
               
                 Texture * tex = textures[Mat[0]._BaseColorTexId];
                 if ( tex )
-                  color = tex -> Sample(u, v);
+                {
+                  if ( _BilinearSampling )
+                    color = tex -> BiLinearSample(uv);
+                  else
+                    color = tex -> Sample(uv);
+                }
               }
               else
               {
@@ -902,11 +912,43 @@ int Test4::UpdateImage()
     }
   }
 
-  _RenderImgElapsed = glfwGetTime() - startTime;
+  _RenderScnElapsed = glfwGetTime() - startTime;
 
   return 0;
 }
 #endif
+
+// ----------------------------------------------------------------------------
+// UpdateImage
+// ----------------------------------------------------------------------------
+int Test4::UpdateImage()
+{
+  double startTime = glfwGetTime();
+
+  int width  = _Settings._RenderResolution.x;
+  int height = _Settings._RenderResolution.y;
+  float ratio = width / float(height);
+
+  Mat4x4 MV;
+  _Scene -> GetCamera().ComputeLookAtMatrix(MV);
+
+  float top, right;
+  Mat4x4 P;
+  _Scene -> GetCamera().ComputePerspectiveProjMatrix(ratio, P, &top, &right);
+
+  Mat4x4 MVP = P * MV;
+
+  float near, far;
+  _Scene -> GetCamera().GetZNearFar(near, far);
+
+  RenderBackground(top, right);
+
+  RenderScene(MV, P);
+
+  _RenderImgElapsed = glfwGetTime() - startTime;
+
+  return 0;
+}
 
 // ----------------------------------------------------------------------------
 // VertexShader
@@ -933,7 +975,10 @@ void Test4::FragmentShader_Scene( const Vec4 & iFragCoord, const Varying & iAttr
 
   if ( _Uniforms._Texture )
   {
-    oColor = _Uniforms._Texture -> Sample(iAttrib._UV.x, iAttrib._UV.y);
+    if ( _BilinearSampling )
+      oColor = _Uniforms._Texture -> BiLinearSample(iAttrib._UV);
+    else
+      oColor = _Uniforms._Texture -> Sample(iAttrib._UV);
   }
   else
   {
@@ -972,7 +1017,10 @@ Vec4 Test4::SampleSkybox( const Vec3 & iDir )
     float phi   = std::atan2(iDir.z, iDir.x);
     Vec2 uv = Vec2(.5f + phi * M_1_PI * .5f, .5f - theta * M_1_PI) + Vec2(_Uniforms._SkyBoxRotation, 0.0);
 
-    return _Uniforms._SkyBox -> Sample(uv.x, uv.y);
+    if ( _BilinearSampling )
+      return _Uniforms._SkyBox -> BiLinearSample(uv);
+    else
+      return _Uniforms._SkyBox -> Sample(uv);
   }
 
   return Vec4(0.f);
@@ -984,9 +1032,9 @@ Vec4 Test4::SampleSkybox( const Vec3 & iDir )
 int Test4::InitializeScene()
 {
   //std::string sceneFile = g_AssetsDir + "TexturedBoxes.scene";
-  //std::string sceneFile = g_AssetsDir + "BasicRT_Scene.scene";
+  std::string sceneFile = g_AssetsDir + "BasicRT_Scene.scene";
   //std::string sceneFile = g_AssetsDir + "TexturedBox.scene";
-  std::string sceneFile = g_AssetsDir + "my_cornell_box.scene";
+  //std::string sceneFile = g_AssetsDir + "my_cornell_box.scene";
   //std::string sceneFile = g_AssetsDir + "teapot.scene";
 
   Scene * newScene = nullptr;
@@ -1003,7 +1051,9 @@ int Test4::InitializeScene()
   {
     Light newLight;
     _Scene -> AddLight(newLight);
+    firstLight = _Scene -> GetLight(0);
   }
+  _Uniforms._Light = firstLight;
 
   // Loading sky box
   int skyboxID =_Scene -> AddTexture(g_AssetsDir + "skyboxes\\alps_field_2k.hdr", 4, TexFormat::TEX_FLOAT);
