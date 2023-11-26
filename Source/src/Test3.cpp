@@ -59,6 +59,8 @@ void Test3::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
       this_ -> _KeyLeft =  ( action == GLFW_PRESS ); break;
     case GLFW_KEY_D:
       this_ -> _KeyRight = ( action == GLFW_PRESS ); break;
+    case GLFW_KEY_ESCAPE:
+      this_ -> _KeyEsc = ( action == GLFW_PRESS ); break;
     default :
       break;
     }
@@ -1200,7 +1202,7 @@ int Test3::Run()
   glBindTexture(GL_TEXTURE_2D, 0);
 
   _CPULoopTime = glfwGetTime();
-  while (!glfwWindowShouldClose(_MainWindow))
+  while (!glfwWindowShouldClose(_MainWindow) && !_KeyEsc)
   {
     _FrameNum++;
 

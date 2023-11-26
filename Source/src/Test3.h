@@ -119,6 +119,7 @@ private:
   bool            _KeyDown              = false;
   bool            _KeyLeft              = false;
   bool            _KeyRight             = false;
+  bool            _KeyEsc               = false;
 
   Scene         * _Scene                  = nullptr;
   RenderSettings  _Settings;
