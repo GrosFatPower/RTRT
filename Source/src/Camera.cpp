@@ -191,7 +191,10 @@ void Camera::ComputeFrustum( float iLeft, float iRight, float iBottom, float iTo
 
 float Camera::ComputeVerticalFOV( float iAspectRatio ) const
 {
-  return 2.f * atanf(tanf(_FOV * .5f) / iAspectRatio);
+  if ( iAspectRatio > 1.f )
+    return 2.f * atanf(tanf(_FOV * .5f) / iAspectRatio);
+  else
+    return 2.f * atanf(tanf(_FOV * .5f) * iAspectRatio);
 }
 
 }
