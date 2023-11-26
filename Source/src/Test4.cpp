@@ -60,6 +60,8 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
       this_ -> _KeyState._KeyRight = true; break;
     case GLFW_KEY_LEFT_CONTROL:
       this_ -> _KeyState._KeyLeftCTRL = true; break;
+    case GLFW_KEY_ESCAPE:
+      this_ -> _KeyState._KeyEsc = true; break;
     default :
       break;
     }
@@ -89,6 +91,8 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
       this_ -> _Settings._EnableBackGround = !this_ -> _Settings._EnableBackGround; break;
     case GLFW_KEY_LEFT_CONTROL:
       this_ -> _KeyState._KeyLeftCTRL = false; break;
+    case GLFW_KEY_ESCAPE:
+      this_ -> _KeyState._KeyEsc = false; break;
     case GLFW_KEY_PAGE_DOWN:
     {
       this_ -> _Settings._RenderScale = std::max(this_ -> _Settings._RenderScale - 5, 5);
@@ -1232,7 +1236,7 @@ int Test4::Run()
   //ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   _CPULoopTime = glfwGetTime();
-  while (!glfwWindowShouldClose(_MainWindow))
+  while ( !glfwWindowShouldClose(_MainWindow) && !_KeyState._KeyEsc )
   {
     UpdateCPUTime();
 

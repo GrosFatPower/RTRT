@@ -38,6 +38,7 @@ private:
     bool _KeyLeft     = false;
     bool _KeyRight    = false;
     bool _KeyLeftCTRL = false;
+    bool _KeyEsc      = false;
   };
 
   struct MouseState
