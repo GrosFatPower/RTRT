@@ -1036,10 +1036,14 @@ Vec4 Test4::SampleSkybox( const Vec3 & iDir )
 int Test4::InitializeScene()
 {
   //std::string sceneFile = g_AssetsDir + "TexturedBoxes.scene";
-  std::string sceneFile = g_AssetsDir + "BasicRT_Scene.scene";
+  //std::string sceneFile = g_AssetsDir + "BasicRT_Scene.scene";
   //std::string sceneFile = g_AssetsDir + "TexturedBox.scene";
   //std::string sceneFile = g_AssetsDir + "my_cornell_box.scene";
   //std::string sceneFile = g_AssetsDir + "teapot.scene";
+  //std::string sceneFile = g_AssetsDir + "test_veach.scene";
+  //std::string sceneFile = g_AssetsDir + "diningroom.scene";
+  //std::string sceneFile = g_AssetsDir + "bedroom.scene";
+  std::string sceneFile = g_AssetsDir + "tropical_island.scene";
 
   Scene * newScene = nullptr;
   if ( !Loader::LoadScene(sceneFile, newScene, _Settings) || !newScene )
