@@ -52,6 +52,12 @@ private:
     bool   _MiddleClick = false;
   };
 
+  enum class ShadingType
+  {
+    Flat = 0,
+    Phong
+  };
+
   struct Vertex
   {
     Vec4             _Position;
@@ -127,6 +133,7 @@ private:
 
   bool               _ViewDepthBuffer  = false;
   bool               _BilinearSampling = true;
+  ShadingType        _ShadingType = ShadingType::Phong;
   std::vector<Vec4>  _ColorBuffer;
   std::vector<float> _DepthBuffer;
 

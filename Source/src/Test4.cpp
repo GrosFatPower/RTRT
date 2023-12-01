@@ -87,6 +87,8 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
       this_ -> _ViewDepthBuffer = !this_ -> _ViewDepthBuffer; break;
     case GLFW_KEY_T:
       this_ -> _BilinearSampling = !this_ -> _BilinearSampling; break;
+    case GLFW_KEY_L:
+      this_ -> _ShadingType = ( ShadingType::Flat == this_ -> _ShadingType ) ? ( ShadingType::Phong ) : ( ShadingType::Flat ); break;
     case GLFW_KEY_B:
       this_ -> _Settings._EnableBackGround = !this_ -> _Settings._EnableBackGround; break;
     case GLFW_KEY_LEFT_CONTROL:
@@ -586,28 +588,28 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
         _Uniforms._Texture = Textures[(int)_Uniforms._Material -> _BaseColorTexId];
     }
 
+    Vertex Verts[3];
     Vec4 VertexPos[3];
     Varying Attrib[3];
     Vec2 bboxMin(std::numeric_limits<float>::infinity());
     Vec2 bboxMax = -bboxMin;
     for ( int j = 0; j < 3; ++j )
     {
-      Vertex Vert;
-      Vert._Position = Vec4(Vertices[Index[j].x], 1.f);
+      Verts[j]._Position = Vec4(Vertices[Index[j].x], 1.f);
 
       if ( Index[j].y >= 0 )
-        Vert._Normal = Normals[Index[j].y];
+        Verts[j]._Normal = Normals[Index[j].y];
 
       if ( Index[j].z >= 0 )
-        Vert._UV = Vec2(UVMatIDs[Index[j].z].x, UVMatIDs[Index[j].z].y);
+        Verts[j]._UV = Vec2(UVMatIDs[Index[j].z].x, UVMatIDs[Index[j].z].y);
 
       int matID = (int)UVMatIDs[Index[j].z].z;
       if ( matID >= 0 )
-        Vert._Color    = Vec4(Materials[matID]._Albedo, 1.f);
+        Verts[j]._Color    = Vec4(Materials[matID]._Albedo, 1.f);
       else
-        Vert._Color    = Vec4(0.f);
+        Verts[j]._Color    = Vec4(0.f);
 
-      VertexShader(Vert, MVP, VertexPos[j], Attrib[j]);
+      VertexShader(Verts[j], MVP, VertexPos[j], Attrib[j]);
 
       VertexPos[j].w = 1.f / VertexPos[j].w; // 1.f / -z
       VertexPos[j].x *= VertexPos[j].w;      // X / -z
@@ -676,16 +678,22 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
         // Interpolation
         Vec4 fragCoord(coord, 1.f);
         Varying fragAttrib;
-        for ( int j = 0; j < 3; ++j )
-        {
-          fragCoord.w          = W[0] * VertexPos[0].w         + W[1] * VertexPos[1].w          + W[2] * VertexPos[2].w;
-          fragAttrib._WorldPos = W[0] * Attrib   [0]._WorldPos + W[1] * Attrib   [1]._WorldPos  + W[2] * Attrib   [2]._WorldPos;
-          fragAttrib._Normal   = W[0] * Attrib   [0]._Normal   + W[1] * Attrib   [1]._Normal    + W[2] * Attrib   [2]._Normal;
-          fragAttrib._UV       = W[0] * Attrib   [0]._UV       + W[1] * Attrib   [1]._UV        + W[2] * Attrib   [2]._UV;
-          fragAttrib._Color    = W[0] * Attrib   [0]._Color    + W[1] * Attrib   [1]._Color     + W[2] * Attrib   [2]._Color;
+        fragCoord.w          = W[0] * VertexPos[0].w         + W[1] * VertexPos[1].w          + W[2] * VertexPos[2].w;
+        fragAttrib._WorldPos = W[0] * Attrib   [0]._WorldPos + W[1] * Attrib   [1]._WorldPos  + W[2] * Attrib   [2]._WorldPos;
+        fragAttrib._UV       = W[0] * Attrib   [0]._UV       + W[1] * Attrib   [1]._UV        + W[2] * Attrib   [2]._UV;
+        fragAttrib._Color    = W[0] * Attrib   [0]._Color    + W[1] * Attrib   [1]._Color     + W[2] * Attrib   [2]._Color;
 
-          fragAttrib._Normal = glm::normalize(fragAttrib._Normal);
+        if ( ShadingType::Phong == _ShadingType )
+        {
+          fragAttrib._Normal = W[0] * Attrib   [0]._Normal   + W[1] * Attrib   [1]._Normal    + W[2] * Attrib   [2]._Normal;
         }
+        else
+        {
+          Vec3 vec1(Verts[1]._Position.x-Verts[0]._Position.x, Verts[1]._Position.y-Verts[0]._Position.y, Verts[1]._Position.z-Verts[0]._Position.z);
+          Vec3 vec2(Verts[2]._Position.x-Verts[0]._Position.x, Verts[2]._Position.y-Verts[0]._Position.y, Verts[2]._Position.z-Verts[0]._Position.z);
+          fragAttrib._Normal = glm::cross(vec1, vec2);
+        }
+        fragAttrib._Normal = glm::normalize(fragAttrib._Normal);
 
         Vec4 fragColor(1.f);
         FragmentShader_Scene(fragCoord, fragAttrib, fragColor);
@@ -1011,7 +1019,7 @@ void Test4::FragmentShader_Scene( const Vec4 & iFragCoord, const Varying & iAttr
 }
 
 // ----------------------------------------------------------------------------
-// FragmentShader_Scene
+// SampleSkybox
 // ----------------------------------------------------------------------------
 Vec4 Test4::SampleSkybox( const Vec3 & iDir )
 {
