@@ -21,10 +21,12 @@ class Scene;
 class Test3 : public BaseTest
 {
 public:
-  Test3( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight );
+  Test3( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iScreenHeight );
   virtual ~Test3();
 
   int Run();
+
+  static const char * GetTestHeader();
 
 private:
 
@@ -52,8 +54,6 @@ private:
   static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
   static void MousebuttonCallback(GLFWwindow * window, int button, int action, int mods);
   static void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
-
-  GLFWwindow    * _MainWindow;
 
   QuadMesh      * _Quad      = nullptr;
   ShaderProgram * _RTTShader = nullptr;

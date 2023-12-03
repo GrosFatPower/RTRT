@@ -31,6 +31,8 @@
 namespace RTRT
 {
 
+const char * Test3::GetTestHeader() { return "Test 3 : Basic ray tracing"; }
+
 // ----------------------------------------------------------------------------
 // Global variables
 // ----------------------------------------------------------------------------
@@ -140,7 +142,7 @@ bool VectorOfStringGetter(void* data, int n, const char** out_text)
 // ----------------------------------------------------------------------------
 // CTOR
 // ----------------------------------------------------------------------------
-Test3::Test3( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
+Test3::Test3( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iScreenHeight )
 : BaseTest(iMainWindow, iScreenWidth, iScreenHeight)
 {
   _Settings._RenderResolution.x = iScreenWidth;
@@ -450,7 +452,7 @@ int Test3::InitializeUI()
 
   // Setup Platform/Renderer backends
   const char* glsl_version = "#version 130";
-  ImGui_ImplGlfw_InitForOpenGL(_MainWindow, true);
+  ImGui_ImplGlfw_InitForOpenGL(_MainWindow.get(), true);
   ImGui_ImplOpenGL3_Init(glsl_version);
 
   return 0;
@@ -1014,7 +1016,7 @@ int Test3::UpdateScene()
   {
     const float MouseSensitivity[5] = { 1.f, 0.5f, 0.01f, 0.01f, 0.01f }; // Yaw, Pitch, StafeRight, StrafeUp, ZoomIn
 
-    glfwGetCursorPos(_MainWindow, &_MouseX, &_MouseY);
+    glfwGetCursorPos(_MainWindow.get(), &_MouseX, &_MouseY);
 
     double deltaX = _MouseX - _OldMouseX;
     double deltaY = _MouseY - _OldMouseY;
@@ -1151,14 +1153,14 @@ int Test3::Run()
   if ( !_MainWindow )
     return 1;
 
-  glfwSetWindowTitle(_MainWindow, "Test 3 : Basic ray tracing");
-  glfwSetWindowUserPointer(_MainWindow, this);
+  glfwSetWindowTitle(_MainWindow.get(), GetTestHeader());
+  glfwSetWindowUserPointer(_MainWindow.get(), this);
 
-  glfwSetFramebufferSizeCallback(_MainWindow, Test3::FramebufferSizeCallback);
-  glfwSetMouseButtonCallback(_MainWindow, Test3::MousebuttonCallback);
-  glfwSetKeyCallback(_MainWindow, Test3::KeyCallback);
+  glfwSetFramebufferSizeCallback(_MainWindow.get(), Test3::FramebufferSizeCallback);
+  glfwSetMouseButtonCallback(_MainWindow.get(), Test3::MousebuttonCallback);
+  glfwSetKeyCallback(_MainWindow.get(), Test3::KeyCallback);
 
-  glfwMakeContextCurrent(_MainWindow);
+  glfwMakeContextCurrent(_MainWindow.get());
   glfwSwapInterval(1); // Enable vsync
 
   // Setup Dear ImGui context
@@ -1193,7 +1195,7 @@ int Test3::Run()
   InitializeScene();
 
   // Main loop
-  glfwSetWindowSize(_MainWindow, _Settings._RenderResolution.x, _Settings._RenderResolution.y);
+  glfwSetWindowSize(_MainWindow.get(), _Settings._RenderResolution.x, _Settings._RenderResolution.y);
   glViewport(0, 0, _Settings._RenderResolution.x, _Settings._RenderResolution.y);
   glDisable(GL_DEPTH_TEST);
 
@@ -1202,7 +1204,7 @@ int Test3::Run()
   glBindTexture(GL_TEXTURE_2D, 0);
 
   _CPULoopTime = glfwGetTime();
-  while (!glfwWindowShouldClose(_MainWindow) && !_KeyEsc)
+  while (!glfwWindowShouldClose(_MainWindow.get()) && !_KeyEsc)
   {
     _FrameNum++;
 
@@ -1222,7 +1224,7 @@ int Test3::Run()
     // UI
     DrawUI();
 
-    glfwSwapBuffers(_MainWindow);
+    glfwSwapBuffers(_MainWindow.get());
   }
 
   // Cleanup

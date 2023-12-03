@@ -25,10 +25,12 @@ class Light;
 class Test4 : public BaseTest
 {
 public:
-  Test4( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight );
+  Test4( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iScreenHeight );
   virtual ~Test4();
 
   int Run();
+
+  static const char * GetTestHeader();
 
 private:
 
@@ -117,8 +119,6 @@ private:
   void FragmentShader_Scene( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor );
 
   Vec4 SampleSkybox( const Vec3 & iDir );
-
-  GLFWwindow       * _MainWindow;
 
   std::unique_ptr<QuadMesh> _Quad;
   std::unique_ptr<Scene>    _Scene;

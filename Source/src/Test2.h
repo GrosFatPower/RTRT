@@ -16,16 +16,16 @@ class Scene;
 class Test2 : public BaseTest
 {
 public:
-  Test2( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight );
+  Test2( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iScreenHeight );
   virtual ~Test2();
 
   int Run();
 
+  static const char * GetTestHeader();
+
 private:
 
   void InitializeSceneFile();
-
-  GLFWwindow     * _MainWindow;
 
   Scene          * _Scene = nullptr;
   RenderSettings   _Settings;

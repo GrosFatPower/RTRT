@@ -30,6 +30,9 @@ constexpr std::execution::sequenced_policy policy = std::execution::seq;
 
 namespace RTRT
 {
+
+const char * Test4::GetTestHeader() { return "Test 4 : CPU Rasterizer"; }
+
 // ----------------------------------------------------------------------------
 // Global variables
 // ----------------------------------------------------------------------------
@@ -233,7 +236,7 @@ void Test4::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 // ----------------------------------------------------------------------------
 // CTOR
 // ----------------------------------------------------------------------------
-Test4::Test4( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
+Test4::Test4( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iScreenHeight )
 : BaseTest(iMainWindow, iScreenWidth, iScreenHeight)
 {
   _Settings._RenderScale = 100;
@@ -281,7 +284,7 @@ int Test4::UpdateCPUTime()
   oldCpuTime = _CPULoopTime;
 
   _LastDeltas.push_back(_TimeDelta);
-  while ( _LastDeltas.size() > 30 )
+  while ( _LastDeltas.size() > 10 )
     _LastDeltas.pop_front();
     
   double totalDelta = 0.;
@@ -456,7 +459,7 @@ int Test4::InitializeUI()
 
   // Setup Platform/Renderer backends
   const char* glsl_version = "#version 130";
-  ImGui_ImplGlfw_InitForOpenGL(_MainWindow, true);
+  ImGui_ImplGlfw_InitForOpenGL(_MainWindow.get(), true);
   ImGui_ImplOpenGL3_Init(glsl_version);
 
   return 0;
@@ -474,24 +477,56 @@ void Test4::DrawUI()
 
   // Frame info
   {
-    ImGui::Begin("Test 4");
+    static const char * YESorNO[]         = { "No", "Yes" };
+    static const char * DEPTHorCOLOR[]    = { "Color", "Depth" };
+    static const char * LINEARorBILNEAR[] = { "Linear", "Bilinear" };
+    static const char * PHONGorFLAT[]     = { "Flat", "Phong" };
 
-    ImGui::Text("Render time : %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
-    ImGui::Text("Render image : %.3f ms/frame", _RenderImgElapsed * 1000.f);
-    ImGui::Text("Render background : %.3f ms/frame", _RenderBgdElapsed * 1000.f);
-    ImGui::Text("Render scene : %.3f ms/frame", _RenderScnElapsed * 1000.f);
-    ImGui::Text("Render to texture : %.3f ms/frame", _RTTElapsed * 1000.f);
-    ImGui::Text("Render to screen : %.3f ms/frame", _RTSElapsed * 1000.f);
-
-    ImGui::Text("Window width %d: height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
-    ImGui::Text("Render width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
-    ImGui::Text("Render scale : %d %%", _Settings._RenderScale);
-    ImGui::Text("FOV : %3.0f deg", _Scene -> GetCamera().GetFOVInDegrees());
-    
     float near, far;
     _Scene -> GetCamera().GetZNearFar(near, far);
-    ImGui::Text("Near : %f", near);
-    ImGui::Text("Far : %f", far);
+
+    ImGui::Begin("Test 4");
+
+    ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255,255,0,255));
+    ImGui::Text("Frame time : %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
+    ImGui::PopStyleColor();
+
+    if (ImGui::CollapsingHeader("Rendering"))
+    {
+      ImGui::Text("Render image      : %.3f ms/frame", _RenderImgElapsed * 1000.f);
+      ImGui::Text("Render background : %.3f ms/frame", _RenderBgdElapsed * 1000.f);
+      ImGui::Text("Render scene      : %.3f ms/frame", _RenderScnElapsed * 1000.f);
+      ImGui::Text("Render to texture : %.3f ms/frame", _RTTElapsed * 1000.f);
+      ImGui::Text("Render to screen  : %.3f ms/frame", _RTSElapsed * 1000.f);
+    }
+
+    if (ImGui::CollapsingHeader("Settings"))
+    {
+      ImGui::Text("Window width %d: height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+      ImGui::Text("Render width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
+      ImGui::Text("Render scale            : %d %%", _Settings._RenderScale);
+      ImGui::Text("FOV                     : %3.0f deg", _Scene -> GetCamera().GetFOVInDegrees());
+      ImGui::Text("zNear                   : %f", near);
+      ImGui::Text("zFar                    : %f", far);
+      ImGui::Text("Buffer                  : %s", DEPTHorCOLOR[!!_ViewDepthBuffer]);
+      ImGui::Text("Background              : %s", YESorNO[!!_Settings._EnableBackGround]);
+      ImGui::Text("Texture sampling        : %s", LINEARorBILNEAR[!!_BilinearSampling]);
+      ImGui::Text("Shading                 : %s", PHONGorFLAT[!!((int)_ShadingType)]);
+    }
+
+    if (ImGui::CollapsingHeader("Controls"))
+    {
+      ImGui::Text("W,S,A,D      : Move camera");
+      ImGui::Text("Esc          : Exit test");
+      ImGui::Text("Y            : (toggle) Color/Depth buffer view");
+      ImGui::Text("T            : (toggle) Linear/Bilinear sampling");
+      ImGui::Text("L            : (toggle) Phong/Flat shading");
+      ImGui::Text("B            : (toggle) Enable/Disable background");
+      ImGui::Text("Page up/down : increase/decrease render scale");
+      ImGui::Text("left/right   : increase/decrease fov");
+      ImGui::Text("up/down      : increase/decrease zNear");
+      ImGui::Text("left ctrl + up/down : increase/decrease zFar");
+    }
 
     ImGui::End();
   }
@@ -1116,7 +1151,7 @@ int Test4::UpdateScene()
 
     double oldMouseX = _MouseState._MouseX;
     double oldMouseY = _MouseState._MouseY;
-    glfwGetCursorPos(_MainWindow, &_MouseState._MouseX, &_MouseState._MouseY);
+    glfwGetCursorPos(_MainWindow.get(), &_MouseState._MouseX, &_MouseState._MouseY);
 
     double deltaX = _MouseState._MouseX - oldMouseX;
     double deltaY = _MouseState._MouseY - oldMouseY;
@@ -1185,14 +1220,14 @@ int Test4::Run()
   if ( !_MainWindow )
     return 1;
 
-  glfwSetWindowTitle(_MainWindow, "Test 4 : CPU Rasterizer");
-  glfwSetWindowUserPointer(_MainWindow, this);
+  glfwSetWindowTitle(_MainWindow.get(), GetTestHeader());
+  glfwSetWindowUserPointer(_MainWindow.get(), this);
 
-  glfwSetFramebufferSizeCallback(_MainWindow, Test4::FramebufferSizeCallback);
-  glfwSetMouseButtonCallback(_MainWindow, Test4::MousebuttonCallback);
-  glfwSetKeyCallback(_MainWindow, Test4::KeyCallback);
+  glfwSetFramebufferSizeCallback(_MainWindow.get(), Test4::FramebufferSizeCallback);
+  glfwSetMouseButtonCallback(_MainWindow.get(), Test4::MousebuttonCallback);
+  glfwSetKeyCallback(_MainWindow.get(), Test4::KeyCallback);
 
-  glfwMakeContextCurrent(_MainWindow);
+  glfwMakeContextCurrent(_MainWindow.get());
   glfwSwapInterval(1); // Enable vsync
 
   // Setup Dear ImGui context
@@ -1237,7 +1272,7 @@ int Test4::Run()
   }
 
   // Main loop
-  glfwSetWindowSize(_MainWindow, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+  glfwSetWindowSize(_MainWindow.get(), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
   glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
   glDisable(GL_DEPTH_TEST);
 
@@ -1248,7 +1283,7 @@ int Test4::Run()
   //ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   _CPULoopTime = glfwGetTime();
-  while ( !glfwWindowShouldClose(_MainWindow) && !_KeyState._KeyEsc )
+  while ( !glfwWindowShouldClose(_MainWindow.get()) && !_KeyState._KeyEsc )
   {
     UpdateCPUTime();
 
@@ -1272,7 +1307,7 @@ int Test4::Run()
 
     DrawUI();
 
-    glfwSwapBuffers(_MainWindow);
+    glfwSwapBuffers(_MainWindow.get());
   }
 
   // Cleanup

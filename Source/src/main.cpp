@@ -10,6 +10,7 @@
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
 
 #include <iostream>
+#include <memory>
 
 // ----------------------------------------------------------------------------
 // Global variables
@@ -55,10 +56,10 @@ int TestSelectionPanel( GLFWwindow * iMainWindow )
   ImGui_ImplOpenGL3_Init(glsl_version);
 
   // Our state
-  const char * TestNames[] = { "Test 1 : Render to texture",
-                               "Test 2 : Scene loader",
-                               "Test 3 : Basic ray tracing",
-                               "Test 4 : CPU Rasterizer" };
+  const char * TestNames[] = { RTRT::Test1::GetTestHeader(),
+                               RTRT::Test2::GetTestHeader(),
+                               RTRT::Test3::GetTestHeader(),
+                               RTRT::Test4::GetTestHeader() };
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   while (!glfwWindowShouldClose(iMainWindow) && !selectedTest)
@@ -129,51 +130,51 @@ int main(int, char**)
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
   // Create window with graphics context
-  GLFWwindow * mainWindow = glfwCreateWindow(g_ScreenWidth, g_ScreenHeight, "RTRT - Tests", NULL, NULL);
-  if ( !mainWindow )
   {
-    std::cout << "Failed to create a window!" << std::endl;
-    glfwTerminate();
-    return 1;
+    auto mainWindow = std::shared_ptr<GLFWwindow>(glfwCreateWindow(g_ScreenWidth, g_ScreenHeight, "RTRT - Tests", NULL, NULL), [](GLFWwindow*window){glfwDestroyWindow(window);});
+    if ( !mainWindow )
+    {
+      std::cout << "Failed to create a window!" << std::endl;
+      glfwTerminate();
+      return 1;
+    }
+    glfwMakeContextCurrent(mainWindow.get());
+    glfwSwapInterval(1); // Enable vsync
+
+    while ( !glfwWindowShouldClose(mainWindow.get()) )
+    {
+      int selectedTest = TestSelectionPanel(mainWindow.get());
+
+      if ( 1 == selectedTest )
+      {
+        RTRT::Test1 test1(mainWindow, g_ScreenWidth, g_ScreenHeight);
+        failure = test1.Run();
+      }
+
+      else if ( 2 == selectedTest )
+      {
+        RTRT::Test2 test2(mainWindow, g_ScreenWidth, g_ScreenHeight);
+        failure = test2.Run();
+      }
+
+      else if ( 3 == selectedTest )
+      {
+        RTRT::Test3 test3(mainWindow, g_ScreenWidth, g_ScreenHeight);
+        failure = test3.Run();
+      }
+
+      else if ( 4 == selectedTest )
+      {
+        RTRT::Test4 test4(mainWindow, g_ScreenWidth, g_ScreenHeight);
+        failure = test4.Run();
+      }
+
+      else
+      {
+        break;
+      }
+    }
   }
-  glfwMakeContextCurrent(mainWindow);
-  glfwSwapInterval(1); // Enable vsync
-
-  while ( !glfwWindowShouldClose(mainWindow) )
-  {
-    int selectedTest = TestSelectionPanel(mainWindow);
-
-    if ( 1 == selectedTest )
-    {
-      RTRT::Test1 test1(mainWindow, g_ScreenWidth, g_ScreenHeight);
-      failure = test1.Run();
-    }
-
-    else if ( 2 == selectedTest )
-    {
-      RTRT::Test2 test2(mainWindow, g_ScreenWidth, g_ScreenHeight);
-      failure = test2.Run();
-    }
-
-    else if ( 3 == selectedTest )
-    {
-      RTRT::Test3 test3(mainWindow, g_ScreenWidth, g_ScreenHeight);
-      failure = test3.Run();
-    }
-
-    else if ( 4 == selectedTest )
-    {
-      RTRT::Test4 test4(mainWindow, g_ScreenWidth, g_ScreenHeight);
-      failure = test4.Run();
-    }
-
-    else
-    {
-      break;
-    }
-  }
-
-  glfwDestroyWindow(mainWindow);
   glfwTerminate();
 
   // Exit program

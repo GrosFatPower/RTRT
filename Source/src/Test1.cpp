@@ -22,6 +22,8 @@
 namespace RTRT
 {
 
+const char * Test1::GetTestHeader() { return "Test 1 : Render to texture"; }
+
 // ----------------------------------------------------------------------------
 // Global variables
 // ----------------------------------------------------------------------------
@@ -205,7 +207,7 @@ void UpdateUniforms()
   }
 }
 
-Test1::Test1( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
+Test1::Test1( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iScreenHeight )
 : BaseTest(iMainWindow, iScreenWidth, iScreenHeight)
 {
   g_ScreenWidth = iScreenWidth;
@@ -223,13 +225,13 @@ int Test1::Run()
   if ( !_MainWindow )
     return 1;
 
-  glfwSetWindowTitle(_MainWindow, "Test 1 : Render to texture");
+  glfwSetWindowTitle(_MainWindow.get(), GetTestHeader());
 
-  glfwSetFramebufferSizeCallback(_MainWindow, FramebufferSizeCallback);
-  glfwSetMouseButtonCallback(_MainWindow, MousebuttonCallback);
+  glfwSetFramebufferSizeCallback(_MainWindow.get(), FramebufferSizeCallback);
+  glfwSetMouseButtonCallback(_MainWindow.get(), MousebuttonCallback);
   //glfwSetKeyCallback(_MainWindow, keyCallback);
 
-  glfwMakeContextCurrent(_MainWindow);
+  glfwMakeContextCurrent(_MainWindow.get());
   glfwSwapInterval(1); // Enable vsync
 
   // Setup Dear ImGui context
@@ -248,7 +250,7 @@ int Test1::Run()
 
   // Setup Platform/Renderer backends
   const char* glsl_version = "#version 130";
-  ImGui_ImplGlfw_InitForOpenGL(_MainWindow, true);
+  ImGui_ImplGlfw_InitForOpenGL(_MainWindow.get(), true);
   ImGui_ImplOpenGL3_Init(glsl_version);
 
   // Init openGL scene
@@ -319,7 +321,7 @@ int Test1::Run()
   std::deque<float> lastDeltas;
 
   double oldCpuTime = glfwGetTime();
-  while (!glfwWindowShouldClose(_MainWindow))
+  while (!glfwWindowShouldClose(_MainWindow.get()))
   {
     g_Frame++;
 
@@ -380,7 +382,7 @@ int Test1::Run()
     // Rendering
     ImGui::Render();
 
-    glfwGetFramebufferSize(_MainWindow, &g_ScreenWidth, &g_ScreenHeight);
+    glfwGetFramebufferSize(_MainWindow.get(), &g_ScreenWidth, &g_ScreenHeight);
     glViewport(0, 0, g_ScreenWidth, g_ScreenHeight);
     glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -396,7 +398,7 @@ int Test1::Run()
 
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-    glfwSwapBuffers(_MainWindow);
+    glfwSwapBuffers(_MainWindow.get());
   }
 
   // Cleanup

@@ -16,6 +16,8 @@
 namespace RTRT
 {
 
+const char * Test2::GetTestHeader() { return "Test 2 : Scene loader"; }
+
 // ----------------------------------------------------------------------------
 // Global variables
 // ----------------------------------------------------------------------------
@@ -83,7 +85,7 @@ static int LoadScene( const std::string & iFilename, Scene *& ioScene, RenderSet
   return 0;
 }
 
-Test2::Test2( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
+Test2::Test2( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iScreenHeight )
 : BaseTest(iMainWindow, iScreenWidth, iScreenHeight)
 {
   InitializeSceneFile();
@@ -121,13 +123,13 @@ int Test2::Run()
   if ( !_MainWindow )
     return 1;
 
-  glfwSetWindowTitle(_MainWindow, "Test 2 : Scene loader");
+  glfwSetWindowTitle(_MainWindow.get(), GetTestHeader());
 
-  glfwSetFramebufferSizeCallback(_MainWindow, FramebufferSizeCallback);
-  glfwSetMouseButtonCallback(_MainWindow, MousebuttonCallback);
+  glfwSetFramebufferSizeCallback(_MainWindow.get(), FramebufferSizeCallback);
+  glfwSetMouseButtonCallback(_MainWindow.get(), MousebuttonCallback);
   //glfwSetKeyCallback(_MainWindow, keyCallback);
 
-  glfwMakeContextCurrent(_MainWindow);
+  glfwMakeContextCurrent(_MainWindow.get());
   glfwSwapInterval(1); // Enable vsync
 
   // Setup Dear ImGui context
@@ -145,7 +147,7 @@ int Test2::Run()
 
   // Setup Platform/Renderer backends
   const char* glsl_version = "#version 130";
-  ImGui_ImplGlfw_InitForOpenGL(_MainWindow, true);
+  ImGui_ImplGlfw_InitForOpenGL(_MainWindow.get(), true);
   ImGui_ImplOpenGL3_Init(glsl_version);
 
   // Init openGL scene
@@ -166,7 +168,7 @@ int Test2::Run()
 
   bool forceResize = false;
   double oldCpuTime = glfwGetTime();
-  while (!glfwWindowShouldClose(_MainWindow))
+  while (!glfwWindowShouldClose(_MainWindow.get()))
   {
     double curLoopTime = glfwGetTime();
 
@@ -177,7 +179,7 @@ int Test2::Run()
     {
       _ScreenWitdh  = _Settings._WindowResolution.x;
       _ScreenHeight = _Settings._WindowResolution.y;
-      glfwSetWindowSize(_MainWindow, _ScreenWitdh, _ScreenHeight);
+      glfwSetWindowSize(_MainWindow.get(), _ScreenWitdh, _ScreenHeight);
       forceResize = false;
     }
 
@@ -233,14 +235,14 @@ int Test2::Run()
     // Rendering
     ImGui::Render();
 
-    glfwGetFramebufferSize(_MainWindow, &_ScreenWitdh, &_ScreenHeight);
+    glfwGetFramebufferSize(_MainWindow.get(), &_ScreenWitdh, &_ScreenHeight);
     glViewport(0, 0, _ScreenWitdh, _ScreenHeight);
     glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
 
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-    glfwSwapBuffers(_MainWindow);
+    glfwSwapBuffers(_MainWindow.get());
   }
 
   // Cleanup
