@@ -84,11 +84,8 @@ static int LoadScene( const std::string & iFilename, Scene *& ioScene, RenderSet
 }
 
 Test2::Test2( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
-: _MainWindow(iMainWindow)
+: BaseTest(iMainWindow, iScreenWidth, iScreenHeight)
 {
-  _ScreenWitdh  = iScreenWidth;
-  _ScreenHeight = iScreenHeight;
-
   InitializeSceneFile();
 }
 

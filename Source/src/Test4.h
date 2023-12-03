@@ -1,6 +1,7 @@
 #ifndef _Test4_
 #define _Test4_
 
+#include "BaseTest.h"
 #include "RenderSettings.h"
 #include "MathUtil.h"
 #include <vector>
@@ -21,7 +22,7 @@ class Material;
 class Texture;
 class Light;
 
-class Test4
+class Test4 : public BaseTest
 {
 public:
   Test4( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight );

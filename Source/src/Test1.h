@@ -1,22 +1,21 @@
 #ifndef _Test1_
 #define _Test1_
 
+#include "BaseTest.h"
+
 struct GLFWwindow;
 
 namespace RTRT
 {
 
-class Test1
+class Test1 : public BaseTest
 {
 public:
   Test1( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight );
   virtual ~Test1();
 
-  int Run();
+  virtual int Run();
 
-private:
-
-  GLFWwindow * _MainWindow;
 };
 
 }

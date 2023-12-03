@@ -234,7 +234,7 @@ void Test4::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 // CTOR
 // ----------------------------------------------------------------------------
 Test4::Test4( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
-: _MainWindow(iMainWindow)
+: BaseTest(iMainWindow, iScreenWidth, iScreenHeight)
 {
   _Settings._RenderScale = 100;
 

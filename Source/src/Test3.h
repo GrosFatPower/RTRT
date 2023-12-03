@@ -1,6 +1,7 @@
 #ifndef _Test3_
 #define _Test3_
 
+#include "BaseTest.h"
 #include "RenderSettings.h"
 #include <vector>
 #include <string>
@@ -17,7 +18,7 @@ class ShaderProgram;
 class Scene;
 
 
-class Test3
+class Test3 : public BaseTest
 {
 public:
   Test3( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight );

@@ -141,7 +141,7 @@ bool VectorOfStringGetter(void* data, int n, const char** out_text)
 // CTOR
 // ----------------------------------------------------------------------------
 Test3::Test3( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
-: _MainWindow(iMainWindow)
+: BaseTest(iMainWindow, iScreenWidth, iScreenHeight)
 {
   _Settings._RenderResolution.x = iScreenWidth;
   _Settings._RenderResolution.y = iScreenHeight;

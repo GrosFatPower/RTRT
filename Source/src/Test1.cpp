@@ -206,7 +206,7 @@ void UpdateUniforms()
 }
 
 Test1::Test1( GLFWwindow * iMainWindow, int iScreenWidth, int iScreenHeight )
-: _MainWindow(iMainWindow)
+: BaseTest(iMainWindow, iScreenWidth, iScreenHeight)
 {
   g_ScreenWidth = iScreenWidth;
   g_ScreenHeight = iScreenHeight;
