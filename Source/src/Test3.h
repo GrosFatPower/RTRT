@@ -30,8 +30,10 @@ public:
 
 private:
 
+  int InitializeSceneFiles();
   int InitializeScene();
   int UpdateScene();
+  void ClearSceneData();
 
   int InitializeUI();
   int DrawUI();
@@ -122,7 +124,12 @@ private:
   bool            _KeyRight             = false;
   bool            _KeyEsc               = false;
 
-  Scene         * _Scene                  = nullptr;
+  Scene         * _Scene = nullptr;
+  std::vector<std::string>  _SceneFiles;
+  std::vector<const char*>  _SceneNames;
+  unsigned int              _CurSceneId = 0;
+  bool                      _ReloadScene = true;
+
   RenderSettings  _Settings;
   bool            _SceneCameraModified    = false;
   bool            _SceneLightsModified    = false;

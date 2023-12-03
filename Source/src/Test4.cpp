@@ -1187,7 +1187,8 @@ int Test4::UpdateScene()
 {
   if ( _ReloadScene )
   {
-    InitializeScene();
+    if ( 0 != InitializeScene() )
+      return 1;
 
     glfwSetWindowSize(_MainWindow.get(), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
     glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
@@ -1343,7 +1344,8 @@ int Test4::Run()
 
     ProcessInput();
 
-    UpdateScene();
+    if ( 0 != UpdateScene() )
+      break;
 
     UpdateImage();
 

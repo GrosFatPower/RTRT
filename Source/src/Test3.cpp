@@ -12,6 +12,8 @@
 #include "MathUtil.h"
 #include "Loader.h"
 
+#include "tinydir.h"
+
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
@@ -154,8 +156,27 @@ Test3::Test3( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iSc
 // ----------------------------------------------------------------------------
 Test3::~Test3()
 {
-  glDeleteFramebuffers(1, &_FrameBufferID);
+  ClearSceneData();
 
+  glDeleteFramebuffers(1, &_FrameBufferID);
+  glDeleteTextures(1, &_ScreenTextureID);
+  
+  if (_Quad)
+    delete _Quad;
+  _Quad = nullptr;
+  if (_RTTShader)
+    delete _RTTShader;
+  _RTTShader = nullptr;
+  if (_RTSShader)
+    delete _RTSShader;
+  _RTSShader = nullptr;
+
+  for ( auto fileName : _SceneNames )
+    delete[] fileName;
+}
+
+void Test3::ClearSceneData()
+{
   glDeleteBuffers(1, &_VtxBufferID);
   glDeleteBuffers(1, &_VtxNormBufferID);
   glDeleteBuffers(1, &_VtxUVBufferID);
@@ -174,7 +195,6 @@ Test3::~Test3()
   glDeleteBuffers(1, &_BLASPackedNormalsBufferID);
   glDeleteBuffers(1, &_BLASPackedUVsBufferID);
 
-  glDeleteTextures(1, &_ScreenTextureID);
   glDeleteTextures(1, &_SkyboxTextureID);
   glDeleteTextures(1, &_VtxTextureID);
   glDeleteTextures(1, &_VtxNormTextureID);
@@ -194,19 +214,39 @@ Test3::~Test3()
   glDeleteTextures(1, &_BLASPackedVerticesTextureID);
   glDeleteTextures(1, &_BLASPackedNormalsTextureID);
   glDeleteTextures(1, &_BLASPackedUVsTextureID);
- 
-  if (_Quad)
-    delete _Quad;
-  _Quad = nullptr;
-  if (_RTTShader)
-    delete _RTTShader;
-  _RTTShader = nullptr;
-  if (_RTSShader)
-    delete _RTSShader;
-  _RTSShader = nullptr;
+
   if ( _Scene )
     delete _Scene;
   _Scene = nullptr;
+}
+
+int Test3::InitializeSceneFiles()
+{
+  tinydir_dir dir;
+  tinydir_open_sorted(&dir, g_AssetsDir.c_str());
+  
+  for ( int i = 0; i < dir.n_files; ++i )
+  {
+    tinydir_file file;
+    tinydir_readfile_n(&dir, &file, i);
+  
+    std::string extension(file.extension);
+    if ( "scene" == extension )
+    {
+      char * filename = new char[256];
+      snprintf(filename, 256, "%s", file.name);
+      _SceneNames.push_back(filename);
+      _SceneFiles.push_back(g_AssetsDir + std::string(file.name));
+
+      std::size_t found = _SceneFiles[_SceneFiles.size()-1].find("TexturedBox.scene");
+      if ( std::string::npos != found )
+        _CurSceneId = _SceneFiles.size()-1;
+    }
+  }
+  
+  tinydir_close(&dir);
+
+  return 0;
 }
 
 int Test3::InitializeFrameBuffer()
@@ -473,6 +513,16 @@ int Test3::DrawUI()
     ImGui::Text("Window width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
 
     ImGui::Text("Accumulated frames : %d", _AccumulatedFrames);
+
+    int selectedSceneId = _CurSceneId;
+    if ( ImGui::Combo("Scene", &selectedSceneId, _SceneNames.data(), _SceneNames.size()) )
+    {
+      if ( selectedSceneId != _CurSceneId )
+      {
+        _CurSceneId = selectedSceneId;
+        _ReloadScene = true;
+      }
+    }
 
     if ( ImGui::CollapsingHeader("Render settings") )
     {
@@ -797,23 +847,11 @@ void Test3::AdjustRenderScale()
 int Test3::InitializeScene()
 {
   if ( _Scene )
-    delete _Scene;
+    ClearSceneData();
 
-  //std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene.scene";
-  //std::string sceneFile = "..\\..\\Assets\\BasicRT_Scene2.scene";
-  //std::string sceneFile = "..\\..\\Assets\\my_cornell_box.scene";
-  //std::string sceneFile = "..\\..\\Assets\\teapot.scene";
-  //std::string sceneFile = "..\\..\\Assets\\test_veach.scene";
-  //std::string sceneFile = "..\\..\\Assets\\diningroom.scene";
-  std::string sceneFile = "..\\..\\Assets\\tropical_island.scene";
-  //std::string sceneFile = "..\\..\\Assets\\tropical_island2.scene";
-  //std::string sceneFile = "..\\..\\Assets\\bedroom.scene";
-  //std::string sceneFile = "..\\..\\Assets\\TexturedBox.scene";
-
-  //_Scene = new Scene();
-  if ( !Loader::LoadScene(sceneFile, _Scene, _Settings) || !_Scene )
+  if ( !Loader::LoadScene(_SceneFiles[_CurSceneId], _Scene, _Settings) || !_Scene )
   {
-    std::cout << "Failed to load scene : " << sceneFile << std::endl;
+    std::cout << "Failed to load scene : " << _SceneFiles[_CurSceneId] << std::endl;
     return 1;
   }
 
@@ -1004,11 +1042,25 @@ int Test3::InitializeScene()
   _SceneMaterialsModified = true;
   _SceneInstancesModified = true;
 
+  _ReloadScene = false;
+
   return 0;
 }
 
 int Test3::UpdateScene()
 {
+  if ( _ReloadScene )
+  {
+    if ( 0 != InitializeScene() )
+      return 1;
+
+    glfwSetWindowSize(_MainWindow.get(), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+    glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+
+    glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
   if ( !_Scene )
     return 1;
 
@@ -1192,7 +1244,11 @@ int Test3::Run()
   }
 
   // Initialize the scene
-  InitializeScene();
+  if ( ( 0 != InitializeSceneFiles() ) || ( 0 != InitializeScene() ) )
+  {
+    std::cout << "ERROR: Scene initialization failed!" << std::endl;
+    return 1;
+  }
 
   // Main loop
   glfwSetWindowSize(_MainWindow.get(), _Settings._RenderResolution.x, _Settings._RenderResolution.y);
@@ -1212,7 +1268,9 @@ int Test3::Run()
 
     glfwPollEvents();
 
-    UpdateScene();
+    if ( 0 != UpdateScene() )
+      break;
+
     UpdateUniforms();
 
     // Render to texture
