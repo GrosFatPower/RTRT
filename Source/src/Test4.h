@@ -93,6 +93,7 @@ private:
   int UpdateCPUTime();
   int InitializeUI();
   int InitializeFrameBuffer();
+  int InitializeSceneFiles();
   int InitializeScene();
 
   int RecompileShaders();
@@ -122,6 +123,10 @@ private:
 
   std::unique_ptr<QuadMesh> _Quad;
   std::unique_ptr<Scene>    _Scene;
+  std::vector<std::string>  _SceneFiles;
+  std::vector<const char*>  _SceneNames;
+  unsigned int              _CurSceneId = 0;
+  bool                      _ReloadScene = true;
 
   std::unique_ptr<ShaderProgram> _RTTShader;
   std::unique_ptr<ShaderProgram> _RTSShader;

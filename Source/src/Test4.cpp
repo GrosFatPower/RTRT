@@ -8,6 +8,8 @@
 #include "Light.h"
 #include "Loader.h"
 
+#include "tinydir.h"
+
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
@@ -94,6 +96,10 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
       this_ -> _ShadingType = ( ShadingType::Flat == this_ -> _ShadingType ) ? ( ShadingType::Phong ) : ( ShadingType::Flat ); break;
     case GLFW_KEY_B:
       this_ -> _Settings._EnableBackGround = !this_ -> _Settings._EnableBackGround; break;
+    case GLFW_KEY_R:
+      this_ -> _ReloadScene = true; break;
+    case GLFW_KEY_N:
+      this_ -> _CurSceneId++; if ( this_ -> _CurSceneId == this_ -> _SceneFiles.size() ) this_ -> _CurSceneId = 0; this_ -> _ReloadScene = true; break;
     case GLFW_KEY_LEFT_CONTROL:
       this_ -> _KeyState._KeyLeftCTRL = false; break;
     case GLFW_KEY_ESCAPE:
@@ -245,7 +251,6 @@ Test4::Test4( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iSc
   _Settings._WindowResolution.y = iScreenHeight;
   _Settings._RenderResolution.x = iScreenWidth  * ( _Settings._RenderScale * 0.01f );
   _Settings._RenderResolution.y = iScreenHeight * ( _Settings._RenderScale * 0.01f );
-
   ResizeImageBuffers();
 }
 
@@ -258,6 +263,41 @@ Test4::~Test4()
 
   glDeleteTextures(1, &_ScreenTextureID);
   glDeleteTextures(1, &_ImageTextureID);
+
+  for ( auto fileName : _SceneNames )
+    delete[] fileName;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeSceneFiles
+// ----------------------------------------------------------------------------
+int Test4::InitializeSceneFiles()
+{
+  tinydir_dir dir;
+  tinydir_open_sorted(&dir, g_AssetsDir.c_str());
+  
+  for ( int i = 0; i < dir.n_files; ++i )
+  {
+    tinydir_file file;
+    tinydir_readfile_n(&dir, &file, i);
+  
+    std::string extension(file.extension);
+    if ( "scene" == extension )
+    {
+      char * filename = new char[256];
+      snprintf(filename, 256, "%s", file.name);
+      _SceneNames.push_back(filename);
+      _SceneFiles.push_back(g_AssetsDir + std::string(file.name));
+
+      std::size_t found = _SceneFiles[_SceneFiles.size()-1].find("TexturedBox.scene");
+      if ( std::string::npos != found )
+        _CurSceneId = _SceneFiles.size()-1;
+    }
+  }
+  
+  tinydir_close(&dir);
+
+  return 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -482,14 +522,24 @@ void Test4::DrawUI()
     static const char * LINEARorBILNEAR[] = { "Linear", "Bilinear" };
     static const char * PHONGorFLAT[]     = { "Flat", "Phong" };
 
-    float near, far;
-    _Scene -> GetCamera().GetZNearFar(near, far);
+    float zNear = 0.f, zFar = 0.f;
+    _Scene -> GetCamera().GetZNearFar(zNear, zFar);
 
     ImGui::Begin("Test 4");
 
     ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255,255,0,255));
     ImGui::Text("Frame time : %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
     ImGui::PopStyleColor();
+
+    int selectedSceneId = _CurSceneId;
+    if ( ImGui::Combo("Scene", &selectedSceneId, _SceneNames.data(), _SceneNames.size()) )
+    {
+      if ( selectedSceneId != _CurSceneId )
+      {
+        _CurSceneId = selectedSceneId;
+        _ReloadScene = true;
+      }
+    }
 
     if (ImGui::CollapsingHeader("Rendering"))
     {
@@ -506,8 +556,8 @@ void Test4::DrawUI()
       ImGui::Text("Render width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
       ImGui::Text("Render scale            : %d %%", _Settings._RenderScale);
       ImGui::Text("FOV                     : %3.0f deg", _Scene -> GetCamera().GetFOVInDegrees());
-      ImGui::Text("zNear                   : %f", near);
-      ImGui::Text("zFar                    : %f", far);
+      ImGui::Text("zNear                   : %f", zNear);
+      ImGui::Text("zFar                    : %f", zFar);
       ImGui::Text("Buffer                  : %s", DEPTHorCOLOR[!!_ViewDepthBuffer]);
       ImGui::Text("Background              : %s", YESorNO[!!_Settings._EnableBackGround]);
       ImGui::Text("Texture sampling        : %s", LINEARorBILNEAR[!!_BilinearSampling]);
@@ -518,6 +568,8 @@ void Test4::DrawUI()
     {
       ImGui::Text("W,S,A,D      : Move camera");
       ImGui::Text("Esc          : Exit test");
+      ImGui::Text("R            : Reload scene");
+      ImGui::Text("N            : Next scene");
       ImGui::Text("Y            : (toggle) Color/Depth buffer view");
       ImGui::Text("T            : (toggle) Linear/Bilinear sampling");
       ImGui::Text("L            : (toggle) Phong/Flat shading");
@@ -547,12 +599,12 @@ int Test4::RenderBackground( float iTop, float iRight )
   int width  = _Settings._RenderResolution.x;
   int height = _Settings._RenderResolution.y;
 
-  float near, far;
-  _Scene -> GetCamera().GetZNearFar(near, far);
+  float zNear, zFar;
+  _Scene -> GetCamera().GetZNearFar(zNear, zFar);
 
   if ( _Settings._EnableBackGround )
   {
-    Vec3 bottomLeft = _Scene -> GetCamera().GetForward() * near - iRight * _Scene -> GetCamera().GetRight() - iTop * _Scene -> GetCamera().GetUp();
+    Vec3 bottomLeft = _Scene -> GetCamera().GetForward() * zNear - iRight * _Scene -> GetCamera().GetRight() - iTop * _Scene -> GetCamera().GetUp();
     Vec3 dX = _Scene -> GetCamera().GetRight() * ( 2 * iRight / width );
     Vec3 dY = _Scene -> GetCamera().GetUp() * ( 2 * iTop / height );
 
@@ -591,8 +643,8 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
 
   Mat4x4 MVP = iP * iMV;
 
-  float near, far;
-  _Scene -> GetCamera().GetZNearFar(near, far);
+  float zNear, zFar;
+  _Scene -> GetCamera().GetZNearFar(zNear, zFar);
 
   const std::vector<Vec3i>    & Indices   = _Scene -> GetIndices();
   const std::vector<Vec3>     & Vertices  = _Scene -> GetVertices();
@@ -602,7 +654,7 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
   const std::vector<Texture*> & Textures  = _Scene -> GetTextures();
   const int nbTris = Indices.size() / 3;
 
-  std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), far);
+  std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), zFar);
 
   for ( int i = 0; i < nbTris; ++i )
   {
@@ -698,7 +750,7 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
         W[2] *= VertexPos[2].w; // W2 / z2
 
         float Z = 1.f / (W[0] + W[1] + W[2]);
-        if ( Z > _DepthBuffer[x + width * y] || ( Z < near) )
+        if ( Z > _DepthBuffer[x + width * y] || ( Z < zNear) )
           continue;
 
         W[0] *= Z;
@@ -985,9 +1037,6 @@ int Test4::UpdateImage()
 
   Mat4x4 MVP = P * MV;
 
-  float near, far;
-  _Scene -> GetCamera().GetZNearFar(near, far);
-
   RenderBackground(top, right);
 
   RenderScene(MV, P);
@@ -1078,20 +1127,12 @@ Vec4 Test4::SampleSkybox( const Vec3 & iDir )
 // ----------------------------------------------------------------------------
 int Test4::InitializeScene()
 {
-  //std::string sceneFile = g_AssetsDir + "TexturedBoxes.scene";
-  //std::string sceneFile = g_AssetsDir + "BasicRT_Scene.scene";
-  //std::string sceneFile = g_AssetsDir + "TexturedBox.scene";
-  //std::string sceneFile = g_AssetsDir + "my_cornell_box.scene";
-  //std::string sceneFile = g_AssetsDir + "teapot.scene";
-  //std::string sceneFile = g_AssetsDir + "test_veach.scene";
-  //std::string sceneFile = g_AssetsDir + "diningroom.scene";
-  //std::string sceneFile = g_AssetsDir + "bedroom.scene";
-  std::string sceneFile = g_AssetsDir + "tropical_island.scene";
+  _Uniforms = Uniform();
 
   Scene * newScene = nullptr;
-  if ( !Loader::LoadScene(sceneFile, newScene, _Settings) || !newScene )
+  if ( !Loader::LoadScene(_SceneFiles[_CurSceneId], newScene, _Settings) || !newScene )
   {
-    std::cout << "Failed to load scene : " << sceneFile << std::endl;
+    std::cout << "Failed to load scene : " << _SceneFiles[_CurSceneId] << std::endl;
     return 1;
   }
   _Scene.reset(newScene);
@@ -1126,6 +1167,8 @@ int Test4::InitializeScene()
   // Resize Image Buffer
   this -> ResizeImageBuffers();
 
+  _ReloadScene = false;
+
   return 0;
 }
 
@@ -1142,6 +1185,17 @@ void Test4::ProcessInput()
 // ----------------------------------------------------------------------------
 int Test4::UpdateScene()
 {
+  if ( _ReloadScene )
+  {
+    InitializeScene();
+
+    glfwSetWindowSize(_MainWindow.get(), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+    glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+
+    glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
   if ( !_Scene )
     return 1;
 
@@ -1231,10 +1285,9 @@ int Test4::Run()
   glfwSwapInterval(1); // Enable vsync
 
   // Setup Dear ImGui context
-  if ( InitializeUI() != 0 )
+  if ( 0 != InitializeUI() )
   {
     std::cout << "Failed to initialize ImGui!" << std::endl;
-    glfwTerminate();
     return 1;
   }
 
@@ -1243,12 +1296,11 @@ int Test4::Run()
   if ( glewInit() != GLEW_OK )
   {
     std::cout << "Failed to initialize GLEW!" << std::endl;
-    glfwTerminate();
     return 1;
   }
 
   // Initialize the scene
-  if ( 0 != InitializeScene() )
+  if ( ( 0 != InitializeSceneFiles() ) || ( 0 != InitializeScene() ) )
   {
     std::cout << "ERROR: Scene initialization failed!" << std::endl;
     return 1;
