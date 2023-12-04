@@ -3,6 +3,7 @@
 
 #include "BaseTest.h"
 #include "RenderSettings.h"
+#include "Light.h"
 #include "MathUtil.h"
 #include <vector>
 #include <string>
@@ -20,7 +21,6 @@ class ShaderProgram;
 class Scene;
 class Material;
 class Texture;
-class Light;
 
 class Test4 : public BaseTest
 {
@@ -79,11 +79,11 @@ private:
 
   struct Uniform
   {
-    const Material * _Material       = nullptr;
-    const Texture  * _Texture        = nullptr;
-    const Light    * _Light          = nullptr;
-    const Texture  * _SkyBox         = nullptr;
-    float            _SkyBoxRotation = 0.f;
+    const Material     * _Material       = nullptr;
+    const Texture      * _Texture        = nullptr;
+    const Texture      * _SkyBox         = nullptr;
+    std::vector<Light>   _Lights;
+    float                _SkyBoxRotation = 0.f;
   };
 
   static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);

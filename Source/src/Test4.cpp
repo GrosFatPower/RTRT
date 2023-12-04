@@ -1075,26 +1075,28 @@ void Test4::FragmentShader_Scene( const Vec4 & iFragCoord, const Varying & iAttr
     return;
   }
 
+  Vec4 albedo;
   if ( _Uniforms._Texture )
   {
     if ( _BilinearSampling )
-      oColor = _Uniforms._Texture -> BiLinearSample(iAttrib._UV);
+      albedo = _Uniforms._Texture -> BiLinearSample(iAttrib._UV);
     else
-      oColor = _Uniforms._Texture -> Sample(iAttrib._UV);
+      albedo = _Uniforms._Texture -> Sample(iAttrib._UV);
   }
   else
   {
-    oColor = iAttrib._Color;
+    albedo = iAttrib._Color;
   }
 
   // Shading
-  if ( _Uniforms._Light )
+  Vec4 alpha(0.f, 0.f, 0.f, 0.f);
+  for ( const auto & light : _Uniforms._Lights )
   {
     float ambientStrength = .1f;
     float diffuse = 0.f;
     float specular = 0.f;
 
-    Vec3 dirToLight = glm::normalize(_Uniforms._Light ->_Pos - iAttrib._WorldPos);
+    Vec3 dirToLight = glm::normalize(light._Pos - iAttrib._WorldPos);
     diffuse = std::max(0.f, glm::dot(iAttrib._Normal, dirToLight));
 
     Vec3 viewDir =  glm::normalize(_Scene -> GetCamera().GetPos() - iAttrib._WorldPos);
@@ -1103,9 +1105,10 @@ void Test4::FragmentShader_Scene( const Vec4 & iFragCoord, const Varying & iAttr
     static float specularStrength = 0.5f;
     specular = pow(std::max(glm::dot(viewDir, reflectDir), 0.f), 32) * specularStrength;
 
-    oColor *= std::min(diffuse+ambientStrength+specular, 1.f) * Vec4(glm::normalize(_Uniforms._Light -> _Emission), 1.f);
-    oColor = MathUtil::Min(oColor, Vec4(1.f));
+    alpha += std::min(diffuse+ambientStrength+specular, 1.f) * Vec4(glm::normalize(light._Emission), 1.f);
   }
+
+  oColor = MathUtil::Min(albedo * alpha, Vec4(1.f));
 }
 
 // ----------------------------------------------------------------------------
@@ -1151,7 +1154,10 @@ int Test4::InitializeScene()
     _Scene -> AddLight(newLight);
     firstLight = _Scene -> GetLight(0);
   }
-  _Uniforms._Light = firstLight;
+
+  _Uniforms._Lights.clear();
+  for ( int i = 0; i < _Scene -> GetNbLights(); ++i )
+    _Uniforms._Lights.push_back(*_Scene -> GetLight(i));
 
   // Loading sky box
   int skyboxID =_Scene -> AddTexture(g_AssetsDir + "skyboxes\\alps_field_2k.hdr", 4, TexFormat::TEX_FLOAT);
