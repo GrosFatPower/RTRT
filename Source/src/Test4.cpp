@@ -519,7 +519,7 @@ void Test4::DrawUI()
   {
     static const char * YESorNO[]         = { "No", "Yes" };
     static const char * DEPTHorCOLOR[]    = { "Color", "Depth" };
-    static const char * LINEARorBILNEAR[] = { "Linear", "Bilinear" };
+    static const char * NEARESTorBILNEAR[] = { "Nearest", "Bilinear" };
     static const char * PHONGorFLAT[]     = { "Flat", "Phong" };
 
     float zNear = 0.f, zFar = 0.f;
@@ -560,7 +560,7 @@ void Test4::DrawUI()
       ImGui::Text("zFar                    : %f", zFar);
       ImGui::Text("Buffer                  : %s", DEPTHorCOLOR[!!_ViewDepthBuffer]);
       ImGui::Text("Background              : %s", YESorNO[!!_Settings._EnableBackGround]);
-      ImGui::Text("Texture sampling        : %s", LINEARorBILNEAR[!!_BilinearSampling]);
+      ImGui::Text("Texture sampling        : %s", NEARESTorBILNEAR[!!_BilinearSampling]);
       ImGui::Text("Shading                 : %s", PHONGorFLAT[!!((int)_ShadingType)]);
     }
 
