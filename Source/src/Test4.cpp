@@ -89,7 +89,7 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
     case GLFW_KEY_D:
       this_ -> _KeyState._KeyRight = false; break;
     case GLFW_KEY_Y:
-      this_ -> _ViewDepthBuffer = !this_ -> _ViewDepthBuffer; break;
+      this_ -> _ColorDepthOrNormalsBuffer = ( ( this_ -> _ColorDepthOrNormalsBuffer + 1 ) % 3 ); break;
     case GLFW_KEY_T:
       this_ -> _BilinearSampling = !this_ -> _BilinearSampling; break;
     case GLFW_KEY_L:
@@ -517,10 +517,10 @@ void Test4::DrawUI()
 
   // Frame info
   {
-    static const char * YESorNO[]         = { "No", "Yes" };
-    static const char * DEPTHorCOLOR[]    = { "Color", "Depth" };
-    static const char * NEARESTorBILNEAR[] = { "Nearest", "Bilinear" };
-    static const char * PHONGorFLAT[]     = { "Flat", "Phong" };
+    static const char * YESorNO[]               = { "No", "Yes" };
+    static const char * COLORorDEPTHorNORMALS[] = { "Color", "Depth", "Normals" };
+    static const char * NEARESTorBILNEAR[]      = { "Nearest", "Bilinear" };
+    static const char * PHONGorFLAT[]           = { "Flat", "Phong" };
 
     float zNear = 0.f, zFar = 0.f;
     _Scene -> GetCamera().GetZNearFar(zNear, zFar);
@@ -558,7 +558,7 @@ void Test4::DrawUI()
       ImGui::Text("FOV                     : %3.0f deg", _Scene -> GetCamera().GetFOVInDegrees());
       ImGui::Text("zNear                   : %f", zNear);
       ImGui::Text("zFar                    : %f", zFar);
-      ImGui::Text("Buffer                  : %s", DEPTHorCOLOR[!!_ViewDepthBuffer]);
+      ImGui::Text("Buffer                  : %s", COLORorDEPTHorNORMALS[_ColorDepthOrNormalsBuffer]);
       ImGui::Text("Background              : %s", YESorNO[!!_Settings._EnableBackGround]);
       ImGui::Text("Texture sampling        : %s", NEARESTorBILNEAR[!!_BilinearSampling]);
       ImGui::Text("Shading                 : %s", PHONGorFLAT[!!((int)_ShadingType)]);
@@ -570,7 +570,7 @@ void Test4::DrawUI()
       ImGui::Text("Esc          : Exit test");
       ImGui::Text("R            : Reload scene");
       ImGui::Text("N            : Next scene");
-      ImGui::Text("Y            : (toggle) Color/Depth buffer view");
+      ImGui::Text("Y            : Switch Color/Depth/Normal buffer view");
       ImGui::Text("T            : (toggle) Linear/Bilinear sampling");
       ImGui::Text("L            : (toggle) Phong/Flat shading");
       ImGui::Text("B            : (toggle) Enable/Disable background");
@@ -1001,7 +1001,7 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
             }
           }
 
-          if ( _ViewDepthBuffer )
+          if ( 1 == _ColorDepthOrNormalsBuffer )
             _ColorBuffer[x + width * y] = Vec4(Vec3(1.f - z), 1.f);
           else
             _ColorBuffer[x + width * y] = Vec4(color, 1.f);
@@ -1063,9 +1063,15 @@ void Test4::VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Vec4 & oVer
 // ----------------------------------------------------------------------------
 void Test4::FragmentShader_Scene( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor )
 {
-  if ( _ViewDepthBuffer )
+  if ( 1 == _ColorDepthOrNormalsBuffer )
   {
     oColor = Vec4(Vec3(1.f - iFragCoord.z), 1.f);
+    return;
+  }
+  else if ( 2 == _ColorDepthOrNormalsBuffer )
+  {
+    
+    oColor = Vec4(glm::abs(iAttrib._Normal),1.f);
     return;
   }
 

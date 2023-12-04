@@ -137,7 +137,7 @@ private:
 
   RenderSettings     _Settings;
 
-  bool               _ViewDepthBuffer  = false;
+  int                _ColorDepthOrNormalsBuffer = 0;
   bool               _BilinearSampling = true;
   ShadingType        _ShadingType = ShadingType::Phong;
   std::vector<Vec4>  _ColorBuffer;
