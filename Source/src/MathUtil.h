@@ -13,6 +13,7 @@
 #include "glm/mat4x4.hpp"
 #include "glm/gtx/transform.hpp"
 #include "glm/gtx/quaternion.hpp"
+#include "glm/gtx/extended_min_max.hpp"
 
 
 typedef glm::vec2   Vec2;

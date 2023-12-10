@@ -72,6 +72,8 @@ private:
   struct Varying
   {
     Vec3             _WorldPos;
+    Vec2             _VertCoords[3];
+    //Vec3             _W;
     Vec2             _UV;
     Vec3             _Normal;
     Vec4             _Color;
@@ -117,7 +119,13 @@ private:
 
   void VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Vec4 & oVertexPosition, Varying & oAttrib );
 
-  void FragmentShader_Scene( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor );
+  void FragmentShader_Color( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor );
+
+  void FragmentShader_Depth( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor );
+
+  void FragmentShader_Normal( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor );
+
+  float DistanceToSegment( const Vec2 iA, const Vec2 iB, const Vec2 iP );
 
   Vec4 SampleSkybox( const Vec3 & iDir );
 
@@ -138,6 +146,7 @@ private:
   RenderSettings     _Settings;
 
   int                _ColorDepthOrNormalsBuffer = 0;
+  bool               _ShowWires = false;
   bool               _BilinearSampling = true;
   ShadingType        _ShadingType = ShadingType::Phong;
   std::vector<Vec4>  _ColorBuffer;

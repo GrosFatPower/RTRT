@@ -28,6 +28,8 @@ constexpr std::execution::parallel_policy policy = std::execution::par;
 constexpr std::execution::sequenced_policy policy = std::execution::seq;
 #endif
 
+#define EPSILON 0.01
+
 #define SIMUL_RENDERING_PIPELINE
 
 namespace RTRT
@@ -90,6 +92,8 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
       this_ -> _KeyState._KeyRight = false; break;
     case GLFW_KEY_Y:
       this_ -> _ColorDepthOrNormalsBuffer = ( ( this_ -> _ColorDepthOrNormalsBuffer + 1 ) % 3 ); break;
+    case GLFW_KEY_K:
+      this_ -> _ShowWires = !this_ -> _ShowWires; break;
     case GLFW_KEY_T:
       this_ -> _BilinearSampling = !this_ -> _BilinearSampling; break;
     case GLFW_KEY_L:
@@ -574,6 +578,7 @@ void Test4::DrawUI()
       ImGui::Text("T            : (toggle) Linear/Bilinear sampling");
       ImGui::Text("L            : (toggle) Phong/Flat shading");
       ImGui::Text("B            : (toggle) Enable/Disable background");
+      ImGui::Text("K            : (toggle) Show/no Show wires");
       ImGui::Text("Page up/down : increase/decrease render scale");
       ImGui::Text("left/right   : increase/decrease fov");
       ImGui::Text("up/down      : increase/decrease zNear");
@@ -730,34 +735,30 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
       {
         Vec3 coord(x + .5f, y + .5f, 0.f);
 
-        float W[3];
-        W[0] = EdgeFunction(VertexPos[1], VertexPos[2], coord);
-        W[1] = EdgeFunction(VertexPos[2], VertexPos[0], coord);
-        W[2] = EdgeFunction(VertexPos[0], VertexPos[1], coord);
+        Vec3 W;
+        W.x = EdgeFunction(VertexPos[1], VertexPos[2], coord);
+        W.y = EdgeFunction(VertexPos[2], VertexPos[0], coord);
+        W.z = EdgeFunction(VertexPos[0], VertexPos[1], coord);
 
-        if ( ( W[0] < 0.f )
-          || ( W[1] < 0.f )
-          || ( W[2] < 0.f ) )
+        if ( ( W.x < 0.f )
+          || ( W.y < 0.f )
+          || ( W.z < 0.f ) )
             continue;
 
-        W[0] *= invArea;
-        W[1] *= invArea;
-        W[2] *= invArea;
+        W *= invArea;
 
         // Perspective correction
-        W[0] *= VertexPos[0].w; // W0 / z0
-        W[1] *= VertexPos[1].w; // W1 / z1
-        W[2] *= VertexPos[2].w; // W2 / z2
+        W.x *= VertexPos[0].w; // W0 / z0
+        W.y *= VertexPos[1].w; // W1 / z1
+        W.z *= VertexPos[2].w; // W2 / z2
 
-        float Z = 1.f / (W[0] + W[1] + W[2]);
+        float Z = 1.f / (W.x + W.y + W.z);
         if ( Z > _DepthBuffer[x + width * y] || ( Z < zNear) )
           continue;
 
-        W[0] *= Z;
-        W[1] *= Z;
-        W[2] *= Z;
+        W *= Z;
 
-        coord.z = W[0] * VertexPos[0].z + W[1] * VertexPos[1].z + W[2] * VertexPos[2].z;
+        coord.z = W.x * VertexPos[0].z + W.y * VertexPos[1].z + W.z * VertexPos[2].z;
         coord.z = ( coord.z + 1.f ) * .5f;
         if ( ( coord.z < 0.f ) || ( coord.z > 1.f ) )
           continue;
@@ -765,14 +766,21 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
         // Interpolation
         Vec4 fragCoord(coord, 1.f);
         Varying fragAttrib;
-        fragCoord.w          = W[0] * VertexPos[0].w         + W[1] * VertexPos[1].w          + W[2] * VertexPos[2].w;
-        fragAttrib._WorldPos = W[0] * Attrib   [0]._WorldPos + W[1] * Attrib   [1]._WorldPos  + W[2] * Attrib   [2]._WorldPos;
-        fragAttrib._UV       = W[0] * Attrib   [0]._UV       + W[1] * Attrib   [1]._UV        + W[2] * Attrib   [2]._UV;
-        fragAttrib._Color    = W[0] * Attrib   [0]._Color    + W[1] * Attrib   [1]._Color     + W[2] * Attrib   [2]._Color;
+        fragCoord.w          = W.x * VertexPos[0].w         + W.y * VertexPos[1].w          + W.z * VertexPos[2].w;
+        fragAttrib._WorldPos = W.x * Attrib   [0]._WorldPos + W.y * Attrib   [1]._WorldPos  + W.z * Attrib   [2]._WorldPos;
+        fragAttrib._UV       = W.x * Attrib   [0]._UV       + W.y * Attrib   [1]._UV        + W.z * Attrib   [2]._UV;
+        fragAttrib._Color    = W.x * Attrib   [0]._Color    + W.y * Attrib   [1]._Color     + W.z * Attrib   [2]._Color;
+        if ( _ShowWires )
+        {
+          //fragAttrib._W = W;
+          fragAttrib._VertCoords[0].x = VertexPos[0].x; fragAttrib._VertCoords[0].y = VertexPos[0].y;
+          fragAttrib._VertCoords[1].x = VertexPos[1].x; fragAttrib._VertCoords[1].y = VertexPos[1].y;
+          fragAttrib._VertCoords[2].x = VertexPos[2].x; fragAttrib._VertCoords[2].y = VertexPos[2].y;
+        }
 
         if ( ShadingType::Phong == _ShadingType )
         {
-          fragAttrib._Normal = W[0] * Attrib   [0]._Normal   + W[1] * Attrib   [1]._Normal    + W[2] * Attrib   [2]._Normal;
+          fragAttrib._Normal = W.x * Attrib   [0]._Normal   + W.y * Attrib   [1]._Normal    + W.z * Attrib   [2]._Normal;
         }
         else
         {
@@ -783,7 +791,13 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
         fragAttrib._Normal = glm::normalize(fragAttrib._Normal);
 
         Vec4 fragColor(1.f);
-        FragmentShader_Scene(fragCoord, fragAttrib, fragColor);
+
+        if ( 1 == _ColorDepthOrNormalsBuffer )
+          FragmentShader_Depth(fragCoord, fragAttrib, fragColor);
+        else if ( 2 == _ColorDepthOrNormalsBuffer )
+          FragmentShader_Normal(fragCoord, fragAttrib, fragColor);
+        else
+          FragmentShader_Color(fragCoord, fragAttrib, fragColor);
 
         _ColorBuffer[x + width * y] = fragColor;
         _DepthBuffer[x + width * y] = Z;
@@ -1059,20 +1073,38 @@ void Test4::VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Vec4 & oVer
 }
 
 // ----------------------------------------------------------------------------
-// FragmentShader_Scene
+// FragmentShader_Depth
 // ----------------------------------------------------------------------------
-void Test4::FragmentShader_Scene( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor )
+void Test4::FragmentShader_Depth( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor )
 {
-  if ( 1 == _ColorDepthOrNormalsBuffer )
-  {
-    oColor = Vec4(Vec3(1.f - iFragCoord.z), 1.f);
-    return;
-  }
-  else if ( 2 == _ColorDepthOrNormalsBuffer )
-  {
-    
+  oColor = Vec4(Vec3(1.f - iFragCoord.z), 1.f);
+  return;
+}
+
+// ----------------------------------------------------------------------------
+// FragmentShader_Normal
+// ----------------------------------------------------------------------------
+void Test4::FragmentShader_Normal( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor )
+{
     oColor = Vec4(glm::abs(iAttrib._Normal),1.f);
     return;
+}
+
+// ----------------------------------------------------------------------------
+// FragmentShader_Color
+// ----------------------------------------------------------------------------
+void Test4::FragmentShader_Color( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor )
+{
+  if ( _ShowWires )
+  {
+    Vec2 P(iFragCoord.x, iFragCoord.y);
+    if ( ( DistanceToSegment(iAttrib._VertCoords[0], iAttrib._VertCoords[1], P) <= 1.f )
+      || ( DistanceToSegment(iAttrib._VertCoords[1], iAttrib._VertCoords[2], P) <= 1.f )
+      || ( DistanceToSegment(iAttrib._VertCoords[2], iAttrib._VertCoords[0], P) <= 1.f ) )
+    {
+      oColor = Vec4(1.f, 0.f, 0.f, 1.f);
+      return;
+    }
   }
 
   Vec4 albedo;
@@ -1109,6 +1141,30 @@ void Test4::FragmentShader_Scene( const Vec4 & iFragCoord, const Varying & iAttr
   }
 
   oColor = MathUtil::Min(albedo * alpha, Vec4(1.f));
+}
+
+// ----------------------------------------------------------------------------
+// DistanceToSegment
+// ----------------------------------------------------------------------------
+float Test4::DistanceToSegment( const Vec2 iA, const Vec2 iB, const Vec2 iP )
+{
+  float dist = 0.f;
+
+  Vec2 AP(iP - iA);
+  Vec2 AB(iB - iA);
+
+  float normAB = glm::length(AB);
+  if ( normAB > 0.f )
+  {
+    float t = glm::dot(AP, AB) / ( normAB * normAB );
+    t = glm::clamp(t, 0.f, 1.f);
+
+    dist = glm::length(AP - t * AB);
+  }
+  else
+    dist = glm::length(AP);
+
+  return dist;
 }
 
 // ----------------------------------------------------------------------------
