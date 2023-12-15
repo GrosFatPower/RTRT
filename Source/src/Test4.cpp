@@ -731,6 +731,7 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
 
     for ( int y = yMin; y <= yMax; ++y )
     {
+      bool inside = false;
       for ( int x = xMin; x <= xMax; ++x  )
       {
         Vec3 coord(x + .5f, y + .5f, 0.f);
@@ -743,7 +744,14 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
         if ( ( W.x < 0.f )
           || ( W.y < 0.f )
           || ( W.z < 0.f ) )
+        {
+          if ( inside )
+            break;
+          else
             continue;
+        }
+
+        inside = true;
 
         W *= invArea;
 
