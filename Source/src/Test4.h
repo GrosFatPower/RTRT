@@ -115,7 +115,9 @@ private:
 
   void ResizeImageBuffers();
 
-  float EdgeFunction(const Vec3 & iV1, const Vec3 & iV2, const Vec3 & iV3);
+  float EdgeFunction(const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2) const;
+  float EdgeFunction_Optim1(const float iA, const float iB, const float iC, const Vec3 & iV2) const ;
+  void EdgeFunction_PreComputeABC( const Vec3 & iV1, const Vec3 & iV2, float & oA, float &oB, float & oC ) const;
 
   void VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Vec4 & oVertexPosition, Varying & oAttrib );
 
@@ -171,9 +173,15 @@ private:
 };
 
 
-inline float Test4::EdgeFunction(const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2) { 
+inline float Test4::EdgeFunction(const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2) const { 
   return (iV1.x - iV0.x) * (iV2.y - iV0.y) - (iV1.y - iV0.y) * (iV2.x - iV0.x); } // Counter-Clockwise edge function
 //  return (iV2.x - iV0.x) * (iV1.y - iV0.y) - (iV2.y - iV0.y) * (iV1.x - iV0.x); } // Clockwise edge function
+
+inline float Test4::EdgeFunction_Optim1(const float iA, const float iB, const float iC, const Vec3 & iV2) const {
+  return ( iA * iV2.x ) + ( iB * iV2.y ) + iC; } // A = (iV0.y - iV1.y), B = (iV1.x - iV0.x), C = ( iV0.x * iV1.y - iV0.y * iV1.x )
+
+inline void Test4::EdgeFunction_PreComputeABC( const Vec3 & iV0, const Vec3 & iV1, float & oA, float & oB, float & oC ) const { 
+  oA = (iV0.y - iV1.y); oB = (iV1.x - iV0.x); oC = ( iV0.x * iV1.y ) - ( iV0.y * iV1.x ); }
 
 }
 

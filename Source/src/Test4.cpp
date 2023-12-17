@@ -31,6 +31,7 @@ constexpr std::execution::sequenced_policy policy = std::execution::seq;
 #define EPSILON 0.01
 
 #define SIMUL_RENDERING_PIPELINE
+//#define RASTERIZATION_OPTIM
 
 namespace RTRT
 {
@@ -727,31 +728,58 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
     int xMax = std::max(0, std::min((int)std::floorf(bboxMax.x), width  - 1)); 
     int yMax = std::max(0, std::min((int)std::floorf(bboxMax.y), height - 1));
 
-    float invArea = 1.f / EdgeFunction(VertexPos[0], VertexPos[1], VertexPos[2]);
+#ifdef RASTERIZATION_OPTIM
+    float A01, A12, A20;
+    float B01, B12, B20;
+    float C01, C12, C20;
+    EdgeFunction_PreComputeABC(VertexPos[0], VertexPos[1], A01, B01, C01);
+    EdgeFunction_PreComputeABC(VertexPos[1], VertexPos[2], A12, B12, C12);
+    EdgeFunction_PreComputeABC(VertexPos[2], VertexPos[0], A20, B20, C20);
+
+    float area = EdgeFunction_Optim1(A01, B01, C01, VertexPos[2]);
+#else
+    float area = EdgeFunction(VertexPos[0], VertexPos[1], VertexPos[2]);
+#endif
+    if ( area <= 0.f )
+      continue;
+    float invArea = 1.f / area;
+
+#ifdef RASTERIZATION_OPTIM
+    Vec3 startP(xMin + .5f, yMin + .5f, 0.f);
+    Vec3 rowW;
+    rowW.x = EdgeFunction(VertexPos[1], VertexPos[2], startP);
+    rowW.y = EdgeFunction(VertexPos[2], VertexPos[0], startP);
+    rowW.z = EdgeFunction(VertexPos[0], VertexPos[1], startP);
+#endif
 
     for ( int y = yMin; y <= yMax; ++y )
     {
-      bool inside = false;
+#ifdef RASTERIZATION_OPTIM
+      Vec3 curW = rowW;
+#endif
+
       for ( int x = xMin; x <= xMax; ++x  )
       {
         Vec3 coord(x + .5f, y + .5f, 0.f);
 
         Vec3 W;
+#ifdef RASTERIZATION_OPTIM
+        W = curW;
+        curW.x += A12;
+        curW.y += A20;
+        curW.z += A01;
+#else
         W.x = EdgeFunction(VertexPos[1], VertexPos[2], coord);
         W.y = EdgeFunction(VertexPos[2], VertexPos[0], coord);
         W.z = EdgeFunction(VertexPos[0], VertexPos[1], coord);
+#endif
 
         if ( ( W.x < 0.f )
           || ( W.y < 0.f )
           || ( W.z < 0.f ) )
         {
-          if ( inside )
-            break;
-          else
-            continue;
+          continue;
         }
-
-        inside = true;
 
         W *= invArea;
 
@@ -810,6 +838,12 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
         _ColorBuffer[x + width * y] = fragColor;
         _DepthBuffer[x + width * y] = Z;
       }
+
+#ifdef RASTERIZATION_OPTIM
+      rowW.x += B12;
+      rowW.y += B20;
+      rowW.z += B01;
+#endif
     }
   }
 
