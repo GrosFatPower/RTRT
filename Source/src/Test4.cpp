@@ -652,75 +652,42 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
   float zNear, zFar;
   _Scene -> GetCamera().GetZNearFar(zNear, zFar);
 
-  const std::vector<Vec3i>    & Indices   = _Scene -> GetIndices();
-  const std::vector<Vec3>     & Vertices  = _Scene -> GetVertices();
-  const std::vector<Vec3>     & Normals   = _Scene -> GetNormals();
-  const std::vector<Vec3>     & UVMatIDs  = _Scene -> GetUVMatID();
-  const std::vector<Material> & Materials = _Scene -> GetMaterials();
-  const std::vector<Texture*> & Textures  = _Scene -> GetTextures();
-  const int nbTris = Indices.size() / 3;
-
   std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), zFar);
+
+  const int nbTris = _Triangles.size();
 
   for ( int i = 0; i < nbTris; ++i )
   {
-    Vec3i Index[3];
-    Index[0] = Indices[i*3];
-    Index[1] = Indices[i*3+1];
-    Index[2] = Indices[i*3+2];
-
     // Update uniforms
-    _Uniforms._Material = nullptr;
-    _Uniforms._Texture  = nullptr;
+    _Uniforms._Material = _Triangles[i]._Material;
+    _Uniforms._Texture  = _Triangles[i]._Texture;
 
-    int matID = (int)UVMatIDs[Index[0].z].z;
-    if ( matID >= 0 )
-    {
-      _Uniforms._Material = &Materials[matID];
-      if ( _Uniforms._Material && ( _Uniforms._Material -> _BaseColorTexId >= 0 ) )
-        _Uniforms._Texture = Textures[(int)_Uniforms._Material -> _BaseColorTexId];
-    }
-
-    Vertex Verts[3];
-    Vec4 VertexPos[3];
+    Vec4    VtxNDCPos[3];
+    Vec2    VtxScreenPos[3];
     Varying Attrib[3];
-    Vec2 bboxMin(std::numeric_limits<float>::infinity());
-    Vec2 bboxMax = -bboxMin;
+    Vec2    bboxMin(std::numeric_limits<float>::infinity());
+    Vec2    bboxMax = -bboxMin;
     for ( int j = 0; j < 3; ++j )
     {
-      Verts[j]._Position = Vec4(Vertices[Index[j].x], 1.f);
+      VertexShader(_Triangles[i]._Vert[j], MVP, VtxNDCPos[j], Attrib[j]);
 
-      if ( Index[j].y >= 0 )
-        Verts[j]._Normal = Normals[Index[j].y];
-
-      if ( Index[j].z >= 0 )
-        Verts[j]._UV = Vec2(UVMatIDs[Index[j].z].x, UVMatIDs[Index[j].z].y);
-
-      int matID = (int)UVMatIDs[Index[j].z].z;
-      if ( matID >= 0 )
-        Verts[j]._Color    = Vec4(Materials[matID]._Albedo, 1.f);
-      else
-        Verts[j]._Color    = Vec4(0.f);
-
-      VertexShader(Verts[j], MVP, VertexPos[j], Attrib[j]);
-
-      VertexPos[j].w = 1.f / VertexPos[j].w; // 1.f / -z
-      VertexPos[j].x *= VertexPos[j].w;      // X / -z
-      VertexPos[j].y *= VertexPos[j].w;      // Y / -z
-      VertexPos[j].z *= VertexPos[j].w;      // Z / -z
+      VtxNDCPos[j].w = 1.f / VtxNDCPos[j].w; // 1.f / -z
+      VtxNDCPos[j].x *= VtxNDCPos[j].w;      // X / -z
+      VtxNDCPos[j].y *= VtxNDCPos[j].w;      // Y / -z
+      VtxNDCPos[j].z *= VtxNDCPos[j].w;      // Z / -z
 
       // Convert to raster space
-      VertexPos[j].x = ((VertexPos[j].x + 1.f) * .5f * width);
-      VertexPos[j].y = ((VertexPos[j].y + 1.f) * .5f * height);
+      VtxScreenPos[j].x = ((VtxNDCPos[j].x + 1.f) * .5f * width);
+      VtxScreenPos[j].y = ((VtxNDCPos[j].y + 1.f) * .5f * height);
 
-      if ( VertexPos[j].x < bboxMin.x )
-        bboxMin.x = VertexPos[j].x;
-      if ( VertexPos[j].y < bboxMin.y )
-        bboxMin.y = VertexPos[j].y;
-      if ( VertexPos[j].x > bboxMax.x )
-        bboxMax.x = VertexPos[j].x;
-      if ( VertexPos[j].y > bboxMax.y )
-        bboxMax.y = VertexPos[j].y;
+      if ( VtxScreenPos[j].x < bboxMin.x )
+        bboxMin.x = VtxScreenPos[j].x;
+      if ( VtxScreenPos[j].y < bboxMin.y )
+        bboxMin.y = VtxScreenPos[j].y;
+      if ( VtxScreenPos[j].x > bboxMax.x )
+        bboxMax.x = VtxScreenPos[j].x;
+      if ( VtxScreenPos[j].y > bboxMax.y )
+        bboxMax.y = VtxScreenPos[j].y;
     }
 
     int xMin = std::max(0, std::min((int)std::floorf(bboxMin.x), width  - 1));
@@ -732,13 +699,13 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
     float A01, A12, A20;
     float B01, B12, B20;
     float C01, C12, C20;
-    EdgeFunction_PreComputeABC(VertexPos[0], VertexPos[1], A01, B01, C01);
-    EdgeFunction_PreComputeABC(VertexPos[1], VertexPos[2], A12, B12, C12);
-    EdgeFunction_PreComputeABC(VertexPos[2], VertexPos[0], A20, B20, C20);
+    EdgeFunction_PreComputeABC(VtxScreenPos[0], VtxScreenPos[1], A01, B01, C01);
+    EdgeFunction_PreComputeABC(VtxScreenPos[1], VtxScreenPos[2], A12, B12, C12);
+    EdgeFunction_PreComputeABC(VtxScreenPos[2], VtxScreenPos[0], A20, B20, C20);
 
-    float area = EdgeFunction_Optim1(A01, B01, C01, VertexPos[2]);
+    float area = EdgeFunction_Optim1(A01, B01, C01, VtxScreenPos[2]);
 #else
-    float area = EdgeFunction(VertexPos[0], VertexPos[1], VertexPos[2]);
+    float area = EdgeFunction(VtxScreenPos[0], VtxScreenPos[1], VtxScreenPos[2]);
 #endif
     if ( area <= 0.f )
       continue;
@@ -747,9 +714,9 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
 #ifdef RASTERIZATION_OPTIM
     Vec3 startP(xMin + .5f, yMin + .5f, 0.f);
     Vec3 rowW;
-    rowW.x = EdgeFunction(VertexPos[1], VertexPos[2], startP);
-    rowW.y = EdgeFunction(VertexPos[2], VertexPos[0], startP);
-    rowW.z = EdgeFunction(VertexPos[0], VertexPos[1], startP);
+    rowW.x = EdgeFunction(VtxScreenPos[1], VtxScreenPos[2], startP);
+    rowW.y = EdgeFunction(VtxScreenPos[2], VtxScreenPos[0], startP);
+    rowW.z = EdgeFunction(VtxScreenPos[0], VtxScreenPos[1], startP);
 #endif
 
     for ( int y = yMin; y <= yMax; ++y )
@@ -769,9 +736,9 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
         curW.y += A20;
         curW.z += A01;
 #else
-        W.x = EdgeFunction(VertexPos[1], VertexPos[2], coord);
-        W.y = EdgeFunction(VertexPos[2], VertexPos[0], coord);
-        W.z = EdgeFunction(VertexPos[0], VertexPos[1], coord);
+        W.x = EdgeFunction(VtxScreenPos[1], VtxScreenPos[2], coord);
+        W.y = EdgeFunction(VtxScreenPos[2], VtxScreenPos[0], coord);
+        W.z = EdgeFunction(VtxScreenPos[0], VtxScreenPos[1], coord);
 #endif
 
         if ( ( W.x < 0.f )
@@ -784,9 +751,9 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
         W *= invArea;
 
         // Perspective correction
-        W.x *= VertexPos[0].w; // W0 / z0
-        W.y *= VertexPos[1].w; // W1 / z1
-        W.z *= VertexPos[2].w; // W2 / z2
+        W.x *= VtxNDCPos[0].w; // W0 / z0
+        W.y *= VtxNDCPos[1].w; // W1 / z1
+        W.z *= VtxNDCPos[2].w; // W2 / z2
 
         float Z = 1.f / (W.x + W.y + W.z);
         if ( Z > _DepthBuffer[x + width * y] || ( Z < zNear) )
@@ -794,7 +761,7 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
 
         W *= Z;
 
-        coord.z = W.x * VertexPos[0].z + W.y * VertexPos[1].z + W.z * VertexPos[2].z;
+        coord.z = W.x * VtxNDCPos[0].z + W.y * VtxNDCPos[1].z + W.z * VtxNDCPos[2].z;
         coord.z = ( coord.z + 1.f ) * .5f;
         if ( ( coord.z < 0.f ) || ( coord.z > 1.f ) )
           continue;
@@ -802,29 +769,25 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
         // Interpolation
         Vec4 fragCoord(coord, 1.f);
         Varying fragAttrib;
-        fragCoord.w          = W.x * VertexPos[0].w         + W.y * VertexPos[1].w          + W.z * VertexPos[2].w;
+        fragCoord.w          = W.x * VtxNDCPos[0].w         + W.y * VtxNDCPos[1].w          + W.z * VtxNDCPos[2].w;
         fragAttrib._WorldPos = W.x * Attrib   [0]._WorldPos + W.y * Attrib   [1]._WorldPos  + W.z * Attrib   [2]._WorldPos;
         fragAttrib._UV       = W.x * Attrib   [0]._UV       + W.y * Attrib   [1]._UV        + W.z * Attrib   [2]._UV;
         fragAttrib._Color    = W.x * Attrib   [0]._Color    + W.y * Attrib   [1]._Color     + W.z * Attrib   [2]._Color;
         if ( _ShowWires )
         {
           //fragAttrib._W = W;
-          fragAttrib._VertCoords[0].x = VertexPos[0].x; fragAttrib._VertCoords[0].y = VertexPos[0].y;
-          fragAttrib._VertCoords[1].x = VertexPos[1].x; fragAttrib._VertCoords[1].y = VertexPos[1].y;
-          fragAttrib._VertCoords[2].x = VertexPos[2].x; fragAttrib._VertCoords[2].y = VertexPos[2].y;
+          fragAttrib._VertCoords[0].x = VtxScreenPos[0].x; fragAttrib._VertCoords[0].y = VtxScreenPos[0].y;
+          fragAttrib._VertCoords[1].x = VtxScreenPos[1].x; fragAttrib._VertCoords[1].y = VtxScreenPos[1].y;
+          fragAttrib._VertCoords[2].x = VtxScreenPos[2].x; fragAttrib._VertCoords[2].y = VtxScreenPos[2].y;
         }
 
         if ( ShadingType::Phong == _ShadingType )
         {
           fragAttrib._Normal = W.x * Attrib   [0]._Normal   + W.y * Attrib   [1]._Normal    + W.z * Attrib   [2]._Normal;
+          fragAttrib._Normal = glm::normalize(fragAttrib._Normal);
         }
         else
-        {
-          Vec3 vec1(Verts[1]._Position.x-Verts[0]._Position.x, Verts[1]._Position.y-Verts[0]._Position.y, Verts[1]._Position.z-Verts[0]._Position.z);
-          Vec3 vec2(Verts[2]._Position.x-Verts[0]._Position.x, Verts[2]._Position.y-Verts[0]._Position.y, Verts[2]._Position.z-Verts[0]._Position.z);
-          fragAttrib._Normal = glm::cross(vec1, vec2);
-        }
-        fragAttrib._Normal = glm::normalize(fragAttrib._Normal);
+          fragAttrib._Normal = _Triangles[i]._Normal;
 
         Vec4 fragColor(1.f);
 
@@ -1273,6 +1236,64 @@ int Test4::InitializeScene()
   }
 
   _Scene -> CompileMeshData(_Settings._TextureSize);
+
+  // Load _Triangles
+  const std::vector<Vec3i>    & Indices   = _Scene -> GetIndices();
+  const std::vector<Vec3>     & Vertices  = _Scene -> GetVertices();
+  const std::vector<Vec3>     & Normals   = _Scene -> GetNormals();
+  const std::vector<Vec3>     & UVMatIDs  = _Scene -> GetUVMatID();
+  const std::vector<Material> & Materials = _Scene -> GetMaterials();
+  const std::vector<Texture*> & Textures  = _Scene -> GetTextures();
+  const int nbTris = Indices.size() / 3;
+
+  _Triangles.resize(nbTris);
+  for ( int i = 0; i < nbTris; ++i )
+  {
+    Triangle & tri = _Triangles[i];
+
+    Vec3i Index[3];
+    Index[0] = Indices[i*3];
+    Index[1] = Indices[i*3+1];
+    Index[2] = Indices[i*3+2];
+
+    for ( int j = 0; j < 3; ++j )
+    {
+      Vertex & vert = tri._Vert[j];
+
+      vert._Position = Vec4(Vertices[Index[j].x], 1.f);
+
+      if ( Index[j].z >= 0 )
+        vert._UV = Vec2(UVMatIDs[Index[j].z].x, UVMatIDs[Index[j].z].y);
+      else
+        vert._UV = Vec2(0.f);
+
+      int matID = (int)UVMatIDs[Index[j].z].z;
+      if ( matID >= 0 )
+        vert._Color = Vec4(Materials[matID]._Albedo, 1.f);
+      else
+        vert._Color = Vec4(0.f);
+    }
+
+    Vec3 vec1(tri._Vert[1]._Position.x-tri._Vert[0]._Position.x, tri._Vert[1]._Position.y-tri._Vert[0]._Position.y, tri._Vert[1]._Position.z-tri._Vert[0]._Position.z);
+    Vec3 vec2(tri._Vert[2]._Position.x-tri._Vert[0]._Position.x, tri._Vert[2]._Position.y-tri._Vert[0]._Position.y, tri._Vert[2]._Position.z-tri._Vert[0]._Position.z);
+    tri._Normal = glm::normalize(glm::cross(vec1, vec2));
+
+    for ( int j = 0; j < 3; ++j )
+    {
+      if ( Index[j].y >= 0 )
+        tri._Vert[j]._Normal = Normals[Index[j].y];
+      else
+        tri._Vert[j]._Normal = tri._Normal;
+    }
+
+    int matID = (int)UVMatIDs[Index[0].z].z;
+    if ( matID >= 0 )
+    {
+      tri._Material = &Materials[matID];
+      if ( tri._Material && ( tri._Material -> _BaseColorTexId >= 0 ) )
+        tri._Texture = Textures[(int)tri._Material -> _BaseColorTexId];
+    }
+  }
 
   // Resize Image Buffer
   this -> ResizeImageBuffers();

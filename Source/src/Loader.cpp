@@ -49,6 +49,22 @@ void Tokenize( std::string iStr, std::vector<std::string> & oTokens )
   }
 }
 
+bool CompareChar( char iC1, char iC2 )
+{
+  if ( iC1 == iC2 )
+    return true;
+  else if ( std::toupper(iC1) == std::toupper(iC2) )
+    return true;
+  return false;
+}
+
+ // Case insensitive string comparison
+bool IsEqual( const std::string & iStr1, const std::string & iStr2 )
+{
+  return ( ( iStr1.size() == iStr2.size() )
+        && std::equal(iStr1.begin(), iStr1.end(), iStr2.begin(), &CompareChar) );
+}
+
 bool Loader::LoadScene(const std::string & iFilename, Scene *& oScene, RenderSettings & oRenderSettings)
 {
   oScene = nullptr;
@@ -105,7 +121,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
 
     //--------------------------------------------
     // Material - START
-    if ( ( 2 == nbTokens ) && ( "material" == tokens[0] ) )
+    if ( ( 2 == nbTokens ) && ( IsEqual("material", tokens[0]) ) )
     {
       std::cout << "New material : " << tokens[1] << std::endl;
 
@@ -122,7 +138,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
 
     //--------------------------------------------
     // Mesh - START
-    if ( "mesh" == tokens[0] )
+    if ( IsEqual("mesh", tokens[0]) )
     {
       std::cout << "New mesh" << std::endl;
 
@@ -137,7 +153,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
 
     //--------------------------------------------
     // Sphere - START
-    if ( "sphere" == tokens[0] )
+    if ( IsEqual("sphere", tokens[0]) )
     {
       std::cout << "New sphere" << std::endl;
 
@@ -152,7 +168,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
 
     //--------------------------------------------
     // Box - START
-    if ( "box" == tokens[0] )
+    if ( IsEqual("box", tokens[0]) )
     {
       std::cout << "New box" << std::endl;
 
@@ -167,7 +183,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
 
     //--------------------------------------------
     // Plane - START
-    if ( "plane" == tokens[0] )
+    if ( IsEqual("plane", tokens[0]) )
     {
       std::cout << "New plane" << std::endl;
 
@@ -182,7 +198,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
 
     //--------------------------------------------
     // Light - START
-    if ( "light" == tokens[0] )
+    if ( IsEqual("light", tokens[0]) )
     {
       std::cout << "New light" << std::endl;
 
@@ -197,7 +213,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
 
     //--------------------------------------------
     // Camera - START
-    if ( "camera" == tokens[0] )
+    if ( IsEqual("camera", tokens[0]) )
     {
       std::cout << "New camera" << std::endl;
 
@@ -212,7 +228,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
 
     //--------------------------------------------
     // Renderer - START
-    if ( "renderer" == tokens[0] )
+    if ( IsEqual("renderer", tokens[0]) )
     {
       std::cout << "New renderer" << std::endl;
 
@@ -232,7 +248,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
 
     //--------------------------------------------
     // GLTF - START
-    if ( "gltf" == tokens[0] )
+    if ( IsEqual("gltf", tokens[0]) )
     {
       std::cout << "New gltf model" << std::endl;
 
@@ -307,168 +323,168 @@ int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, cons
       }
     }
 
-    if ( "color" == tokens[0] )
+    if ( IsEqual("color", tokens[0]) )
     {
       if ( 4 == nbTokens )
         newMaterial._Albedo = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
         parsingError++;
     }
-    else if ( "emission" == tokens[0] )
+    else if ( IsEqual("emission", tokens[0]) )
     {
       if ( 4 == nbTokens )
         newMaterial._Emission = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
         parsingError++;
     }
-    else if ( "mediumcolor" == tokens[0] )
+    else if ( IsEqual("mediumcolor", tokens[0]) )
     {
       if ( 4 == nbTokens )
         newMaterial._MediumColor = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
         parsingError++;
     }
-    else if ( "opacity" == tokens[0] )
+    else if ( IsEqual("opacity", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newMaterial._Opacity = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "alphaCutoff" == tokens[0] )
+    else if ( IsEqual("alphaCutoff", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newMaterial._AlphaCutoff = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "metallic" == tokens[0] )
+    else if ( IsEqual("metallic", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newMaterial._Metallic = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "roughness" == tokens[0] )
+    else if ( IsEqual("roughness", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newMaterial._Roughness = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "subsurface" == tokens[0] )
+    else if ( IsEqual("subsurface", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newMaterial._Subsurface = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "speculartint" == tokens[0] )
+    else if ( IsEqual("speculartint", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newMaterial._SpecularTint = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "anisotropic" == tokens[0] )
+    else if ( IsEqual("anisotropic", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newMaterial._Anisotropic = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "sheen" == tokens[0] )
+    else if ( IsEqual("sheen", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newMaterial._Sheen = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "sheenTint" == tokens[0] )
+    else if ( IsEqual("sheenTint", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newMaterial._SheenTint = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "clearcoat" == tokens[0] )
+    else if ( IsEqual("clearcoat", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newMaterial._Clearcoat = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "clearcoatgloss" == tokens[0] )
+    else if ( IsEqual("clearcoatgloss", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newMaterial._ClearcoatGloss = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "spectrans" == tokens[0] )
+    else if ( IsEqual("spectrans", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newMaterial._SpecTrans = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "ior" == tokens[0] )
+    else if ( IsEqual("ior", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newMaterial._IOR = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "mediumdensity" == tokens[0] )
+    else if ( IsEqual("mediumdensity", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newMaterial._MediumDensity = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "mediumanisotropy" == tokens[0] )
+    else if ( IsEqual("mediumanisotropy", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newMaterial._MediumAnisotropy = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "albedotexture" == tokens[0] )
+    else if ( IsEqual("albedotexture", tokens[0]) )
     {
       if ( 2 == nbTokens )
         albedoTexName = tokens[1];
       else
         parsingError++;
     }
-    else if ( "metallicroughnesstexture" == tokens[0] )
+    else if ( IsEqual("metallicroughnesstexture", tokens[0]) )
     {
       if ( 2 == nbTokens )
         metallicRoughnessTexName = tokens[1];
       else
         parsingError++;
     }
-    else if ( "normaltexture" == tokens[0] )
+    else if ( IsEqual("normaltexture", tokens[0]) )
     {
       if ( 2 == nbTokens )
         normalTexName = tokens[1];
       else
         parsingError++;
     }
-    else if ( "emissiontexture" == tokens[0] )
+    else if ( IsEqual("emissiontexture", tokens[0]) )
     {
       if ( 2 == nbTokens )
         emissionTexName = tokens[1];
       else
         parsingError++;
     }
-    else if ( "alphamode" == tokens[0] )
+    else if ( IsEqual("alphamode", tokens[0]) )
     {
       if ( 2 == nbTokens )
         alphaMode = tokens[1];
       else
         parsingError++;
     }
-    else if ( "mediumtype" == tokens[0] )
+    else if ( IsEqual("mediumtype", tokens[0]) )
     {
       if ( 2 == nbTokens )
         mediumType = tokens[1];
@@ -549,50 +565,50 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
       }
     }
 
-    if ( "position" == tokens[0] )
+    if ( IsEqual("position", tokens[0]) )
     {
       if ( 4 == nbTokens )
         newLight._Pos = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
         parsingError++;
     }
-    else if ( "emission" == tokens[0] )
+    else if ( IsEqual("emission", tokens[0]) )
     {
       if ( 4 == nbTokens )
         newLight._Emission = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
         parsingError++;
     }
-    else if ( "v1" == tokens[0] )
+    else if ( IsEqual("v1", tokens[0]) )
     {
       if ( 4 == nbTokens )
         newLight._DirU = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
         parsingError++;
     }
-    else if ( "v2" == tokens[0] )
+    else if ( IsEqual("v2", tokens[0]) )
     {
       if ( 4 == nbTokens )
         newLight._DirV = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
         parsingError++;
     }
-    else if ( "radius" == tokens[0] )
+    else if ( IsEqual("radius", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newLight._Radius = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "type" == tokens[0] )
+    else if ( IsEqual("type", tokens[0]) )
     {
       if ( 2 == nbTokens )
       {
-        if ( "quad" == tokens[1] )
+        if ( IsEqual("quad", tokens[1]) )
           newLight._Type = (float) LightType::RectLight;
-        else if ( "sphere" == tokens[1] )
+        else if ( IsEqual("sphere", tokens[1]) )
           newLight._Type = (float) LightType::SphereLight;
-        else if ( "distant" == tokens[1] )
+        else if ( IsEqual("distant", tokens[1]) )
           newLight._Type = (float) LightType::DistantLight;
         else
           parsingError++;
@@ -673,56 +689,56 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
       }
     }
 
-    if ( "position" == tokens[0] )
+    if ( IsEqual("position", tokens[0]) )
     {
       if ( 4 == nbTokens )
         pos = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
         parsingError++;
     }
-    else if ( "lookat" == tokens[0] )
+    else if ( IsEqual("lookat", tokens[0]) )
     {
       if ( 4 == nbTokens )
         lookAt = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
         parsingError++;
     }
-    else if ( "aperture" == tokens[0] )
+    else if ( IsEqual("aperture", tokens[0]) )
     {
       if ( 2 == nbTokens )
         aperture = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "focaldist" == tokens[0] )
+    else if ( IsEqual("focaldist", tokens[0]) )
     {
       if ( 2 == nbTokens )
         focalDist = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "fov" == tokens[0] )
+    else if ( IsEqual("fov", tokens[0]) )
     {
       if ( 2 == nbTokens )
         fov = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "near" == tokens[0] )
+    else if ( IsEqual("near", tokens[0]) )
     {
       if ( 2 == nbTokens )
         near = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "far" == tokens[0] )
+    else if ( IsEqual("far", tokens[0]) )
     {
       if ( 2 == nbTokens )
         far = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "matrix" == tokens[0] )
+    else if ( IsEqual("matrix", tokens[0]) )
     {
       if ( 17 == nbTokens )
       {
@@ -826,7 +842,7 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSetting
       }
     }
 
-    if ( "resolution" == tokens[0] )
+    if ( IsEqual("resolution", tokens[0]) )
     {
       if ( 3 == nbTokens )
       {
@@ -836,7 +852,7 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSetting
       else
         parsingError++;
     }
-    else if ( "windowresolution" == tokens[0] )
+    else if ( IsEqual("windowresolution", tokens[0]) )
     {
       if ( 3 == nbTokens )
       {
@@ -846,27 +862,27 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSetting
       else
         parsingError++;
     }
-    else if ( "backgroundcolor" == tokens[0] )
+    else if ( IsEqual("backgroundcolor", tokens[0]) )
     {
       if ( 4 == nbTokens )
         oSettings._BackgroundColor = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
         parsingError++;
     }
-    else if ( "uniformlightcolor" == tokens[0] )
+    else if ( IsEqual("uniformlightcolor", tokens[0]) )
     {
       if ( 4 == nbTokens )
         oSettings._UniformLightCol = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
         parsingError++;
     }
-    else if ( "enablebackground" == tokens[0] )
+    else if ( IsEqual("enablebackground", tokens[0]) )
     {
       if ( 2 == nbTokens )
       {
-        if ( "true" == tokens[1] )
+        if ( IsEqual("true", tokens[1]) )
           oSettings._EnableBackGround = true;
-        else if ( "false" == tokens[1] )
+        else if ( IsEqual("false", tokens[1]) )
           oSettings._EnableBackGround = false;
         else
           parsingError++;
@@ -874,13 +890,13 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSetting
       else
         parsingError++;
     }
-    else if ( "enableskybox" == tokens[0] )
+    else if ( IsEqual("enableskybox", tokens[0]) )
     {
       if ( 2 == nbTokens )
       {
-        if ( "true" == tokens[1] )
+        if ( IsEqual("true", tokens[1]) )
           oSettings._EnableSkybox = true;
-        else if ( "false" == tokens[1] )
+        else if ( IsEqual("false", tokens[1]) )
           oSettings._EnableSkybox = false;
         else
           parsingError++;
@@ -888,13 +904,13 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSetting
       else
         parsingError++;
     }
-    else if ( "enableuniformlight" == tokens[0] )
+    else if ( IsEqual("enableuniformlight", tokens[0]) )
     {
       if ( 2 == nbTokens )
       {
-        if ( "true" == tokens[1] )
+        if ( IsEqual("true", tokens[1]) )
           oSettings._EnableUniformLight = true;
-        else if ( "false" == tokens[1] )
+        else if ( IsEqual("false", tokens[1]) )
           oSettings._EnableUniformLight = false;
         else
           parsingError++;
@@ -902,21 +918,21 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSetting
       else
         parsingError++;
     }
-    else if ( "bounces" == tokens[0] )
+    else if ( IsEqual("bounces", tokens[0]) )
     {
       if ( 2 == nbTokens )
         oSettings._Bounces =  std::stoi(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "maxdepth" == tokens[0] )
+    else if ( IsEqual("maxdepth", tokens[0]) )
     {
       if ( 2 == nbTokens )
         oSettings._Bounces =  std::stoi(tokens[1]);
       else
         parsingError++;
     }
-    //else if ( "background" == tokens[0] )
+    //else if ( IsEqual("background", tokens[0]) )
     //{
     //  if ( 2 == nbTokens )
     //  {
@@ -985,21 +1001,21 @@ int Loader::ParseSphere( std::ifstream & iStr, Scene & ioScene )
       }
     }
 
-    if ( "radius" == tokens[0] )
+    if ( IsEqual("radius", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newSphere._Radius = std::stof(tokens[1]);
       else
         parsingError++;
     }
-    else if ( "material" == tokens[0] )
+    else if ( IsEqual("material", tokens[0]) )
     {
       if ( 2 == nbTokens )
         materialName = tokens[1];
       else
         parsingError++;
     }
-    else if ( "position" == tokens[0] )
+    else if ( IsEqual("position", tokens[0]) )
     {
       if ( 4 == nbTokens )
       {
@@ -1010,7 +1026,7 @@ int Loader::ParseSphere( std::ifstream & iStr, Scene & ioScene )
       else
         parsingError++;
     }
-    else if ( "scale" == tokens[0] )
+    else if ( IsEqual("scale", tokens[0]) )
     {
       if ( 4 == nbTokens )
       {
@@ -1021,7 +1037,7 @@ int Loader::ParseSphere( std::ifstream & iStr, Scene & ioScene )
       else
         parsingError++;
     }
-    else if ( "rotation" == tokens[0] )
+    else if ( IsEqual("rotation", tokens[0]) )
     {
       if ( 5 == nbTokens )
       {
@@ -1036,7 +1052,7 @@ int Loader::ParseSphere( std::ifstream & iStr, Scene & ioScene )
       else
         parsingError++;
     }
-    else if ( "matrix" == tokens[0] )
+    else if ( IsEqual("matrix", tokens[0]) )
     {
       if ( 17 == nbTokens )
       {
@@ -1133,28 +1149,28 @@ int Loader::ParseBox( std::ifstream & iStr, Scene & ioScene )
       }
     }
 
-    if ( "low" == tokens[0] )
+    if ( IsEqual("low", tokens[0]) )
     {
       if ( 4 == nbTokens )
         newBox._Low = { std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]) };
       else
         parsingError++;
     }
-    else if ( "high" == tokens[0] )
+    else if ( IsEqual("high", tokens[0]) )
     {
       if ( 4 == nbTokens )
         newBox._High = { std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]) };
       else
         parsingError++;
     }
-    else if ( "material" == tokens[0] )
+    else if ( IsEqual("material", tokens[0]) )
     {
       if ( 2 == nbTokens )
         materialName = tokens[1];
       else
         parsingError++;
     }
-    else if ( "position" == tokens[0] )
+    else if ( IsEqual("position", tokens[0]) )
     {
       if ( 4 == nbTokens )
       {
@@ -1165,7 +1181,7 @@ int Loader::ParseBox( std::ifstream & iStr, Scene & ioScene )
       else
         parsingError++;
     }
-    else if ( "scale" == tokens[0] )
+    else if ( IsEqual("scale", tokens[0]) )
     {
       if ( 4 == nbTokens )
       {
@@ -1176,7 +1192,7 @@ int Loader::ParseBox( std::ifstream & iStr, Scene & ioScene )
       else
         parsingError++;
     }
-    else if ( "rotation" == tokens[0] )
+    else if ( IsEqual("rotation", tokens[0]) )
     {
       if ( 5 == nbTokens )
       {
@@ -1191,7 +1207,7 @@ int Loader::ParseBox( std::ifstream & iStr, Scene & ioScene )
       else
         parsingError++;
     }
-    else if ( "matrix" == tokens[0] )
+    else if ( IsEqual("matrix", tokens[0]) )
     {
       if ( 17 == nbTokens )
       {
@@ -1288,28 +1304,28 @@ int Loader::ParsePlane( std::ifstream & iStr, Scene & ioScene )
       }
     }
 
-    if ( "origin" == tokens[0] )
+    if ( IsEqual("origin", tokens[0]) )
     {
       if ( 4 == nbTokens )
         newPlane._Origin = { std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]) };
       else
         parsingError++;
     }
-    else if ( "normal" == tokens[0] )
+    else if ( IsEqual("normal", tokens[0]) )
     {
       if ( 4 == nbTokens )
         newPlane._Normal = { std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]) };
       else
         parsingError++;
     }
-    else if ( "material" == tokens[0] )
+    else if ( IsEqual("material", tokens[0]) )
     {
       if ( 2 == nbTokens )
         materialName = tokens[1];
       else
         parsingError++;
     }
-    else if ( "position" == tokens[0] )
+    else if ( IsEqual("position", tokens[0]) )
     {
       if ( 4 == nbTokens )
       {
@@ -1320,7 +1336,7 @@ int Loader::ParsePlane( std::ifstream & iStr, Scene & ioScene )
       else
         parsingError++;
     }
-    else if ( "scale" == tokens[0] )
+    else if ( IsEqual("scale", tokens[0]) )
     {
       if ( 4 == nbTokens )
       {
@@ -1331,7 +1347,7 @@ int Loader::ParsePlane( std::ifstream & iStr, Scene & ioScene )
       else
         parsingError++;
     }
-    else if ( "rotation" == tokens[0] )
+    else if ( IsEqual("rotation", tokens[0]) )
     {
       if ( 5 == nbTokens )
       {
@@ -1346,7 +1362,7 @@ int Loader::ParsePlane( std::ifstream & iStr, Scene & ioScene )
       else
         parsingError++;
     }
-    else if ( "matrix" == tokens[0] )
+    else if ( IsEqual("matrix", tokens[0]) )
     {
       if ( 17 == nbTokens )
       {
@@ -1444,28 +1460,28 @@ int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scen
       }
     }
 
-    if ( "name" == tokens[0] )
+    if ( IsEqual("name", tokens[0]) )
     {
       if ( 2 == nbTokens )
         meshName = tokens[1];
       else
         parsingError++;
     }
-    else if ( "file" == tokens[0] )
+    else if ( IsEqual("file", tokens[0]) )
     {
       if ( 2 == nbTokens )
         meshFileName = tokens[1];
       else
         parsingError++;
     }
-    else if ( "material" == tokens[0] )
+    else if ( IsEqual("material", tokens[0]) )
     {
       if ( 2 == nbTokens )
         materialName = tokens[1];
       else
         parsingError++;
     }
-    else if ( "position" == tokens[0] )
+    else if ( IsEqual("position", tokens[0]) )
     {
       if ( 4 == nbTokens )
       {
@@ -1476,7 +1492,7 @@ int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scen
       else
         parsingError++;
     }
-    else if ( "scale" == tokens[0] )
+    else if ( IsEqual("scale", tokens[0]) )
     {
       if ( 4 == nbTokens )
       {
@@ -1487,7 +1503,7 @@ int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scen
       else
         parsingError++;
     }
-    else if ( "rotation" == tokens[0] )
+    else if ( IsEqual("rotation", tokens[0]) )
     {
       if ( 5 == nbTokens )
       {
@@ -1502,7 +1518,7 @@ int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scen
       else
         parsingError++;
     }
-    else if ( "matrix" == tokens[0] )
+    else if ( IsEqual("matrix", tokens[0]) )
     {
       if ( 17 == nbTokens )
       {
