@@ -628,7 +628,7 @@ void Test4::DrawUI()
       _ColorDepthOrNormalsBuffer = bufferChoice;
 
       int enableBG = !!_Settings._EnableBackGround;
-      ImGui::Combo("Background", &enableBG, YESorNO, 2);
+      ImGui::Combo("Show background", &enableBG, YESorNO, 2);
       _Settings._EnableBackGround = !!enableBG;
 
       int sampling = (int)_BilinearSampling;
