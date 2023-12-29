@@ -134,6 +134,8 @@ private:
   int InitializeFrameBuffer();
   int InitializeSceneFiles();
   int InitializeScene();
+  int InitializeBackgroundFiles();
+  int InitializeBackground();
 
   int RecompileShaders();
   int UpdateUniforms();
@@ -177,8 +179,12 @@ private:
   std::unique_ptr<Scene>    _Scene;
   std::vector<std::string>  _SceneFiles;
   std::vector<const char*>  _SceneNames;
+  std::vector<std::string>  _BackgroundFiles;
+  std::vector<const char*>  _BackgroundNames;
   unsigned int              _CurSceneId = 0;
+  unsigned int              _CurBackgroundId = 0;
   bool                      _ReloadScene = true;
+  bool                      _ReloadBackground = true;
   bool                      _UpdateFrameBuffers = false;
 
   std::vector<Triangle>     _Triangles;

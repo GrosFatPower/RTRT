@@ -19,7 +19,7 @@
 
 #include <iostream>
 #include <execution>
-#include <omp.h>
+//#include <omp.h>
 #include <thread>
 
 #define PARALLEL
@@ -261,6 +261,8 @@ Test4::~Test4()
 
   for ( auto fileName : _SceneNames )
     delete[] fileName;
+  for ( auto fileName : _BackgroundNames )
+    delete[] fileName;
 }
 
 // ----------------------------------------------------------------------------
@@ -287,6 +289,40 @@ int Test4::InitializeSceneFiles()
       std::size_t found = _SceneFiles[_SceneFiles.size()-1].find("TexturedBox.scene");
       if ( std::string::npos != found )
         _CurSceneId = _SceneFiles.size()-1;
+    }
+  }
+  
+  tinydir_close(&dir);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeBackgroundFiles
+// ----------------------------------------------------------------------------
+int Test4::InitializeBackgroundFiles()
+{
+  std::string bgdPath = g_AssetsDir + "skyboxes\\";
+
+  tinydir_dir dir;
+  tinydir_open_sorted(&dir, bgdPath.c_str());
+  
+  for ( int i = 0; i < dir.n_files; ++i )
+  {
+    tinydir_file file;
+    tinydir_readfile_n(&dir, &file, i);
+  
+    std::string extension(file.extension);
+    if ( ( "hdr" == extension ) || ( "HDR" == extension ) )
+    {
+      char * filename = new char[256];
+      snprintf(filename, 256, "%s", file.name);
+      _BackgroundNames.push_back(filename);
+      _BackgroundFiles.push_back(bgdPath + std::string(file.name));
+
+      std::size_t found = _BackgroundFiles[_BackgroundFiles.size()-1].find("alps_field_2k.hdr");
+      if ( std::string::npos != found )
+        _CurBackgroundId = _BackgroundFiles.size()-1;
     }
   }
   
@@ -370,7 +406,7 @@ int Test4::InitializeFrameBuffer()
 
 // ----------------------------------------------------------------------------
 // RecompileShaders
-// ----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 int Test4::RecompileShaders()
 {
   ShaderSource vertexShaderSrc = Shader::LoadShader("..\\..\\shaders\\vertex_Default.glsl");
@@ -533,6 +569,16 @@ void Test4::DrawUI()
       {
         _CurSceneId = selectedSceneId;
         _ReloadScene = true;
+      }
+    }
+
+    int selectedBgdId = _CurBackgroundId;
+    if ( ImGui::Combo("Background", &selectedBgdId, _BackgroundNames.data(), _BackgroundNames.size()) )
+    {
+      if ( selectedBgdId != _CurBackgroundId )
+      {
+        _CurBackgroundId = selectedBgdId;
+        _ReloadBackground = true;
       }
     }
 
@@ -1310,21 +1356,6 @@ int Test4::InitializeScene()
   for ( int i = 0; i < _Scene -> GetNbLights(); ++i )
     _Uniforms._Lights.push_back(*_Scene -> GetLight(i));
 
-  // Loading sky box
-  int skyboxID =_Scene -> AddTexture(g_AssetsDir + "skyboxes\\alps_field_2k.hdr", 4, TexFormat::TEX_FLOAT);
-  {
-    std::vector<Texture*> & textures = _Scene -> GetTextures();
-
-    Texture * skyboxTexture = textures[skyboxID];
-    if ( skyboxTexture )
-    {
-      _Uniforms._SkyBox = skyboxTexture;
-      _Uniforms._SkyBoxRotation = _Settings._SkyBoxRotation;
-    }
-    else
-      return 1;
-  }
-
   _Scene -> CompileMeshData(_Settings._TextureSize);
 
   // Load _Triangles
@@ -1394,6 +1425,41 @@ int Test4::InitializeScene()
 }
 
 // ----------------------------------------------------------------------------
+// InitializeBackground
+// ----------------------------------------------------------------------------
+int Test4::InitializeBackground()
+{
+  if ( _BackgroundFiles.size() )
+  {
+    if ( ( _CurBackgroundId < 0 ) || ( _CurBackgroundId >= _BackgroundFiles.size() ) )
+      _CurBackgroundId = 0;
+
+    if ( _Scene )
+    {
+      int skyboxID = _Scene -> AddTexture(_BackgroundFiles[_CurBackgroundId], 4, TexFormat::TEX_FLOAT);
+      {
+        std::vector<Texture*> & textures = _Scene -> GetTextures();
+
+        Texture * skyboxTexture = textures[skyboxID];
+        if ( skyboxTexture )
+        {
+          _Uniforms._SkyBox = skyboxTexture;
+          _Uniforms._SkyBoxRotation = _Settings._SkyBoxRotation;
+        }
+        else
+          return 1;
+      }
+    }
+    else
+      return 1;
+  }
+
+  _ReloadBackground = false;
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // ProcessInput
 // ----------------------------------------------------------------------------
 void Test4::ProcessInput()
@@ -1417,9 +1483,17 @@ int Test4::UpdateScene()
     glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
     glBindTexture(GL_TEXTURE_2D, 0);
+
+    _ReloadBackground = true;
   }
   if ( !_Scene )
     return 1;
+
+  if ( _ReloadBackground )
+  {
+    if ( 0 != InitializeBackground() )
+      return 1;
+  }
 
   // Mouse input
   {
@@ -1534,6 +1608,13 @@ int Test4::Run()
   if ( ( 0 != InitializeSceneFiles() ) || ( 0 != InitializeScene() ) )
   {
     std::cout << "ERROR: Scene initialization failed!" << std::endl;
+    return 1;
+  }
+
+  // Initialize the Background
+  if ( ( 0 != InitializeBackgroundFiles() ) || ( 0 != InitializeBackground() ) )
+  {
+    std::cout << "ERROR: Background initialization failed!" << std::endl;
     return 1;
   }
 
