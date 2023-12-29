@@ -198,7 +198,8 @@ private:
 
   RenderSettings     _Settings;
 
-  int                _NbThreads = 8;
+  int                _NbThreadsMax = 1;
+  int                _NbThreads = 1;
   int                _ColorDepthOrNormalsBuffer = 0;
   bool               _ShowWires = false;
   bool               _BilinearSampling = true;

@@ -247,6 +247,9 @@ Test4::Test4( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iSc
   _Settings._RenderResolution.x = iScreenWidth  * ( _Settings._RenderScale * 0.01f );
   _Settings._RenderResolution.y = iScreenHeight * ( _Settings._RenderScale * 0.01f );
   ResizeImageBuffers();
+
+  _NbThreadsMax = std::thread::hardware_concurrency();
+  _NbThreads = _NbThreadsMax;
 }
 
 // ----------------------------------------------------------------------------
@@ -640,7 +643,7 @@ void Test4::DrawUI()
       _ShadingType = (ShadingType)shadingType;
 
       int numThreads = _NbThreads;
-      if ( ImGui::SliderInt("Nb Threads", &numThreads, 1, 24) && ( numThreads > 0 ) )
+      if ( ImGui::SliderInt("Nb Threads", &numThreads, 1, _NbThreadsMax) && ( numThreads > 0 ) )
         _NbThreads = numThreads;
     }
 
