@@ -20,6 +20,7 @@
 #include <iostream>
 #include <execution>
 #include <omp.h>
+#include <thread>
 
 #define PARALLEL
 #ifdef PARALLEL
@@ -79,8 +80,6 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
   {
     std::cout << "EVENT : KEY RELEASE" << std::endl;
 
-    bool updateFrameBuffer = false;
-
     switch ( key )
     {
     case GLFW_KEY_W:
@@ -113,14 +112,14 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
     {
       this_ -> _Settings._RenderScale = std::max(this_ -> _Settings._RenderScale - 5, 5);
       std::cout << "SCALE = " << this_ -> _Settings._RenderScale << std::endl;
-      updateFrameBuffer = true;
+      this_ -> _UpdateFrameBuffers = true;
       break;
     }
     case GLFW_KEY_PAGE_UP:
     {
       this_ -> _Settings._RenderScale = std::min(this_ -> _Settings._RenderScale + 5, 300);
       std::cout << "SCALE = " << this_ -> _Settings._RenderScale << std::endl;
-      updateFrameBuffer = true;
+      this_ -> _UpdateFrameBuffers = true;
       break;
     }
     case GLFW_KEY_LEFT:
@@ -163,15 +162,6 @@ void Test4::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
     }
     default :
       break;
-    }
-
-    if ( updateFrameBuffer )
-    {
-      this_ -> ResizeImageBuffers();
-
-      glBindTexture(GL_TEXTURE_2D, this_->_ScreenTextureID);
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, this_ -> _Settings._RenderResolution.x, this_ -> _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
-      glBindTexture(GL_TEXTURE_2D, 0);
     }
   }
 }
@@ -548,6 +538,9 @@ void Test4::DrawUI()
 
     if (ImGui::CollapsingHeader("Rendering"))
     {
+      ImGui::Text("Window width %d: height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+      ImGui::Text("Render width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
+
       ImGui::Text("Render image      : %.3f ms/frame", _RenderImgElapsed * 1000.f);
       ImGui::Text("Render background : %.3f ms/frame", _RenderBgdElapsed * 1000.f);
       ImGui::Text("Render scene      : %.3f ms/frame", _RenderScnElapsed * 1000.f);
@@ -557,16 +550,52 @@ void Test4::DrawUI()
 
     if (ImGui::CollapsingHeader("Settings"))
     {
-      ImGui::Text("Window width %d: height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
-      ImGui::Text("Render width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
       ImGui::Text("Render scale            : %d %%", _Settings._RenderScale);
-      ImGui::Text("FOV                     : %3.0f deg", _Scene -> GetCamera().GetFOVInDegrees());
-      ImGui::Text("zNear                   : %f", zNear);
-      ImGui::Text("zFar                    : %f", zFar);
-      ImGui::Text("Buffer                  : %s", COLORorDEPTHorNORMALS[_ColorDepthOrNormalsBuffer]);
-      ImGui::Text("Background              : %s", YESorNO[!!_Settings._EnableBackGround]);
-      ImGui::Text("Texture sampling        : %s", NEARESTorBILNEAR[!!_BilinearSampling]);
-      ImGui::Text("Shading                 : %s", PHONGorFLAT[!!((int)_ShadingType)]);
+
+      int scale = _Settings._RenderScale;
+      if ( ImGui::SliderInt("Render scale", &scale, 5, 200) )
+      {
+        _Settings._RenderScale = scale;
+        _UpdateFrameBuffers = true;
+      }
+
+      float fov = _Scene -> GetCamera().GetFOVInDegrees();
+      if ( ImGui::SliderFloat("FOV", &fov, 5.f, 150.f) )
+        _Scene -> GetCamera().SetFOVInDegrees(fov);
+
+      float zVal = zNear;
+      if ( ImGui::SliderFloat("zNear", &zVal, 0.01f, std::min(10.f, zFar)) )
+      {
+        zNear = zVal;
+        _Scene -> GetCamera().SetZNearFar(zNear, zFar);
+      }
+
+      zVal = zFar;
+      if ( ImGui::SliderFloat("zFar", &zVal, zNear + 0.01f, 10000.f) )
+      {
+        zFar = zVal;
+        _Scene -> GetCamera().SetZNearFar(zNear, zFar);
+      }
+
+      int bufferChoice = _ColorDepthOrNormalsBuffer;
+      ImGui::Combo("Buffer", &bufferChoice, COLORorDEPTHorNORMALS, 3);
+      _ColorDepthOrNormalsBuffer = bufferChoice;
+
+      int enableBG = !!_Settings._EnableBackGround;
+      ImGui::Combo("Background", &enableBG, YESorNO, 2);
+      _Settings._EnableBackGround = !!enableBG;
+
+      int sampling = (int)_BilinearSampling;
+      ImGui::Combo("Texture sampling", &sampling, NEARESTorBILNEAR, 2);
+      _BilinearSampling = !!sampling;
+
+      int shadingType = (int)_ShadingType;
+      ImGui::Combo("Shading", &shadingType, PHONGorFLAT, 2);
+      _ShadingType = (ShadingType)shadingType;
+
+      int numThreads = _NbThreads;
+      if ( ImGui::SliderInt("Nb Threads", &numThreads, 1, 24) && ( numThreads > 0 ) )
+        _NbThreads = numThreads;
     }
 
     if (ImGui::CollapsingHeader("Controls"))
@@ -614,9 +643,69 @@ int Test4::RenderBackground( float iTop, float iRight )
     Vec3 dX = _Scene -> GetCamera().GetRight() * ( 2 * iRight / width );
     Vec3 dY = _Scene -> GetCamera().GetUp() * ( 2 * iTop / height );
 
+    std::vector<std::thread> threads;
+    threads.reserve(_NbThreads);
+
+    for ( int i = 0; i < _NbThreads; ++i )
+    {
+      int startY = ( height / _NbThreads ) * i;
+      int endY = std::min(startY + ( height / _NbThreads ), height);
+      BGThreadData TD(this, _ColorBuffer, bottomLeft, dX, dY, width, height, startY, endY);
+
+      threads.emplace_back(std::thread(Test4::RenderBackgroundRows, TD));
+    }
+
+    for ( auto & thread : threads )
+    {
+      thread.join();
+    }
+  }
+  else
+  {
+    const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
+    std::fill(policy, _ColorBuffer.begin(), _ColorBuffer.end(), backgroundColor);
+  }
+
+  _RenderBgdElapsed = glfwGetTime() - startTime;
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// RenderBackgroundRows
+// ----------------------------------------------------------------------------
+void Test4::RenderBackgroundRows( BGThreadData iTD )
+{
+  for ( int y = iTD._StartY; y < iTD._EndY; ++y )
+  {
+    for ( int x = 0; x < iTD._Width; ++x  )
+    {
+      Vec3 worldP = glm::normalize(iTD._BottomLeft + iTD._DX * (float)x + iTD._DY * (float)y);
+      iTD._ColorBuffer[x + iTD._Width * y] = iTD._this -> SampleSkybox(worldP);
+    }
+  }
+}
+
+/*
+int Test4::RenderBackground( float iTop, float iRight )
+{
+  double startTime = glfwGetTime();
+
+  int width  = _Settings._RenderResolution.x;
+  int height = _Settings._RenderResolution.y;
+
+  float zNear, zFar;
+  _Scene -> GetCamera().GetZNearFar(zNear, zFar);
+
+  if ( _Settings._EnableBackGround )
+  {
+    Vec3 bottomLeft = _Scene -> GetCamera().GetForward() * zNear - iRight * _Scene -> GetCamera().GetRight() - iTop * _Scene -> GetCamera().GetUp();
+    Vec3 dX = _Scene -> GetCamera().GetRight() * ( 2 * iRight / width );
+    Vec3 dY = _Scene -> GetCamera().GetUp() * ( 2 * iTop / height );
+
     for ( int y = 0; y < height; ++y )
     {
-      //#pragma omp parallel for
+      #pragma omp parallel for
       for ( int x = 0; x < width; ++x  )
       {
         Vec3 worldP = glm::normalize(bottomLeft + dX * (float)x + dY * (float)y);
@@ -634,6 +723,7 @@ int Test4::RenderBackground( float iTop, float iRight )
 
   return 0;
 }
+*/
 
 // ----------------------------------------------------------------------------
 // RenderScene
@@ -1391,6 +1481,15 @@ int Test4::UpdateScene()
     {
       _Scene -> GetCamera().OffsetOrientations(-_TimeDelta * velocity, 0.f);
     }
+  }
+
+  if ( _UpdateFrameBuffers )
+  {
+    this -> ResizeImageBuffers();
+
+    glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
   }
 
   return 0;

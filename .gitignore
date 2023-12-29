@@ -23,6 +23,8 @@
 .vs/
 Bin/
 Build/
+Assets/Figurine/
+Assets/bedroom/
 
 # Files
 *.vcxproj

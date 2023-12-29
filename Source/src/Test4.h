@@ -96,6 +96,35 @@ private:
     float                _SkyBoxRotation = 0.f;
   };
 
+  struct BGThreadData
+  {
+    Test4             * _this;
+    std::vector<Vec4> & _ColorBuffer;
+    Vec3                _BottomLeft;
+    Vec3                _DX;
+    Vec3                _DY;
+    int                 _Width;
+    int                 _Height;
+    int                 _StartY;
+    int                 _EndY;
+
+    BGThreadData(Test4             * iThis,
+                 std::vector<Vec4> & iColorBuffer,
+                 Vec3              & iBottomLeft,
+                 Vec3              & iDX,
+                 Vec3              & iDY,
+                 int                 iWidth,
+                 int                 iHeight,
+                 int                 iStartY,
+                 int                 iEndY)
+    : _this(iThis)
+    , _ColorBuffer(iColorBuffer)
+    , _BottomLeft(iBottomLeft)
+    , _DX(iDX), _DY(iDY)
+    , _Width(iWidth), _Height(iHeight)
+    , _StartY(iStartY), _EndY(iEndY){};
+  };
+
   static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
   static void MousebuttonCallback(GLFWwindow * window, int button, int action, int mods);
   static void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
@@ -113,6 +142,7 @@ private:
   int UpdateScene();
 
   int RenderBackground( float iTop, float iRight );
+  static void RenderBackgroundRows( BGThreadData iTD );
   int RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP );
 
   void RenderToTexture();
@@ -149,6 +179,7 @@ private:
   std::vector<const char*>  _SceneNames;
   unsigned int              _CurSceneId = 0;
   bool                      _ReloadScene = true;
+  bool                      _UpdateFrameBuffers = false;
 
   std::vector<Triangle>     _Triangles;
 
@@ -161,6 +192,7 @@ private:
 
   RenderSettings     _Settings;
 
+  int                _NbThreads = 8;
   int                _ColorDepthOrNormalsBuffer = 0;
   bool               _ShowWires = false;
   bool               _BilinearSampling = true;
