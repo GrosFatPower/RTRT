@@ -89,11 +89,16 @@ private:
 
   struct Uniform
   {
-    const Material     * _Material       = nullptr;
-    const Texture      * _Texture        = nullptr;
-    const Texture      * _SkyBox         = nullptr;
+    const Material     * _Material         = nullptr;
+    const Texture      * _Texture          = nullptr;
+    const Texture      * _SkyBox           = nullptr;
     std::vector<Light>   _Lights;
-    float                _SkyBoxRotation = 0.f;
+    Vec3                 _CameraPos;
+    float                _SkyBoxRotation   = 0.f;
+    int                  _ColorDepthOrNormalsBuffer = 0;
+    ShadingType          _ShadingType      = ShadingType::Phong;
+    bool                 _ShowWires        = false;
+    bool                 _BilinearSampling = true;
   };
 
   struct BGThreadData
@@ -125,6 +130,41 @@ private:
     , _StartY(iStartY), _EndY(iEndY){};
   };
 
+  struct SceneThreadData
+  {
+    Test4                 * _this;
+    std::vector<Vec4>     & _ColorBuffer;
+    std::vector<float>    & _DepthBuffer;
+    std::vector<Triangle> & _Triangles;
+    const Uniform         & _Uniforms;
+    const Mat4x4            _MV;
+    const Mat4x4            _P;
+    int                     _Width;
+    int                     _Height;
+    int                     _StartY;
+    int                     _EndY;
+
+    SceneThreadData(Test4                 * iThis,
+                    std::vector<Vec4>     & iColorBuffer,
+                    std::vector<float>    & iDepthBuffer,
+                    std::vector<Triangle> & iTriangles,
+                    const Uniform         & iUniforms,
+                    const Mat4x4          & iMV,
+                    const Mat4x4          & iP,
+                    int                     iWidth,
+                    int                     iHeight,
+                    int                     iStartY,
+                    int                     iEndY)
+    : _this(iThis)
+    , _ColorBuffer(iColorBuffer)
+    , _DepthBuffer(iDepthBuffer)
+    , _Triangles(iTriangles)
+    , _Uniforms(iUniforms)
+    , _MV(iMV), _P(iP)
+    , _Width(iWidth), _Height(iHeight)
+    , _StartY(iStartY), _EndY(iEndY){};
+  };
+
   static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
   static void MousebuttonCallback(GLFWwindow * window, int button, int action, int mods);
   static void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
@@ -146,6 +186,7 @@ private:
   int RenderBackground( float iTop, float iRight );
   static void RenderBackgroundRows( BGThreadData iTD );
   int RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP );
+  static void RenderSceneRows( SceneThreadData iTD );
 
   void RenderToTexture();
   void RenderToSceen();
@@ -155,23 +196,23 @@ private:
 
   void ResizeImageBuffers();
 
-  float EdgeFunction(const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2) const;
-  float EdgeFunction(const Vec2 & iV0, const Vec2 & iV1, const Vec2 & iV2) const;
-  float EdgeFunction_Optim1(const float iA, const float iB, const float iC, const Vec3 & iV2) const ;
-  float EdgeFunction_Optim1(const float iA, const float iB, const float iC, const Vec2 & iV2) const ;
-  void EdgeFunction_PreComputeABC( const Vec3 & iV1, const Vec3 & iV2, float & oA, float &oB, float & oC ) const;
-  void EdgeFunction_PreComputeABC( const Vec2 & iV1, const Vec2 & iV2, float & oA, float &oB, float & oC ) const;
+  static float EdgeFunction(const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2);
+  static float EdgeFunction(const Vec2 & iV0, const Vec2 & iV1, const Vec2 & iV2);
+  static float EdgeFunction_Optim1(const float iA, const float iB, const float iC, const Vec3 & iV2);
+  static float EdgeFunction_Optim1(const float iA, const float iB, const float iC, const Vec2 & iV2);
+  static void EdgeFunction_PreComputeABC( const Vec3 & iV1, const Vec3 & iV2, float & oA, float &oB, float & oC );
+  static void EdgeFunction_PreComputeABC( const Vec2 & iV1, const Vec2 & iV2, float & oA, float &oB, float & oC );
 
 
-  void VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Vec4 & oVertexPosition, Varying & oAttrib );
+  static void VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Uniform & iUniforms, Vec4 & oVertexPosition, Varying & oAttrib );
 
-  void FragmentShader_Color( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor );
+  static void FragmentShader_Color( const Vec4 & iFragCoord, Uniform & iUniforms, const Varying & iAttrib, Vec4 & oColor );
 
-  void FragmentShader_Depth( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor );
+  static void FragmentShader_Depth( const Vec4 & iFragCoord, Uniform & iUniforms, const Varying & iAttrib, Vec4 & oColor );
 
-  void FragmentShader_Normal( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor );
+  static void FragmentShader_Normal( const Vec4 & iFragCoord, Uniform & iUniforms, const Varying & iAttrib, Vec4 & oColor );
 
-  float DistanceToSegment( const Vec2 iA, const Vec2 iB, const Vec2 iP );
+  static float DistanceToSegment( const Vec2 iA, const Vec2 iB, const Vec2 iP );
 
   Vec4 SampleSkybox( const Vec3 & iDir );
 
@@ -226,24 +267,24 @@ private:
 };
 
 
-inline float Test4::EdgeFunction(const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2) const { 
+inline float Test4::EdgeFunction(const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2) { 
   return (iV1.x - iV0.x) * (iV2.y - iV0.y) - (iV1.y - iV0.y) * (iV2.x - iV0.x); } // Counter-Clockwise edge function
 //  return (iV2.x - iV0.x) * (iV1.y - iV0.y) - (iV2.y - iV0.y) * (iV1.x - iV0.x); } // Clockwise edge function
 
-inline float Test4::EdgeFunction(const Vec2 & iV0, const Vec2 & iV1, const Vec2 & iV2) const { 
+inline float Test4::EdgeFunction(const Vec2 & iV0, const Vec2 & iV1, const Vec2 & iV2) { 
   return (iV1.x - iV0.x) * (iV2.y - iV0.y) - (iV1.y - iV0.y) * (iV2.x - iV0.x); } // Counter-Clockwise edge function
 //  return (iV2.x - iV0.x) * (iV1.y - iV0.y) - (iV2.y - iV0.y) * (iV1.x - iV0.x); } // Clockwise edge function
 
-inline float Test4::EdgeFunction_Optim1(const float iA, const float iB, const float iC, const Vec3 & iV2) const {
+inline float Test4::EdgeFunction_Optim1(const float iA, const float iB, const float iC, const Vec3 & iV2) {
   return ( iA * iV2.x ) + ( iB * iV2.y ) + iC; } // A = (iV0.y - iV1.y), B = (iV1.x - iV0.x), C = ( iV0.x * iV1.y - iV0.y * iV1.x )
 
-inline float Test4::EdgeFunction_Optim1(const float iA, const float iB, const float iC, const Vec2 & iV2) const {
+inline float Test4::EdgeFunction_Optim1(const float iA, const float iB, const float iC, const Vec2 & iV2) {
   return ( iA * iV2.x ) + ( iB * iV2.y ) + iC; } // A = (iV0.y - iV1.y), B = (iV1.x - iV0.x), C = ( iV0.x * iV1.y - iV0.y * iV1.x )
 
-inline void Test4::EdgeFunction_PreComputeABC( const Vec3 & iV0, const Vec3 & iV1, float & oA, float & oB, float & oC ) const { 
+inline void Test4::EdgeFunction_PreComputeABC( const Vec3 & iV0, const Vec3 & iV1, float & oA, float & oB, float & oC ) { 
   oA = (iV0.y - iV1.y); oB = (iV1.x - iV0.x); oC = ( iV0.x * iV1.y ) - ( iV0.y * iV1.x ); }
 
-inline void Test4::EdgeFunction_PreComputeABC( const Vec2 & iV0, const Vec2 & iV1, float & oA, float & oB, float & oC ) const { 
+inline void Test4::EdgeFunction_PreComputeABC( const Vec2 & iV0, const Vec2 & iV1, float & oA, float & oB, float & oC ) { 
   oA = (iV0.y - iV1.y); oB = (iV1.x - iV0.x); oC = ( iV0.x * iV1.y ) - ( iV0.y * iV1.x ); }
 
 }

@@ -22,17 +22,16 @@
 //#include <omp.h>
 #include <thread>
 
+#define EPSILON 0.01
+
 #define PARALLEL
+//#define RASTERIZATION_OPTIM
+
 #ifdef PARALLEL
 constexpr std::execution::parallel_policy policy = std::execution::par;
 #else
 constexpr std::execution::sequenced_policy policy = std::execution::seq;
 #endif
-
-#define EPSILON 0.01
-
-#define SIMUL_RENDERING_PIPELINE
-//#define RASTERIZATION_OPTIM
 
 namespace RTRT
 {
@@ -687,6 +686,7 @@ void Test4::DrawUI()
 // ----------------------------------------------------------------------------
 // RenderBackground
 // ----------------------------------------------------------------------------
+#ifdef PARALLEL
 int Test4::RenderBackground( float iTop, float iRight )
 {
   double startTime = glfwGetTime();
@@ -732,22 +732,8 @@ int Test4::RenderBackground( float iTop, float iRight )
   return 0;
 }
 
-// ----------------------------------------------------------------------------
-// RenderBackgroundRows
-// ----------------------------------------------------------------------------
-void Test4::RenderBackgroundRows( BGThreadData iTD )
-{
-  for ( int y = iTD._StartY; y < iTD._EndY; ++y )
-  {
-    for ( int x = 0; x < iTD._Width; ++x  )
-    {
-      Vec3 worldP = glm::normalize(iTD._BottomLeft + iTD._DX * (float)x + iTD._DY * (float)y);
-      iTD._ColorBuffer[x + iTD._Width * y] = iTD._this -> SampleSkybox(worldP);
-    }
-  }
-}
+#else
 
-/*
 int Test4::RenderBackground( float iTop, float iRight )
 {
   double startTime = glfwGetTime();
@@ -784,12 +770,70 @@ int Test4::RenderBackground( float iTop, float iRight )
 
   return 0;
 }
-*/
+#endif
+
+// ----------------------------------------------------------------------------
+// RenderBackgroundRows
+// ----------------------------------------------------------------------------
+void Test4::RenderBackgroundRows( BGThreadData iTD )
+{
+  for ( int y = iTD._StartY; y < iTD._EndY; ++y )
+  {
+    for ( int x = 0; x < iTD._Width; ++x  )
+    {
+      Vec3 worldP = glm::normalize(iTD._BottomLeft + iTD._DX * (float)x + iTD._DY * (float)y);
+      iTD._ColorBuffer[x + iTD._Width * y] = iTD._this -> SampleSkybox(worldP);
+    }
+  }
+}
 
 // ----------------------------------------------------------------------------
 // RenderScene
 // ----------------------------------------------------------------------------
-#ifdef SIMUL_RENDERING_PIPELINE
+#ifdef PARALLEL
+int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
+{
+  double startTime = glfwGetTime();
+
+  int width  = _Settings._RenderResolution.x;
+  int height = _Settings._RenderResolution.y;
+
+  float zNear, zFar;
+  _Scene -> GetCamera().GetZNearFar(zNear, zFar);
+
+  std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), zFar);
+
+  std::vector<std::thread> threads;
+  threads.reserve(_NbThreads);
+
+  _Uniforms._CameraPos                 = _Scene -> GetCamera().GetPos();
+  _Uniforms._ShowWires                 = _ShowWires;
+  _Uniforms._BilinearSampling          = _BilinearSampling;
+  _Uniforms._ColorDepthOrNormalsBuffer = _ColorDepthOrNormalsBuffer;
+  _Uniforms._ShadingType               = _ShadingType;
+
+  for ( int i = 0; i < _NbThreads; ++i )
+  {
+    int startY = ( height / _NbThreads ) * i;
+    int endY = ( i == _NbThreads-1 ) ? ( height ) : ( startY + ( height / _NbThreads ) );
+
+    SceneThreadData TD(this, _ColorBuffer, _DepthBuffer, _Triangles, _Uniforms, iMV, iP, width, height, startY, endY);
+
+    threads.emplace_back(std::thread(Test4::RenderSceneRows, TD));
+  }
+
+  for ( auto & thread : threads )
+  {
+    thread.join();
+  }
+
+  _RenderScnElapsed = glfwGetTime() - startTime;
+
+  return 0;
+}
+
+#else
+
 int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
 {
   double startTime = glfwGetTime();
@@ -807,6 +851,12 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
 
   const int nbTris = _Triangles.size();
 
+  _Uniforms._CameraPos                 = _Scene -> GetCamera().GetPos();
+  _Uniforms._ShowWires                 = _ShowWires;
+  _Uniforms._BilinearSampling          = _BilinearSampling;
+  _Uniforms._ColorDepthOrNormalsBuffer = _ColorDepthOrNormalsBuffer;
+  _Uniforms._ShadingType               = _ShadingType;
+
   for ( int i = 0; i < nbTris; ++i )
   {
     // Update uniforms
@@ -820,7 +870,7 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
     Vec2    bboxMax = -bboxMin;
     for ( int j = 0; j < 3; ++j )
     {
-      VertexShader(_Triangles[i]._Vert[j], MVP, VtxNDCPos[j], Attrib[j]);
+      VertexShader(_Triangles[i]._Vert[j], MVP, _Uniforms, VtxNDCPos[j], Attrib[j]);
 
       VtxNDCPos[j].w = 1.f / VtxNDCPos[j].w; // 1.f / -z
       VtxNDCPos[j].x *= VtxNDCPos[j].w;      // X / -z
@@ -943,11 +993,11 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
         Vec4 fragColor(1.f);
 
         if ( 1 == _ColorDepthOrNormalsBuffer )
-          FragmentShader_Depth(fragCoord, fragAttrib, fragColor);
+          FragmentShader_Depth(fragCoord, _Uniforms, fragAttrib, fragColor);
         else if ( 2 == _ColorDepthOrNormalsBuffer )
-          FragmentShader_Normal(fragCoord, fragAttrib, fragColor);
+          FragmentShader_Normal(fragCoord, _Uniforms, fragAttrib, fragColor);
         else
-          FragmentShader_Color(fragCoord, fragAttrib, fragColor);
+          FragmentShader_Color(fragCoord, _Uniforms, fragAttrib, fragColor);
 
         _ColorBuffer[x + width * y] = fragColor;
         _DepthBuffer[x + width * y] = Z;
@@ -965,227 +1015,143 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
 
   return 0;
 }
-#else
-int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
+#endif
+
+// ----------------------------------------------------------------------------
+// RenderSceneRows
+// ----------------------------------------------------------------------------
+void Test4::RenderSceneRows( SceneThreadData iTD )
 {
-  double startTime = glfwGetTime();
+  float ratio = iTD._Width / float(iTD._Height);
 
-  int width  = _Settings._RenderResolution.x;
-  int height = _Settings._RenderResolution.y;
-  float ratio = width / float(height);
+  Mat4x4 MVP = iTD._P * iTD._MV;
 
-  Mat4x4 MVP = iP * iMV;
+  float zNear, zFar;
+  iTD._this -> _Scene -> GetCamera().GetZNearFar(zNear, zFar);
 
-  float near, far;
-  _Scene -> GetCamera().GetZNearFar(near, far);
+  const int nbTris = iTD._Triangles.size();
 
-  const std::vector<Vec3>     & vertices  = _Scene -> GetVertices();
-  const std::vector<Vec3i>    & indices   = _Scene -> GetIndices();
-  const std::vector<Vec3>     & uvMatIDs  = _Scene -> GetUVMatID();
-  const std::vector<Vec3>     & normals   = _Scene -> GetNormals();
-  const std::vector<Material> & materials = _Scene -> GetMaterials();
-  const std::vector<Texture*> & textures  = _Scene -> GetTextures();
-  const int nbVertices = vertices.size();
-  const int nbTris = indices.size() / 3;
-
-  const Vec3 R = { 1.f, 0.f, 0.f };
-  const Vec3 G = { 0.f, 1.f, 0.f };
-  const Vec3 B = { 0.f, 0.f, 1.f };
-
-  //std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), 1.f);
-  std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), far);
-
-  std::vector<Vec4> CamVerts;
-  std::vector<Vec4> ProjVerts;
-  CamVerts.resize(nbVertices);
-  ProjVerts.resize(nbVertices);
-
-//#pragma omp parallel
-  { 
-    //#pragma omp for
-    for ( int i = 0; i < nbVertices; ++i )
-    {
-      CamVerts[i] = iMV * Vec4(vertices[i], 1.f);
-
-      Vec4 projVert = iP * CamVerts[i];
-      projVert.w = 1.f / projVert.w; // 1.f / -z
-      projVert.x *= projVert.w;      // X / -z
-      projVert.y *= projVert.w;      // Y / -z
-      projVert.z *= projVert.w;      // Z / -z
-
-      projVert.x = ((projVert.x + 1.f) * .5f * width);
-      projVert.y = ((projVert.y + 1.f) * .5f * height);
-      ProjVerts[i] = projVert;
-    }
-  }
-
-  Vec2 bboxMin(std::numeric_limits<float>::infinity());
-  Vec2 bboxMax = -bboxMin;
+  Uniform uniforms(iTD._Uniforms);
 
   for ( int i = 0; i < nbTris; ++i )
   {
-    Vec3i Index[3];
-    Index[0] = indices[i*3];
-    Index[1] = indices[i*3+1];
-    Index[2] = indices[i*3+2];
+    // Update uniforms
+    uniforms._Material = iTD._Triangles[i]._Material;
+    uniforms._Texture  = iTD._Triangles[i]._Texture;
 
-    Vec4 CamVec[3];
-    Vec4 ProjVec[3];
+    Vec4    VtxNDCPos[3];
+    Vec2    VtxScreenPos[3];
+    Varying Attrib[3];
+    Vec2    bboxMin(std::numeric_limits<float>::infinity());
+    Vec2    bboxMax = -bboxMin;
     for ( int j = 0; j < 3; ++j )
     {
-      CamVec[j] = CamVerts[Index[j].x];
-      ProjVec[j] = ProjVerts[Index[j].x];
-        
-      if ( ProjVec[j].x < bboxMin.x )
-        bboxMin.x = ProjVec[j].x;
-      if ( ProjVec[j].y < bboxMin.y )
-        bboxMin.y = ProjVec[j].y;
-      if ( ProjVec[j].x > bboxMax.x )
-        bboxMax.x = ProjVec[j].x;
-      if ( ProjVec[j].y > bboxMax.y )
-        bboxMax.y = ProjVec[j].y;
+      VertexShader(iTD._Triangles[i]._Vert[j], MVP, uniforms, VtxNDCPos[j], Attrib[j]);
+
+      VtxNDCPos[j].w = 1.f / VtxNDCPos[j].w; // 1.f / -z
+      VtxNDCPos[j].x *= VtxNDCPos[j].w;      // X / -z
+      VtxNDCPos[j].y *= VtxNDCPos[j].w;      // Y / -z
+      VtxNDCPos[j].z *= VtxNDCPos[j].w;      // Z / -z
+
+      // Convert to raster space
+      VtxScreenPos[j].x = ((VtxNDCPos[j].x + 1.f) * .5f * iTD._Width);
+      VtxScreenPos[j].y = ((VtxNDCPos[j].y + 1.f) * .5f * iTD._Height);
+
+      if ( VtxScreenPos[j].x < bboxMin.x )
+        bboxMin.x = VtxScreenPos[j].x;
+      if ( VtxScreenPos[j].y < bboxMin.y )
+        bboxMin.y = VtxScreenPos[j].y;
+      if ( VtxScreenPos[j].x > bboxMax.x )
+        bboxMax.x = VtxScreenPos[j].x;
+      if ( VtxScreenPos[j].y > bboxMax.y )
+        bboxMax.y = VtxScreenPos[j].y;
     }
 
-    int xMin = std::max(0, std::min((int)std::floorf(bboxMin.x), width  - 1));
-    int yMin = std::max(0, std::min((int)std::floorf(bboxMin.y), height - 1));
-    int xMax = std::max(0, std::min((int)std::floorf(bboxMax.x), width  - 1)); 
-    int yMax = std::max(0, std::min((int)std::floorf(bboxMax.y), height - 1));
+    int xMin = std::max(0,           std::min((int)std::floorf(bboxMin.x), iTD._Width - 1));
+    int yMin = std::max(iTD._StartY, std::min((int)std::floorf(bboxMin.y), iTD._EndY - 1 ));
+    int xMax = std::max(0,           std::min((int)std::floorf(bboxMax.x), iTD._Width - 1));
+    int yMax = std::max(iTD._StartY, std::min((int)std::floorf(bboxMax.y), iTD._EndY - 1 ));
 
-    float invArea = 1.f / EdgeFunction(ProjVec[0], ProjVec[1], ProjVec[2]);
+    float area = EdgeFunction(VtxScreenPos[0], VtxScreenPos[1], VtxScreenPos[2]);
+    if ( area <= 0.f )
+      continue;
+    float invArea = 1.f / area;
 
     for ( int y = yMin; y <= yMax; ++y )
     {
       for ( int x = xMin; x <= xMax; ++x  )
       {
-        Vec3 p(x + .5f, y + .5f, 0.f);
+        Vec3 coord(x + .5f, y + .5f, 0.f);
 
-        float W[3];
-        W[0] = EdgeFunction(ProjVec[1], ProjVec[2], p);
-        W[1] = EdgeFunction(ProjVec[2], ProjVec[0], p);
-        W[2] = EdgeFunction(ProjVec[0], ProjVec[1], p);
+        Vec3 W;
+        W.x = EdgeFunction(VtxScreenPos[1], VtxScreenPos[2], coord);
+        W.y = EdgeFunction(VtxScreenPos[2], VtxScreenPos[0], coord);
+        W.z = EdgeFunction(VtxScreenPos[0], VtxScreenPos[1], coord);
 
-        if ( ( W[0] < 0.f )
-          || ( W[1] < 0.f )
-          || ( W[2] < 0.f ) )
-            continue;
+        if ( ( W.x < 0.f )
+          || ( W.y < 0.f )
+          || ( W.z < 0.f ) )
+        {
+          continue;
+        }
 
-        W[0] *= invArea;
-        W[1] *= invArea;
-        W[2] *= invArea;
+        W *= invArea;
 
-        // perspective correction
-        W[0] *= ProjVec[0].w; // W0 / z0
-        W[1] *= ProjVec[1].w; // W1 / z1
-        W[2] *= ProjVec[2].w; // W2 / z2
+        // Perspective correction
+        W.x *= VtxNDCPos[0].w; // W0 / z0
+        W.y *= VtxNDCPos[1].w; // W1 / z1
+        W.z *= VtxNDCPos[2].w; // W2 / z2
 
-        float Z = 1.f / (W[0] + W[1] + W[2]);
-        W[0] *= Z;
-        W[1] *= Z;
-        W[2] *= Z;
-
-        float z = W[0] * ProjVec[0].z + W[1] * ProjVec[1].z + W[2] * ProjVec[2].z;
-        z = ( z + 1.f ) * .5f;
-        if ( ( z < 0.f ) || ( z > 1.f ) )
+        float Z = 1.f / (W.x + W.y + W.z);
+        if ( Z > iTD._DepthBuffer[x + iTD._Width * y] || ( Z < zNear) )
           continue;
 
-        if ( Z < _DepthBuffer[x + width * y] && ( Z > near) )
+        W *= Z;
+
+        coord.z = W.x * VtxNDCPos[0].z + W.y * VtxNDCPos[1].z + W.z * VtxNDCPos[2].z;
+        coord.z = ( coord.z + 1.f ) * .5f;
+        if ( ( coord.z < 0.f ) || ( coord.z > 1.f ) )
+          continue;
+
+        // Interpolation
+        Vec4 fragCoord(coord, 1.f);
+        Varying fragAttrib;
+        fragCoord.w          = W.x * VtxNDCPos[0].w         + W.y * VtxNDCPos[1].w          + W.z * VtxNDCPos[2].w;
+        fragAttrib._WorldPos = W.x * Attrib   [0]._WorldPos + W.y * Attrib   [1]._WorldPos  + W.z * Attrib   [2]._WorldPos;
+        fragAttrib._UV       = W.x * Attrib   [0]._UV       + W.y * Attrib   [1]._UV        + W.z * Attrib   [2]._UV;
+        fragAttrib._Color    = W.x * Attrib   [0]._Color    + W.y * Attrib   [1]._Color     + W.z * Attrib   [2]._Color;
+        if ( uniforms._ShowWires )
         {
-          Vec3 color(1.f);
-
-          if ( Index[0].z >=0 )
-          {
-            Vec3 UVMatID[3];
-            UVMatID[0] = uvMatIDs[Index[0].z];
-            UVMatID[1] = uvMatIDs[Index[1].z];
-            UVMatID[2] = uvMatIDs[Index[2].z];
-              
-            if ( UVMatID[0].z >= 0 && materials.size() )
-            {
-              Material Mat[3] = { materials[UVMatID[0].z], materials[UVMatID[1].z], materials[UVMatID[1].z] };
-
-              if ( Mat[0]._BaseColorTexId >= 0 )
-              {
-                Vec2 uv;
-                uv.x = W[0] * UVMatID[0].x + W[1] * UVMatID[1].x + W[2] * UVMatID[2].x;
-                uv.y = W[0] * UVMatID[0].y + W[1] * UVMatID[1].y + W[2] * UVMatID[2].y;
-              
-                Texture * tex = textures[Mat[0]._BaseColorTexId];
-                if ( tex )
-                {
-                  if ( _BilinearSampling )
-                    color = tex -> BiLinearSample(uv);
-                  else
-                    color = tex -> Sample(uv);
-                }
-              }
-              else
-              {
-                color = Mat[0]._Albedo * W[0] +  Mat[1]._Albedo * W[1] + Mat[2]._Albedo * W[2];
-              }
-            }
-          }
-          else
-          {
-            color = W[0] * R + W[1] * G + W[2] * B;
-          }
-
-          // Shading
-          if ( ( Index[0].y >=0 )
-            && ( Index[1].y >=0 )
-            && ( Index[2].y >=0 ) )
-          {
-            Vec3 worldP = vertices[Index[0].x] * W[0] + vertices[Index[1].x] * W[1] + vertices[Index[2].x] * W[2];
-
-            float ambientStrength = .1f;
-            float diffuse = 0.f;
-            float specular = 0.f;
-            Light * firstLight = _Scene -> GetLight(0);
-            if ( firstLight )
-            {
-              Vec3 normal = normals[Index[0].y] * W[0] + normals[Index[1].y] * W[1] + normals[Index[2].y] * W[2];
-              normal = glm::normalize(normal);
-
-              Vec3 dirToLight = glm::normalize(firstLight ->_Pos - worldP);
-              diffuse = std::max(0.f, glm::dot(normal, dirToLight));
-
-              Vec3 viewDir =  glm::normalize(_Scene -> GetCamera().GetPos() - worldP);
-              Vec3 reflectDir = glm::reflect(-dirToLight, normal);
-
-              static float specularStrength = 0.5f;
-              specular = pow(std::max(glm::dot(viewDir, reflectDir), 0.f), 32) * specularStrength;
-
-              color *= std::min(diffuse+ambientStrength+specular, 1.f) * glm::normalize(firstLight -> _Emission);
-              color = MathUtil::Min(color, Vec3(1.f));
-            }
-            else
-            {
-              Vec3 V1V0 = CamVec[1] - CamVec[0];
-              Vec3 V2V0 = CamVec[2] - CamVec[0];
-              Vec3 normal = glm::cross(V1V0, V2V0);
-              normal = glm::normalize(normal);
-
-              Vec3 viewDir =  glm::normalize(-worldP);
-              diffuse =  std::max(0.f, glm::dot(normal,viewDir));
-
-              color *= std::min(diffuse+ambientStrength, 1.f);
-            }
-          }
-
-          if ( 1 == _ColorDepthOrNormalsBuffer )
-            _ColorBuffer[x + width * y] = Vec4(Vec3(1.f - z), 1.f);
-          else
-            _ColorBuffer[x + width * y] = Vec4(color, 1.f);
-          _DepthBuffer[x + width * y] = Z;
+          //fragAttrib._W = W;
+          fragAttrib._VertCoords[0].x = VtxScreenPos[0].x; fragAttrib._VertCoords[0].y = VtxScreenPos[0].y;
+          fragAttrib._VertCoords[1].x = VtxScreenPos[1].x; fragAttrib._VertCoords[1].y = VtxScreenPos[1].y;
+          fragAttrib._VertCoords[2].x = VtxScreenPos[2].x; fragAttrib._VertCoords[2].y = VtxScreenPos[2].y;
         }
+
+        if ( ShadingType::Phong == uniforms._ShadingType )
+        {
+          fragAttrib._Normal = W.x * Attrib   [0]._Normal   + W.y * Attrib   [1]._Normal    + W.z * Attrib   [2]._Normal;
+          fragAttrib._Normal = glm::normalize(fragAttrib._Normal);
+        }
+        else
+          fragAttrib._Normal = iTD._Triangles[i]._Normal;
+
+        Vec4 fragColor(1.f);
+
+        if ( 1 == uniforms._ColorDepthOrNormalsBuffer )
+          FragmentShader_Depth(fragCoord, uniforms, fragAttrib, fragColor);
+        else if ( 2 == uniforms._ColorDepthOrNormalsBuffer )
+          FragmentShader_Normal(fragCoord, uniforms, fragAttrib, fragColor);
+        else
+          FragmentShader_Color(fragCoord, uniforms, fragAttrib, fragColor);
+
+        iTD._ColorBuffer[x + iTD._Width * y] = fragColor;
+        iTD._DepthBuffer[x + iTD._Width * y] = Z;
       }
     }
   }
 
-  _RenderScnElapsed = glfwGetTime() - startTime;
-
-  return 0;
 }
-#endif
 
 // ----------------------------------------------------------------------------
 // UpdateImage
@@ -1219,7 +1185,7 @@ int Test4::UpdateImage()
 // ----------------------------------------------------------------------------
 // VertexShader
 // ----------------------------------------------------------------------------
-void Test4::VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Vec4 & oVertexPosition, Varying & oAttrib )
+void Test4::VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Uniform & iUniforms, Vec4 & oVertexPosition, Varying & oAttrib )
 {
   oVertexPosition   = iMVP * iVertex._Position;
   oAttrib._WorldPos = iVertex._Position;
@@ -1231,7 +1197,7 @@ void Test4::VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Vec4 & oVer
 // ----------------------------------------------------------------------------
 // FragmentShader_Depth
 // ----------------------------------------------------------------------------
-void Test4::FragmentShader_Depth( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor )
+void Test4::FragmentShader_Depth( const Vec4 & iFragCoord, Uniform & iUniforms, const Varying & iAttrib, Vec4 & oColor )
 {
   oColor = Vec4(Vec3(iFragCoord.z), 1.f);
   return;
@@ -1240,7 +1206,7 @@ void Test4::FragmentShader_Depth( const Vec4 & iFragCoord, const Varying & iAttr
 // ----------------------------------------------------------------------------
 // FragmentShader_Normal
 // ----------------------------------------------------------------------------
-void Test4::FragmentShader_Normal( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor )
+void Test4::FragmentShader_Normal( const Vec4 & iFragCoord, Uniform & iUniforms, const Varying & iAttrib, Vec4 & oColor )
 {
     oColor = Vec4(glm::abs(iAttrib._Normal),1.f);
     return;
@@ -1249,9 +1215,9 @@ void Test4::FragmentShader_Normal( const Vec4 & iFragCoord, const Varying & iAtt
 // ----------------------------------------------------------------------------
 // FragmentShader_Color
 // ----------------------------------------------------------------------------
-void Test4::FragmentShader_Color( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor )
+void Test4::FragmentShader_Color( const Vec4 & iFragCoord, Uniform & iUniforms, const Varying & iAttrib, Vec4 & oColor )
 {
-  if ( _ShowWires )
+  if ( iUniforms._ShowWires )
   {
     Vec2 P(iFragCoord.x, iFragCoord.y);
     if ( ( DistanceToSegment(iAttrib._VertCoords[0], iAttrib._VertCoords[1], P) <= 1.f )
@@ -1264,12 +1230,12 @@ void Test4::FragmentShader_Color( const Vec4 & iFragCoord, const Varying & iAttr
   }
 
   Vec4 albedo;
-  if ( _Uniforms._Texture )
+  if ( iUniforms._Texture )
   {
-    if ( _BilinearSampling )
-      albedo = _Uniforms._Texture -> BiLinearSample(iAttrib._UV);
+    if ( iUniforms._BilinearSampling )
+      albedo = iUniforms._Texture -> BiLinearSample(iAttrib._UV);
     else
-      albedo = _Uniforms._Texture -> Sample(iAttrib._UV);
+      albedo = iUniforms._Texture -> Sample(iAttrib._UV);
   }
   else
   {
@@ -1278,7 +1244,7 @@ void Test4::FragmentShader_Color( const Vec4 & iFragCoord, const Varying & iAttr
 
   // Shading
   Vec4 alpha(0.f, 0.f, 0.f, 0.f);
-  for ( const auto & light : _Uniforms._Lights )
+  for ( const auto & light : iUniforms._Lights )
   {
     float ambientStrength = .1f;
     float diffuse = 0.f;
@@ -1287,7 +1253,7 @@ void Test4::FragmentShader_Color( const Vec4 & iFragCoord, const Varying & iAttr
     Vec3 dirToLight = glm::normalize(light._Pos - iAttrib._WorldPos);
     diffuse = std::max(0.f, glm::dot(iAttrib._Normal, dirToLight));
 
-    Vec3 viewDir =  glm::normalize(_Scene -> GetCamera().GetPos() - iAttrib._WorldPos);
+    Vec3 viewDir =  glm::normalize(iUniforms._CameraPos - iAttrib._WorldPos);
     Vec3 reflectDir = glm::reflect(-dirToLight, iAttrib._Normal);
 
     static float specularStrength = 0.5f;
