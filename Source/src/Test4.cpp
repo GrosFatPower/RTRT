@@ -565,23 +565,38 @@ void Test4::DrawUI()
     ImGui::Text("Frame time : %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
     ImGui::PopStyleColor();
 
-    int selectedSceneId = _CurSceneId;
-    if ( ImGui::Combo("Scene", &selectedSceneId, _SceneNames.data(), _SceneNames.size()) )
+    if (ImGui::CollapsingHeader("Scene "))
     {
-      if ( selectedSceneId != _CurSceneId )
+      int selectedSceneId = _CurSceneId;
+      if ( ImGui::Combo("Scene", &selectedSceneId, _SceneNames.data(), _SceneNames.size()) )
       {
-        _CurSceneId = selectedSceneId;
-        _ReloadScene = true;
+        if ( selectedSceneId != _CurSceneId )
+        {
+          _CurSceneId = selectedSceneId;
+          _ReloadScene = true;
+        }
       }
-    }
 
-    int selectedBgdId = _CurBackgroundId;
-    if ( ImGui::Combo("Background", &selectedBgdId, _BackgroundNames.data(), _BackgroundNames.size()) )
-    {
-      if ( selectedBgdId != _CurBackgroundId )
+      int selectedBgdId = _CurBackgroundId;
+      if ( ImGui::Combo("Background", &selectedBgdId, _BackgroundNames.data(), _BackgroundNames.size()) )
       {
-        _CurBackgroundId = selectedBgdId;
-        _ReloadBackground = true;
+        if ( selectedBgdId != _CurBackgroundId )
+        {
+          _CurBackgroundId = selectedBgdId;
+          _ReloadBackground = true;
+        }
+      }
+
+      int enableBG = !!_Settings._EnableBackGround;
+      ImGui::Combo("Show background", &enableBG, YESorNO, 2);
+      _Settings._EnableBackGround = !!enableBG;
+
+      float rgb[3] = { _Settings._BackgroundColor.r, _Settings._BackgroundColor.g, _Settings._BackgroundColor.b };
+      if ( ImGui::ColorEdit3("Default", rgb) )
+      {
+        _Settings._BackgroundColor.r = rgb[0];
+        _Settings._BackgroundColor.g = rgb[1];
+        _Settings._BackgroundColor.b = rgb[2];
       }
     }
 
@@ -629,10 +644,6 @@ void Test4::DrawUI()
       int bufferChoice = _ColorDepthOrNormalsBuffer;
       ImGui::Combo("Buffer", &bufferChoice, COLORorDEPTHorNORMALS, 3);
       _ColorDepthOrNormalsBuffer = bufferChoice;
-
-      int enableBG = !!_Settings._EnableBackGround;
-      ImGui::Combo("Show background", &enableBG, YESorNO, 2);
-      _Settings._EnableBackGround = !!enableBG;
 
       int sampling = (int)_BilinearSampling;
       ImGui::Combo("Texture sampling", &sampling, NEARESTorBILNEAR, 2);
@@ -698,7 +709,8 @@ int Test4::RenderBackground( float iTop, float iRight )
     for ( int i = 0; i < _NbThreads; ++i )
     {
       int startY = ( height / _NbThreads ) * i;
-      int endY = std::min(startY + ( height / _NbThreads ), height);
+      int endY = ( i == _NbThreads-1 ) ? ( height ) : ( startY + ( height / _NbThreads ) );
+
       BGThreadData TD(this, _ColorBuffer, bottomLeft, dX, dY, width, height, startY, endY);
 
       threads.emplace_back(std::thread(Test4::RenderBackgroundRows, TD));
@@ -1221,7 +1233,7 @@ void Test4::VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Vec4 & oVer
 // ----------------------------------------------------------------------------
 void Test4::FragmentShader_Depth( const Vec4 & iFragCoord, const Varying & iAttrib, Vec4 & oColor )
 {
-  oColor = Vec4(Vec3(1.f - iFragCoord.z), 1.f);
+  oColor = Vec4(Vec3(iFragCoord.z), 1.f);
   return;
 }
 
