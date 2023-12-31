@@ -25,6 +25,8 @@ Bin/
 Build/
 Assets/Figurine/
 Assets/bedroom/
+Assets/Mustang/
+Assets/panther/
 
 # Files
 *.vcxproj
