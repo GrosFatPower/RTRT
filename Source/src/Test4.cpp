@@ -7,6 +7,7 @@
 #include "Camera.h"
 #include "Light.h"
 #include "Loader.h"
+#include "JobSystem.h"
 
 #include "tinydir.h"
 
@@ -240,6 +241,8 @@ Test4::Test4( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iSc
 
   _NbThreadsMax = std::thread::hardware_concurrency();
   _NbThreads = _NbThreadsMax;
+
+  JobSystem::Get().Initialize(_NbThreads);
 }
 
 // ----------------------------------------------------------------------------
@@ -645,7 +648,10 @@ void Test4::DrawUI()
 
       int numThreads = _NbThreads;
       if ( ImGui::SliderInt("Nb Threads", &numThreads, 1, _NbThreadsMax) && ( numThreads > 0 ) )
+      {
         _NbThreads = numThreads;
+        JobSystem::Get().Initialize(_NbThreads);
+      }
     }
 
     if (ImGui::CollapsingHeader("Controls"))
@@ -693,23 +699,26 @@ int Test4::RenderBackground( float iTop, float iRight )
     Vec3 dX = _Scene -> GetCamera().GetRight() * ( 2 * iRight / width );
     Vec3 dY = _Scene -> GetCamera().GetUp() * ( 2 * iTop / height );
 
-    std::vector<std::thread> threads;
-    threads.reserve(_NbThreads);
+    //std::vector<std::thread> threads;
+    //threads.reserve(_NbThreads);
 
-    for ( int i = 0; i < _NbThreads; ++i )
-    {
-      int startY = ( height / _NbThreads ) * i;
-      int endY = ( i == _NbThreads-1 ) ? ( height ) : ( startY + ( height / _NbThreads ) );
+    //for ( int i = 0; i < _NbThreads; ++i )
+    //{
+    //  int startY = ( height / _NbThreads ) * i;
+    //  int endY = ( i == _NbThreads-1 ) ? ( height ) : ( startY + ( height / _NbThreads ) );
 
-      BGThreadData TD(this, _ColorBuffer, bottomLeft, dX, dY, width, height, startY, endY);
+    //  threads.emplace_back(std::thread(&Test4::RenderBackgroundRows, this, startY, endY, bottomLeft, dX, dY));
+    //}
 
-      threads.emplace_back(std::thread(Test4::RenderBackgroundRows, TD));
-    }
+    //for ( auto & thread : threads )
+    //{
+    //  thread.join();
+    //}
 
-    for ( auto & thread : threads )
-    {
-      thread.join();
-    }
+    for ( int i = 0; i < height; ++i )
+      JobSystem::Get().Execute([this, i, bottomLeft, dX, dY](){ this -> RenderBackgroundRows(i, i+1, bottomLeft, dX, dY); });
+
+    JobSystem::Get().Wait();
   }
   else
   {
@@ -725,16 +734,45 @@ int Test4::RenderBackground( float iTop, float iRight )
 // ----------------------------------------------------------------------------
 // RenderBackgroundRows
 // ----------------------------------------------------------------------------
-void Test4::RenderBackgroundRows( BGThreadData iTD )
+void Test4::RenderBackgroundRows( int iStartY, int iEndY, Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY )
 {
-  for ( int y = iTD._StartY; y < iTD._EndY; ++y )
+  int width  = _Settings._RenderResolution.x;
+
+  for ( int y = iStartY; y < iEndY; ++y )
   {
-    for ( int x = 0; x < iTD._Width; ++x  )
+    for ( int x = 0; x < width; ++x  )
     {
-      Vec3 worldP = glm::normalize(iTD._BottomLeft + iTD._DX * (float)x + iTD._DY * (float)y);
-      iTD._ColorBuffer[x + iTD._Width * y] = iTD._this -> SampleSkybox(worldP);
+      Vec3 worldP = glm::normalize(iBottomLeft + iDX * (float)x + iDY * (float)y);
+      _ColorBuffer[x + width * y] = this -> SampleSkybox(worldP);
     }
   }
+}
+
+// ----------------------------------------------------------------------------
+// SampleSkybox
+// ----------------------------------------------------------------------------
+Vec4 Test4::SampleSkybox( const Vec3 & iDir )
+{
+  std::vector<Texture*> & textures = _Scene -> GetTextures();
+
+  if ( ( _SkyboxTexId >= 0 ) && ( _SkyboxTexId < textures.size() ) )
+  {
+    Texture * skyboxTexture = textures[_SkyboxTexId];
+
+    if ( skyboxTexture )
+    {
+      float theta = std::asin(iDir.y);
+      float phi   = std::atan2(iDir.z, iDir.x);
+      Vec2 uv = Vec2(.5f + phi * M_1_PI * .5f, .5f - theta * M_1_PI) + Vec2(_Settings._SkyBoxRotation, 0.0);
+
+      if ( _BilinearSampling )
+        return skyboxTexture -> BiLinearSample(uv);
+      else
+        return skyboxTexture -> Sample(uv);
+    }
+  }
+
+  return Vec4(0.f);
 }
 
 // ----------------------------------------------------------------------------
@@ -752,168 +790,9 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
 
   std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), zFar);
 
-  std::vector<std::thread> threads;
-  threads.reserve(_NbThreads);
-
-  _Uniforms._CameraPos                 = _Scene -> GetCamera().GetPos();
-  _Uniforms._ShowWires                 = _ShowWires;
-  _Uniforms._BilinearSampling          = _BilinearSampling;
-  _Uniforms._ColorDepthOrNormalsBuffer = _ColorDepthOrNormalsBuffer;
-  _Uniforms._ShadingType               = _ShadingType;
-
-  for ( int i = 0; i < _NbThreads; ++i )
-  {
-    int startY = ( height / _NbThreads ) * i;
-    int endY = ( i == _NbThreads-1 ) ? ( height ) : ( startY + ( height / _NbThreads ) );
-
-    SceneThreadData TD(this, _ColorBuffer, _DepthBuffer, _Triangles, _Uniforms, iMV, iP, width, height, startY, endY);
-
-    threads.emplace_back(std::thread(Test4::RenderSceneRows, TD));
-  }
-
-  for ( auto & thread : threads )
-  {
-    thread.join();
-  }
-
   _RenderScnElapsed = glfwGetTime() - startTime;
 
   return 0;
-}
-
-// ----------------------------------------------------------------------------
-// RenderSceneRows
-// ----------------------------------------------------------------------------
-void Test4::RenderSceneRows( SceneThreadData iTD )
-{
-  float ratio = iTD._Width / float(iTD._Height);
-
-  Mat4x4 MVP = iTD._P * iTD._MV;
-
-  float zNear, zFar;
-  iTD._this -> _Scene -> GetCamera().GetZNearFar(zNear, zFar);
-
-  const int nbTris = iTD._Triangles.size();
-
-  Uniform uniforms(iTD._Uniforms);
-
-  for ( int i = 0; i < nbTris; ++i )
-  {
-    // Update uniforms
-    uniforms._Material = iTD._Triangles[i]._Material;
-    uniforms._Texture  = iTD._Triangles[i]._Texture;
-
-    Vec4    VtxNDCPos[3];
-    Vec2    VtxScreenPos[3];
-    Varying Attrib[3];
-    Vec2    bboxMin(std::numeric_limits<float>::infinity());
-    Vec2    bboxMax = -bboxMin;
-    for ( int j = 0; j < 3; ++j )
-    {
-      VertexShader(iTD._Triangles[i]._Vert[j], MVP, uniforms, VtxNDCPos[j], Attrib[j]);
-
-      VtxNDCPos[j].w = 1.f / VtxNDCPos[j].w; // 1.f / -z
-      VtxNDCPos[j].x *= VtxNDCPos[j].w;      // X / -z
-      VtxNDCPos[j].y *= VtxNDCPos[j].w;      // Y / -z
-      VtxNDCPos[j].z *= VtxNDCPos[j].w;      // Z / -z
-
-      // Convert to raster space
-      VtxScreenPos[j].x = ((VtxNDCPos[j].x + 1.f) * .5f * iTD._Width);
-      VtxScreenPos[j].y = ((VtxNDCPos[j].y + 1.f) * .5f * iTD._Height);
-
-      if ( VtxScreenPos[j].x < bboxMin.x )
-        bboxMin.x = VtxScreenPos[j].x;
-      if ( VtxScreenPos[j].y < bboxMin.y )
-        bboxMin.y = VtxScreenPos[j].y;
-      if ( VtxScreenPos[j].x > bboxMax.x )
-        bboxMax.x = VtxScreenPos[j].x;
-      if ( VtxScreenPos[j].y > bboxMax.y )
-        bboxMax.y = VtxScreenPos[j].y;
-    }
-
-    int xMin = std::max(0,           std::min((int)std::floorf(bboxMin.x), iTD._Width - 1));
-    int yMin = std::max(iTD._StartY, std::min((int)std::floorf(bboxMin.y), iTD._EndY - 1 ));
-    int xMax = std::max(0,           std::min((int)std::floorf(bboxMax.x), iTD._Width - 1));
-    int yMax = std::max(iTD._StartY, std::min((int)std::floorf(bboxMax.y), iTD._EndY - 1 ));
-
-    float area = EdgeFunction(VtxScreenPos[0], VtxScreenPos[1], VtxScreenPos[2]);
-    if ( area <= 0.f )
-      continue;
-    float invArea = 1.f / area;
-
-    for ( int y = yMin; y <= yMax; ++y )
-    {
-      for ( int x = xMin; x <= xMax; ++x  )
-      {
-        Vec3 coord(x + .5f, y + .5f, 0.f);
-
-        Vec3 W;
-        W.x = EdgeFunction(VtxScreenPos[1], VtxScreenPos[2], coord);
-        W.y = EdgeFunction(VtxScreenPos[2], VtxScreenPos[0], coord);
-        W.z = EdgeFunction(VtxScreenPos[0], VtxScreenPos[1], coord);
-
-        if ( ( W.x < 0.f )
-          || ( W.y < 0.f )
-          || ( W.z < 0.f ) )
-        {
-          continue;
-        }
-
-        W *= invArea;
-
-        // Perspective correction
-        W.x *= VtxNDCPos[0].w; // W0 / z0
-        W.y *= VtxNDCPos[1].w; // W1 / z1
-        W.z *= VtxNDCPos[2].w; // W2 / z2
-
-        float Z = 1.f / (W.x + W.y + W.z);
-        if ( Z > iTD._DepthBuffer[x + iTD._Width * y] || ( Z < zNear) )
-          continue;
-
-        W *= Z;
-
-        coord.z = W.x * VtxNDCPos[0].z + W.y * VtxNDCPos[1].z + W.z * VtxNDCPos[2].z;
-        coord.z = ( coord.z + 1.f ) * .5f;
-        if ( ( coord.z < 0.f ) || ( coord.z > 1.f ) )
-          continue;
-
-        // Interpolation
-        Vec4 fragCoord(coord, 1.f);
-        Varying fragAttrib;
-        fragCoord.w          = W.x * VtxNDCPos[0].w         + W.y * VtxNDCPos[1].w          + W.z * VtxNDCPos[2].w;
-        fragAttrib._WorldPos = W.x * Attrib   [0]._WorldPos + W.y * Attrib   [1]._WorldPos  + W.z * Attrib   [2]._WorldPos;
-        fragAttrib._UV       = W.x * Attrib   [0]._UV       + W.y * Attrib   [1]._UV        + W.z * Attrib   [2]._UV;
-        fragAttrib._Color    = W.x * Attrib   [0]._Color    + W.y * Attrib   [1]._Color     + W.z * Attrib   [2]._Color;
-        if ( uniforms._ShowWires )
-        {
-          //fragAttrib._W = W;
-          fragAttrib._VertCoords[0].x = VtxScreenPos[0].x; fragAttrib._VertCoords[0].y = VtxScreenPos[0].y;
-          fragAttrib._VertCoords[1].x = VtxScreenPos[1].x; fragAttrib._VertCoords[1].y = VtxScreenPos[1].y;
-          fragAttrib._VertCoords[2].x = VtxScreenPos[2].x; fragAttrib._VertCoords[2].y = VtxScreenPos[2].y;
-        }
-
-        if ( ShadingType::Phong == uniforms._ShadingType )
-        {
-          fragAttrib._Normal = W.x * Attrib   [0]._Normal   + W.y * Attrib   [1]._Normal    + W.z * Attrib   [2]._Normal;
-          fragAttrib._Normal = glm::normalize(fragAttrib._Normal);
-        }
-        else
-          fragAttrib._Normal = iTD._Triangles[i]._Normal;
-
-        Vec4 fragColor(1.f);
-
-        if ( 1 == uniforms._ColorDepthOrNormalsBuffer )
-          FragmentShader_Depth(fragCoord, uniforms, fragAttrib, fragColor);
-        else if ( 2 == uniforms._ColorDepthOrNormalsBuffer )
-          FragmentShader_Normal(fragCoord, uniforms, fragAttrib, fragColor);
-        else
-          FragmentShader_Color(fragCoord, uniforms, fragAttrib, fragColor);
-
-        iTD._ColorBuffer[x + iTD._Width * y] = fragColor;
-        iTD._DepthBuffer[x + iTD._Width * y] = Z;
-      }
-    }
-  }
 }
 
 // ----------------------------------------------------------------------------
@@ -946,139 +825,10 @@ int Test4::UpdateImage()
 }
 
 // ----------------------------------------------------------------------------
-// VertexShader
-// ----------------------------------------------------------------------------
-void Test4::VertexShader( const Vertex & iVertex, const Mat4x4 iMVP, Uniform & iUniforms, Vec4 & oVertexPosition, Varying & oAttrib )
-{
-  oVertexPosition   = iMVP * iVertex._Position;
-  oAttrib._WorldPos = iVertex._Position;
-  oAttrib._Normal   = iVertex._Normal;
-  oAttrib._UV       = iVertex._UV;
-  oAttrib._Color    = iVertex._Color;
-}
-
-// ----------------------------------------------------------------------------
-// FragmentShader_Depth
-// ----------------------------------------------------------------------------
-void Test4::FragmentShader_Depth( const Vec4 & iFragCoord, Uniform & iUniforms, const Varying & iAttrib, Vec4 & oColor )
-{
-  oColor = Vec4(Vec3(iFragCoord.z), 1.f);
-  return;
-}
-
-// ----------------------------------------------------------------------------
-// FragmentShader_Normal
-// ----------------------------------------------------------------------------
-void Test4::FragmentShader_Normal( const Vec4 & iFragCoord, Uniform & iUniforms, const Varying & iAttrib, Vec4 & oColor )
-{
-    oColor = Vec4(glm::abs(iAttrib._Normal),1.f);
-    return;
-}
-
-// ----------------------------------------------------------------------------
-// FragmentShader_Color
-// ----------------------------------------------------------------------------
-void Test4::FragmentShader_Color( const Vec4 & iFragCoord, Uniform & iUniforms, const Varying & iAttrib, Vec4 & oColor )
-{
-  if ( iUniforms._ShowWires )
-  {
-    Vec2 P(iFragCoord.x, iFragCoord.y);
-    if ( ( DistanceToSegment(iAttrib._VertCoords[0], iAttrib._VertCoords[1], P) <= 1.f )
-      || ( DistanceToSegment(iAttrib._VertCoords[1], iAttrib._VertCoords[2], P) <= 1.f )
-      || ( DistanceToSegment(iAttrib._VertCoords[2], iAttrib._VertCoords[0], P) <= 1.f ) )
-    {
-      oColor = Vec4(1.f, 0.f, 0.f, 1.f);
-      return;
-    }
-  }
-
-  Vec4 albedo;
-  if ( iUniforms._Texture )
-  {
-    if ( iUniforms._BilinearSampling )
-      albedo = iUniforms._Texture -> BiLinearSample(iAttrib._UV);
-    else
-      albedo = iUniforms._Texture -> Sample(iAttrib._UV);
-  }
-  else
-  {
-    albedo = iAttrib._Color;
-  }
-
-  // Shading
-  Vec4 alpha(0.f, 0.f, 0.f, 0.f);
-  for ( const auto & light : iUniforms._Lights )
-  {
-    float ambientStrength = .1f;
-    float diffuse = 0.f;
-    float specular = 0.f;
-
-    Vec3 dirToLight = glm::normalize(light._Pos - iAttrib._WorldPos);
-    diffuse = std::max(0.f, glm::dot(iAttrib._Normal, dirToLight));
-
-    Vec3 viewDir =  glm::normalize(iUniforms._CameraPos - iAttrib._WorldPos);
-    Vec3 reflectDir = glm::reflect(-dirToLight, iAttrib._Normal);
-
-    static float specularStrength = 0.5f;
-    specular = pow(std::max(glm::dot(viewDir, reflectDir), 0.f), 32) * specularStrength;
-
-    alpha += std::min(diffuse+ambientStrength+specular, 1.f) * Vec4(glm::normalize(light._Emission), 1.f);
-  }
-
-  oColor = MathUtil::Min(albedo * alpha, Vec4(1.f));
-}
-
-// ----------------------------------------------------------------------------
-// DistanceToSegment
-// ----------------------------------------------------------------------------
-float Test4::DistanceToSegment( const Vec2 iA, const Vec2 iB, const Vec2 iP )
-{
-  float dist = 0.f;
-
-  Vec2 AP(iP - iA);
-  Vec2 AB(iB - iA);
-
-  float normAB = glm::length(AB);
-  if ( normAB > 0.f )
-  {
-    float t = glm::dot(AP, AB) / ( normAB * normAB );
-    t = glm::clamp(t, 0.f, 1.f);
-
-    dist = glm::length(AP - t * AB);
-  }
-  else
-    dist = glm::length(AP);
-
-  return dist;
-}
-
-// ----------------------------------------------------------------------------
-// SampleSkybox
-// ----------------------------------------------------------------------------
-Vec4 Test4::SampleSkybox( const Vec3 & iDir )
-{
-  if ( _Uniforms._SkyBox )
-  {
-    float theta = std::asin(iDir.y);
-    float phi   = std::atan2(iDir.z, iDir.x);
-    Vec2 uv = Vec2(.5f + phi * M_1_PI * .5f, .5f - theta * M_1_PI) + Vec2(_Uniforms._SkyBoxRotation, 0.0);
-
-    if ( _BilinearSampling )
-      return _Uniforms._SkyBox -> BiLinearSample(uv);
-    else
-      return _Uniforms._SkyBox -> Sample(uv);
-  }
-
-  return Vec4(0.f);
-}
-
-// ----------------------------------------------------------------------------
 // InitializeScene
 // ----------------------------------------------------------------------------
 int Test4::InitializeScene()
 {
-  _Uniforms = Uniform();
-
   Scene * newScene = nullptr;
   if ( !Loader::LoadScene(_SceneFiles[_CurSceneId], newScene, _Settings) || !newScene )
   {
@@ -1096,69 +846,7 @@ int Test4::InitializeScene()
     firstLight = _Scene -> GetLight(0);
   }
 
-  _Uniforms._Lights.clear();
-  for ( int i = 0; i < _Scene -> GetNbLights(); ++i )
-    _Uniforms._Lights.push_back(*_Scene -> GetLight(i));
-
   _Scene -> CompileMeshData(_Settings._TextureSize);
-
-  // Load _Triangles
-  const std::vector<Vec3i>    & Indices   = _Scene -> GetIndices();
-  const std::vector<Vec3>     & Vertices  = _Scene -> GetVertices();
-  const std::vector<Vec3>     & Normals   = _Scene -> GetNormals();
-  const std::vector<Vec3>     & UVMatIDs  = _Scene -> GetUVMatID();
-  const std::vector<Material> & Materials = _Scene -> GetMaterials();
-  const std::vector<Texture*> & Textures  = _Scene -> GetTextures();
-  const int nbTris = Indices.size() / 3;
-
-  _Triangles.resize(nbTris);
-  for ( int i = 0; i < nbTris; ++i )
-  {
-    Triangle & tri = _Triangles[i];
-
-    Vec3i Index[3];
-    Index[0] = Indices[i*3];
-    Index[1] = Indices[i*3+1];
-    Index[2] = Indices[i*3+2];
-
-    for ( int j = 0; j < 3; ++j )
-    {
-      Vertex & vert = tri._Vert[j];
-
-      vert._Position = Vec4(Vertices[Index[j].x], 1.f);
-
-      if ( Index[j].z >= 0 )
-        vert._UV = Vec2(UVMatIDs[Index[j].z].x, UVMatIDs[Index[j].z].y);
-      else
-        vert._UV = Vec2(0.f);
-
-      int matID = (int)UVMatIDs[Index[j].z].z;
-      if ( matID >= 0 )
-        vert._Color = Vec4(Materials[matID]._Albedo, 1.f);
-      else
-        vert._Color = Vec4(0.f);
-    }
-
-    Vec3 vec1(tri._Vert[1]._Position.x-tri._Vert[0]._Position.x, tri._Vert[1]._Position.y-tri._Vert[0]._Position.y, tri._Vert[1]._Position.z-tri._Vert[0]._Position.z);
-    Vec3 vec2(tri._Vert[2]._Position.x-tri._Vert[0]._Position.x, tri._Vert[2]._Position.y-tri._Vert[0]._Position.y, tri._Vert[2]._Position.z-tri._Vert[0]._Position.z);
-    tri._Normal = glm::normalize(glm::cross(vec1, vec2));
-
-    for ( int j = 0; j < 3; ++j )
-    {
-      if ( Index[j].y >= 0 )
-        tri._Vert[j]._Normal = Normals[Index[j].y];
-      else
-        tri._Vert[j]._Normal = tri._Normal;
-    }
-
-    int matID = (int)UVMatIDs[Index[0].z].z;
-    if ( matID >= 0 )
-    {
-      tri._Material = &Materials[matID];
-      if ( tri._Material && ( tri._Material -> _BaseColorTexId >= 0 ) )
-        tri._Texture = Textures[(int)tri._Material -> _BaseColorTexId];
-    }
-  }
 
   // Resize Image Buffer
   this -> ResizeImageBuffers();
@@ -1180,17 +868,13 @@ int Test4::InitializeBackground()
 
     if ( _Scene )
     {
-      int skyboxID = _Scene -> AddTexture(_BackgroundFiles[_CurBackgroundId], 4, TexFormat::TEX_FLOAT);
+      _SkyboxTexId = _Scene -> AddTexture(_BackgroundFiles[_CurBackgroundId], 4, TexFormat::TEX_FLOAT);
+      if ( _SkyboxTexId >= 0 )
       {
         std::vector<Texture*> & textures = _Scene -> GetTextures();
 
-        Texture * skyboxTexture = textures[skyboxID];
-        if ( skyboxTexture )
-        {
-          _Uniforms._SkyBox = skyboxTexture;
-          _Uniforms._SkyBoxRotation = _Settings._SkyBoxRotation;
-        }
-        else
+        Texture * skyboxTexture = textures[_SkyboxTexId];
+        if ( !skyboxTexture )
           return 1;
       }
     }
