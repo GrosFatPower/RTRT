@@ -335,8 +335,8 @@ void Test4::ResizeImageBuffers()
   _Settings._RenderResolution.x = _Settings._WindowResolution.x * ( _Settings._RenderScale * 0.01f );
   _Settings._RenderResolution.y = _Settings._WindowResolution.y * ( _Settings._RenderScale * 0.01f );
 
-  _ColorBuffer.resize(_Settings._RenderResolution.x  * _Settings._RenderResolution.y);
-  _DepthBuffer.resize(_Settings._RenderResolution.x  * _Settings._RenderResolution.y);
+  _ImageBuffer._ColorBuffer.resize(_Settings._RenderResolution.x  * _Settings._RenderResolution.y);
+  _ImageBuffer._DepthBuffer.resize(_Settings._RenderResolution.x  * _Settings._RenderResolution.y);
 }
 
 // ----------------------------------------------------------------------------
@@ -385,7 +385,7 @@ int Test4::InitializeFrameBuffer()
   glGenTextures(1, &_ImageTextureID);
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, _ImageTextureID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, &_ColorBuffer[0]);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, &_ImageBuffer._ColorBuffer[0]);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -460,7 +460,7 @@ int Test4::UpdateUniforms()
 int Test4::UpdateTextures()
 {
   glBindTexture(GL_TEXTURE_2D, _ImageTextureID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, &_ColorBuffer[0]);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, &_ImageBuffer._ColorBuffer[0]);
   glBindTexture(GL_TEXTURE_2D, 0);
 
   return 0;
@@ -699,22 +699,6 @@ int Test4::RenderBackground( float iTop, float iRight )
     Vec3 dX = _Scene -> GetCamera().GetRight() * ( 2 * iRight / width );
     Vec3 dY = _Scene -> GetCamera().GetUp() * ( 2 * iTop / height );
 
-    //std::vector<std::thread> threads;
-    //threads.reserve(_NbThreads);
-
-    //for ( int i = 0; i < _NbThreads; ++i )
-    //{
-    //  int startY = ( height / _NbThreads ) * i;
-    //  int endY = ( i == _NbThreads-1 ) ? ( height ) : ( startY + ( height / _NbThreads ) );
-
-    //  threads.emplace_back(std::thread(&Test4::RenderBackgroundRows, this, startY, endY, bottomLeft, dX, dY));
-    //}
-
-    //for ( auto & thread : threads )
-    //{
-    //  thread.join();
-    //}
-
     for ( int i = 0; i < height; ++i )
       JobSystem::Get().Execute([this, i, bottomLeft, dX, dY](){ this -> RenderBackgroundRows(i, i+1, bottomLeft, dX, dY); });
 
@@ -723,7 +707,7 @@ int Test4::RenderBackground( float iTop, float iRight )
   else
   {
     const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
-    std::fill(policy, _ColorBuffer.begin(), _ColorBuffer.end(), backgroundColor);
+    std::fill(policy, _ImageBuffer._ColorBuffer.begin(), _ImageBuffer._ColorBuffer.end(), backgroundColor);
   }
 
   _RenderBgdElapsed = glfwGetTime() - startTime;
@@ -743,7 +727,7 @@ void Test4::RenderBackgroundRows( int iStartY, int iEndY, Vec3 iBottomLeft, Vec3
     for ( int x = 0; x < width; ++x  )
     {
       Vec3 worldP = glm::normalize(iBottomLeft + iDX * (float)x + iDY * (float)y);
-      _ColorBuffer[x + width * y] = this -> SampleSkybox(worldP);
+      _ImageBuffer._ColorBuffer[x + width * y] = this -> SampleSkybox(worldP);
     }
   }
 }
@@ -782,17 +766,103 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
 {
   double startTime = glfwGetTime();
 
-  int width  = _Settings._RenderResolution.x;
-  int height = _Settings._RenderResolution.y;
+  //int width  = _Settings._RenderResolution.x;
+  //int height = _Settings._RenderResolution.y;
 
-  float zNear, zFar;
-  _Scene -> GetCamera().GetZNearFar(zNear, zFar);
+  //float zNear, zFar;
+  //_Scene -> GetCamera().GetZNearFar(zNear, zFar);
 
-  std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), zFar);
+  std::fill(policy, _ImageBuffer._DepthBuffer.begin(), _ImageBuffer._DepthBuffer.end(), 1.f);
+
+  ProcessVertices(iMV, iP);
 
   _RenderScnElapsed = glfwGetTime() - startTime;
 
   return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ProcessVertices
+// ----------------------------------------------------------------------------
+int Test4::ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP )
+{
+  if ( !_Scene )
+    return 1;
+
+  Mat4x4 MVP = iP * iMV;
+
+  const std::vector<Vec3i> & Indices = _Scene -> GetIndices();
+  _ProjVertices.reserve(Indices.size());
+
+  //for ( int i = 0; i < _NbThreads; ++i )
+  //{
+  //  int startInd = ( Indices.size() / _NbThreads ) * i;
+  //  int endInd = ( i == _NbThreads-1 ) ? ( Indices.size() ) : ( startInd + ( Indices.size() / _NbThreads ) );
+  //
+  //  JobSystem::Get().Execute([this, MVP, startInd, endInd](){ this -> ProcessVertices(MVP, startInd, endInd); });
+  //}
+
+  int curInd = 0;
+  do
+  {
+    int nextInd = std::min(curInd + 512, (int)Indices.size());
+
+    JobSystem::Get().Execute([this, MVP, curInd, nextInd](){ this -> ProcessVertices(MVP, curInd, nextInd); });
+
+    curInd = nextInd;
+
+  } while ( curInd < Indices.size() );
+
+  JobSystem::Get().Wait();
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ProcessVertices
+// ----------------------------------------------------------------------------
+void Test4::ProcessVertices( const Mat4x4 & iMVP, int iStartInd, int iEndInd )
+{
+  const std::vector<Vec3i>    & Indices   = _Scene -> GetIndices();
+  const std::vector<Vec3>     & Vertices  = _Scene -> GetVertices();
+  const std::vector<Vec3>     & Normals   = _Scene -> GetNormals();
+  const std::vector<Vec3>     & UVMatIDs  = _Scene -> GetUVMatID();
+  const std::vector<Material> & Materials = _Scene -> GetMaterials();
+
+  for ( int i = iStartInd; i < iEndInd; ++i )
+  {
+    Vec4 pos       = Vec4(Vertices[Indices[i].x], 1.f);
+    Vec2 uv        = Vec2(0.f);
+    Vec3 normal    = Vec3(0.f);
+    Vec4 color     = Vec4(0.f);
+
+    if ( Indices[i].y >= 0 )
+      normal = Normals[Indices[i].y];
+
+    if ( Indices[i].z >= 0 )
+    {
+       uv = Vec2(UVMatIDs[Indices[i].z].x, UVMatIDs[Indices[i].z].y);
+
+       int matID = (int)UVMatIDs[Indices[i].z].z;
+      if ( matID >= 0 )
+        color = Vec4(Materials[matID]._Albedo, 1.f);
+    }
+
+    ProjectedVertex & projVtx = _ProjVertices[i];
+    VertexShader(pos, uv, normal, color, iMVP, projVtx);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// VertexShader
+// ----------------------------------------------------------------------------
+void Test4::VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 iNormal, const Vec4 iColor, const Mat4x4 iMVP, ProjectedVertex & oProjectedVertex )
+{
+  oProjectedVertex._ProjPos          = iMVP * iVertexPos;
+  oProjectedVertex._Attrib._WorldPos = iVertexPos;
+  oProjectedVertex._Attrib._UV       = iUV;
+  oProjectedVertex._Attrib._Normal   = iNormal;
+  oProjectedVertex._Attrib._Color    = iColor;
 }
 
 // ----------------------------------------------------------------------------

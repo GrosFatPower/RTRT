@@ -55,6 +55,26 @@ private:
     bool   _MiddleClick = false;
   };
 
+  struct FrameBuffer
+  {
+    std::vector<Vec4>  _ColorBuffer;
+    std::vector<float> _DepthBuffer;
+  };
+
+  struct Varying
+  {
+    Vec3 _WorldPos;
+    Vec2 _UV;
+    Vec3 _Normal;
+    Vec4 _Color;
+  };
+
+  struct ProjectedVertex
+  {
+    Vec4    _ProjPos;
+    Varying _Attrib;
+  };
+
   enum class ShadingType
   {
     Flat = 0,
@@ -81,7 +101,10 @@ private:
 
   int RenderBackground( float iTop, float iRight );
   void RenderBackgroundRows( int iStartY, int iEndY, Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY );
+
   int RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP );
+  int ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP );
+  void ProcessVertices( const Mat4x4 & iMVP, int iStartInd, int iEndInd );
 
   void RenderToTexture();
   void RenderToSceen();
@@ -92,6 +115,9 @@ private:
   void ResizeImageBuffers();
 
   Vec4 SampleSkybox( const Vec3 & iDir );
+
+  static void VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 iNormal, const Vec4 iColor, const Mat4x4 iMVP, ProjectedVertex & oProjectedVertex );
+
 
   std::unique_ptr<QuadMesh> _Quad;
   std::unique_ptr<Scene>    _Scene;
@@ -114,14 +140,15 @@ private:
 
   RenderSettings     _Settings;
 
+  FrameBuffer        _ImageBuffer;
+  std::vector<ProjectedVertex> _ProjVertices;
+
   int                _NbThreadsMax = 1;
   int                _NbThreads = 1;
   int                _ColorDepthOrNormalsBuffer = 0;
   bool               _ShowWires = false;
   bool               _BilinearSampling = true;
   ShadingType        _ShadingType = ShadingType::Phong;
-  std::vector<Vec4>  _ColorBuffer;
-  std::vector<float> _DepthBuffer;
 
   int                _SkyboxTexId = -1;
 
