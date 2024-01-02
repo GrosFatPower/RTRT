@@ -22,16 +22,7 @@
 //#include <omp.h>
 #include <thread>
 
-#define EPSILON 0.01
-
-#define PARALLEL
-//#define RASTERIZATION_OPTIM
-
-#ifdef PARALLEL
 constexpr std::execution::parallel_policy policy = std::execution::par;
-#else
-constexpr std::execution::sequenced_policy policy = std::execution::seq;
-#endif
 
 namespace RTRT
 {
@@ -686,7 +677,6 @@ void Test4::DrawUI()
 // ----------------------------------------------------------------------------
 // RenderBackground
 // ----------------------------------------------------------------------------
-#ifdef PARALLEL
 int Test4::RenderBackground( float iTop, float iRight )
 {
   double startTime = glfwGetTime();
@@ -732,46 +722,6 @@ int Test4::RenderBackground( float iTop, float iRight )
   return 0;
 }
 
-#else
-
-int Test4::RenderBackground( float iTop, float iRight )
-{
-  double startTime = glfwGetTime();
-
-  int width  = _Settings._RenderResolution.x;
-  int height = _Settings._RenderResolution.y;
-
-  float zNear, zFar;
-  _Scene -> GetCamera().GetZNearFar(zNear, zFar);
-
-  if ( _Settings._EnableBackGround )
-  {
-    Vec3 bottomLeft = _Scene -> GetCamera().GetForward() * zNear - iRight * _Scene -> GetCamera().GetRight() - iTop * _Scene -> GetCamera().GetUp();
-    Vec3 dX = _Scene -> GetCamera().GetRight() * ( 2 * iRight / width );
-    Vec3 dY = _Scene -> GetCamera().GetUp() * ( 2 * iTop / height );
-
-    for ( int y = 0; y < height; ++y )
-    {
-      #pragma omp parallel for
-      for ( int x = 0; x < width; ++x  )
-      {
-        Vec3 worldP = glm::normalize(bottomLeft + dX * (float)x + dY * (float)y);
-        _ColorBuffer[x + width * y] = SampleSkybox(worldP);
-      }
-    }
-  }
-  else
-  {
-    const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
-    std::fill(policy, _ColorBuffer.begin(), _ColorBuffer.end(), backgroundColor);
-  }
-
-  _RenderBgdElapsed = glfwGetTime() - startTime;
-
-  return 0;
-}
-#endif
-
 // ----------------------------------------------------------------------------
 // RenderBackgroundRows
 // ----------------------------------------------------------------------------
@@ -790,7 +740,6 @@ void Test4::RenderBackgroundRows( BGThreadData iTD )
 // ----------------------------------------------------------------------------
 // RenderScene
 // ----------------------------------------------------------------------------
-#ifdef PARALLEL
 int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
 {
   double startTime = glfwGetTime();
@@ -831,191 +780,6 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
 
   return 0;
 }
-
-#else
-
-int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
-{
-  double startTime = glfwGetTime();
-
-  int width  = _Settings._RenderResolution.x;
-  int height = _Settings._RenderResolution.y;
-  float ratio = width / float(height);
-
-  Mat4x4 MVP = iP * iMV;
-
-  float zNear, zFar;
-  _Scene -> GetCamera().GetZNearFar(zNear, zFar);
-
-  std::fill(policy, _DepthBuffer.begin(), _DepthBuffer.end(), zFar);
-
-  const int nbTris = _Triangles.size();
-
-  _Uniforms._CameraPos                 = _Scene -> GetCamera().GetPos();
-  _Uniforms._ShowWires                 = _ShowWires;
-  _Uniforms._BilinearSampling          = _BilinearSampling;
-  _Uniforms._ColorDepthOrNormalsBuffer = _ColorDepthOrNormalsBuffer;
-  _Uniforms._ShadingType               = _ShadingType;
-
-  for ( int i = 0; i < nbTris; ++i )
-  {
-    // Update uniforms
-    _Uniforms._Material = _Triangles[i]._Material;
-    _Uniforms._Texture  = _Triangles[i]._Texture;
-
-    Vec4    VtxNDCPos[3];
-    Vec2    VtxScreenPos[3];
-    Varying Attrib[3];
-    Vec2    bboxMin(std::numeric_limits<float>::infinity());
-    Vec2    bboxMax = -bboxMin;
-    for ( int j = 0; j < 3; ++j )
-    {
-      VertexShader(_Triangles[i]._Vert[j], MVP, _Uniforms, VtxNDCPos[j], Attrib[j]);
-
-      VtxNDCPos[j].w = 1.f / VtxNDCPos[j].w; // 1.f / -z
-      VtxNDCPos[j].x *= VtxNDCPos[j].w;      // X / -z
-      VtxNDCPos[j].y *= VtxNDCPos[j].w;      // Y / -z
-      VtxNDCPos[j].z *= VtxNDCPos[j].w;      // Z / -z
-
-      // Convert to raster space
-      VtxScreenPos[j].x = ((VtxNDCPos[j].x + 1.f) * .5f * width);
-      VtxScreenPos[j].y = ((VtxNDCPos[j].y + 1.f) * .5f * height);
-
-      if ( VtxScreenPos[j].x < bboxMin.x )
-        bboxMin.x = VtxScreenPos[j].x;
-      if ( VtxScreenPos[j].y < bboxMin.y )
-        bboxMin.y = VtxScreenPos[j].y;
-      if ( VtxScreenPos[j].x > bboxMax.x )
-        bboxMax.x = VtxScreenPos[j].x;
-      if ( VtxScreenPos[j].y > bboxMax.y )
-        bboxMax.y = VtxScreenPos[j].y;
-    }
-
-    int xMin = std::max(0, std::min((int)std::floorf(bboxMin.x), width  - 1));
-    int yMin = std::max(0, std::min((int)std::floorf(bboxMin.y), height - 1));
-    int xMax = std::max(0, std::min((int)std::floorf(bboxMax.x), width  - 1)); 
-    int yMax = std::max(0, std::min((int)std::floorf(bboxMax.y), height - 1));
-
-#ifdef RASTERIZATION_OPTIM
-    float A01, A12, A20;
-    float B01, B12, B20;
-    float C01, C12, C20;
-    EdgeFunction_PreComputeABC(VtxScreenPos[0], VtxScreenPos[1], A01, B01, C01);
-    EdgeFunction_PreComputeABC(VtxScreenPos[1], VtxScreenPos[2], A12, B12, C12);
-    EdgeFunction_PreComputeABC(VtxScreenPos[2], VtxScreenPos[0], A20, B20, C20);
-
-    float area = EdgeFunction_Optim1(A01, B01, C01, VtxScreenPos[2]);
-#else
-    float area = EdgeFunction(VtxScreenPos[0], VtxScreenPos[1], VtxScreenPos[2]);
-#endif
-    if ( area <= 0.f )
-      continue;
-    float invArea = 1.f / area;
-
-#ifdef RASTERIZATION_OPTIM
-    Vec3 startP(xMin + .5f, yMin + .5f, 0.f);
-    Vec3 rowW;
-    rowW.x = EdgeFunction(VtxScreenPos[1], VtxScreenPos[2], startP);
-    rowW.y = EdgeFunction(VtxScreenPos[2], VtxScreenPos[0], startP);
-    rowW.z = EdgeFunction(VtxScreenPos[0], VtxScreenPos[1], startP);
-#endif
-
-    for ( int y = yMin; y <= yMax; ++y )
-    {
-#ifdef RASTERIZATION_OPTIM
-      Vec3 curW = rowW;
-#endif
-
-      for ( int x = xMin; x <= xMax; ++x  )
-      {
-        Vec3 coord(x + .5f, y + .5f, 0.f);
-
-        Vec3 W;
-#ifdef RASTERIZATION_OPTIM
-        W = curW;
-        curW.x += A12;
-        curW.y += A20;
-        curW.z += A01;
-#else
-        W.x = EdgeFunction(VtxScreenPos[1], VtxScreenPos[2], coord);
-        W.y = EdgeFunction(VtxScreenPos[2], VtxScreenPos[0], coord);
-        W.z = EdgeFunction(VtxScreenPos[0], VtxScreenPos[1], coord);
-#endif
-
-        if ( ( W.x < 0.f )
-          || ( W.y < 0.f )
-          || ( W.z < 0.f ) )
-        {
-          continue;
-        }
-
-        W *= invArea;
-
-        // Perspective correction
-        W.x *= VtxNDCPos[0].w; // W0 / z0
-        W.y *= VtxNDCPos[1].w; // W1 / z1
-        W.z *= VtxNDCPos[2].w; // W2 / z2
-
-        float Z = 1.f / (W.x + W.y + W.z);
-        if ( Z > _DepthBuffer[x + width * y] || ( Z < zNear) )
-          continue;
-
-        W *= Z;
-
-        coord.z = W.x * VtxNDCPos[0].z + W.y * VtxNDCPos[1].z + W.z * VtxNDCPos[2].z;
-        coord.z = ( coord.z + 1.f ) * .5f;
-        if ( ( coord.z < 0.f ) || ( coord.z > 1.f ) )
-          continue;
-
-        // Interpolation
-        Vec4 fragCoord(coord, 1.f);
-        Varying fragAttrib;
-        fragCoord.w          = W.x * VtxNDCPos[0].w         + W.y * VtxNDCPos[1].w          + W.z * VtxNDCPos[2].w;
-        fragAttrib._WorldPos = W.x * Attrib   [0]._WorldPos + W.y * Attrib   [1]._WorldPos  + W.z * Attrib   [2]._WorldPos;
-        fragAttrib._UV       = W.x * Attrib   [0]._UV       + W.y * Attrib   [1]._UV        + W.z * Attrib   [2]._UV;
-        fragAttrib._Color    = W.x * Attrib   [0]._Color    + W.y * Attrib   [1]._Color     + W.z * Attrib   [2]._Color;
-        if ( _ShowWires )
-        {
-          //fragAttrib._W = W;
-          fragAttrib._VertCoords[0].x = VtxScreenPos[0].x; fragAttrib._VertCoords[0].y = VtxScreenPos[0].y;
-          fragAttrib._VertCoords[1].x = VtxScreenPos[1].x; fragAttrib._VertCoords[1].y = VtxScreenPos[1].y;
-          fragAttrib._VertCoords[2].x = VtxScreenPos[2].x; fragAttrib._VertCoords[2].y = VtxScreenPos[2].y;
-        }
-
-        if ( ShadingType::Phong == _ShadingType )
-        {
-          fragAttrib._Normal = W.x * Attrib   [0]._Normal   + W.y * Attrib   [1]._Normal    + W.z * Attrib   [2]._Normal;
-          fragAttrib._Normal = glm::normalize(fragAttrib._Normal);
-        }
-        else
-          fragAttrib._Normal = _Triangles[i]._Normal;
-
-        Vec4 fragColor(1.f);
-
-        if ( 1 == _ColorDepthOrNormalsBuffer )
-          FragmentShader_Depth(fragCoord, _Uniforms, fragAttrib, fragColor);
-        else if ( 2 == _ColorDepthOrNormalsBuffer )
-          FragmentShader_Normal(fragCoord, _Uniforms, fragAttrib, fragColor);
-        else
-          FragmentShader_Color(fragCoord, _Uniforms, fragAttrib, fragColor);
-
-        _ColorBuffer[x + width * y] = fragColor;
-        _DepthBuffer[x + width * y] = Z;
-      }
-
-#ifdef RASTERIZATION_OPTIM
-      rowW.x += B12;
-      rowW.y += B20;
-      rowW.z += B01;
-#endif
-    }
-  }
-
-  _RenderScnElapsed = glfwGetTime() - startTime;
-
-  return 0;
-}
-#endif
 
 // ----------------------------------------------------------------------------
 // RenderSceneRows
@@ -1150,7 +914,6 @@ void Test4::RenderSceneRows( SceneThreadData iTD )
       }
     }
   }
-
 }
 
 // ----------------------------------------------------------------------------
