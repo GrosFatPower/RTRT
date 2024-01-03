@@ -214,7 +214,7 @@ int Scene::AddPrimitiveInstance( int iPrimitiveID, int iMaterialID, const Mat4x4
   return -1;
 }
 
-void Scene::CompileMeshData( Vec2i iTextureSize )
+void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, bool iBuildBVH )
 {
   _NbFaces = 0;
   _Vertices.clear();
@@ -319,106 +319,112 @@ void Scene::CompileMeshData( Vec2i iTextureSize )
   _NbFaces = _Indices.size() / 3;
 
   // Textures
-  std::vector<Texture*> _MatTextures;
-  for ( int i = 0; i < _Materials.size(); ++i )
+  if ( iBuildTextureArray )
   {
-    int baseColorTexId         = (int) _Materials[i]._BaseColorTexId;
-    int metallicRoughnessTexID = (int) _Materials[i]._MetallicRoughnessTexID;
-    int normalMapTexID         = (int) _Materials[i]._NormalMapTexID;
-    int emissionMapTexID       = (int) _Materials[i]._EmissionMapTexID;
-
-    if ( ( baseColorTexId >= 0 ) && _Textures[baseColorTexId] && ( _Textures[baseColorTexId] -> GetTexID() == baseColorTexId ) )
+    std::vector<Texture*> MatTextures;
+    for ( int i = 0; i < _Materials.size(); ++i )
     {
-      if ( std::find(_MatTextures.begin(), _MatTextures.end(), _Textures[baseColorTexId]) == _MatTextures.end() )
-        _MatTextures.push_back(_Textures[baseColorTexId]);
-    }
-    if ( ( metallicRoughnessTexID >= 0 ) && _Textures[metallicRoughnessTexID] && ( _Textures[metallicRoughnessTexID] -> GetTexID() == metallicRoughnessTexID ) )
-    {
-      if ( std::find(_MatTextures.begin(), _MatTextures.end(), _Textures[metallicRoughnessTexID]) == _MatTextures.end() )
-        _MatTextures.push_back(_Textures[metallicRoughnessTexID]);
-    }
-    if ( ( normalMapTexID >= 0 ) && _Textures[normalMapTexID] && ( _Textures[normalMapTexID] -> GetTexID() == normalMapTexID ) )
-    {
-      if ( std::find(_MatTextures.begin(), _MatTextures.end(), _Textures[normalMapTexID]) == _MatTextures.end() )
-        _MatTextures.push_back(_Textures[normalMapTexID]);
-    }
-    if ( ( emissionMapTexID >= 0 ) && _Textures[emissionMapTexID] && ( _Textures[emissionMapTexID] -> GetTexID() == emissionMapTexID ) )
-    {
-      if ( std::find(_MatTextures.begin(), _MatTextures.end(), _Textures[emissionMapTexID]) == _MatTextures.end() )
-        _MatTextures.push_back(_Textures[emissionMapTexID]);
-    }
-  }
+      int baseColorTexId         = (int) _Materials[i]._BaseColorTexId;
+      int metallicRoughnessTexID = (int) _Materials[i]._MetallicRoughnessTexID;
+      int normalMapTexID         = (int) _Materials[i]._NormalMapTexID;
+      int emissionMapTexID       = (int) _Materials[i]._EmissionMapTexID;
 
-  if ( _MatTextures.size() )
-  {
-    _TextureArrayIDs = std::vector<int>(_Textures.size(), -1);
-
-    int textureUCSize = iTextureSize.x * iTextureSize.y * 4;
-    _TextureArray.resize(textureUCSize * _MatTextures.size());
-
-    _NbCompiledTex = 0;
-    for ( int i = 0; i < _MatTextures.size(); ++i )
-    {
-      Texture * curTexture = _MatTextures[i];
-
-      // 4 component-uchar only
-      if ( 4 != curTexture -> GetNbComponents() )
-        continue;
-      unsigned char * texUCData = curTexture -> GetUCData();
-      if ( !texUCData )
-        continue;
-      
-      // Resize if necessary
-      if ( ( curTexture -> GetWidth() != iTextureSize.x ) || ( curTexture -> GetHeight() != iTextureSize.y ) )
+      if ( ( baseColorTexId >= 0 ) && _Textures[baseColorTexId] && ( _Textures[baseColorTexId] -> GetTexID() == baseColorTexId ) )
       {
-        unsigned char * resizedTex = new unsigned char[textureUCSize];
-        stbir_resize_uint8(texUCData, curTexture -> GetWidth(), curTexture -> GetHeight(), 0, resizedTex, iTextureSize.x, iTextureSize.y, 0, 4);
-        std::copy(resizedTex, resizedTex + textureUCSize, &_TextureArray[_NbCompiledTex * textureUCSize]);
-        delete[] resizedTex;
+        if ( std::find(MatTextures.begin(), MatTextures.end(), _Textures[baseColorTexId]) == MatTextures.end() )
+          MatTextures.push_back(_Textures[baseColorTexId]);
       }
-      else
-          std::copy(texUCData, texUCData + textureUCSize, &_TextureArray[_NbCompiledTex * textureUCSize]);
+      if ( ( metallicRoughnessTexID >= 0 ) && _Textures[metallicRoughnessTexID] && ( _Textures[metallicRoughnessTexID] -> GetTexID() == metallicRoughnessTexID ) )
+      {
+        if ( std::find(MatTextures.begin(), MatTextures.end(), _Textures[metallicRoughnessTexID]) == MatTextures.end() )
+          MatTextures.push_back(_Textures[metallicRoughnessTexID]);
+      }
+      if ( ( normalMapTexID >= 0 ) && _Textures[normalMapTexID] && ( _Textures[normalMapTexID] -> GetTexID() == normalMapTexID ) )
+      {
+        if ( std::find(MatTextures.begin(), MatTextures.end(), _Textures[normalMapTexID]) == MatTextures.end() )
+          MatTextures.push_back(_Textures[normalMapTexID]);
+      }
+      if ( ( emissionMapTexID >= 0 ) && _Textures[emissionMapTexID] && ( _Textures[emissionMapTexID] -> GetTexID() == emissionMapTexID ) )
+      {
+        if ( std::find(MatTextures.begin(), MatTextures.end(), _Textures[emissionMapTexID]) == MatTextures.end() )
+          MatTextures.push_back(_Textures[emissionMapTexID]);
+      }
+    }
 
-      int texID = curTexture -> GetTexID();
-      _TextureArrayIDs[texID] = _NbCompiledTex;
-      _NbCompiledTex++;
+    if ( MatTextures.size() )
+    {
+      _TextureArrayIDs = std::vector<int>(_Textures.size(), -1);
+
+      int textureUCSize = iTextureArraySize.x * iTextureArraySize.y * 4;
+      _TextureArray.resize(textureUCSize * MatTextures.size());
+
+      _NbCompiledTex = 0;
+      for ( int i = 0; i < MatTextures.size(); ++i )
+      {
+        Texture * curTexture = MatTextures[i];
+
+        // 4 component-uchar only
+        if ( 4 != curTexture -> GetNbComponents() )
+          continue;
+        unsigned char * texUCData = curTexture -> GetUCData();
+        if ( !texUCData )
+          continue;
+      
+        // Resize if necessary
+        if ( ( curTexture -> GetWidth() != iTextureArraySize.x ) || ( curTexture -> GetHeight() != iTextureArraySize.y ) )
+        {
+          unsigned char * resizedTex = new unsigned char[textureUCSize];
+          stbir_resize_uint8(texUCData, curTexture -> GetWidth(), curTexture -> GetHeight(), 0, resizedTex, iTextureArraySize.x, iTextureArraySize.y, 0, 4);
+          std::copy(resizedTex, resizedTex + textureUCSize, &_TextureArray[_NbCompiledTex * textureUCSize]);
+          delete[] resizedTex;
+        }
+        else
+            std::copy(texUCData, texUCData + textureUCSize, &_TextureArray[_NbCompiledTex * textureUCSize]);
+
+        int texID = curTexture -> GetTexID();
+        _TextureArrayIDs[texID] = _NbCompiledTex;
+        _NbCompiledTex++;
+      }
     }
   }
 
   // BVH
-  _TLAS.Build(_Meshes, _MeshInstances);
-
-  for ( auto meshInst : _TLAS.GetPackedMeshInstances() )
+  if ( iBuildBVH )
   {
-    _TLASPackedTransforms.emplace_back(meshInst._Transform);
-    _TLASPackedMeshMatID.emplace_back(meshInst._MeshID, meshInst._MaterialID);
-  }
+    _TLAS.Build(_Meshes, _MeshInstances);
 
-  for (auto & mesh : _Meshes)
-  {
-    mesh -> BuildBvh();
+    for ( auto meshInst : _TLAS.GetPackedMeshInstances() )
+    {
+      _TLASPackedTransforms.emplace_back(meshInst._Transform);
+      _TLASPackedMeshMatID.emplace_back(meshInst._MeshID, meshInst._MaterialID);
+    }
 
-    std::shared_ptr<GpuBLAS> curBLAS = mesh -> GetBvh();
+    for (auto & mesh : _Meshes)
+    {
+      mesh -> BuildBvh();
 
-    int nbNodes = curBLAS -> GetNodes().size();
-    int startIdx = _BLASNodes.size();
-    _BLASNodes.insert(_BLASNodes.end(), curBLAS -> GetNodes().begin(), curBLAS -> GetNodes().end());
-    _BLASNodesRange.emplace_back(startIdx, nbNodes);
+      std::shared_ptr<GpuBLAS> curBLAS = mesh -> GetBvh();
 
-    const std::vector<Vec3>  & curVertices = mesh -> GetVertices();
-    const std::vector<Vec3>  & curNormals  = mesh -> GetNormals();
-    const std::vector<Vec2>  & curUVs      = mesh -> GetUVs();
+      int nbNodes = curBLAS -> GetNodes().size();
+      int startIdx = _BLASNodes.size();
+      _BLASNodes.insert(_BLASNodes.end(), curBLAS -> GetNodes().begin(), curBLAS -> GetNodes().end());
+      _BLASNodesRange.emplace_back(startIdx, nbNodes);
+
+      const std::vector<Vec3>  & curVertices = mesh -> GetVertices();
+      const std::vector<Vec3>  & curNormals  = mesh -> GetNormals();
+      const std::vector<Vec2>  & curUVs      = mesh -> GetUVs();
   
-    const Vec3i offset(_BLASPackedVertices.size(), _BLASPackedNormals.size(), _BLASPackedUVs.size());
-    _BLASPackedVertices.insert(_BLASPackedVertices.end(), curVertices.begin(), curVertices.end());
-    _BLASPackedNormals. insert(_BLASPackedNormals.end(),  curNormals.begin(),  curNormals.end());
-    _BLASPackedUVs.     insert(_BLASPackedUVs.end(),      curUVs.begin(),      curUVs.end());
+      const Vec3i offset(_BLASPackedVertices.size(), _BLASPackedNormals.size(), _BLASPackedUVs.size());
+      _BLASPackedVertices.insert(_BLASPackedVertices.end(), curVertices.begin(), curVertices.end());
+      _BLASPackedNormals. insert(_BLASPackedNormals.end(),  curNormals.begin(),  curNormals.end());
+      _BLASPackedUVs.     insert(_BLASPackedUVs.end(),      curUVs.begin(),      curUVs.end());
 
-    int nbIndices = curBLAS -> GetPackedTriangleIdx().size();
-    startIdx = _BLASPackedIndices.size();
-    for (auto & indices : curBLAS -> GetPackedTriangleIdx())
-      _BLASPackedIndices.emplace_back(indices + offset);
-    _BLASPackedIndicesRange.emplace_back(startIdx, nbIndices);
+      int nbIndices = curBLAS -> GetPackedTriangleIdx().size();
+      startIdx = _BLASPackedIndices.size();
+      for (auto & indices : curBLAS -> GetPackedTriangleIdx())
+        _BLASPackedIndices.emplace_back(indices + offset);
+      _BLASPackedIndicesRange.emplace_back(startIdx, nbIndices);
+    }
   }
 
 }

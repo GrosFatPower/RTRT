@@ -32,6 +32,80 @@ public:
 
   static const char * GetTestHeader();
 
+public:
+
+  struct Varying
+  {
+    Vec3 _WorldPos;
+    Vec2 _UV;
+    Vec3 _Normal;
+    Vec3 _Color;
+  };
+
+  struct Vertex
+  {
+    Vec3 _WorldPos;
+    Vec2 _UV;
+    Vec3 _Normal;
+    Vec3 _Color;
+
+    bool operator==(const Vertex & iRhs) const
+    {
+      return ( ( _WorldPos == iRhs._WorldPos )
+            && ( _Normal   == iRhs._Normal   )
+            && ( _UV       == iRhs._UV       )
+            && ( _Color    == iRhs._Color    ) );
+    }
+
+    Vertex operator*(float t) const
+    {
+      auto copy = *this;
+
+      copy._WorldPos *= t;
+      copy._Normal   *= t;
+      copy._UV       *= t;
+      copy._Color    *= t;
+
+      return copy;
+    }
+
+    Vertex operator+(const Vertex & iRhs) const
+    {
+      auto copy = *this;
+
+      copy._WorldPos *= iRhs._WorldPos;
+      copy._Normal   *= iRhs._Normal;
+      copy._UV       *= iRhs._UV;
+      copy._Color    *= iRhs._Color;
+
+      return copy;
+    }
+  };
+
+  struct Triangle
+  {
+    int   _Indices[3];
+    Vec3  _Normal;
+    int   _MatID;
+  };
+
+  struct ProjectedVertex
+  {
+    Vec4    _ProjPos;
+    Varying _Attrib;
+  };
+
+  struct RasterTriangle
+  {
+    Vec3  _HomogeneousProjPos[3];
+    Vec2  _V[3];
+    float _InvW[3];
+    float _InvArea;
+    Vec2  _BBoxMin, _BBoxMax;
+    Vec3  _Normal;
+    int   _MatID;
+  };
+
 private:
 
   struct KeyState
@@ -59,20 +133,6 @@ private:
   {
     std::vector<Vec4>  _ColorBuffer;
     std::vector<float> _DepthBuffer;
-  };
-
-  struct Varying
-  {
-    Vec3 _WorldPos;
-    Vec2 _UV;
-    Vec3 _Normal;
-    Vec4 _Color;
-  };
-
-  struct ProjectedVertex
-  {
-    Vec4    _ProjPos;
-    Varying _Attrib;
   };
 
   enum class ShadingType
@@ -105,6 +165,8 @@ private:
   int RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP );
   int ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP );
   void ProcessVertices( const Mat4x4 & iMVP, int iStartInd, int iEndInd );
+  int ClipTriangles();
+  void ClipTriangles( int iThreadBin, int iStartInd, int iEndInd );
 
   void RenderToTexture();
   void RenderToSceen();
@@ -116,8 +178,9 @@ private:
 
   Vec4 SampleSkybox( const Vec3 & iDir );
 
-  static void VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 iNormal, const Vec4 iColor, const Mat4x4 iMVP, ProjectedVertex & oProjectedVertex );
+  static void VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 iNormal, const Vec3 iColor, const Mat4x4 iMVP, ProjectedVertex & oProjectedVertex );
 
+  static float EdgeFunction(const Vec2 & iV0, const Vec2 & iV1, const Vec2 & iV2);
 
   std::unique_ptr<QuadMesh> _Quad;
   std::unique_ptr<Scene>    _Scene;
@@ -131,6 +194,11 @@ private:
   bool                      _ReloadBackground = true;
   bool                      _UpdateFrameBuffers = false;
 
+  std::vector<Vertex>            _Vertices;
+  std::vector<Triangle>          _Triangles;
+  std::vector<ProjectedVertex>   _ProjVertices;
+  std::vector<RasterTriangle>  * _RasterTriangles = nullptr;
+
   std::unique_ptr<ShaderProgram> _RTTShader;
   std::unique_ptr<ShaderProgram> _RTSShader;
 
@@ -141,7 +209,6 @@ private:
   RenderSettings     _Settings;
 
   FrameBuffer        _ImageBuffer;
-  std::vector<ProjectedVertex> _ProjVertices;
 
   int                _NbThreadsMax = 1;
   int                _NbThreads = 1;
@@ -167,6 +234,10 @@ private:
   double             _AverageDelta         = 0.f;
   std::deque<double> _LastDeltas;
 };
+
+inline float Test4::EdgeFunction(const Vec2 & iV0, const Vec2 & iV1, const Vec2 & iV2) { 
+  return (iV1.x - iV0.x) * (iV2.y - iV0.y) - (iV1.y - iV0.y) * (iV2.x - iV0.x); } // Counter-Clockwise edge function
+//  return (iV2.x - iV0.x) * (iV1.y - iV0.y) - (iV2.y - iV0.y) * (iV1.x - iV0.x); } // Clockwise edge function
 
 }
 

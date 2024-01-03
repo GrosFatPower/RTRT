@@ -14,6 +14,8 @@
 #include "glm/gtx/transform.hpp"
 #include "glm/gtx/quaternion.hpp"
 #include "glm/gtx/extended_min_max.hpp"
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/hash.hpp>
 
 
 typedef glm::vec2   Vec2;

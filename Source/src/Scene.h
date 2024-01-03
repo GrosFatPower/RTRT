@@ -62,7 +62,7 @@ public:
   std::vector<Primitive*>        & GetPrimitives()         { return _Primitives;         }
 
   // Compiled data
-  void CompileMeshData( Vec2i iTextureSize );
+  void CompileMeshData( Vec2i iTextureArraySize = Vec2i(0), bool iBuildTextureArray = true, bool iBuildBVH = true );
   int GetNbFaces() const { return _NbFaces; }
   int GetNbCompiledTex() const { return _NbCompiledTex; }
   const std::vector<Vec3>          & GetVertices()               const { return _Vertices;                }

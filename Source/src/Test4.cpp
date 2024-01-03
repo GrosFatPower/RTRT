@@ -18,12 +18,37 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
 
+#include <unordered_map>
+
 #include <iostream>
 #include <execution>
 //#include <omp.h>
 #include <thread>
 
 constexpr std::execution::parallel_policy policy = std::execution::par;
+
+/**
+ * The vertices vector contains a lot of duplicated vertex data,
+ * because many vertices are included in multiple triangles.
+ * We should keep only the unique vertices and use
+ * the index buffer to reuse them whenever they come up.
+ * https://en.cppreference.com/w/cpp/utility/hash
+ */
+namespace std
+{
+  template <>
+  struct hash<RTRT::Test4::Vertex>
+  {
+    size_t operator()(RTRT::Test4::Vertex const & iV) const
+    {
+      return
+        ( (hash<Vec3>()(iV._WorldPos))
+        ^ (hash<Vec3>()(iV._Color))
+        ^ (hash<Vec3>()(iV._Normal))
+        ^ (hash<Vec2>()(iV._UV)) );
+    }
+  };
+}
 
 namespace RTRT
 {
@@ -259,6 +284,8 @@ Test4::~Test4()
     delete[] fileName;
   for ( auto fileName : _BackgroundNames )
     delete[] fileName;
+
+  delete[] _RasterTriangles;
 }
 
 // ----------------------------------------------------------------------------
@@ -766,19 +793,16 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
 {
   double startTime = glfwGetTime();
 
-  //int width  = _Settings._RenderResolution.x;
-  //int height = _Settings._RenderResolution.y;
-
-  //float zNear, zFar;
-  //_Scene -> GetCamera().GetZNearFar(zNear, zFar);
-
   std::fill(policy, _ImageBuffer._DepthBuffer.begin(), _ImageBuffer._DepthBuffer.end(), 1.f);
 
-  ProcessVertices(iMV, iP);
+  int ko = ProcessVertices(iMV, iP);
+
+  if ( !ko )
+    ClipTriangles();
 
   _RenderScnElapsed = glfwGetTime() - startTime;
 
-  return 0;
+  return ko;
 }
 
 // ----------------------------------------------------------------------------
@@ -791,13 +815,12 @@ int Test4::ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP )
 
   Mat4x4 MVP = iP * iMV;
 
-  const std::vector<Vec3i> & Indices = _Scene -> GetIndices();
-  _ProjVertices.reserve(Indices.size());
+  _ProjVertices.resize(_Vertices.size());
 
   //for ( int i = 0; i < _NbThreads; ++i )
   //{
-  //  int startInd = ( Indices.size() / _NbThreads ) * i;
-  //  int endInd = ( i == _NbThreads-1 ) ? ( Indices.size() ) : ( startInd + ( Indices.size() / _NbThreads ) );
+  //  int startInd = ( _Vertices.size() / _NbThreads ) * i;
+  //  int endInd = ( i == _NbThreads-1 ) ? ( _Vertices.size() ) : ( startInd + ( _Vertices.size() / _NbThreads ) );
   //
   //  JobSystem::Get().Execute([this, MVP, startInd, endInd](){ this -> ProcessVertices(MVP, startInd, endInd); });
   //}
@@ -805,13 +828,13 @@ int Test4::ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP )
   int curInd = 0;
   do
   {
-    int nextInd = std::min(curInd + 512, (int)Indices.size());
+    int nextInd = std::min(curInd + 512, (int)_Vertices.size());
 
     JobSystem::Get().Execute([this, MVP, curInd, nextInd](){ this -> ProcessVertices(MVP, curInd, nextInd); });
 
     curInd = nextInd;
 
-  } while ( curInd < Indices.size() );
+  } while ( curInd < _Vertices.size() );
 
   JobSystem::Get().Wait();
 
@@ -823,46 +846,104 @@ int Test4::ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP )
 // ----------------------------------------------------------------------------
 void Test4::ProcessVertices( const Mat4x4 & iMVP, int iStartInd, int iEndInd )
 {
-  const std::vector<Vec3i>    & Indices   = _Scene -> GetIndices();
-  const std::vector<Vec3>     & Vertices  = _Scene -> GetVertices();
-  const std::vector<Vec3>     & Normals   = _Scene -> GetNormals();
-  const std::vector<Vec3>     & UVMatIDs  = _Scene -> GetUVMatID();
-  const std::vector<Material> & Materials = _Scene -> GetMaterials();
-
   for ( int i = iStartInd; i < iEndInd; ++i )
   {
-    Vec4 pos       = Vec4(Vertices[Indices[i].x], 1.f);
-    Vec2 uv        = Vec2(0.f);
-    Vec3 normal    = Vec3(0.f);
-    Vec4 color     = Vec4(0.f);
-
-    if ( Indices[i].y >= 0 )
-      normal = Normals[Indices[i].y];
-
-    if ( Indices[i].z >= 0 )
-    {
-       uv = Vec2(UVMatIDs[Indices[i].z].x, UVMatIDs[Indices[i].z].y);
-
-       int matID = (int)UVMatIDs[Indices[i].z].z;
-      if ( matID >= 0 )
-        color = Vec4(Materials[matID]._Albedo, 1.f);
-    }
+    Vertex & vert = _Vertices[i];
 
     ProjectedVertex & projVtx = _ProjVertices[i];
-    VertexShader(pos, uv, normal, color, iMVP, projVtx);
+    VertexShader(Vec4(vert._WorldPos ,1.f), vert._UV, vert._Normal, vert._Color, iMVP, projVtx);
   }
 }
 
 // ----------------------------------------------------------------------------
 // VertexShader
 // ----------------------------------------------------------------------------
-void Test4::VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 iNormal, const Vec4 iColor, const Mat4x4 iMVP, ProjectedVertex & oProjectedVertex )
+void Test4::VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 iNormal, const Vec3 iColor, const Mat4x4 iMVP, ProjectedVertex & oProjectedVertex )
 {
   oProjectedVertex._ProjPos          = iMVP * iVertexPos;
   oProjectedVertex._Attrib._WorldPos = iVertexPos;
   oProjectedVertex._Attrib._UV       = iUV;
   oProjectedVertex._Attrib._Normal   = iNormal;
   oProjectedVertex._Attrib._Color    = iColor;
+}
+
+// ----------------------------------------------------------------------------
+// ClipTriangles
+// ----------------------------------------------------------------------------
+int Test4::ClipTriangles()
+{
+  if ( !_RasterTriangles )
+    _RasterTriangles = new std::vector<RasterTriangle>[_NbThreads];
+
+  for ( int i = 0; i < _NbThreads; ++i )
+  {
+    int startInd = ( _Triangles.size() / _NbThreads ) * i;
+    int endInd = ( i == _NbThreads-1 ) ? ( _Triangles.size() ) : ( startInd + ( _Triangles.size() / _NbThreads ) );
+    if ( startInd >= endInd )
+      break;
+
+    _RasterTriangles[i].clear();
+    _RasterTriangles[i].reserve(endInd - startInd);
+  
+    JobSystem::Get().Execute([this, i, startInd, endInd](){ this -> ClipTriangles(i, startInd, endInd); });
+  }
+
+  JobSystem::Get().Wait();
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ClipTriangles
+// ----------------------------------------------------------------------------
+void Test4::ClipTriangles( int iThreadBin, int iStartInd, int iEndInd )
+{
+  int width  = _Settings._RenderResolution.x;
+  int height = _Settings._RenderResolution.y;
+
+  for ( int i = iStartInd; i < iEndInd; ++i )
+  {
+    Triangle & tri = _Triangles[i];
+
+    ProjectedVertex ProjVert[3];
+    ProjVert[0] = _ProjVertices[tri._Indices[0]];
+    ProjVert[1] = _ProjVertices[tri._Indices[1]];
+    ProjVert[2] = _ProjVertices[tri._Indices[2]];
+
+    RasterTriangle rasterTri;
+    rasterTri._BBoxMin = Vec2(std::numeric_limits<float>::infinity());
+    rasterTri._BBoxMax = -rasterTri._BBoxMin;
+    for ( int j = 0; j < 3; ++j )
+    {
+      rasterTri._InvW[j] = 1.f / ProjVert[0]._ProjPos.w;
+      rasterTri._HomogeneousProjPos[j].x = ProjVert[j]._ProjPos.x * rasterTri._InvW[j];
+      rasterTri._HomogeneousProjPos[j].y = ProjVert[j]._ProjPos.y * rasterTri._InvW[j];
+      rasterTri._HomogeneousProjPos[j].z = ProjVert[j]._ProjPos.z * rasterTri._InvW[j];
+
+      rasterTri._V[j].x = ((rasterTri._HomogeneousProjPos[j].x + 1.f) * .5f * width);
+      rasterTri._V[j].y = ((rasterTri._HomogeneousProjPos[j].y + 1.f) * .5f * height);
+
+      if ( rasterTri._V[j].x < rasterTri._BBoxMin.x )
+        rasterTri._BBoxMin.x = rasterTri._V[j].x;
+      if ( rasterTri._V[j].y < rasterTri._BBoxMin.y )
+        rasterTri._BBoxMin.y = rasterTri._V[j].y;
+      if ( rasterTri._V[j].x > rasterTri._BBoxMax.x )
+        rasterTri._BBoxMax.x = rasterTri._V[j].x;
+      if ( rasterTri._V[j].y > rasterTri._BBoxMax.y )
+        rasterTri._BBoxMax.y = rasterTri._V[j].y;
+    }
+
+    float area = EdgeFunction(rasterTri._V[0], rasterTri._V[1], rasterTri._V[2]);
+    if ( area > 0.f )
+      rasterTri._InvArea = 1.f / area;
+    else
+      rasterTri._InvArea = -1.f;
+
+    rasterTri._MatID  = tri._MatID;
+    rasterTri._Normal = tri._Normal;
+
+    _RasterTriangles[iThreadBin].emplace_back(rasterTri);
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -916,7 +997,85 @@ int Test4::InitializeScene()
     firstLight = _Scene -> GetLight(0);
   }
 
-  _Scene -> CompileMeshData(_Settings._TextureSize);
+  // Compile mesh data
+  _Scene -> CompileMeshData(Vec2i(0), false, false);
+
+  // Load _Triangles
+  _Vertices.clear();
+  _Triangles.clear();
+  _ProjVertices.clear();
+  if ( _RasterTriangles )
+    delete[] _RasterTriangles;
+  _RasterTriangles = nullptr;
+
+  const std::vector<Vec3i>    & Indices   = _Scene -> GetIndices();
+  const std::vector<Vec3>     & Vertices  = _Scene -> GetVertices();
+  const std::vector<Vec3>     & Normals   = _Scene -> GetNormals();
+  const std::vector<Vec3>     & UVMatIDs  = _Scene -> GetUVMatID();
+  const std::vector<Material> & Materials = _Scene -> GetMaterials();
+  const std::vector<Texture*> & Textures  = _Scene -> GetTextures();
+  const int nbTris = Indices.size() / 3;
+
+  std::unordered_map<Vertex, int> VertexIDs;
+  VertexIDs.reserve(Vertices.size());
+
+  _Triangles.resize(nbTris);
+  for ( int i = 0; i < nbTris; ++i )
+  {
+    Triangle & tri = _Triangles[i];
+
+    Vec3i Index[3];
+    Index[0] = Indices[i*3];
+    Index[1] = Indices[i*3+1];
+    Index[2] = Indices[i*3+2];
+
+    Vertex Vert[3];
+    for ( int j = 0; j < 3; ++j )
+    {
+      Vert[j]._WorldPos = Vertices[Index[j].x];
+      Vert[j]._UV       = Vec2(0.f);
+      Vert[j]._Normal   = Vec3(0.f);
+      Vert[j]._Color    = Vec3(0.f);
+    }
+
+    Vec3 vec1(Vert[1]._WorldPos.x-Vert[0]._WorldPos.x, Vert[1]._WorldPos.y-Vert[0]._WorldPos.y, Vert[1]._WorldPos.z-Vert[0]._WorldPos.z);
+    Vec3 vec2(Vert[2]._WorldPos.x-Vert[0]._WorldPos.x, Vert[2]._WorldPos.y-Vert[0]._WorldPos.y, Vert[2]._WorldPos.z-Vert[0]._WorldPos.z);
+    tri._Normal = glm::normalize(glm::cross(vec1, vec2));
+
+    for ( int j = 0; j < 3; ++j )
+    {
+      if ( Index[j].y >= 0 )
+        Vert[j]._Normal = Normals[Index[j].y];
+      else
+        Vert[j]._Normal = tri._Normal;
+
+      if ( Index[j].z >= 0 )
+      {
+         Vert[j]._UV = Vec2(UVMatIDs[Index[j].z].x, UVMatIDs[Index[j].z].y);
+
+         int matID = (int)UVMatIDs[Index[j].z].z;
+         if ( matID >= 0 )
+           Vert[j]._Color = Materials[matID]._Albedo;
+      }
+    }
+
+    tri._MatID = (int)UVMatIDs[Index[0].z].z;
+
+    for ( int j = 0; j < 3; ++j )
+    {
+      int idx = 0;
+      if ( 0 == VertexIDs.count(Vert[j]) )
+      {
+        idx = (int)_Vertices.size();
+        VertexIDs[Vert[j]] = idx;
+        _Vertices.push_back(Vert[j]);
+      }
+      else
+        idx = VertexIDs[Vert[j]];
+
+      tri._Indices[j] = idx;
+    }
+  }
 
   // Resize Image Buffer
   this -> ResizeImageBuffers();
