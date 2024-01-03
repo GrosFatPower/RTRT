@@ -42,6 +42,15 @@ public:
     Vec3 _Color;
   };
 
+  struct Uniform
+  {
+    const std::vector<Material> * _Materials = nullptr;
+    const std::vector<Texture*> * _Textures  = nullptr;
+    std::vector<Light>            _Lights;
+    Vec3                          _CameraPos;
+    bool                          _BilinearSampling = true;
+  };
+
   struct Vertex
   {
     Vec3 _WorldPos;
@@ -97,6 +106,7 @@ public:
 
   struct RasterTriangle
   {
+    int   _Indices[3];
     Vec3  _HomogeneousProjPos[3];
     Vec2  _V[3];
     float _InvW[3];
@@ -104,6 +114,13 @@ public:
     Vec2  _BBoxMin, _BBoxMax;
     Vec3  _Normal;
     int   _MatID;
+  };
+
+  struct Fragment
+  {
+    Vec3    _FragCoords;
+    int     _MatID;
+    Varying _Attrib;
   };
 
 private:
@@ -167,6 +184,8 @@ private:
   void ProcessVertices( const Mat4x4 & iMVP, int iStartInd, int iEndInd );
   int ClipTriangles();
   void ClipTriangles( int iThreadBin, int iStartInd, int iEndInd );
+  int ProcessFragments();
+  void ProcessFragments( int iStartY, int iEndY );
 
   void RenderToTexture();
   void RenderToSceen();
@@ -179,6 +198,7 @@ private:
   Vec4 SampleSkybox( const Vec3 & iDir );
 
   static void VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 iNormal, const Vec3 iColor, const Mat4x4 iMVP, ProjectedVertex & oProjectedVertex );
+  static void FragmentShader_Color( const Fragment & iFrag, Uniform & iUniforms, Vec4 & oColor );
 
   static float EdgeFunction(const Vec2 & iV0, const Vec2 & iV1, const Vec2 & iV2);
 

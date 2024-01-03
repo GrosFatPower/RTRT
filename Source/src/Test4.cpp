@@ -798,7 +798,10 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
   int ko = ProcessVertices(iMV, iP);
 
   if ( !ko )
-    ClipTriangles();
+    ko = ClipTriangles();
+
+  if ( !ko )
+    ko = ProcessFragments();
 
   _RenderScnElapsed = glfwGetTime() - startTime;
 
@@ -905,20 +908,19 @@ void Test4::ClipTriangles( int iThreadBin, int iStartInd, int iEndInd )
   {
     Triangle & tri = _Triangles[i];
 
-    ProjectedVertex ProjVert[3];
-    ProjVert[0] = _ProjVertices[tri._Indices[0]];
-    ProjVert[1] = _ProjVertices[tri._Indices[1]];
-    ProjVert[2] = _ProjVertices[tri._Indices[2]];
-
     RasterTriangle rasterTri;
     rasterTri._BBoxMin = Vec2(std::numeric_limits<float>::infinity());
     rasterTri._BBoxMax = -rasterTri._BBoxMin;
     for ( int j = 0; j < 3; ++j )
     {
-      rasterTri._InvW[j] = 1.f / ProjVert[0]._ProjPos.w;
-      rasterTri._HomogeneousProjPos[j].x = ProjVert[j]._ProjPos.x * rasterTri._InvW[j];
-      rasterTri._HomogeneousProjPos[j].y = ProjVert[j]._ProjPos.y * rasterTri._InvW[j];
-      rasterTri._HomogeneousProjPos[j].z = ProjVert[j]._ProjPos.z * rasterTri._InvW[j];
+      rasterTri._Indices[j] = tri._Indices[j];
+
+      ProjectedVertex & projVert = _ProjVertices[tri._Indices[j]];
+
+      rasterTri._InvW[j] = 1.f / projVert._ProjPos.w;
+      rasterTri._HomogeneousProjPos[j].x = projVert._ProjPos.x * rasterTri._InvW[j];
+      rasterTri._HomogeneousProjPos[j].y = projVert._ProjPos.y * rasterTri._InvW[j];
+      rasterTri._HomogeneousProjPos[j].z = projVert._ProjPos.z * rasterTri._InvW[j];
 
       rasterTri._V[j].x = ((rasterTri._HomogeneousProjPos[j].x + 1.f) * .5f * width);
       rasterTri._V[j].y = ((rasterTri._HomogeneousProjPos[j].y + 1.f) * .5f * height);
@@ -937,13 +939,162 @@ void Test4::ClipTriangles( int iThreadBin, int iStartInd, int iEndInd )
     if ( area > 0.f )
       rasterTri._InvArea = 1.f / area;
     else
-      rasterTri._InvArea = -1.f;
+      continue;
 
     rasterTri._MatID  = tri._MatID;
     rasterTri._Normal = tri._Normal;
 
     _RasterTriangles[iThreadBin].emplace_back(rasterTri);
   }
+}
+
+// ----------------------------------------------------------------------------
+// ProcessFragments
+// ----------------------------------------------------------------------------
+int Test4::ProcessFragments()
+{
+  if ( !_Scene || !_RasterTriangles )
+    return 1;
+
+  int height = _Settings._RenderResolution.y;
+
+  for ( int i = 0; i < _NbThreads; ++i )
+  {
+    int startY = ( height / _NbThreads ) * i;
+    int endY = ( i == _NbThreads-1 ) ? ( height ) : ( startY + ( height / _NbThreads ) );
+
+    JobSystem::Get().Execute([this, startY, endY](){ this -> ProcessFragments(startY, endY); });
+  }
+
+  JobSystem::Get().Wait();
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ProcessFragments
+// ----------------------------------------------------------------------------
+void Test4::ProcessFragments( int iStartY, int iEndY )
+{
+  const std::vector<Material> & Materials = _Scene -> GetMaterials();
+
+  int width  = _Settings._RenderResolution.x;
+  int height = _Settings._RenderResolution.y;
+
+  Uniform uniforms;
+  uniforms._CameraPos        = _Scene -> GetCamera().GetPos();
+  uniforms._BilinearSampling = _BilinearSampling;
+  uniforms._Materials        = &_Scene -> GetMaterials();
+  uniforms._Textures         = &_Scene -> GetTextures();
+  for ( int i = 0; i < _Scene -> GetNbLights(); ++i )
+    uniforms._Lights.push_back(*_Scene -> GetLight(i));
+
+  for ( int i = 0; i < _NbThreads; ++i )
+  {
+    for ( RasterTriangle & tri : _RasterTriangles[i] )
+    {
+      int xMin = std::max(0,       std::min((int)std::floorf(tri._BBoxMin.x), width - 1));
+      int yMin = std::max(iStartY, std::min((int)std::floorf(tri._BBoxMin.y), iEndY - 1 ));
+      int xMax = std::max(0,       std::min((int)std::floorf(tri._BBoxMax.x), width - 1));
+      int yMax = std::max(iStartY, std::min((int)std::floorf(tri._BBoxMax.y), iEndY - 1 ));
+
+      for ( int y = yMin; y <= yMax; ++y )
+      {
+        for ( int x = xMin; x <= xMax; ++x )
+        {
+          Vec3 coord(x + .5f, y + .5f, 0.f);
+
+          Vec3 W;
+          W.x = EdgeFunction(tri._V[1], tri._V[2], coord);
+          W.y = EdgeFunction(tri._V[2], tri._V[0], coord);
+          W.z = EdgeFunction(tri._V[0], tri._V[1], coord);
+          if ( ( W.x < 0.f )
+            || ( W.y < 0.f )
+            || ( W.z < 0.f ) )
+            continue;
+
+          // Perspective correction
+          W *= tri._InvArea;
+
+          W.x *= tri._InvW[0]; // W0 / -z0
+          W.y *= tri._InvW[1]; // W1 / -z1
+          W.z *= tri._InvW[2]; // W2 / -z2
+
+          float Z = 1.f / (W.x + W.y + W.z);
+          W *= Z;
+
+          coord.z = W.x * tri._HomogeneousProjPos[0].z + W.y * tri._HomogeneousProjPos[1].z + W.z * tri._HomogeneousProjPos[2].z;
+          if ( ( coord.z < -1.f ) || ( coord.z > 1.f ) )
+            continue;
+
+          Varying Attrib[3];
+          Attrib[0] = _ProjVertices[tri._Indices[0]]._Attrib;
+          Attrib[1] = _ProjVertices[tri._Indices[1]]._Attrib;
+          Attrib[2] = _ProjVertices[tri._Indices[2]]._Attrib;
+
+          Fragment frag;
+          frag._FragCoords = coord;
+          frag._MatID      = tri._MatID;
+          frag._Attrib._WorldPos = W.x * Attrib[0]._WorldPos + W.y * Attrib   [1]._WorldPos  + W.z * Attrib   [2]._WorldPos;
+          frag._Attrib._UV       = W.x * Attrib[0]._UV       + W.y * Attrib   [1]._UV        + W.z * Attrib   [2]._UV;
+          frag._Attrib._Color    = W.x * Attrib[0]._Color    + W.y * Attrib   [1]._Color     + W.z * Attrib   [2]._Color;
+
+          Vec4 fragColor(1.f);
+          FragmentShader_Color(frag, uniforms, fragColor);
+
+          _ImageBuffer._ColorBuffer[x + width * y] = fragColor;
+          _ImageBuffer._DepthBuffer[x + width * y] = Z;
+
+        }
+      }
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
+// FragmentShader_Color
+// ----------------------------------------------------------------------------
+void Test4::FragmentShader_Color( const Fragment & iFrag, Uniform & iUniforms, Vec4 & oColor )
+{
+  Vec4 albedo;
+  if ( iFrag._MatID >= 0 )
+  {
+    const Material & mat = (*iUniforms._Materials)[iFrag._MatID];
+    if ( mat._BaseColorTexId >= 0 )
+    {
+      const Texture * tex = (*iUniforms._Textures)[mat._BaseColorTexId];
+      if ( iUniforms._BilinearSampling )
+        albedo = tex -> BiLinearSample(iFrag._Attrib._UV);
+      else
+        albedo = tex -> Sample(iFrag._Attrib._UV);
+    }
+  }
+  else
+  {
+    albedo = Vec4(iFrag._Attrib._Color, 1.f);
+  }
+
+  // Shading
+  Vec4 alpha(0.f, 0.f, 0.f, 0.f);
+  for ( const auto & light : iUniforms._Lights )
+  {
+    float ambientStrength = .1f;
+    float diffuse = 0.f;
+    float specular = 0.f;
+
+    Vec3 dirToLight = glm::normalize(light._Pos - iFrag._Attrib._WorldPos);
+    diffuse = std::max(0.f, glm::dot(iFrag._Attrib._Normal, dirToLight));
+
+    Vec3 viewDir =  glm::normalize(iUniforms._CameraPos - iFrag._Attrib._WorldPos);
+    Vec3 reflectDir = glm::reflect(-dirToLight, iFrag._Attrib._Normal);
+
+    static float specularStrength = 0.5f;
+    specular = pow(std::max(glm::dot(viewDir, reflectDir), 0.f), 32) * specularStrength;
+
+    alpha += std::min(diffuse+ambientStrength+specular, 1.f) * Vec4(glm::normalize(light._Emission), 1.f);
+  }
+
+  oColor = MathUtil::Min(albedo * alpha, Vec4(1.f));
 }
 
 // ----------------------------------------------------------------------------
