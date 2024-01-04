@@ -39,7 +39,6 @@ public:
     Vec3 _WorldPos;
     Vec2 _UV;
     Vec3 _Normal;
-    Vec3 _Color;
   };
 
   struct Uniform
@@ -56,38 +55,12 @@ public:
     Vec3 _WorldPos;
     Vec2 _UV;
     Vec3 _Normal;
-    Vec3 _Color;
 
     bool operator==(const Vertex & iRhs) const
     {
       return ( ( _WorldPos == iRhs._WorldPos )
             && ( _Normal   == iRhs._Normal   )
-            && ( _UV       == iRhs._UV       )
-            && ( _Color    == iRhs._Color    ) );
-    }
-
-    Vertex operator*(float t) const
-    {
-      auto copy = *this;
-
-      copy._WorldPos *= t;
-      copy._Normal   *= t;
-      copy._UV       *= t;
-      copy._Color    *= t;
-
-      return copy;
-    }
-
-    Vertex operator+(const Vertex & iRhs) const
-    {
-      auto copy = *this;
-
-      copy._WorldPos *= iRhs._WorldPos;
-      copy._Normal   *= iRhs._Normal;
-      copy._UV       *= iRhs._UV;
-      copy._Color    *= iRhs._Color;
-
-      return copy;
+            && ( _UV       == iRhs._UV       ) );
     }
   };
 
@@ -197,8 +170,11 @@ private:
 
   Vec4 SampleSkybox( const Vec3 & iDir );
 
-  static void VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 iNormal, const Vec3 iColor, const Mat4x4 iMVP, ProjectedVertex & oProjectedVertex );
+  static void VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 iNormal, const Mat4x4 iMVP, ProjectedVertex & oProjectedVertex );
   static void FragmentShader_Color( const Fragment & iFrag, Uniform & iUniforms, Vec4 & oColor );
+  static void FragmentShader_Depth( const Fragment & iFrag, Uniform & iUniforms, Vec4 & oColor );
+  static void FragmentShader_Normal( const Fragment & iFrag, Uniform & iUniforms, Vec4 & oColor );
+  static void FragmentShader_Wires( const Fragment & iFrag, const Vec3 iVertCoord[3], Uniform & iUniforms, Vec4 & oColor );
 
   static float EdgeFunction(const Vec2 & iV0, const Vec2 & iV1, const Vec2 & iV2);
   static float EdgeFunction(const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2);

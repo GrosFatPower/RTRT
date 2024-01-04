@@ -31,6 +31,9 @@ typedef glm::mat4x4 Mat4x4;
 namespace RTRT
 {
 
+#define DeletePtr(ioPtr) { if ( ioPtr ) delete ioPtr; ioPtr = nullptr; }
+#define DeleteTab(ioPtr) { if ( ioPtr ) delete[] ioPtr; ioPtr = nullptr; }
+
 class MathUtil
 {
 public:
@@ -192,6 +195,27 @@ public:
     oUp      = Vec3(iMat[1][0], iMat[1][1], iMat[1][2]);
     oForward = Vec3(iMat[2][0], iMat[2][1], iMat[2][2]);
     oPos     = Vec3(iMat[3][0], iMat[3][1], iMat[3][2]);
+  }
+
+  static float DistanceToSegment( const Vec2 iA, const Vec2 iB, const Vec2 iP )
+  {
+    float dist = 0.f;
+
+    Vec2 AP(iP - iA);
+    Vec2 AB(iB - iA);
+
+    float normAB = glm::length(AB);
+    if ( normAB > 0.f )
+    {
+      float t = glm::dot(AP, AB) / ( normAB * normAB );
+      t = glm::clamp(t, 0.f, 1.f);
+
+      dist = glm::length(AP - t * AB);
+    }
+    else
+      dist = glm::length(AP);
+
+    return dist;
   }
 };
 

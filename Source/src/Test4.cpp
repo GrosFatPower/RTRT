@@ -43,7 +43,6 @@ namespace std
     {
       return
         ( (hash<Vec3>()(iV._WorldPos))
-        ^ (hash<Vec3>()(iV._Color))
         ^ (hash<Vec3>()(iV._Normal))
         ^ (hash<Vec2>()(iV._UV)) );
     }
@@ -281,12 +280,12 @@ Test4::~Test4()
   glDeleteTextures(1, &_ImageTextureID);
 
   for ( auto fileName : _SceneNames )
-    delete[] fileName;
+    DeleteTab(fileName);
   for ( auto fileName : _BackgroundNames )
-    delete[] fileName;
+    DeleteTab(fileName);
 
-  delete[] _RasterTriangles;
-  delete[] _NbRasterTri;
+  DeleteTab(_RasterTriangles);
+  DeleteTab(_NbRasterTri);
 }
 
 // ----------------------------------------------------------------------------
@@ -626,11 +625,20 @@ void Test4::DrawUI()
       ImGui::Text("Window width %d: height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
       ImGui::Text("Render width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
 
-      ImGui::Text("Render image      : %.3f ms/frame", _RenderImgElapsed * 1000.f);
-      ImGui::Text("Render background : %.3f ms/frame", _RenderBgdElapsed * 1000.f);
-      ImGui::Text("Render scene      : %.3f ms/frame", _RenderScnElapsed * 1000.f);
-      ImGui::Text("Render to texture : %.3f ms/frame", _RTTElapsed * 1000.f);
-      ImGui::Text("Render to screen  : %.3f ms/frame", _RTSElapsed * 1000.f);
+      ImGui::Text("Render image            : %.3f ms/frame", _RenderImgElapsed * 1000.f);
+      ImGui::Text("Render background       : %.3f ms/frame", _RenderBgdElapsed * 1000.f);
+      ImGui::Text("Render scene            : %.3f ms/frame", _RenderScnElapsed * 1000.f);
+      ImGui::Text("Render to texture       : %.3f ms/frame", _RTTElapsed * 1000.f);
+      ImGui::Text("Render to screen        : %.3f ms/frame", _RTSElapsed * 1000.f);
+
+      ImGui::Text("Nb threads              : %d", _NbThreads);
+      ImGui::Text("Nb vertices             : %d", _Vertices.size());
+      ImGui::Text("Nb triangles            : %d", _Triangles.size());
+
+      unsigned int nbRasterTris = 0;
+      for ( int i = 0; i < _NbThreads; ++i )
+        if ( _NbRasterTri[i] ) nbRasterTris += _NbRasterTri[i];
+      ImGui::Text("Nb raster triangles     : %d", nbRasterTris);
     }
 
     if (ImGui::CollapsingHeader("Settings"))
@@ -674,18 +682,18 @@ void Test4::DrawUI()
       ImGui::Combo("Shading", &shadingType, PHONGorFLAT, 2);
       _ShadingType = (ShadingType)shadingType;
 
+      int showWires = !!_ShowWires;
+      ImGui::Combo("Show wires", &showWires, YESorNO, 2);
+      _ShowWires = !!showWires;
+
       int numThreads = _NbThreads;
       if ( ImGui::SliderInt("Nb Threads", &numThreads, 1, _NbThreadsMax) && ( numThreads > 0 ) )
       {
         _NbThreads = numThreads;
         JobSystem::Get().Initialize(_NbThreads);
 
-        if ( _RasterTriangles )
-          delete[] _RasterTriangles;
-        _RasterTriangles = nullptr;
-        if ( _NbRasterTri )
-          delete[] _NbRasterTri;
-        _NbRasterTri = nullptr;
+        DeleteTab(_RasterTriangles);
+        DeleteTab(_NbRasterTri);
       }
     }
 
@@ -862,20 +870,19 @@ void Test4::ProcessVertices( const Mat4x4 & iMVP, int iStartInd, int iEndInd )
     Vertex & vert = _Vertices[i];
 
     ProjectedVertex & projVtx = _ProjVertices[i];
-    VertexShader(Vec4(vert._WorldPos ,1.f), vert._UV, vert._Normal, vert._Color, iMVP, projVtx);
+    VertexShader(Vec4(vert._WorldPos ,1.f), vert._UV, vert._Normal, iMVP, projVtx);
   }
 }
 
 // ----------------------------------------------------------------------------
 // VertexShader
 // ----------------------------------------------------------------------------
-void Test4::VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 iNormal, const Vec3 iColor, const Mat4x4 iMVP, ProjectedVertex & oProjectedVertex )
+void Test4::VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 iNormal, const Mat4x4 iMVP, ProjectedVertex & oProjectedVertex )
 {
   oProjectedVertex._ProjPos          = iMVP * iVertexPos;
   oProjectedVertex._Attrib._WorldPos = iVertexPos;
   oProjectedVertex._Attrib._UV       = iUV;
   oProjectedVertex._Attrib._Normal   = iNormal;
-  oProjectedVertex._Attrib._Color    = iColor;
 }
 
 // ----------------------------------------------------------------------------
@@ -1045,7 +1052,6 @@ void Test4::ProcessFragments( int iStartY, int iEndY )
           frag._MatID      = tri._MatID;
           frag._Attrib._WorldPos = W.x * Attrib[0]._WorldPos + W.y * Attrib[1]._WorldPos  + W.z * Attrib[2]._WorldPos;
           frag._Attrib._UV       = W.x * Attrib[0]._UV       + W.y * Attrib[1]._UV        + W.z * Attrib[2]._UV;
-          frag._Attrib._Color    = W.x * Attrib[0]._Color    + W.y * Attrib[1]._Color     + W.z * Attrib[2]._Color;
 
          if ( ShadingType::Phong == _ShadingType )
           {
@@ -1056,7 +1062,22 @@ void Test4::ProcessFragments( int iStartY, int iEndY )
             frag._Attrib._Normal = _Triangles[i]._Normal;
 
           Vec4 fragColor(1.f);
-          FragmentShader_Color(frag, uniforms, fragColor);
+
+          if ( 1 == _ColorDepthOrNormalsBuffer )
+            FragmentShader_Depth(frag, uniforms, fragColor);
+          else if ( 2 == _ColorDepthOrNormalsBuffer )
+            FragmentShader_Normal(frag, uniforms, fragColor);
+          else
+            FragmentShader_Color(frag, uniforms, fragColor);
+
+          if ( _ShowWires )
+          {
+            Vec4 wireColor(1.f);
+            FragmentShader_Wires(frag, tri._V, uniforms, wireColor);
+            fragColor.x = glm::mix(fragColor.x, wireColor.x, wireColor.w);
+            fragColor.y = glm::mix(fragColor.y, wireColor.y, wireColor.w);
+            fragColor.z = glm::mix(fragColor.z, wireColor.z, wireColor.w);
+          }
 
           _ImageBuffer._ColorBuffer[x + width * y] = fragColor;
           _ImageBuffer._DepthBuffer[x + width * y] = coord.z;
@@ -1084,10 +1105,8 @@ void Test4::FragmentShader_Color( const Fragment & iFrag, Uniform & iUniforms, V
       else
         albedo = tex -> Sample(iFrag._Attrib._UV);
     }
-  }
-  else
-  {
-    albedo = Vec4(iFrag._Attrib._Color, 1.f);
+    else
+      albedo = Vec4(mat._Albedo, 1.f);
   }
 
   // Shading
@@ -1111,6 +1130,40 @@ void Test4::FragmentShader_Color( const Fragment & iFrag, Uniform & iUniforms, V
   }
 
   oColor = MathUtil::Min(albedo * alpha, Vec4(1.f));
+}
+
+// ----------------------------------------------------------------------------
+// FragmentShader_Depth
+// ----------------------------------------------------------------------------
+void Test4::FragmentShader_Depth( const Fragment  & iFrag, Uniform & iUniforms, Vec4 & oColor )
+{
+  oColor = Vec4(Vec3(iFrag._FragCoords.z + 1.f) * .5f, 1.f);
+  return;
+}
+
+// ----------------------------------------------------------------------------
+// FragmentShader_Normal
+// ----------------------------------------------------------------------------
+void Test4::FragmentShader_Normal( const Fragment  & iFrag, Uniform & iUniforms, Vec4 & oColor )
+{
+  oColor = Vec4(glm::abs(iFrag._Attrib._Normal),1.f);
+  return;
+}
+
+// ----------------------------------------------------------------------------
+// FragmentShader_Wires
+// ----------------------------------------------------------------------------
+void Test4::FragmentShader_Wires( const Fragment & iFrag, const Vec3 iVertCoord[3], Uniform & iUniforms, Vec4 & oColor )
+{
+  Vec2 P(iFrag._FragCoords);
+  if ( ( MathUtil::DistanceToSegment(iVertCoord[0], iVertCoord[1], P) <= 1.f )
+    || ( MathUtil::DistanceToSegment(iVertCoord[1], iVertCoord[2], P) <= 1.f )
+    || ( MathUtil::DistanceToSegment(iVertCoord[2], iVertCoord[0], P) <= 1.f ) )
+  {
+    oColor = Vec4(1.f, 0.f, 0.f, 1.f);
+  }
+  else
+    oColor = Vec4(0.f, 0.f, 0.f, 0.f);
 }
 
 // ----------------------------------------------------------------------------
@@ -1174,9 +1227,8 @@ int Test4::InitializeScene()
   _Vertices.clear();
   _Triangles.clear();
   _ProjVertices.clear();
-  if ( _RasterTriangles )
-    delete[] _RasterTriangles;
-  _RasterTriangles = nullptr;
+  DeleteTab(_RasterTriangles);
+  DeleteTab(_NbRasterTri);
 
   const std::vector<Vec3i>    & Indices   = _Scene -> GetIndices();
   const std::vector<Vec3>     & Vertices  = _Scene -> GetVertices();
@@ -1205,7 +1257,6 @@ int Test4::InitializeScene()
       Vert[j]._WorldPos = Vertices[Index[j].x];
       Vert[j]._UV       = Vec2(0.f);
       Vert[j]._Normal   = Vec3(0.f);
-      Vert[j]._Color    = Vec3(0.f);
     }
 
     Vec3 vec1(Vert[1]._WorldPos.x-Vert[0]._WorldPos.x, Vert[1]._WorldPos.y-Vert[0]._WorldPos.y, Vert[1]._WorldPos.z-Vert[0]._WorldPos.z);
@@ -1220,13 +1271,7 @@ int Test4::InitializeScene()
         Vert[j]._Normal = tri._Normal;
 
       if ( Index[j].z >= 0 )
-      {
          Vert[j]._UV = Vec2(UVMatIDs[Index[j].z].x, UVMatIDs[Index[j].z].y);
-
-         int matID = (int)UVMatIDs[Index[j].z].z;
-         if ( matID >= 0 )
-           Vert[j]._Color = Materials[matID]._Albedo;
-      }
     }
 
     tri._MatID = (int)UVMatIDs[Index[0].z].z;
