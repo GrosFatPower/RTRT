@@ -62,6 +62,15 @@ public:
             && ( _Normal   == iRhs._Normal   )
             && ( _UV       == iRhs._UV       ) );
     }
+
+    Vertex operator*(float t) const
+    {
+      auto copy = *this;
+      copy._WorldPos *= t;
+      copy._Normal   *= t;
+      copy._UV       *= t;
+      return copy;
+    }
   };
 
   struct Triangle
@@ -80,7 +89,6 @@ public:
   struct RasterTriangle
   {
     int        _Indices[3];
-    Vec3       _HomogeneousProjPos[3];
     Vec3       _V[3];
     float      _InvW[3];
     float      _InvArea;
@@ -176,9 +184,6 @@ private:
   static void FragmentShader_Normal( const Fragment & iFrag, Uniform & iUniforms, Vec4 & oColor );
   static void FragmentShader_Wires( const Fragment & iFrag, const Vec3 iVertCoord[3], Uniform & iUniforms, Vec4 & oColor );
 
-  static float EdgeFunction(const Vec2 & iV0, const Vec2 & iV1, const Vec2 & iV2);
-  static float EdgeFunction(const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2);
-
   std::unique_ptr<QuadMesh> _Quad;
   std::unique_ptr<Scene>    _Scene;
   std::vector<std::string>  _SceneFiles;
@@ -233,14 +238,6 @@ private:
   double             _AverageDelta         = 0.f;
   std::deque<double> _LastDeltas;
 };
-
-inline float Test4::EdgeFunction(const Vec2 & iV0, const Vec2 & iV1, const Vec2 & iV2) { 
-  return (iV1.x - iV0.x) * (iV2.y - iV0.y) - (iV1.y - iV0.y) * (iV2.x - iV0.x); } // Counter-Clockwise edge function
-//  return (iV2.x - iV0.x) * (iV1.y - iV0.y) - (iV2.y - iV0.y) * (iV1.x - iV0.x); } // Clockwise edge function
-
-inline float Test4::EdgeFunction(const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2) { 
-  return (iV1.x - iV0.x) * (iV2.y - iV0.y) - (iV1.y - iV0.y) * (iV2.x - iV0.x); } // Counter-Clockwise edge function
-//  return (iV2.x - iV0.x) * (iV1.y - iV0.y) - (iV2.y - iV0.y) * (iV1.x - iV0.x); } // Clockwise edge function
 
 }
 

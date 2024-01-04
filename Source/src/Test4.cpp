@@ -7,6 +7,7 @@
 #include "Camera.h"
 #include "Light.h"
 #include "Loader.h"
+#include "SutherlandHodgman.h"
 #include "JobSystem.h"
 
 #include "tinydir.h"
@@ -913,7 +914,7 @@ int Test4::ClipTriangles( const Mat4x4 & iRasterM )
     int startInd = ( _Triangles.size() / _NbThreads ) * i;
     int endInd = ( i == _NbThreads-1 ) ? ( _Triangles.size() ) : ( startInd + ( _Triangles.size() / _NbThreads ) );
     if ( startInd >= endInd )
-      break;
+      continue;
 
     _RasterTrianglesBuf[i].reserve(endInd - startInd);
   
@@ -927,6 +928,7 @@ int Test4::ClipTriangles( const Mat4x4 & iRasterM )
 
 // ----------------------------------------------------------------------------
 // ClipTriangles
+// SutherlandHodgman
 // ----------------------------------------------------------------------------
 void Test4::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin, int iStartInd, int iEndInd )
 {
@@ -938,37 +940,95 @@ void Test4::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin, int iStartIn
   {
     Triangle & tri = _Triangles[i];
 
-    RasterTriangle rasterTri;
-    for ( int j = 0; j < 3; ++j )
+    uint32_t clipCode0 = SutherlandHodgman::ComputeClipCode(_ProjVerticesBuf[tri._Indices[0]]._ProjPos);
+    uint32_t clipCode1 = SutherlandHodgman::ComputeClipCode(_ProjVerticesBuf[tri._Indices[1]]._ProjPos);
+    uint32_t clipCode2 = SutherlandHodgman::ComputeClipCode(_ProjVerticesBuf[tri._Indices[2]]._ProjPos);
+
+    if (clipCode0 | clipCode1 | clipCode2)
     {
-      rasterTri._Indices[j] = tri._Indices[j];
+      // Check the clipping codes correctness
+      if ( !(clipCode0 & clipCode1 & clipCode2) )
+      {
+        Polygon poly = SutherlandHodgman::ClipTriangle(
+          _ProjVerticesBuf[tri._Indices[0]]._ProjPos,
+          _ProjVerticesBuf[tri._Indices[1]]._ProjPos,
+          _ProjVerticesBuf[tri._Indices[2]]._ProjPos,
+          (clipCode0 ^ clipCode1) | (clipCode1 ^ clipCode2) | (clipCode2 ^ clipCode0));
 
-      ProjectedVertex & projVert = _ProjVerticesBuf[tri._Indices[j]];
+        for ( int j = 2; j < poly.Size(); ++j )
+        {
+          // Preserve winding
+          Polygon::Point Points[3] = { poly[0], poly[j - 1], poly[j] };
 
-      rasterTri._InvW[j] = 1.f / projVert._ProjPos.w;
-      rasterTri._HomogeneousProjPos[j].x = projVert._ProjPos.x * rasterTri._InvW[j];
-      rasterTri._HomogeneousProjPos[j].y = projVert._ProjPos.y * rasterTri._InvW[j];
-      rasterTri._HomogeneousProjPos[j].z = projVert._ProjPos.z * rasterTri._InvW[j];
+          RasterTriangle rasterTri;
+          for ( int k = 0; k < 3; ++k )
+          {
+            rasterTri._Indices[k] = tri._Indices[k]; // Bug !!
 
-      rasterTri._V[j] = MathUtil::TransformPoint(rasterTri._HomogeneousProjPos[j], iRasterM);
+            Vec3 homogeneousProjPos;
+            rasterTri._InvW[k] = 1.f / Points[k]._Pos.w;
+            homogeneousProjPos.x = Points[k]._Pos.x * rasterTri._InvW[k];
+            homogeneousProjPos.y = Points[k]._Pos.y * rasterTri._InvW[k];
+            homogeneousProjPos.z = Points[k]._Pos.z * rasterTri._InvW[k];
 
-      rasterTri._BBox.Insert(rasterTri._V[j]);
+            rasterTri._V[k] = MathUtil::TransformPoint(homogeneousProjPos, iRasterM);
+
+            rasterTri._BBox.Insert(rasterTri._V[k]);
+          }
+
+          float area = MathUtil::EdgeFunction(rasterTri._V[0], rasterTri._V[1], rasterTri._V[2]);
+          if ( area > 0.f )
+            rasterTri._InvArea = 1.f / area;
+          else
+            continue;
+
+          rasterTri._MatID  = tri._MatID;
+          rasterTri._Normal = tri._Normal;
+
+          if ( _NbRasterTriPerBuf[iThreadBin] < _RasterTrianglesBuf[iThreadBin].size() )
+            _RasterTrianglesBuf[iThreadBin][_NbRasterTriPerBuf[iThreadBin]] = rasterTri;
+          else
+            _RasterTrianglesBuf[iThreadBin].emplace_back(rasterTri);
+          _NbRasterTriPerBuf[iThreadBin]++;
+        }
+      }
     }
-
-    float area = EdgeFunction(rasterTri._V[0], rasterTri._V[1], rasterTri._V[2]);
-    if ( area > 0.f )
-      rasterTri._InvArea = 1.f / area;
     else
-      continue;
+    {
+      // No clipping needed
+      RasterTriangle rasterTri;
+      for ( int j = 0; j < 3; ++j )
+      {
+        rasterTri._Indices[j] = tri._Indices[j];
 
-    rasterTri._MatID  = tri._MatID;
-    rasterTri._Normal = tri._Normal;
+        ProjectedVertex & projVert = _ProjVerticesBuf[tri._Indices[j]];
 
-    if ( _NbRasterTriPerBuf[iThreadBin] < _RasterTrianglesBuf[iThreadBin].size() )
-      _RasterTrianglesBuf[iThreadBin][_NbRasterTriPerBuf[iThreadBin]] = rasterTri;
-    else
-      _RasterTrianglesBuf[iThreadBin].emplace_back(rasterTri);
-    _NbRasterTriPerBuf[iThreadBin]++;
+        Vec3 homogeneousProjPos;
+        rasterTri._InvW[j] = 1.f / projVert._ProjPos.w;
+        homogeneousProjPos.x = projVert._ProjPos.x * rasterTri._InvW[j];
+        homogeneousProjPos.y = projVert._ProjPos.y * rasterTri._InvW[j];
+        homogeneousProjPos.z = projVert._ProjPos.z * rasterTri._InvW[j];
+
+        rasterTri._V[j] = MathUtil::TransformPoint(homogeneousProjPos, iRasterM);
+
+        rasterTri._BBox.Insert(rasterTri._V[j]);
+      }
+
+      float area = MathUtil::EdgeFunction(rasterTri._V[0], rasterTri._V[1], rasterTri._V[2]);
+      if ( area > 0.f )
+        rasterTri._InvArea = 1.f / area;
+      else
+        continue;
+
+      rasterTri._MatID  = tri._MatID;
+      rasterTri._Normal = tri._Normal;
+
+      if ( _NbRasterTriPerBuf[iThreadBin] < _RasterTrianglesBuf[iThreadBin].size() )
+        _RasterTrianglesBuf[iThreadBin][_NbRasterTriPerBuf[iThreadBin]] = rasterTri;
+      else
+        _RasterTrianglesBuf[iThreadBin].emplace_back(rasterTri);
+      _NbRasterTriPerBuf[iThreadBin]++;
+    }
   }
 }
 
@@ -1034,9 +1094,9 @@ void Test4::ProcessFragments( int iStartY, int iEndY )
           Vec3 coord(x + .5f, y + .5f, 0.f);
 
           Vec3 W;
-          W.x = EdgeFunction(tri._V[1], tri._V[2], coord);
-          W.y = EdgeFunction(tri._V[2], tri._V[0], coord);
-          W.z = EdgeFunction(tri._V[0], tri._V[1], coord);
+          W.x = MathUtil::EdgeFunction(tri._V[1], tri._V[2], coord);
+          W.y = MathUtil::EdgeFunction(tri._V[2], tri._V[0], coord);
+          W.z = MathUtil::EdgeFunction(tri._V[0], tri._V[1], coord);
           if ( ( W.x < 0.f )
             || ( W.y < 0.f )
             || ( W.z < 0.f ) )

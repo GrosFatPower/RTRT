@@ -217,6 +217,18 @@ public:
 
     return dist;
   }
+
+  static float EdgeFunction(const Vec2 & iV0, const Vec2 & iV1, const Vec2 & iV2)
+  {
+    return (iV1.x - iV0.x) * (iV2.y - iV0.y) - (iV1.y - iV0.y) * (iV2.x - iV0.x);   // Counter-Clockwise edge function
+    //return (iV2.x - iV0.x) * (iV1.y - iV0.y) - (iV2.y - iV0.y) * (iV1.x - iV0.x); // Clockwise edge function
+  } 
+
+  static float EdgeFunction(const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2)
+  {
+    return (iV1.x - iV0.x) * (iV2.y - iV0.y) - (iV1.y - iV0.y) * (iV2.x - iV0.x);     // Counter-Clockwise edge function
+    //  return (iV2.x - iV0.x) * (iV1.y - iV0.y) - (iV2.y - iV0.y) * (iV1.x - iV0.x); // Clockwise edge function
+  }
 };
 
 template <typename T>
