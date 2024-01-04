@@ -286,6 +286,7 @@ Test4::~Test4()
     delete[] fileName;
 
   delete[] _RasterTriangles;
+  delete[] _NbRasterTri;
 }
 
 // ----------------------------------------------------------------------------
@@ -678,6 +679,13 @@ void Test4::DrawUI()
       {
         _NbThreads = numThreads;
         JobSystem::Get().Initialize(_NbThreads);
+
+        if ( _RasterTriangles )
+          delete[] _RasterTriangles;
+        _RasterTriangles = nullptr;
+        if ( _NbRasterTri )
+          delete[] _NbRasterTri;
+        _NbRasterTri = nullptr;
       }
     }
 
@@ -789,7 +797,7 @@ Vec4 Test4::SampleSkybox( const Vec3 & iDir )
 // ----------------------------------------------------------------------------
 // RenderScene
 // ----------------------------------------------------------------------------
-int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
+int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP, const Mat4x4 & iRasterM )
 {
   double startTime = glfwGetTime();
 
@@ -798,7 +806,7 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP )
   int ko = ProcessVertices(iMV, iP);
 
   if ( !ko )
-    ko = ClipTriangles();
+    ko = ClipTriangles(iRasterM);
 
   if ( !ko )
     ko = ProcessFragments();
@@ -873,10 +881,14 @@ void Test4::VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 
 // ----------------------------------------------------------------------------
 // ClipTriangles
 // ----------------------------------------------------------------------------
-int Test4::ClipTriangles()
+int Test4::ClipTriangles( const Mat4x4 & iRasterM )
 {
   if ( !_RasterTriangles )
+  {
     _RasterTriangles = new std::vector<RasterTriangle>[_NbThreads];
+    _NbRasterTri = new int[_NbThreads];
+    memset(_NbRasterTri, 0, sizeof(int) * _NbThreads);
+  }
 
   for ( int i = 0; i < _NbThreads; ++i )
   {
@@ -885,10 +897,9 @@ int Test4::ClipTriangles()
     if ( startInd >= endInd )
       break;
 
-    _RasterTriangles[i].clear();
     _RasterTriangles[i].reserve(endInd - startInd);
   
-    JobSystem::Get().Execute([this, i, startInd, endInd](){ this -> ClipTriangles(i, startInd, endInd); });
+    JobSystem::Get().Execute([this, iRasterM, i, startInd, endInd](){ this -> ClipTriangles(iRasterM, i, startInd, endInd); });
   }
 
   JobSystem::Get().Wait();
@@ -899,18 +910,17 @@ int Test4::ClipTriangles()
 // ----------------------------------------------------------------------------
 // ClipTriangles
 // ----------------------------------------------------------------------------
-void Test4::ClipTriangles( int iThreadBin, int iStartInd, int iEndInd )
+void Test4::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin, int iStartInd, int iEndInd )
 {
   int width  = _Settings._RenderResolution.x;
   int height = _Settings._RenderResolution.y;
 
+  _NbRasterTri[iThreadBin] = 0;
   for ( int i = iStartInd; i < iEndInd; ++i )
   {
     Triangle & tri = _Triangles[i];
 
     RasterTriangle rasterTri;
-    rasterTri._BBoxMin = Vec2(std::numeric_limits<float>::infinity());
-    rasterTri._BBoxMax = -rasterTri._BBoxMin;
     for ( int j = 0; j < 3; ++j )
     {
       rasterTri._Indices[j] = tri._Indices[j];
@@ -922,17 +932,9 @@ void Test4::ClipTriangles( int iThreadBin, int iStartInd, int iEndInd )
       rasterTri._HomogeneousProjPos[j].y = projVert._ProjPos.y * rasterTri._InvW[j];
       rasterTri._HomogeneousProjPos[j].z = projVert._ProjPos.z * rasterTri._InvW[j];
 
-      rasterTri._V[j].x = ((rasterTri._HomogeneousProjPos[j].x + 1.f) * .5f * width);
-      rasterTri._V[j].y = ((rasterTri._HomogeneousProjPos[j].y + 1.f) * .5f * height);
+      rasterTri._V[j] = MathUtil::TransformPoint(rasterTri._HomogeneousProjPos[j], iRasterM);
 
-      if ( rasterTri._V[j].x < rasterTri._BBoxMin.x )
-        rasterTri._BBoxMin.x = rasterTri._V[j].x;
-      if ( rasterTri._V[j].y < rasterTri._BBoxMin.y )
-        rasterTri._BBoxMin.y = rasterTri._V[j].y;
-      if ( rasterTri._V[j].x > rasterTri._BBoxMax.x )
-        rasterTri._BBoxMax.x = rasterTri._V[j].x;
-      if ( rasterTri._V[j].y > rasterTri._BBoxMax.y )
-        rasterTri._BBoxMax.y = rasterTri._V[j].y;
+      rasterTri._BBox.Insert(rasterTri._V[j]);
     }
 
     float area = EdgeFunction(rasterTri._V[0], rasterTri._V[1], rasterTri._V[2]);
@@ -944,7 +946,11 @@ void Test4::ClipTriangles( int iThreadBin, int iStartInd, int iEndInd )
     rasterTri._MatID  = tri._MatID;
     rasterTri._Normal = tri._Normal;
 
-    _RasterTriangles[iThreadBin].emplace_back(rasterTri);
+    if ( _NbRasterTri[iThreadBin] < _RasterTriangles[iThreadBin].size() )
+      _RasterTriangles[iThreadBin][_NbRasterTri[iThreadBin]] = rasterTri;
+    else
+      _RasterTriangles[iThreadBin].emplace_back(rasterTri);
+    _NbRasterTri[iThreadBin]++;
   }
 }
 
@@ -991,12 +997,14 @@ void Test4::ProcessFragments( int iStartY, int iEndY )
 
   for ( int i = 0; i < _NbThreads; ++i )
   {
-    for ( RasterTriangle & tri : _RasterTriangles[i] )
+    for ( int j = 0; j < _NbRasterTri[i]; ++j )
     {
-      int xMin = std::max(0,       std::min((int)std::floorf(tri._BBoxMin.x), width - 1));
-      int yMin = std::max(iStartY, std::min((int)std::floorf(tri._BBoxMin.y), iEndY - 1 ));
-      int xMax = std::max(0,       std::min((int)std::floorf(tri._BBoxMax.x), width - 1));
-      int yMax = std::max(iStartY, std::min((int)std::floorf(tri._BBoxMax.y), iEndY - 1 ));
+      RasterTriangle & tri = _RasterTriangles[i][j];
+
+      int xMin = std::max(0,       std::min((int)std::floorf(tri._BBox._Low.x),  width - 1));
+      int yMin = std::max(iStartY, std::min((int)std::floorf(tri._BBox._Low.y),  iEndY - 1 ));
+      int xMax = std::max(0,       std::min((int)std::floorf(tri._BBox._High.x), width - 1));
+      int yMax = std::max(iStartY, std::min((int)std::floorf(tri._BBox._High.y), iEndY - 1 ));
 
       for ( int y = yMin; y <= yMax; ++y )
       {
@@ -1023,8 +1031,8 @@ void Test4::ProcessFragments( int iStartY, int iEndY )
           float Z = 1.f / (W.x + W.y + W.z);
           W *= Z;
 
-          coord.z = W.x * tri._HomogeneousProjPos[0].z + W.y * tri._HomogeneousProjPos[1].z + W.z * tri._HomogeneousProjPos[2].z;
-          if ( ( coord.z < -1.f ) || ( coord.z > 1.f ) )
+          coord.z = W.x * tri._V[0].z + W.y * tri._V[1].z + W.z * tri._V[2].z;
+          if ( coord.z > _ImageBuffer._DepthBuffer[x + width * y] || ( coord.z < -1.f ) )
             continue;
 
           Varying Attrib[3];
@@ -1035,15 +1043,23 @@ void Test4::ProcessFragments( int iStartY, int iEndY )
           Fragment frag;
           frag._FragCoords = coord;
           frag._MatID      = tri._MatID;
-          frag._Attrib._WorldPos = W.x * Attrib[0]._WorldPos + W.y * Attrib   [1]._WorldPos  + W.z * Attrib   [2]._WorldPos;
-          frag._Attrib._UV       = W.x * Attrib[0]._UV       + W.y * Attrib   [1]._UV        + W.z * Attrib   [2]._UV;
-          frag._Attrib._Color    = W.x * Attrib[0]._Color    + W.y * Attrib   [1]._Color     + W.z * Attrib   [2]._Color;
+          frag._Attrib._WorldPos = W.x * Attrib[0]._WorldPos + W.y * Attrib[1]._WorldPos  + W.z * Attrib[2]._WorldPos;
+          frag._Attrib._UV       = W.x * Attrib[0]._UV       + W.y * Attrib[1]._UV        + W.z * Attrib[2]._UV;
+          frag._Attrib._Color    = W.x * Attrib[0]._Color    + W.y * Attrib[1]._Color     + W.z * Attrib[2]._Color;
+
+         if ( ShadingType::Phong == _ShadingType )
+          {
+            frag._Attrib._Normal = W.x * Attrib[0]._Normal   + W.y * Attrib[1]._Normal    + W.z * Attrib[2]._Normal;
+            frag._Attrib._Normal = glm::normalize(frag._Attrib._Normal);
+          }
+          else
+            frag._Attrib._Normal = _Triangles[i]._Normal;
 
           Vec4 fragColor(1.f);
           FragmentShader_Color(frag, uniforms, fragColor);
 
           _ImageBuffer._ColorBuffer[x + width * y] = fragColor;
-          _ImageBuffer._DepthBuffer[x + width * y] = Z;
+          _ImageBuffer._DepthBuffer[x + width * y] = coord.z;
 
         }
       }
@@ -1115,11 +1131,14 @@ int Test4::UpdateImage()
   Mat4x4 P;
   _Scene -> GetCamera().ComputePerspectiveProjMatrix(ratio, P, &top, &right);
 
+  Mat4x4 RasterM;
+  _Scene -> GetCamera().ComputeRasterMatrix(width, height, RasterM);
+
   Mat4x4 MVP = P * MV;
 
   RenderBackground(top, right);
 
-  RenderScene(MV, P);
+  RenderScene(MV, P, RasterM);
 
   _RenderImgElapsed = glfwGetTime() - startTime;
 

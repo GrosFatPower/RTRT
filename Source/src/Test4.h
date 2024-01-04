@@ -106,14 +106,14 @@ public:
 
   struct RasterTriangle
   {
-    int   _Indices[3];
-    Vec3  _HomogeneousProjPos[3];
-    Vec2  _V[3];
-    float _InvW[3];
-    float _InvArea;
-    Vec2  _BBoxMin, _BBoxMax;
-    Vec3  _Normal;
-    int   _MatID;
+    int        _Indices[3];
+    Vec3       _HomogeneousProjPos[3];
+    Vec3       _V[3];
+    float      _InvW[3];
+    float      _InvArea;
+    AABB<Vec2> _BBox;
+    Vec3       _Normal;
+    int        _MatID;
   };
 
   struct Fragment
@@ -179,11 +179,11 @@ private:
   int RenderBackground( float iTop, float iRight );
   void RenderBackgroundRows( int iStartY, int iEndY, Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY );
 
-  int RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP );
+  int RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP, const Mat4x4 & iRasterM );
   int ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP );
   void ProcessVertices( const Mat4x4 & iMVP, int iStartInd, int iEndInd );
-  int ClipTriangles();
-  void ClipTriangles( int iThreadBin, int iStartInd, int iEndInd );
+  int ClipTriangles( const Mat4x4 & iRasterM );
+  void ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin, int iStartInd, int iEndInd );
   int ProcessFragments();
   void ProcessFragments( int iStartY, int iEndY );
 
@@ -201,6 +201,7 @@ private:
   static void FragmentShader_Color( const Fragment & iFrag, Uniform & iUniforms, Vec4 & oColor );
 
   static float EdgeFunction(const Vec2 & iV0, const Vec2 & iV1, const Vec2 & iV2);
+  static float EdgeFunction(const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2);
 
   std::unique_ptr<QuadMesh> _Quad;
   std::unique_ptr<Scene>    _Scene;
@@ -218,6 +219,7 @@ private:
   std::vector<Triangle>          _Triangles;
   std::vector<ProjectedVertex>   _ProjVertices;
   std::vector<RasterTriangle>  * _RasterTriangles = nullptr;
+  int                          * _NbRasterTri     = nullptr;
 
   std::unique_ptr<ShaderProgram> _RTTShader;
   std::unique_ptr<ShaderProgram> _RTSShader;
@@ -256,6 +258,10 @@ private:
 };
 
 inline float Test4::EdgeFunction(const Vec2 & iV0, const Vec2 & iV1, const Vec2 & iV2) { 
+  return (iV1.x - iV0.x) * (iV2.y - iV0.y) - (iV1.y - iV0.y) * (iV2.x - iV0.x); } // Counter-Clockwise edge function
+//  return (iV2.x - iV0.x) * (iV1.y - iV0.y) - (iV2.y - iV0.y) * (iV1.x - iV0.x); } // Clockwise edge function
+
+inline float Test4::EdgeFunction(const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2) { 
   return (iV1.x - iV0.x) * (iV2.y - iV0.y) - (iV1.y - iV0.y) * (iV2.x - iV0.x); } // Counter-Clockwise edge function
 //  return (iV2.x - iV0.x) * (iV1.y - iV0.y) - (iV2.y - iV0.y) * (iV1.x - iV0.x); } // Clockwise edge function
 

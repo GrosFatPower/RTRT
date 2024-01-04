@@ -28,6 +28,8 @@ THE SOFTWARE.
 #include <algorithm>
 #include <limits>
 
+using namespace RTRT;
+
 namespace RadeonRays
 {
     class bbox

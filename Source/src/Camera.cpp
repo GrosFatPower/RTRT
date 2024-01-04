@@ -188,13 +188,17 @@ void Camera::ComputeFrustum( float iLeft, float iRight, float iBottom, float iTo
 #endif
 }
 
-
 float Camera::ComputeVerticalFOV( float iAspectRatio ) const
 {
   if ( iAspectRatio > 1.f )
     return 2.f * atanf(tanf(_FOV * .5f) / iAspectRatio);
   else
     return 2.f * atanf(tanf(_FOV * .5f) * iAspectRatio);
+}
+
+void Camera::ComputeRasterMatrix( int iWidth, int iHeight, Mat4x4 & oM )
+{
+  oM = glm::scale(Vec3(iWidth, iHeight, 1.f)) * glm::scale(Vec3(0.5f, 0.5f, 1.0f)) * glm::translate(Vec3(1.f, 1.f, 0.f));
 }
 
 }

@@ -17,7 +17,6 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
 
-
 typedef glm::vec2   Vec2;
 typedef glm::vec3   Vec3;
 typedef glm::vec4   Vec4;
@@ -29,7 +28,10 @@ typedef glm::uvec3  Vec3ui;
 typedef glm::uvec4  Vec4ui;
 typedef glm::mat4x4 Mat4x4;
 
-struct MathUtil
+namespace RTRT
+{
+
+class MathUtil
 {
 public:
 
@@ -42,50 +44,48 @@ public:
   template <typename T>
   static T Clamp(T x, T lower, T upper) { return std::min(upper, std::max(x, lower)); };
 
+  static Vec2 Min(const Vec2 & a, const Vec2 & b)
+  {
+    return Vec2(std::min(a.x, b.x), std::min(a.y, b.y));
+  };
+
   static Vec3 Min(const Vec3 & a, const Vec3 & b)
   {
-    Vec3 out;
-    out.x = std::min(a.x, b.x);
-    out.y = std::min(a.y, b.y);
-    out.z = std::min(a.z, b.z);
-    return out;
+    return Vec3(std::min(a.x, b.x), std::min(a.y, b.y), std::min(a.z, b.z));
   };
 
   static Vec4 Min(const Vec4 & a, const Vec4 & b)
   {
-    Vec4 out;
-    out.x = std::min(a.x, b.x);
-    out.y = std::min(a.y, b.y);
-    out.z = std::min(a.z, b.z);
-    out.w = std::min(a.w, b.w);
-    return out;
+    return Vec4(std::min(a.x, b.x),
+                std::min(a.y, b.y),
+                std::min(a.z, b.z),
+                std::min(a.w, b.w));
   };
 
-  static Vec3 Max(const Vec3& a, const Vec3& b)
+  static Vec2 Max(const Vec2 & a, const Vec2 & b)
   {
-    Vec3 out;
-    out.x = std::max(a.x, b.x);
-    out.y = std::max(a.y, b.y);
-    out.z = std::max(a.z, b.z);
-    return out;
+    return Vec2(std::max(a.x, b.x), std::max(a.y, b.y));
   };
 
-  static Vec4 Max(const Vec4& a, const Vec4& b)
+  static Vec3 Max(const Vec3 & a, const Vec3 & b)
   {
-    Vec4 out;
-    out.x = std::max(a.x, b.x);
-    out.y = std::max(a.y, b.y);
-    out.z = std::max(a.z, b.z);
-    out.w = std::max(a.w, b.w);
-    return out;
+    return Vec3(std::max(a.x, b.x), std::max(a.y, b.y), std::max(a.z, b.z));
   };
 
-  static float Dot(const Vec3& a, const Vec3& b)
+  static Vec4 Max(const Vec4 & a, const Vec4 & b)
+  {
+    return Vec4(std::max(a.x, b.x),
+                std::max(a.y, b.y),
+                std::max(a.z, b.z),
+                std::max(a.w, b.w));
+  };
+
+  static float Dot(const Vec3 & a, const Vec3 & b)
   {
     return (a.x * b.x + a.y * b.y + a.z * b.z);
   };
 
-  static Vec3 Clamp(const Vec3& a, const Vec3& lower, const Vec3& upper)
+  static Vec3 Clamp(const Vec3 & a, const Vec3 & lower, const Vec3 & upper)
   {
     return Vec3(
         Clamp(a.x, lower.x, upper.x),
@@ -116,6 +116,19 @@ public:
         Lerp(iStart.z, iEnd.z, iT),
         Lerp(iStart.w, iEnd.w, iT)
     );
+  }
+
+  static Vec3 TransformPoint( const Vec3 & iPt, const Mat4x4 & iTransfoMat )
+  {
+    Vec3 res(0.);
+
+    Vec4 transfoP = iTransfoMat * Vec4(iPt, 1.f);
+
+    res = transfoP;
+    if ( ( transfoP.w != 1.f ) && ( transfoP.w != 0.f ) )
+      res /= transfoP.w;
+
+    return res;
   }
 
   static Mat4x4 QuatToMatrix( float x, float y, float z, float s ) // q = s + ix + jy + kz
@@ -181,5 +194,20 @@ public:
     oPos     = Vec3(iMat[3][0], iMat[3][1], iMat[3][2]);
   }
 };
+
+template <typename T>
+struct AABB
+{
+  T _Low  =  T(std::numeric_limits<float>::infinity());
+  T _High = -T(std::numeric_limits<float>::infinity());
+
+  void Insert(T iP)
+  {
+    _Low  = MathUtil::Min(_Low, iP);
+    _High = MathUtil::Max(_High, iP);
+  }
+};
+
+}
 
 #endif /* _MathUtil_ */
