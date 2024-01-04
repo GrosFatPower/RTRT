@@ -193,9 +193,9 @@ private:
 
   std::vector<Vertex>            _Vertices;
   std::vector<Triangle>          _Triangles;
-  std::vector<ProjectedVertex>   _ProjVertices;
-  std::vector<RasterTriangle>  * _RasterTriangles = nullptr;
-  int                          * _NbRasterTri     = nullptr;
+  std::vector<ProjectedVertex>   _ProjVerticesBuf;
+  std::vector<RasterTriangle>  * _RasterTrianglesBuf = nullptr;
+  int                          * _NbRasterTriPerBuf  = nullptr;
 
   std::unique_ptr<ShaderProgram> _RTTShader;
   std::unique_ptr<ShaderProgram> _RTSShader;
@@ -208,12 +208,13 @@ private:
 
   FrameBuffer        _ImageBuffer;
 
-  int                _NbThreadsMax = 1;
-  int                _NbThreads = 1;
+  int                _NbThreadsMax              = 1;
+  int                _NbThreads                 = 1;
   int                _ColorDepthOrNormalsBuffer = 0;
-  bool               _ShowWires = false;
-  bool               _BilinearSampling = true;
-  ShadingType        _ShadingType = ShadingType::Phong;
+  bool               _ShowWires                 = false;
+  bool               _BilinearSampling          = true;
+  bool               _WBuffer                   = false;
+  ShadingType        _ShadingType               = ShadingType::Phong;
 
   int                _SkyboxTexId = -1;
 

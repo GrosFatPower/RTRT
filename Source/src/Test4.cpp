@@ -284,8 +284,8 @@ Test4::~Test4()
   for ( auto fileName : _BackgroundNames )
     DeleteTab(fileName);
 
-  DeleteTab(_RasterTriangles);
-  DeleteTab(_NbRasterTri);
+  DeleteTab(_RasterTrianglesBuf);
+  DeleteTab(_NbRasterTriPerBuf);
 }
 
 // ----------------------------------------------------------------------------
@@ -637,7 +637,7 @@ void Test4::DrawUI()
 
       unsigned int nbRasterTris = 0;
       for ( int i = 0; i < _NbThreads; ++i )
-        if ( _NbRasterTri[i] ) nbRasterTris += _NbRasterTri[i];
+        if ( _NbRasterTriPerBuf[i] ) nbRasterTris += _NbRasterTriPerBuf[i];
       ImGui::Text("Nb raster triangles     : %d", nbRasterTris);
     }
 
@@ -682,6 +682,10 @@ void Test4::DrawUI()
       ImGui::Combo("Shading", &shadingType, PHONGorFLAT, 2);
       _ShadingType = (ShadingType)shadingType;
 
+      int useWBuffer = !!_WBuffer;
+      ImGui::Combo("W-Buffer", &useWBuffer, YESorNO, 2);
+      _WBuffer = !!useWBuffer;
+
       int showWires = !!_ShowWires;
       ImGui::Combo("Show wires", &showWires, YESorNO, 2);
       _ShowWires = !!showWires;
@@ -692,8 +696,8 @@ void Test4::DrawUI()
         _NbThreads = numThreads;
         JobSystem::Get().Initialize(_NbThreads);
 
-        DeleteTab(_RasterTriangles);
-        DeleteTab(_NbRasterTri);
+        DeleteTab(_RasterTrianglesBuf);
+        DeleteTab(_NbRasterTriPerBuf);
       }
     }
 
@@ -809,7 +813,14 @@ int Test4::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP, const Mat4x4 & iR
 {
   double startTime = glfwGetTime();
 
-  std::fill(policy, _ImageBuffer._DepthBuffer.begin(), _ImageBuffer._DepthBuffer.end(), 1.f);
+  if ( _WBuffer )
+  {
+    float zNear, zFar;
+    _Scene -> GetCamera().GetZNearFar(zNear, zFar);
+    std::fill(policy, _ImageBuffer._DepthBuffer.begin(), _ImageBuffer._DepthBuffer.end(), zFar);
+  }
+  else
+    std::fill(policy, _ImageBuffer._DepthBuffer.begin(), _ImageBuffer._DepthBuffer.end(), 1.f);
 
   int ko = ProcessVertices(iMV, iP);
 
@@ -834,7 +845,7 @@ int Test4::ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP )
 
   Mat4x4 MVP = iP * iMV;
 
-  _ProjVertices.resize(_Vertices.size());
+  _ProjVerticesBuf.resize(_Vertices.size());
 
   //for ( int i = 0; i < _NbThreads; ++i )
   //{
@@ -869,7 +880,7 @@ void Test4::ProcessVertices( const Mat4x4 & iMVP, int iStartInd, int iEndInd )
   {
     Vertex & vert = _Vertices[i];
 
-    ProjectedVertex & projVtx = _ProjVertices[i];
+    ProjectedVertex & projVtx = _ProjVerticesBuf[i];
     VertexShader(Vec4(vert._WorldPos ,1.f), vert._UV, vert._Normal, iMVP, projVtx);
   }
 }
@@ -890,11 +901,11 @@ void Test4::VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 
 // ----------------------------------------------------------------------------
 int Test4::ClipTriangles( const Mat4x4 & iRasterM )
 {
-  if ( !_RasterTriangles )
+  if ( !_RasterTrianglesBuf )
   {
-    _RasterTriangles = new std::vector<RasterTriangle>[_NbThreads];
-    _NbRasterTri = new int[_NbThreads];
-    memset(_NbRasterTri, 0, sizeof(int) * _NbThreads);
+    _RasterTrianglesBuf = new std::vector<RasterTriangle>[_NbThreads];
+    _NbRasterTriPerBuf = new int[_NbThreads];
+    memset(_NbRasterTriPerBuf, 0, sizeof(int) * _NbThreads);
   }
 
   for ( int i = 0; i < _NbThreads; ++i )
@@ -904,7 +915,7 @@ int Test4::ClipTriangles( const Mat4x4 & iRasterM )
     if ( startInd >= endInd )
       break;
 
-    _RasterTriangles[i].reserve(endInd - startInd);
+    _RasterTrianglesBuf[i].reserve(endInd - startInd);
   
     JobSystem::Get().Execute([this, iRasterM, i, startInd, endInd](){ this -> ClipTriangles(iRasterM, i, startInd, endInd); });
   }
@@ -922,7 +933,7 @@ void Test4::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin, int iStartIn
   int width  = _Settings._RenderResolution.x;
   int height = _Settings._RenderResolution.y;
 
-  _NbRasterTri[iThreadBin] = 0;
+  _NbRasterTriPerBuf[iThreadBin] = 0;
   for ( int i = iStartInd; i < iEndInd; ++i )
   {
     Triangle & tri = _Triangles[i];
@@ -932,7 +943,7 @@ void Test4::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin, int iStartIn
     {
       rasterTri._Indices[j] = tri._Indices[j];
 
-      ProjectedVertex & projVert = _ProjVertices[tri._Indices[j]];
+      ProjectedVertex & projVert = _ProjVerticesBuf[tri._Indices[j]];
 
       rasterTri._InvW[j] = 1.f / projVert._ProjPos.w;
       rasterTri._HomogeneousProjPos[j].x = projVert._ProjPos.x * rasterTri._InvW[j];
@@ -953,11 +964,11 @@ void Test4::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin, int iStartIn
     rasterTri._MatID  = tri._MatID;
     rasterTri._Normal = tri._Normal;
 
-    if ( _NbRasterTri[iThreadBin] < _RasterTriangles[iThreadBin].size() )
-      _RasterTriangles[iThreadBin][_NbRasterTri[iThreadBin]] = rasterTri;
+    if ( _NbRasterTriPerBuf[iThreadBin] < _RasterTrianglesBuf[iThreadBin].size() )
+      _RasterTrianglesBuf[iThreadBin][_NbRasterTriPerBuf[iThreadBin]] = rasterTri;
     else
-      _RasterTriangles[iThreadBin].emplace_back(rasterTri);
-    _NbRasterTri[iThreadBin]++;
+      _RasterTrianglesBuf[iThreadBin].emplace_back(rasterTri);
+    _NbRasterTriPerBuf[iThreadBin]++;
   }
 }
 
@@ -966,7 +977,7 @@ void Test4::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin, int iStartIn
 // ----------------------------------------------------------------------------
 int Test4::ProcessFragments()
 {
-  if ( !_Scene || !_RasterTriangles )
+  if ( !_Scene || !_RasterTrianglesBuf )
     return 1;
 
   int height = _Settings._RenderResolution.y;
@@ -994,6 +1005,9 @@ void Test4::ProcessFragments( int iStartY, int iEndY )
   int width  = _Settings._RenderResolution.x;
   int height = _Settings._RenderResolution.y;
 
+  float zNear, zFar;
+  _Scene -> GetCamera().GetZNearFar(zNear, zFar);
+
   Uniform uniforms;
   uniforms._CameraPos        = _Scene -> GetCamera().GetPos();
   uniforms._BilinearSampling = _BilinearSampling;
@@ -1004,9 +1018,9 @@ void Test4::ProcessFragments( int iStartY, int iEndY )
 
   for ( int i = 0; i < _NbThreads; ++i )
   {
-    for ( int j = 0; j < _NbRasterTri[i]; ++j )
+    for ( int j = 0; j < _NbRasterTriPerBuf[i]; ++j )
     {
-      RasterTriangle & tri = _RasterTriangles[i][j];
+      RasterTriangle & tri = _RasterTrianglesBuf[i][j];
 
       int xMin = std::max(0,       std::min((int)std::floorf(tri._BBox._Low.x),  width - 1));
       int yMin = std::max(iStartY, std::min((int)std::floorf(tri._BBox._Low.y),  iEndY - 1 ));
@@ -1039,13 +1053,21 @@ void Test4::ProcessFragments( int iStartY, int iEndY )
           W *= Z;
 
           coord.z = W.x * tri._V[0].z + W.y * tri._V[1].z + W.z * tri._V[2].z;
-          if ( coord.z > _ImageBuffer._DepthBuffer[x + width * y] || ( coord.z < -1.f ) )
-            continue;
+          if ( _WBuffer )
+          {
+            if ( Z > _ImageBuffer._DepthBuffer[x + width * y] || ( Z < zNear ) )
+              continue;
+          }
+          else
+          {
+            if ( coord.z > _ImageBuffer._DepthBuffer[x + width * y] || ( coord.z < -1.f ) )
+              continue;
+          }
 
           Varying Attrib[3];
-          Attrib[0] = _ProjVertices[tri._Indices[0]]._Attrib;
-          Attrib[1] = _ProjVertices[tri._Indices[1]]._Attrib;
-          Attrib[2] = _ProjVertices[tri._Indices[2]]._Attrib;
+          Attrib[0] = _ProjVerticesBuf[tri._Indices[0]]._Attrib;
+          Attrib[1] = _ProjVerticesBuf[tri._Indices[1]]._Attrib;
+          Attrib[2] = _ProjVerticesBuf[tri._Indices[2]]._Attrib;
 
           Fragment frag;
           frag._FragCoords = coord;
@@ -1080,7 +1102,10 @@ void Test4::ProcessFragments( int iStartY, int iEndY )
           }
 
           _ImageBuffer._ColorBuffer[x + width * y] = fragColor;
-          _ImageBuffer._DepthBuffer[x + width * y] = coord.z;
+          if ( _WBuffer )
+            _ImageBuffer._DepthBuffer[x + width * y] = Z;
+          else
+            _ImageBuffer._DepthBuffer[x + width * y] = coord.z;
 
         }
       }
@@ -1226,9 +1251,9 @@ int Test4::InitializeScene()
   // Load _Triangles
   _Vertices.clear();
   _Triangles.clear();
-  _ProjVertices.clear();
-  DeleteTab(_RasterTriangles);
-  DeleteTab(_NbRasterTri);
+  _ProjVerticesBuf.clear();
+  DeleteTab(_RasterTrianglesBuf);
+  DeleteTab(_NbRasterTriPerBuf);
 
   const std::vector<Vec3i>    & Indices   = _Scene -> GetIndices();
   const std::vector<Vec3>     & Vertices  = _Scene -> GetVertices();
