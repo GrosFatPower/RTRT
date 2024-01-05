@@ -846,7 +846,9 @@ int Test4::ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP )
 
   Mat4x4 MVP = iP * iMV;
 
-  _ProjVerticesBuf.resize(_Vertices.size());
+  int nbVertices = _Vertices.size();
+  _ProjVerticesBuf.resize(nbVertices);
+  _ProjVerticesBuf.reserve(nbVertices*2);
 
   //for ( int i = 0; i < _NbThreads; ++i )
   //{
@@ -859,13 +861,13 @@ int Test4::ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP )
   int curInd = 0;
   do
   {
-    int nextInd = std::min(curInd + 512, (int)_Vertices.size());
+    int nextInd = std::min(curInd + 512, nbVertices);
 
     JobSystem::Get().Execute([this, MVP, curInd, nextInd](){ this -> ProcessVertices(MVP, curInd, nextInd); });
 
     curInd = nextInd;
 
-  } while ( curInd < _Vertices.size() );
+  } while ( curInd < nbVertices );
 
   JobSystem::Get().Wait();
 
@@ -902,17 +904,22 @@ void Test4::VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 
 // ----------------------------------------------------------------------------
 int Test4::ClipTriangles( const Mat4x4 & iRasterM )
 {
+  int nbTriangles = _Triangles.size();
+
   if ( !_RasterTrianglesBuf )
   {
     _RasterTrianglesBuf = new std::vector<RasterTriangle>[_NbThreads];
     _NbRasterTriPerBuf = new int[_NbThreads];
     memset(_NbRasterTriPerBuf, 0, sizeof(int) * _NbThreads);
+
+    for ( int i = 0; i < _NbThreads; ++i )
+      _RasterTrianglesBuf[i].reserve(std::max(nbTriangles/_NbThreads, 1));
   }
 
   for ( int i = 0; i < _NbThreads; ++i )
   {
-    int startInd = ( _Triangles.size() / _NbThreads ) * i;
-    int endInd = ( i == _NbThreads-1 ) ? ( _Triangles.size() ) : ( startInd + ( _Triangles.size() / _NbThreads ) );
+    int startInd = ( nbTriangles / _NbThreads ) * i;
+    int endInd = ( i == _NbThreads-1 ) ? ( nbTriangles ) : ( startInd + ( nbTriangles / _NbThreads ) );
     if ( startInd >= endInd )
       continue;
 
@@ -928,7 +935,7 @@ int Test4::ClipTriangles( const Mat4x4 & iRasterM )
 
 // ----------------------------------------------------------------------------
 // ClipTriangles
-// SutherlandHodgman
+// SutherlandHodgman algorithm
 // ----------------------------------------------------------------------------
 void Test4::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin, int iStartInd, int iEndInd )
 {
@@ -963,7 +970,31 @@ void Test4::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin, int iStartIn
           RasterTriangle rasterTri;
           for ( int k = 0; k < 3; ++k )
           {
-            rasterTri._Indices[k] = tri._Indices[k]; // Bug !!
+            if ( Points[k]._Distances.x == 1.f )
+            {
+              rasterTri._Indices[k] = tri._Indices[0]; // == V0
+            }
+            else if ( Points[k]._Distances.y == 1.f )
+            {
+              rasterTri._Indices[k] = tri._Indices[1]; // == V1
+            }
+            else if ( Points[k]._Distances.z == 1.f )
+            {
+              rasterTri._Indices[k] = tri._Indices[2]; // == V2
+            }
+            else
+            {
+              ProjectedVertex newProjVert;
+              newProjVert._ProjPos = Points[k]._Pos;
+              newProjVert._Attrib  = _ProjVerticesBuf[tri._Indices[0]]._Attrib * Points[k]._Distances.x + 
+                                     _ProjVerticesBuf[tri._Indices[1]]._Attrib * Points[k]._Distances.y +
+                                     _ProjVerticesBuf[tri._Indices[2]]._Attrib * Points[k]._Distances.z;
+              {
+                std::unique_lock<std::mutex> lock(_ProjVerticesMutex);
+                rasterTri._Indices[k] = _ProjVerticesBuf.size();
+                _ProjVerticesBuf.emplace_back(newProjVert);
+              }
+            }
 
             Vec3 homogeneousProjPos;
             rasterTri._InvW[k] = 1.f / Points[k]._Pos.w;
@@ -1132,16 +1163,12 @@ void Test4::ProcessFragments( int iStartY, int iEndY )
           Fragment frag;
           frag._FragCoords = coord;
           frag._MatID      = tri._MatID;
-          frag._Attrib._WorldPos = W.x * Attrib[0]._WorldPos + W.y * Attrib[1]._WorldPos  + W.z * Attrib[2]._WorldPos;
-          frag._Attrib._UV       = W.x * Attrib[0]._UV       + W.y * Attrib[1]._UV        + W.z * Attrib[2]._UV;
+          frag._Attrib     = Attrib[0] * W.x + Attrib[1] * W.y + Attrib[2] * W.z;
 
          if ( ShadingType::Phong == _ShadingType )
-          {
-            frag._Attrib._Normal = W.x * Attrib[0]._Normal   + W.y * Attrib[1]._Normal    + W.z * Attrib[2]._Normal;
             frag._Attrib._Normal = glm::normalize(frag._Attrib._Normal);
-          }
           else
-            frag._Attrib._Normal = _Triangles[i]._Normal;
+            frag._Attrib._Normal = tri._Normal;
 
           Vec4 fragColor(1.f);
 

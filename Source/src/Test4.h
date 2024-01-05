@@ -9,6 +9,7 @@
 #include <string>
 #include <deque>
 #include <memory>
+#include <mutex>
 #include "GL/glew.h"
 
 struct GLFWwindow;
@@ -39,6 +40,26 @@ public:
     Vec3 _WorldPos;
     Vec2 _UV;
     Vec3 _Normal;
+
+    Varying operator*(float t) const
+    {
+      auto copy = *this;
+      copy._WorldPos *= t;
+      copy._Normal   *= t;
+      copy._UV       *= t;
+      return copy;
+    }
+
+    Varying operator+(const Varying & iRhs) const
+    {
+      Varying copy = *this;
+
+      copy._WorldPos += iRhs._WorldPos;
+      copy._Normal   += iRhs._Normal;
+      copy._UV       += iRhs._UV;
+
+      return copy;
+    }
   };
 
   struct Uniform
@@ -61,15 +82,6 @@ public:
       return ( ( _WorldPos == iRhs._WorldPos )
             && ( _Normal   == iRhs._Normal   )
             && ( _UV       == iRhs._UV       ) );
-    }
-
-    Vertex operator*(float t) const
-    {
-      auto copy = *this;
-      copy._WorldPos *= t;
-      copy._Normal   *= t;
-      copy._UV       *= t;
-      return copy;
     }
   };
 
@@ -199,6 +211,7 @@ private:
   std::vector<Vertex>            _Vertices;
   std::vector<Triangle>          _Triangles;
   std::vector<ProjectedVertex>   _ProjVerticesBuf;
+  std::mutex                     _ProjVerticesMutex;
   std::vector<RasterTriangle>  * _RasterTrianglesBuf = nullptr;
   int                          * _NbRasterTriPerBuf  = nullptr;
 
