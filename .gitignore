@@ -23,10 +23,19 @@
 .vs/
 Bin/
 Build/
+Assets/ajax/
 Assets/Figurine/
 Assets/bedroom/
 Assets/Mustang/
 Assets/panther/
+Assets/coffee_cart/
+Assets/coffee_maker/
+Assets/dragon/
+Assets/furnace/
+Assets/hyperion/
+Assets/spaceship/
+Assets/staircase/
+Assets/stormtrooper/
 
 # Files
 *.vcxproj
