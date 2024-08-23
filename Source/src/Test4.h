@@ -240,16 +240,17 @@ private:
   MouseState         _MouseState;
 
   // Frame rate
-  double             _CPULoopTime          = 0.f;
-  double             _RenderImgElapsed     = 0.f;
-  double             _RenderBgdElapsed     = 0.f;
-  double             _RenderScnElapsed     = 0.f;
-  double             _RTTElapsed           = 0.f;
-  double             _RTSElapsed           = 0.f;
-  double             _FrameRate            = 0.f;
-  double             _TimeDelta            = 0.f;
-  double             _AverageDelta         = 0.f;
-  std::deque<double> _LastDeltas;
+  double             _CPULoopTime          = 0.;
+  double             _RenderImgElapsed     = 0.;
+  double             _RenderBgdElapsed     = 0.;
+  double             _RenderScnElapsed     = 0.;
+  double             _RTTElapsed           = 0.;
+  double             _RTSElapsed           = 0.;
+  double             _FrameRate            = 0.;
+  double             _TimeDelta            = 0.;
+  double             _AverageDelta         = 0.;
+  double             _AccuDelta            = 0.;
+  int                _NbFrames             = 0;
 };
 
 }

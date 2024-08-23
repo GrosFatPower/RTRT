@@ -102,14 +102,6 @@ private:
   GLuint          _BLASPackedNormalsTextureID       = 0;
   GLuint          _BLASPackedUVsTextureID           = 0;
 
-  long            _FrameNum             = 0;
-  int             _AccumulatedFrames    = 0;
-  float           _CPULoopTime          = 0.f;
-  float           _FrameRate            = 0.f;
-  float           _TimeDelta            = 0.f;
-  float           _AverageDelta         = 0.f;
-  std::deque<float> _LastDeltas;
-
   double          _MouseX               = 0.;
   double          _MouseY               = 0.;
   double          _OldMouseX            = 0.;
@@ -143,6 +135,17 @@ private:
   int                      _SelectedPrimitive = -1;
   int                      _NbTriangles = 0;
   int                      _NbMeshInstances = 0;
+
+  // Frame rate
+  long            _FrameNum             = 0;
+  int             _AccumulatedFrames    = 0;
+  double          _CPULoopTime          = 0.;
+  double          _FrameRate            = 0.;
+  double          _TimeDelta            = 0.;
+  double          _AverageDelta         = 0.;
+  double          _AccuDelta            = 0.;
+  double          _LastAdjustmentTime   = 0.;
+  int             _NbFrames             = 0;
 };
 
 }

@@ -12,11 +12,15 @@ out vec4 fragColor;
 //#define DIRECT_ILLUMINATION
 #define OPTIM_AABB
 #define BLAS_TRAVERSAL
-//#define TLAS_TRAVERSAL
+#define TLAS_TRAVERSAL
 
-// ----------
+#if defined(BLAS_TRAVERSAL) || defined(BLAS_TRAVERSAL)
+#include fragment_BVH.glsl
+#endif
+
+// ============================================================================
 // Uniforms
-// ----------
+// ============================================================================
 
 #define MAX_MATERIAL_COUNT 32
 #define MAX_SPHERE_COUNT   32
@@ -56,463 +60,13 @@ uniform isamplerBuffer u_TexIndTexture;
 uniform isamplerBuffer u_MeshIDRangeTexture;
 uniform sampler2DArray u_TexArrayTexture;
 
-// BVH
-uniform samplerBuffer  u_TLASNodesTexture;
-uniform isamplerBuffer u_TLASMeshMatIDTexture;
-uniform sampler2D      u_TLASTransformsTexture;
-uniform samplerBuffer  u_BLASNodesTexture;
-uniform isamplerBuffer u_BLASNodesRangeTexture;
-uniform isamplerBuffer u_BLASPackedIndicesTexture;
-uniform isamplerBuffer u_BLASPackedIndicesRangeTexture;
-uniform samplerBuffer  u_BLASPackedVtxTexture;
-uniform samplerBuffer  u_BLASPackedNormTexture;
-uniform samplerBuffer  u_BLASPackedUVTexture;
-
-// ----------
+// ============================================================================
 // Ray tracing
-// ----------
+// ============================================================================
 
-#if defined(BLAS_TRAVERSAL) || defined(TLAS_TRAVERSAL)
-bool TraceRay_ThroughBLAS( Ray iRay, mat4 iInvTransfo, int iBlasNodesOffset, int iTriOffset, int iMatID, float iMaxDist, out HitPoint oClosestHit )
-{
-  oClosestHit = HitPoint(-1.f, vec3( 0.f, 0.f, 0.f ), vec3( 0.f, 0.f, 0.f ), vec2( 0.f, 0.f ), -1, 0, true, false);
-
-  int   index       = 0; // BLAS Root
-  bool  leftHit     = false;
-  bool  rightHit    = false;
-  float leftDist    = 0.f;
-  float rightDist   = 0.f;
-  float hitDist     = 0.f;
-
-  vec3 leftBboxMin;
-  vec3 leftBboxMax;
-  vec3 rightBboxMin;
-  vec3 rightBboxMax;
-
-  int   Stack[64]; // BLAS Max depth = 64
-  int   topPtr = 0;
-  Stack[topPtr++] = -1;
-
-  Ray transRay;
-  transRay._Orig = (iInvTransfo * vec4(iRay._Orig, 1.0)).xyz;
-  transRay._Dir  = (iInvTransfo * vec4(iRay._Dir, 0.0)).xyz;
-
-  leftBboxMin  = texelFetch(u_BLASNodesTexture, iBlasNodesOffset    ).xyz;
-  leftBboxMax  = texelFetch(u_BLASNodesTexture, iBlasNodesOffset + 1).xyz;
-  leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
-  if ( !leftHit )
-    index = -1;
-
-  while ( index != -1 )
-  {
-    ivec3 LcRcLeaf = ivec3(texelFetch(u_BLASNodesTexture, iBlasNodesOffset + index * 3 + 2).xyz);
-
-    int leftIndex  = int(LcRcLeaf.x); // or first triangle index
-    int rightIndex = int(LcRcLeaf.y); // or nb triangles
-    int leaf       = int(LcRcLeaf.z);
-
-    if ( leaf > 0 ) // BLAS Leaf node
-    {
-      int firstTriIdx = leftIndex * 3;
-
-      for ( int i = 0; i < rightIndex; i++ ) // rightIndex == nbPrimitives
-      {
-        ivec3 vInd0 = ivec3(texelFetch(u_BLASPackedIndicesTexture, iTriOffset + firstTriIdx + i * 3     ).xyz);
-        ivec3 vInd1 = ivec3(texelFetch(u_BLASPackedIndicesTexture, iTriOffset + firstTriIdx + i * 3 + 1 ).xyz);
-        ivec3 vInd2 = ivec3(texelFetch(u_BLASPackedIndicesTexture, iTriOffset + firstTriIdx + i * 3 + 2 ).xyz);
-
-        vec3 v0 = texelFetch(u_BLASPackedVtxTexture, vInd0.x).xyz;
-        vec3 v1 = texelFetch(u_BLASPackedVtxTexture, vInd1.x).xyz;
-        vec3 v2 = texelFetch(u_BLASPackedVtxTexture, vInd2.x).xyz;
-
-        hitDist = 0.f;
-        vec2 uv;
-        if ( TriangleIntersection(transRay, v0, v1, v2, hitDist, uv) )
-        {
-          if ( ( hitDist > 0.f ) && ( ( hitDist < iMaxDist ) || ( -1.f == iMaxDist ) ) )
-          {
-            vec3 norm0 = texelFetch(u_BLASPackedNormTexture, vInd0.y).xyz;
-            vec3 norm1 = texelFetch(u_BLASPackedNormTexture, vInd1.y).xyz;
-            vec3 norm2 = texelFetch(u_BLASPackedNormTexture, vInd2.y).xyz;
-
-            vec2 uvID0 = texelFetch(u_BLASPackedUVTexture, vInd0.z).xy;
-            vec2 uvID1 = texelFetch(u_BLASPackedUVTexture, vInd1.z).xy;
-            vec2 uvID2 = texelFetch(u_BLASPackedUVTexture, vInd2.z).xy;
-
-            iMaxDist                = hitDist;
-            oClosestHit._Dist       = hitDist;
-            oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
-            oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
-            oClosestHit._UV         = uvID0 * ( 1 - uv.x - uv.y ) + uvID1 * uv.x + uvID2 * uv.y;
-            oClosestHit._MaterialID = iMatID;
-          }
-        }
-      }
-    }
-    else
-    {
-      leftBboxMin  = texelFetch(u_BLASNodesTexture, iBlasNodesOffset + leftIndex  * 3    ).xyz;
-      leftBboxMax  = texelFetch(u_BLASNodesTexture, iBlasNodesOffset + leftIndex  * 3 + 1).xyz;
-      rightBboxMin = texelFetch(u_BLASNodesTexture, iBlasNodesOffset + rightIndex * 3    ).xyz;
-      rightBboxMax = texelFetch(u_BLASNodesTexture, iBlasNodesOffset + rightIndex * 3 + 1).xyz;
-      
-      leftHit  = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
-      rightHit = BoxIntersection(rightBboxMin, rightBboxMax, transRay, rightDist);
-
-      if ( iMaxDist > 0 )
-      {
-        if ( leftHit && ( leftDist > iMaxDist ) )
-          leftHit = false;
-        if ( rightHit && ( rightDist > iMaxDist ) )
-          rightHit = false;
-      }
-
-      if ( leftHit && rightHit )
-      {
-        if ( leftDist > rightDist )
-        {
-          index = rightIndex;
-          Stack[topPtr++] = leftIndex;
-        }
-        else
-        {
-          index = leftIndex;
-          Stack[topPtr++] = rightIndex;
-        }
-        continue;
-      }
-      else if ( leftHit )
-      {
-        index = leftIndex;
-        continue;
-      }
-      else if ( rightHit )
-      {
-        index = rightIndex;
-        continue;
-      }
-    }
-
-    index = Stack[--topPtr];
-  }
-
-  if ( oClosestHit._Dist > 0.f )
-    return true;
-  return false;
-}
-
-bool AnyHit_ThroughBLAS( Ray iRay, mat4 iInvTransfo, int iBlasNodesOffset, int iTriOffset, float iMaxDist )
-{
-  int   index       = 0; // BLAS Root
-  bool  leftHit     = false;
-  bool  rightHit    = false;
-  float leftDist    = 0.f;
-  float rightDist   = 0.f;
-  float hitDist     = 0.f;
-
-  vec3 leftBboxMin;
-  vec3 leftBboxMax;
-  vec3 rightBboxMin;
-  vec3 rightBboxMax;
-
-  int   Stack[64]; // BLAS Max depth = 64
-  int   topPtr = 0;
-  Stack[topPtr++] = -1;
-
-  Ray transRay;
-  transRay._Orig = (iInvTransfo * vec4(iRay._Orig, 1.0)).xyz;
-  transRay._Dir  = (iInvTransfo * vec4(iRay._Dir, 0.0)).xyz;
-
-  leftBboxMin  = texelFetch(u_BLASNodesTexture, iBlasNodesOffset    ).xyz;
-  leftBboxMax  = texelFetch(u_BLASNodesTexture, iBlasNodesOffset + 1).xyz;
-  leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
-  if ( !leftHit )
-    index = -1;
-
-  while ( index != -1 )
-  {
-    ivec3 LcRcLeaf = ivec3(texelFetch(u_BLASNodesTexture, iBlasNodesOffset + index * 3 + 2).xyz);
-
-    int leftIndex  = int(LcRcLeaf.x); // or first triangle index
-    int rightIndex = int(LcRcLeaf.y); // or nb triangles
-    int leaf       = int(LcRcLeaf.z);
-
-    if ( leaf > 0 ) // BLAS Leaf node
-    {
-      int firstTriIdx = leftIndex * 3;
-
-      for ( int i = 0; i < rightIndex; i++ ) // rightIndex == nbPrimitives
-      {
-        ivec3 vInd0 = ivec3(texelFetch(u_BLASPackedIndicesTexture, iTriOffset + firstTriIdx + i * 3     ).xyz);
-        ivec3 vInd1 = ivec3(texelFetch(u_BLASPackedIndicesTexture, iTriOffset + firstTriIdx + i * 3 + 1 ).xyz);
-        ivec3 vInd2 = ivec3(texelFetch(u_BLASPackedIndicesTexture, iTriOffset + firstTriIdx + i * 3 + 2 ).xyz);
-
-        vec3 v0 = texelFetch(u_BLASPackedVtxTexture, vInd0.x).xyz;
-        vec3 v1 = texelFetch(u_BLASPackedVtxTexture, vInd1.x).xyz;
-        vec3 v2 = texelFetch(u_BLASPackedVtxTexture, vInd2.x).xyz;
-
-        hitDist = 0.f;
-        vec2 uv;
-        if ( TriangleIntersection(transRay, v0, v1, v2, hitDist, uv) )
-        {
-          if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
-            return true;
-        }
-      }
-    }
-    else
-    {
-      leftBboxMin  = texelFetch(u_BLASNodesTexture, iBlasNodesOffset + leftIndex  * 3    ).xyz;
-      leftBboxMax  = texelFetch(u_BLASNodesTexture, iBlasNodesOffset + leftIndex  * 3 + 1).xyz;
-      rightBboxMin = texelFetch(u_BLASNodesTexture, iBlasNodesOffset + rightIndex * 3    ).xyz;
-      rightBboxMax = texelFetch(u_BLASNodesTexture, iBlasNodesOffset + rightIndex * 3 + 1).xyz;
-      
-      leftHit  = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
-      rightHit = BoxIntersection(rightBboxMin, rightBboxMax, transRay, rightDist);
-
-      if ( leftHit && rightHit )
-      {
-        if ( leftDist > rightDist )
-        {
-          index = rightIndex;
-          Stack[topPtr++] = leftIndex;
-        }
-        else
-        {
-          index = leftIndex;
-          Stack[topPtr++] = rightIndex;
-        }
-        continue;
-      }
-      else if ( leftHit )
-      {
-        index = leftIndex;
-        continue;
-      }
-      else if ( rightHit )
-      {
-        index = rightIndex;
-        continue;
-      }
-    }
-
-    index = Stack[--topPtr];
-  }
-
-  return false;
-}
-#endif
-
-#ifdef TLAS_TRAVERSAL
-bool TraceRay_ThroughTLAS( Ray iRay, out HitPoint oClosestHit )
-{
-  oClosestHit = HitPoint(-1.f, vec3( 0.f, 0.f, 0.f ), vec3( 0.f, 0.f, 0.f ), vec2( 0.f, 0.f ), -1, 0, true, false);
-
-  int   index       = 0; // TLAS Root
-  bool  leftHit     = false;
-  bool  rightHit    = false;
-  float leftDist    = 0.f;
-  float rightDist   = 0.f;
-  float hitDist     = 0.f;
-
-  vec3 leftBboxMin;
-  vec3 leftBboxMax;
-  vec3 rightBboxMin;
-  vec3 rightBboxMax;
-
-  int   Stack[64]; // BLAS Max depth = 64
-  int   topPtr = 0;
-  Stack[topPtr++] = -1;
-
-  leftBboxMin  = texelFetch(u_TLASNodesTexture, 0).xyz;
-  leftBboxMax  = texelFetch(u_TLASNodesTexture, 1).xyz;
-  leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, iRay, leftDist);
-  if ( !leftHit )
-    index = -1;
-
-  while ( index >= 0 )
-  {
-    ivec3 LcRcLeaf = ivec3(texelFetch(u_TLASNodesTexture, index * 3 + 2).xyz);
-
-    int leftIndex  = int(LcRcLeaf.x); // or first MeshInstance
-    int rightIndex = int(LcRcLeaf.y); // or nb Mesh instances
-    int leaf       = int(LcRcLeaf.z);
-
-    if ( leaf < 0 ) // TLAS Leaf node
-    {
-      for ( int j = 0; j < rightIndex; j++ ) // rightIndex == nbMeshesInstances
-      {
-        int ind = leftIndex + j;
-        ivec2 meshMatID = texelFetch(u_TLASMeshMatIDTexture, ind).xy;
-
-        vec4 right   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 0, 0), 0).xyzw;
-        vec4 up      = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 1, 0), 0).xyzw;
-        vec4 forward = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 2, 0), 0).xyzw;
-        vec4 trans   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 3, 0), 0).xyzw;
-        mat4 invTransform = inverse(mat4(right, up, forward, trans));
-
-        ivec2 blasRange = texelFetch(u_BLASNodesRangeTexture, meshMatID.x).xy;
-        ivec2 triRange  = texelFetch(u_BLASPackedIndicesRangeTexture, meshMatID.x).xy;
-        blasRange.x *= 3;
-
-        HitPoint closestHit;
-        if ( TraceRay_ThroughBLAS(iRay, invTransform, blasRange.x, triRange.x, meshMatID.y, oClosestHit._Dist, closestHit ) )
-          oClosestHit = closestHit;
-      }
-    }
-    else
-    {
-      leftBboxMin  = texelFetch(u_TLASNodesTexture, leftIndex  * 3    ).xyz;
-      leftBboxMax  = texelFetch(u_TLASNodesTexture, leftIndex  * 3 + 1).xyz;
-      rightBboxMin = texelFetch(u_TLASNodesTexture, rightIndex * 3    ).xyz;
-      rightBboxMax = texelFetch(u_TLASNodesTexture, rightIndex * 3 + 1).xyz;
-      
-      leftHit  = BoxIntersection(leftBboxMin, leftBboxMax, iRay, leftDist);
-      rightHit = BoxIntersection(rightBboxMin, rightBboxMax, iRay, rightDist);
-
-      if ( oClosestHit._Dist > 0.f )
-      {
-        if ( leftHit && ( leftDist > oClosestHit._Dist  ) )
-          leftHit = false;
-        if ( rightHit && ( rightDist > oClosestHit._Dist  ) )
-          rightHit = false;
-      }
-
-      if ( leftHit && rightHit )
-      {
-        if ( leftDist > rightDist )
-        {
-          index = rightIndex;
-          Stack[topPtr++] = leftIndex;
-        }
-        else
-        {
-          index = leftIndex;
-          Stack[topPtr++] = rightIndex;
-        }
-        continue;
-      }
-      else if ( leftHit )
-      {
-        index = leftIndex;
-        continue;
-      }
-      else if ( rightHit )
-      {
-        index = rightIndex;
-        continue;
-      }
-    }
-    index = Stack[--topPtr];
-  }
-
-  if ( oClosestHit._Dist > 0.f )
-    return true;
-  return false;
-}
-
-bool AnyHit_ThroughTLAS( Ray iRay, float iMaxDist )
-{
-  int   index       = 0; // TLAS Root
-  bool  leftHit     = false;
-  bool  rightHit    = false;
-  float leftDist    = 0.f;
-  float rightDist   = 0.f;
-
-  vec3 leftBboxMin;
-  vec3 leftBboxMax;
-  vec3 rightBboxMin;
-  vec3 rightBboxMax;
-
-  int   Stack[64]; // BLAS Max depth = 64
-  int   topPtr = 0;
-  Stack[topPtr++] = -1;
-
-  leftBboxMin  = texelFetch(u_TLASNodesTexture, 0).xyz;
-  leftBboxMax  = texelFetch(u_TLASNodesTexture, 1).xyz;
-  leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, iRay, leftDist);
-  if ( !leftHit )
-    index = -1;
-
-  while ( index >= 0 )
-  {
-    ivec3 LcRcLeaf = ivec3(texelFetch(u_TLASNodesTexture, index * 3 + 2).xyz);
-
-    int leftIndex  = int(LcRcLeaf.x); // or first MeshInstance
-    int rightIndex = int(LcRcLeaf.y); // or nb Mesh instances
-    int leaf       = int(LcRcLeaf.z);
-
-    if ( leaf < 0 ) // TLAS Leaf node
-    {
-      for ( int j = 0; j < rightIndex; j++ ) // rightIndex == nbMeshesInstances
-      {
-        int ind = leftIndex + j;
-        ivec2 meshMatID = texelFetch(u_TLASMeshMatIDTexture, ind).xy;
-
-        vec4 right   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 0, 0), 0).xyzw;
-        vec4 up      = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 1, 0), 0).xyzw;
-        vec4 forward = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 2, 0), 0).xyzw;
-        vec4 trans   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 3, 0), 0).xyzw;
-        mat4 invTransform = inverse(mat4(right, up, forward, trans));
-
-        ivec2 blasRange = texelFetch(u_BLASNodesRangeTexture, meshMatID.x).xy;
-        ivec2 triRange  = texelFetch(u_BLASPackedIndicesRangeTexture, meshMatID.x).xy;
-        blasRange.x *= 3;
-
-        if ( AnyHit_ThroughBLAS(iRay, invTransform, blasRange.x, triRange.x, iMaxDist ) )
-          return true;
-      }
-    }
-    else
-    {
-      leftBboxMin  = texelFetch(u_TLASNodesTexture, leftIndex  * 3    ).xyz;
-      leftBboxMax  = texelFetch(u_TLASNodesTexture, leftIndex  * 3 + 1).xyz;
-      rightBboxMin = texelFetch(u_TLASNodesTexture, rightIndex * 3    ).xyz;
-      rightBboxMax = texelFetch(u_TLASNodesTexture, rightIndex * 3 + 1).xyz;
-      
-      leftHit  = BoxIntersection(leftBboxMin, leftBboxMax, iRay, leftDist);
-      rightHit = BoxIntersection(rightBboxMin, rightBboxMax, iRay, rightDist);
-
-      if ( iMaxDist > 0 )
-      {
-        if ( leftHit && ( leftDist > iMaxDist ) )
-          leftHit = false;
-        if ( rightHit && ( rightDist > iMaxDist ) )
-          rightHit = false;
-      }
-
-      if ( leftHit && rightHit )
-      {
-        if ( leftDist > rightDist )
-        {
-          index = rightIndex;
-          Stack[topPtr++] = leftIndex;
-        }
-        else
-        {
-          index = leftIndex;
-          Stack[topPtr++] = rightIndex;
-        }
-        continue;
-      }
-      else if ( leftHit )
-      {
-        index = leftIndex;
-        continue;
-      }
-      else if ( rightHit )
-      {
-        index = rightIndex;
-        continue;
-      }
-    }
-    index = Stack[--topPtr];
-  }
-
-  return false;
-}
-#endif
-
+// ----------------------------------------------------------------------------
+// TraceRay
+// ----------------------------------------------------------------------------
 bool TraceRay( Ray iRay, out HitPoint oClosestHit )
 {
   oClosestHit = HitPoint(-1.f, vec3( 0.f, 0.f, 0.f ), vec3( 0.f, 0.f, 0.f ), vec2( 0.f, 0.f ), -1, 0, true, false);
@@ -706,6 +260,9 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
   return true;
 }
 
+// ----------------------------------------------------------------------------
+// AnyHit
+// ----------------------------------------------------------------------------
 bool AnyHit( Ray iRay, float iMaxDist )
 {
   for ( int i = 0; i < u_NbSpheres; ++i )
@@ -820,9 +377,12 @@ bool AnyHit( Ray iRay, float iMaxDist )
   return false;
 }
 
+// ----------------------------------------------------------------------------
+// SampleSkybox
 // UV mapping : https://en.wikipedia.org/wiki/UV_mapping
 // iRayDir should be normalized
 // (U,V) = normalized spherical coordinates
+// ----------------------------------------------------------------------------
 vec3 SampleSkybox( vec3 iRayDir )
 {
   float theta = asin(iRayDir.y);
@@ -833,7 +393,10 @@ vec3 SampleSkybox( vec3 iRayDir )
   return skycolor;
 }
 
-vec3 pattern( vec2 uv )
+// ----------------------------------------------------------------------------
+// Pattern
+// ----------------------------------------------------------------------------
+vec3 Pattern( vec2 uv )
 {
     vec3 col = vec3(0.6);
     col += 0.4*smoothstep(-0.01,0.01,cos(uv.x*0.5)*cos(uv.y*0.5)); 
@@ -841,9 +404,12 @@ vec3 pattern( vec2 uv )
     return col;
 }
 
+// ----------------------------------------------------------------------------
+// D
 // GGX/Trowbridge-Reitz : Normal Distribution Function
 // Larger the more micro-facets are aligned to H
 // NDF = alpha^2 / ( PI * ( (n.h)^2  * ( aplha^2 -1 ) + 1 )^2 )
+// ----------------------------------------------------------------------------
 float D( float iAlpha, vec3 iN, vec3 iH )
 {
   float num = pow(iAlpha, 2.f);
@@ -854,9 +420,12 @@ float D( float iAlpha, vec3 iN, vec3 iH )
   return num / max(denom, EPSILON);
 }
 
+// ----------------------------------------------------------------------------
+// G1
 // Schlick-Beckmann Geometry Shadowing Function
 // G_SchilickGGX = (n.v) / ( (n.v) * ( 1 - k ) + k )
 // with k = alpha / 2
+// ----------------------------------------------------------------------------
 float G1( float iAlpha, vec3 iN, vec3 iX )
 {
   float NdotX = max(dot(iN, iX), 0.f);
@@ -869,23 +438,32 @@ float G1( float iAlpha, vec3 iN, vec3 iX )
   return num / max(denom, EPSILON);
 }
 
+// ----------------------------------------------------------------------------
+// G
 // Smith Model
 // Smaller the more micro-facets are shadowed by other micro-facets
+// ----------------------------------------------------------------------------
 float G( float iAlpha, vec3 iN, vec3 iV, vec3 iL )
 {
   return G1(iAlpha, iN, iV) * G1(iAlpha, iN, iL);
 }
 
+// ----------------------------------------------------------------------------
+// FSchlick
 // Fresnel-Schlick Function
 // Proportion of specular reflectance
 // FSchlick = F0 + (1-F0)(1-(h.v))^5
+// ----------------------------------------------------------------------------
 vec3 FSchlick( vec3 iF0, vec3 iV, vec3 iH )
 {
   return iF0 + (vec3(1.f) - iF0) * pow(1.f - max(dot(iV, iH), 0.f), 5.f);
 }
 
+// ----------------------------------------------------------------------------
+// PBR
 // Computer Graphics Tutorial - PBR (Physically Based Rendering)
 // https://www.youtube.com/watch?v=RRE-F57fbXw&list=WL&index=109
+// ----------------------------------------------------------------------------
 vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuation )
 {
   vec3 outColor = u_Materials[iClosestHit._MaterialID]._Emission;
@@ -974,6 +552,9 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuat
   return clamp(outColor, 0.f, 1.f);
 }
 
+// ----------------------------------------------------------------------------
+// ComputeColor
+// ----------------------------------------------------------------------------
 vec3 ComputeColor( HitPoint iClosestHit )
 {
   vec3 lightDir = u_SphereLight._Pos - iClosestHit._Pos;
@@ -1002,6 +583,9 @@ vec3 ComputeColor( HitPoint iClosestHit )
   return pixelColor;
 }
 
+// ----------------------------------------------------------------------------
+// Albedo
+// ----------------------------------------------------------------------------
 vec3 Albedo( HitPoint iClosestHit )
 {
   if ( u_Materials[iClosestHit._MaterialID]._BaseColorTexID >= 0 )
@@ -1014,10 +598,9 @@ vec3 Albedo( HitPoint iClosestHit )
   return u_Materials[iClosestHit._MaterialID]._Albedo;
 }
 
-// ----------
-// MAIN
-// ----------
-
+// ----------------------------------------------------------------------------
+// main
+// ----------------------------------------------------------------------------
 void main()
 {
   // Initialization

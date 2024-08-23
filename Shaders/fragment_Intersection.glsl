@@ -2,8 +2,11 @@
  *
  */
 
- // https://raytracing.github.io/books/RayTracingInOneWeekend.html#overview
+// ----------------------------------------------------------------------------
+// SphereIntersection
+// https://raytracing.github.io/books/RayTracingInOneWeekend.html#overview
 // Ray direction should be normalized 
+// ----------------------------------------------------------------------------
 bool SphereIntersection( vec4 iSphere, Ray iRay, out float oHitDistance )
 {
   vec3 oc = iRay._Orig - iSphere.xyz;
@@ -22,6 +25,9 @@ bool SphereIntersection( vec4 iSphere, Ray iRay, out float oHitDistance )
   return true;
 }
 
+// ----------------------------------------------------------------------------
+// PlaneIntersection
+// ----------------------------------------------------------------------------
 bool PlaneIntersection( vec3 iOrig, vec3 iNormal, Ray iRay, out float oHitDistance )
 { 
   float denom = dot(iNormal, iRay._Dir);
@@ -36,7 +42,10 @@ bool PlaneIntersection( vec3 iOrig, vec3 iNormal, Ray iRay, out float oHitDistan
   return false; 
 }
 
+// ----------------------------------------------------------------------------
+// BoxIntersection
 // Intersection method from Real-Time Rendering and Essential Mathematics for Games (p. 581)
+// ----------------------------------------------------------------------------
 bool BoxIntersection( vec3 iLow, vec3 iHigh, mat4 iTransform, Ray iRay, out float oHitDistance )
 {
   float tMin = -INFINITY;
@@ -93,8 +102,11 @@ bool BoxIntersection( vec3 iLow, vec3 iHigh, mat4 iTransform, Ray iRay, out floa
   return true;
 }
 
+// ----------------------------------------------------------------------------
+// BoxIntersection
 // Journal of Computer Graphics Techniques Vol. 7, No. 3, 2018
 // A Ray-Box Intersection Algorithm and Efficient Dynamic Voxel Rendering
+// ----------------------------------------------------------------------------
 bool BoxIntersection( vec3 iLow, vec3 iHigh, Ray iRay, out float oHitDistance )
 {
   vec3 invRaydir = 1.f / iRay._Dir; // Safe ???
@@ -110,7 +122,10 @@ bool BoxIntersection( vec3 iLow, vec3 iHigh, Ray iRay, out float oHitDistance )
   return oHitDistance <= min(min(tmax.x, tmax.y), tmax.z);
 }
 
+// ----------------------------------------------------------------------------
+// BoxNormal
 // Adapted from https://gist.github.com/Shtille/1f98c649abeeb7a18c5a56696546d3cf
+// ----------------------------------------------------------------------------
 vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iTransform, vec3 iHitPoint )
 {
   // Resolution in local space
@@ -133,6 +148,9 @@ vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iTransform, vec3 iHitPoint )
   return normalize(normal);
 }
 
+// ----------------------------------------------------------------------------
+// GetLightDirSample
+// ----------------------------------------------------------------------------
 vec3 GetLightDirSample( vec3 iSamplePos, vec3 iLightPos, float iLightRadius )
 {
   vec3 lightSample = iLightPos + RandomUnitVector() * iLightRadius;
@@ -140,7 +158,10 @@ vec3 GetLightDirSample( vec3 iSamplePos, vec3 iLightPos, float iLightRadius )
   return lightSample - iSamplePos;
 }
 
+// ----------------------------------------------------------------------------
+// TriangleIntersection
 // https://www.shadertoy.com/view/MlGcDz
+// ----------------------------------------------------------------------------
 bool TriangleIntersection( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oHitDistance, out vec2 oUV )
 {
   vec3 v0v1 = iV1 - iV0;
@@ -167,7 +188,10 @@ bool TriangleIntersection( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oHi
   return true;
 }
 
+// ----------------------------------------------------------------------------
+// TriangleIntersection2
 // https://www.mathematik.uni-marburg.de/~thormae/lectures/graphics2/graphics_2_2_eng_web.html#1
+// ----------------------------------------------------------------------------
 bool TriangleIntersection2( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oHitDistance, out vec2 oUV )
 { 
   vec3 i = iV1 - iV0;

@@ -356,7 +356,7 @@ int Test4::InitializeBackgroundFiles()
 }
 
 // ----------------------------------------------------------------------------
-// UpdateCPUTime
+// ResizeImageBuffers
 // ----------------------------------------------------------------------------
 void Test4::ResizeImageBuffers()
 {
@@ -378,17 +378,25 @@ int Test4::UpdateCPUTime()
   _TimeDelta = _CPULoopTime - oldCpuTime;
   oldCpuTime = _CPULoopTime;
 
-  _LastDeltas.push_back(_TimeDelta);
-  while ( _LastDeltas.size() > 10 )
-    _LastDeltas.pop_front();
-    
-  double totalDelta = 0.;
-  for ( auto delta : _LastDeltas )
-    totalDelta += delta;
-  _AverageDelta = totalDelta / _LastDeltas.size();
+  _AccuDelta += _TimeDelta;
+  _NbFrames++;
 
-  if ( _AverageDelta > 0. )
-    _FrameRate = 1. / (float)_AverageDelta;
+  if ( ( _FrameRate == 0. ) && _AccuDelta && ( _NbFrames > 1 ) )
+  {
+    _FrameRate = _NbFrames / _AccuDelta;
+  }
+  else if ( _AccuDelta >= 1. )
+  {
+    _FrameRate = (double)_NbFrames * .75 + _FrameRate * .25;
+    while ( _AccuDelta > 1. )
+      _AccuDelta -= 1.;
+    _NbFrames = 0;
+  }
+   
+  if ( _AverageDelta == 0. )
+    _AverageDelta = _TimeDelta;
+  else
+    _AverageDelta = _TimeDelta * .25 + _AverageDelta * .75;
 
   return 0;
 }

@@ -795,14 +795,25 @@ int Test3::UpdateCPUTime()
   _TimeDelta = _CPULoopTime - oldCpuTime;
   oldCpuTime = _CPULoopTime;
 
-  _LastDeltas.push_back(_TimeDelta);
-  while ( _LastDeltas.size() > 30 )
-    _LastDeltas.pop_front();
-    
-  double totalDelta = 0.;
-  for ( auto delta : _LastDeltas )
-    totalDelta += delta;
-  _AverageDelta = totalDelta / _LastDeltas.size();
+  _AccuDelta += _TimeDelta;
+  _NbFrames++;
+
+  if ( ( _FrameRate == 0. ) && _AccuDelta && ( _NbFrames > 1 ) )
+  {
+    _FrameRate = _NbFrames / _AccuDelta;
+  }
+  else if ( _AccuDelta >= 1. )
+  {
+    _FrameRate = (double)_NbFrames * .75 + _FrameRate * .25;
+    while ( _AccuDelta > 1. )
+      _AccuDelta -= 1.;
+    _NbFrames = 0;
+  }
+
+  if ( _AverageDelta == 0. )
+    _AverageDelta = _TimeDelta;
+  else
+    _AverageDelta = _TimeDelta * .25 + _AverageDelta * .75;
 
   if ( _AverageDelta > 0. )
     _FrameRate = 1. / (float)_AverageDelta;
@@ -814,28 +825,30 @@ void Test3::AdjustRenderScale()
 {
   if ( !_Settings._AutoScale )
     return;
-  if ( _LastDeltas.size() < 10 )
-    return;
 
   int newScale = _Settings._RenderScale;
 
   float diff = _FrameRate - _Settings._TargetFPS;
   if ( abs(diff) > ( _Settings._TargetFPS * .05f ) )
   {
-    if ( diff < -10.f )
-      newScale -= std::min((int)floor(abs(diff)), 25);
-    else if ( ( abs(diff) > 3.f ) && ( _LastDeltas.size() >= 20 ) )
-      newScale += MathUtil::Sign(diff) * floor(diff);
-    else
-      newScale += MathUtil::Sign(diff) * 1;
+    double timeSinceLastAdjust = _CPULoopTime - _LastAdjustmentTime;
 
-    newScale = MathUtil::Clamp(newScale, 25, 200);
+    if ( timeSinceLastAdjust > 0.25f )
+    {
+      if ( diff < -5.f )
+        newScale -= std::min((int)floor(abs(diff)), 5);
+      else
+        newScale += MathUtil::Sign(diff) * 1;
+
+      newScale = MathUtil::Clamp(newScale, 25, 200);
+
+      _LastAdjustmentTime = _CPULoopTime;
+    }
   }
 
   if ( newScale != _Settings._RenderScale )
   {
     _Settings._RenderScale = newScale;
-    _LastDeltas.clear();
     _RenderSettingsModified = true;
 
     glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
