@@ -350,6 +350,7 @@ int Test3::UpdateUniforms()
           glUniform3f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Emission"), firstLight -> _Emission.r, firstLight -> _Emission.g, firstLight -> _Emission.b);
           glUniform1f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Radius"), firstLight -> _Radius);
         }
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_ShowLights"), (int)_Settings._ShowLights);
         _SceneLightsModified = false;
       }
 
@@ -613,6 +614,9 @@ int Test3::DrawUI()
         }
 
         if ( ImGui::SliderFloat("Light radius", &firstLight -> _Radius, 0.001f, 1.f) )
+          _SceneLightsModified = true;
+
+        if ( ImGui::Checkbox("Show light", &_Settings._ShowLights) )
           _SceneLightsModified = true;
       }
     }

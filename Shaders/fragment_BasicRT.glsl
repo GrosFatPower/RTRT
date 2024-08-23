@@ -37,6 +37,7 @@ uniform int            u_Bounces;
 uniform vec3           u_BackgroundColor;
 uniform Camera         u_Camera;
 uniform SphereLight    u_SphereLight;
+uniform int            u_ShowLights;
 uniform int            u_NbMaterials;
 uniform Material       u_Materials[MAX_MATERIAL_COUNT];
 uniform int            u_NbSpheres;
@@ -233,16 +234,19 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
 #endif
 
   // Lights
-  hitDist = 0.f;
-  if ( SphereIntersection(vec4(u_SphereLight._Pos.xyz, u_SphereLight._Radius), iRay, hitDist) )
+  if ( 0 != u_ShowLights )
   {
-    if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
+    hitDist = 0.f;
+    if ( SphereIntersection(vec4(u_SphereLight._Pos.xyz, u_SphereLight._Radius), iRay, hitDist) )
     {
-      oClosestHit._Dist       = hitDist;
-      oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
-      oClosestHit._MaterialID = -1;
-      oClosestHit._LightID    = 0;
-      oClosestHit._IsEmitter  = true;
+      if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
+      {
+        oClosestHit._Dist       = hitDist;
+        oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+        oClosestHit._MaterialID = -1;
+        oClosestHit._LightID    = 0;
+        oClosestHit._IsEmitter  = true;
+      }
     }
   }
 
@@ -635,7 +639,7 @@ void main()
     TraceRay(ray, closestHit);
     if ( closestHit._Dist < -RESOLUTION )
     {
-      if ( 1 == u_EnableSkybox )
+      if ( 0 != u_EnableSkybox )
         pixelColor += SampleSkybox(ray._Dir) * multiplier;
       else
         pixelColor += u_BackgroundColor * multiplier;
