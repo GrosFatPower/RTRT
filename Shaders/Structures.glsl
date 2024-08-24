@@ -29,7 +29,11 @@ struct Light
 {
   vec3  _Pos;
   vec3  _Emission;
+  vec3  _DirU;
+  vec3  _DirV;
   float _Radius;
+  float _Area;
+  float _Type;
 };
 
 struct HitPoint

@@ -240,7 +240,18 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
     for ( int i = 0; i < u_NbLights; ++i )
     {
       hitDist = 0.f;
-      if ( SphereIntersection(vec4(u_Lights[i]._Pos.xyz, u_Lights[i]._Radius), iRay, hitDist) )
+      if ( ( SPHERE_LIGHT == u_Lights[i]._Type ) && SphereIntersection(vec4(u_Lights[i]._Pos, u_Lights[i]._Radius), iRay, hitDist) )
+      {
+        if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
+        {
+          oClosestHit._Dist       = hitDist;
+          oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+          oClosestHit._MaterialID = -1;
+          oClosestHit._LightID    = i;
+          oClosestHit._IsEmitter  = true;
+        }
+      }
+      else if ( ( QUAD_LIGHT == u_Lights[i]._Type ) && QuadIntersection(u_Lights[i]._Pos, u_Lights[i]._DirU, u_Lights[i]._DirV, iRay, hitDist) )
       {
         if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
         {
@@ -492,7 +503,13 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuat
     for ( int i = 0; i < u_NbLights; ++i )
     {
       // Soft Shadows
-      vec3 L = GetLightDirSample(iClosestHit._Pos, u_Lights[i]._Pos, u_Lights[i]._Radius);
+      vec3 L;
+      if ( QUAD_LIGHT == u_Lights[i]._Type )
+        L = GetLightDirSample(iClosestHit._Pos, u_Lights[i]._Pos, u_Lights[i]._DirU, u_Lights[i]._DirV);
+      else if ( SPHERE_LIGHT == u_Lights[i]._Type )
+        L = GetLightDirSample(iClosestHit._Pos, u_Lights[i]._Pos, u_Lights[i]._Radius);
+      else
+        L = u_Lights[i]._Pos;
       float distToLight = length(L);
       L = normalize(L);
     

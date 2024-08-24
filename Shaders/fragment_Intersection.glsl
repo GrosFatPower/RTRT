@@ -43,6 +43,32 @@ bool PlaneIntersection( vec3 iOrig, vec3 iNormal, Ray iRay, out float oHitDistan
 }
 
 // ----------------------------------------------------------------------------
+// QuadIntersection
+// ----------------------------------------------------------------------------
+bool QuadIntersection( vec3 iOrig, vec3 iDirU, vec3 iDirV, Ray iRay, out float oHitDistance )
+{
+  vec3 n = normalize(cross(iDirU, iDirV));
+
+  if ( PlaneIntersection(iOrig, n, iRay, oHitDistance) )
+  {
+    vec3 hitPoint = iRay._Orig + oHitDistance * iRay._Dir;
+    vec3 p = hitPoint - iOrig;
+
+    float lengthU = length(iDirU);
+    float u = dot(p, iDirU);
+    if ( ( u >= 0.f ) && ( u <= lengthU * lengthU ) )
+    {
+      float lengthV = length(iDirV);
+      float v = dot(p, iDirV);
+      if ( ( v >= 0.f ) && ( v <= lengthV * lengthV ) )
+        return true;
+    }
+  }
+
+  return false;
+}
+
+// ----------------------------------------------------------------------------
 // BoxIntersection
 // Intersection method from Real-Time Rendering and Essential Mathematics for Games (p. 581)
 // ----------------------------------------------------------------------------
@@ -154,6 +180,16 @@ vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iTransform, vec3 iHitPoint )
 vec3 GetLightDirSample( vec3 iSamplePos, vec3 iLightPos, float iLightRadius )
 {
   vec3 lightSample = iLightPos + RandomUnitVector() * iLightRadius;
+
+  return lightSample - iSamplePos;
+}
+
+// ----------------------------------------------------------------------------
+// GetLightDirSample
+// ----------------------------------------------------------------------------
+vec3 GetLightDirSample( vec3 iSamplePos, vec3 iLightPos, vec3 iDirU, vec3 iDirV )
+{
+  vec3 lightSample = iLightPos + rand() * iDirU + rand() * iDirV;
 
   return lightSample - iSamplePos;
 }

@@ -531,6 +531,7 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
   int parsingError = 0;
 
   Light newLight;
+  Vec3 v1, v2;
 
   State curState = State::ExpectOpenBracket;
   std::string line;
@@ -582,14 +583,14 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
     else if ( IsEqual("v1", tokens[0]) )
     {
       if ( 4 == nbTokens )
-        newLight._DirU = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
+        v1 = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
         parsingError++;
     }
     else if ( IsEqual("v2", tokens[0]) )
     {
       if ( 4 == nbTokens )
-        newLight._DirV = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
+        v2 = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
         parsingError++;
     }
@@ -624,6 +625,8 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
   {
     if ( LightType::RectLight == (LightType)newLight._Type )
     {
+      newLight._DirU = v1 - newLight._Pos;
+      newLight._DirV = v2 - newLight._Pos;
       newLight._Area = glm::length(glm::cross(newLight._DirU, newLight._DirV));
     }
     else if ( LightType::SphereLight == (LightType)newLight._Type )

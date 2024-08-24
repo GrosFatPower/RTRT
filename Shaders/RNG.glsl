@@ -29,7 +29,8 @@ void pcg4d(inout uvec4 v)
 // ----------------------------------------------------------------------------
 float rand()
 {
-  pcg4d(g_Seed); return float(g_Seed.x) / float(0xffffffffu);
+  pcg4d(g_Seed);
+  return float(g_Seed.x) / float(0xffffffffu);
 }
 
 // ----------------------------------------------------------------------------

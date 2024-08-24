@@ -354,7 +354,11 @@ int Test3::UpdateUniforms()
 
           glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Pos"     ).c_str()), curLight -> _Pos.x, curLight -> _Pos.y, curLight -> _Pos.z);
           glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Emission").c_str()), curLight -> _Emission.r, curLight -> _Emission.g, curLight -> _Emission.b);
+          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_DirU"    ).c_str()), curLight -> _DirU.x, curLight -> _DirU.y, curLight -> _DirU.z);
+          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_DirV"    ).c_str()), curLight -> _DirV.x, curLight -> _DirV.y, curLight -> _DirV.z);
           glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Radius"  ).c_str()), curLight -> _Radius);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Area"    ).c_str()), curLight -> _Area);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Type"    ).c_str()), curLight -> _Type);
 
           nbLights++;
           if ( nbLights >= 32 )
@@ -630,6 +634,18 @@ int Test3::DrawUI()
         Light * curLight = _Scene -> GetLight(_SelectedLight);
         if ( curLight )
         {
+          const char * LightTypes[3] = { "Quad", "Sphere", "Distant" };
+
+          int lightType = (int)curLight -> _Type;
+          if ( ImGui::Combo("Type", &lightType, LightTypes, 3) )
+          {
+            if ( lightType != (int)curLight -> _Type )
+            {
+              curLight -> _Type = (float)lightType;
+              _SceneLightsModified = true;
+            }
+          }
+
           float pos[3] = { curLight -> _Pos.x, curLight -> _Pos.y, curLight -> _Pos.z };
           if ( ImGui::InputFloat3("Position", pos) )
           {
@@ -648,8 +664,36 @@ int Test3::DrawUI()
             _SceneLightsModified = true;
           }
 
-          if ( ImGui::SliderFloat("Light radius", &curLight -> _Radius, 0.001f, 1.f) )
-            _SceneLightsModified = true;
+          if ( LightType::SphereLight == (LightType) lightType )
+          {
+            if ( ImGui::SliderFloat("Light radius", &curLight -> _Radius, 0.001f, 1.f) )
+            {
+              curLight -> _Area = 4.0f * M_PI * curLight -> _Radius * curLight -> _Radius;
+              _SceneLightsModified = true;
+            }
+          }
+          else if ( LightType::RectLight == (LightType) lightType )
+          {
+            float dirU[3] = { curLight -> _DirU.x, curLight -> _DirU.y, curLight -> _DirU.z };
+            if ( ImGui::InputFloat3("DirU", dirU) )
+            {
+              curLight -> _DirU.x = dirU[0];
+              curLight -> _DirU.y = dirU[1];
+              curLight -> _DirU.z = dirU[2];
+              curLight -> _Area = glm::length(glm::cross(curLight -> _DirU, curLight -> _DirV));
+              _SceneLightsModified = true;
+            }
+
+            float dirV[3] = { curLight -> _DirV.x, curLight -> _DirV.y, curLight -> _DirV.z };
+            if ( ImGui::InputFloat3("DirV", dirV) )
+            {
+              curLight -> _DirV.x = dirV[0];
+              curLight -> _DirV.y = dirV[1];
+              curLight -> _DirV.z = dirV[2];
+              curLight -> _Area = glm::length(glm::cross(curLight -> _DirU, curLight -> _DirV));
+              _SceneLightsModified = true;
+            }
+          }
 
           if ( ImGui::Checkbox("Show lights", &_Settings._ShowLights) )
             _SceneLightsModified = true;
