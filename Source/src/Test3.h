@@ -129,6 +129,8 @@ private:
   bool            _SceneInstancesModified = false;
   bool            _RenderSettingsModified = false;
 
+  int                      _SelectedLight = -1;
+
   std::vector<std::string> _MaterialNames;
   int                      _SelectedMaterial = -1;
   std::vector<std::string> _PrimitiveNames;

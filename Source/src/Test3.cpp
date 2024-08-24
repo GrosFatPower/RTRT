@@ -602,35 +602,58 @@ int Test3::DrawUI()
       }
     }
 
-    if ( ImGui::CollapsingHeader("Light") )
+    if ( ImGui::CollapsingHeader("Lights") )
     {
-      Light * firstLight = _Scene -> GetLight(0);
-
-      if ( firstLight )
+      ImGui::ListBoxHeader("##Lights");
+      for (int i = 0; i < _Scene -> GetNbLights(); i++)
       {
-        float pos[3] = { firstLight -> _Pos.x, firstLight -> _Pos.y, firstLight -> _Pos.z };
-        if ( ImGui::InputFloat3("Position", pos) )
+        std::string lightName("Light#");
+        lightName += std::to_string(i);
+
+        bool is_selected = ( _SelectedMaterial == i );
+        if (ImGui::Selectable(lightName.c_str(), is_selected))
         {
-          firstLight -> _Pos.x = pos[0];
-          firstLight -> _Pos.y = pos[1];
-          firstLight -> _Pos.z = pos[2];
-          _SceneLightsModified = true;
+          _SelectedLight = i;
         }
+      }
+      ImGui::ListBoxFooter();
 
-        float rgb[3] = { firstLight -> _Emission.r, firstLight -> _Emission.g, firstLight -> _Emission.b };
-        if ( ImGui::ColorEdit3("Emission", rgb) )
+      if (ImGui::Button("Add light"))
+      {
+        Light newLight;
+        _Scene -> AddLight(newLight);
+        _SelectedLight = _Scene -> GetNbLights() - 1;
+      }
+
+      if ( _SelectedLight >= 0 )
+      {
+        Light * curLight = _Scene -> GetLight(_SelectedLight);
+        if ( curLight )
         {
-          firstLight -> _Emission.r = rgb[0];
-          firstLight -> _Emission.g = rgb[1];
-          firstLight -> _Emission.b = rgb[2];
-          _SceneLightsModified = true;
+          float pos[3] = { curLight -> _Pos.x, curLight -> _Pos.y, curLight -> _Pos.z };
+          if ( ImGui::InputFloat3("Position", pos) )
+          {
+            curLight -> _Pos.x = pos[0];
+            curLight -> _Pos.y = pos[1];
+            curLight -> _Pos.z = pos[2];
+            _SceneLightsModified = true;
+          }
+
+          float rgb[3] = { curLight -> _Emission.r, curLight -> _Emission.g, curLight -> _Emission.b };
+          if ( ImGui::ColorEdit3("Emission", rgb) )
+          {
+            curLight -> _Emission.r = rgb[0];
+            curLight -> _Emission.g = rgb[1];
+            curLight -> _Emission.b = rgb[2];
+            _SceneLightsModified = true;
+          }
+
+          if ( ImGui::SliderFloat("Light radius", &curLight -> _Radius, 0.001f, 1.f) )
+            _SceneLightsModified = true;
+
+          if ( ImGui::Checkbox("Show lights", &_Settings._ShowLights) )
+            _SceneLightsModified = true;
         }
-
-        if ( ImGui::SliderFloat("Light radius", &firstLight -> _Radius, 0.001f, 1.f) )
-          _SceneLightsModified = true;
-
-        if ( ImGui::Checkbox("Show light", &_Settings._ShowLights) )
-          _SceneLightsModified = true;
       }
     }
 
