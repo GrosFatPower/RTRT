@@ -94,6 +94,8 @@ bool Mesh::Load( const std::string & iFilename )
 
     _UVs.push_back(uv);
   }
+  if ( 0 == nbUVs )
+    _UVs.push_back(Vec2(0.f));
 
   for ( size_t s = 0; s < shapes.size(); ++s )
   {

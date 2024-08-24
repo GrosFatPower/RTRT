@@ -2,6 +2,10 @@
  *
  */
 
+#define QUAD_LIGHT    0
+#define SPHERE_LIGHT  1
+#define DISTANT_LIGHT 2
+
 struct Ray
 {
   vec3 _Orig;
@@ -21,7 +25,7 @@ struct Material
   float _Opacity;
 };
 
-struct SphereLight
+struct Light
 {
   vec3  _Pos;
   vec3  _Emission;

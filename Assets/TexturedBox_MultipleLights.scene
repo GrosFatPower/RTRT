@@ -1,0 +1,38 @@
+renderer
+{
+	resolution 800 600
+}
+
+camera
+{
+	position 0.0 0.0 -5.0
+	lookat 0.0 0.0 0.0
+	fov 80
+}
+
+light
+{
+	type sphere
+	position 2 3 -3
+	emission 4. 4. 4.
+	radius .2
+}
+
+light
+{
+	type sphere
+	position 2 2 2
+	emission 0.8 0.8 0.8
+	radius .1
+}
+
+material textured_box
+{
+	albedotexture misc/textures/box.jpg
+}
+
+mesh
+{
+	file misc/TexturedBox.obj
+	material textured_box
+}

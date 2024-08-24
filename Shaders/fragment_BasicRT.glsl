@@ -36,7 +36,8 @@ uniform int            u_Accumulate;
 uniform int            u_Bounces;
 uniform vec3           u_BackgroundColor;
 uniform Camera         u_Camera;
-uniform SphereLight    u_SphereLight;
+uniform Light          u_Lights[MAX_LIGHT_COUNT];
+uniform int            u_NbLights;
 uniform int            u_ShowLights;
 uniform int            u_NbMaterials;
 uniform Material       u_Materials[MAX_MATERIAL_COUNT];
@@ -236,16 +237,19 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
   // Lights
   if ( 0 != u_ShowLights )
   {
-    hitDist = 0.f;
-    if ( SphereIntersection(vec4(u_SphereLight._Pos.xyz, u_SphereLight._Radius), iRay, hitDist) )
+    for ( int i = 0; i < u_NbLights; ++i )
     {
-      if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
+      hitDist = 0.f;
+      if ( SphereIntersection(vec4(u_Lights[i]._Pos.xyz, u_Lights[i]._Radius), iRay, hitDist) )
       {
-        oClosestHit._Dist       = hitDist;
-        oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
-        oClosestHit._MaterialID = -1;
-        oClosestHit._LightID    = 0;
-        oClosestHit._IsEmitter  = true;
+        if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
+        {
+          oClosestHit._Dist       = hitDist;
+          oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+          oClosestHit._MaterialID = -1;
+          oClosestHit._LightID    = i;
+          oClosestHit._IsEmitter  = true;
+        }
       }
     }
   }
@@ -485,41 +489,44 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuat
 
   if ( iClosestHit._FrontFace )
   {
-    // Soft Shadows
-    vec3 L = GetLightDirSample(iClosestHit._Pos, u_SphereLight._Pos, u_SphereLight._Radius);
-    float distToLight = length(L);
-    L = normalize(L);
-    
-    Ray occlusionTestRay;
-    occlusionTestRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
-    occlusionTestRay._Dir = L;
-    if ( !AnyHit(occlusionTestRay, distToLight) )
+    for ( int i = 0; i < u_NbLights; ++i )
     {
-      vec3 N = iClosestHit._Normal;
-      vec3 V = normalize(iRay._Orig - iClosestHit._Pos);
-      vec3 H = normalize(V + L);
+      // Soft Shadows
+      vec3 L = GetLightDirSample(iClosestHit._Pos, u_Lights[i]._Pos, u_Lights[i]._Radius);
+      float distToLight = length(L);
+      L = normalize(L);
+    
+      Ray occlusionTestRay;
+      occlusionTestRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
+      occlusionTestRay._Dir = L;
+      if ( !AnyHit(occlusionTestRay, distToLight) )
+      {
+        vec3 N = iClosestHit._Normal;
+        vec3 V = normalize(iRay._Orig - iClosestHit._Pos);
+        vec3 H = normalize(V + L);
 
-      float attenuation = 1.f / ( distToLight * distToLight );
-      vec3 radiance = u_SphereLight._Emission * attenuation;
+        float attenuation = 1.f / ( distToLight * distToLight );
+        vec3 radiance = u_Lights[i]._Emission * attenuation;
 
-      // Diffuse
-      vec3 F  = FSchlick(F0, V, H);
-      vec3 Ks = F;
-      vec3 Kd = vec3(1.f) - Ks;
-      Kd *= ( 1 - u_Materials[iClosestHit._MaterialID]._Metallic ); // pure metals have no diffuse light
-      vec3 lambert = albedo * INV_PI;
+        // Diffuse
+        vec3 F  = FSchlick(F0, V, H);
+        vec3 Ks = F;
+        vec3 Kd = vec3(1.f) - Ks;
+        Kd *= ( 1 - u_Materials[iClosestHit._MaterialID]._Metallic ); // pure metals have no diffuse light
+        vec3 lambert = albedo * INV_PI;
 
-      // Specular (cookTorrance)
-      float alpha = pow(u_Materials[iClosestHit._MaterialID]._Roughness, 2.f);
-      float D     = D(alpha, N, H);
-      float G     = G(alpha, N, V, L);
-      vec3 cookTorranceNum =  D * G * F;
-      float cookTorranceDenom = 4.f * max(dot(V, N), 0.f) * max(dot(L, N), 0.f); // 4(V.N)(L.N)
-      vec3 specular = cookTorranceNum / max(cookTorranceDenom, EPSILON);
+        // Specular (cookTorrance)
+        float alpha = pow(u_Materials[iClosestHit._MaterialID]._Roughness, 2.f);
+        float D     = D(alpha, N, H);
+        float G     = G(alpha, N, V, L);
+        vec3 cookTorranceNum =  D * G * F;
+        float cookTorranceDenom = 4.f * max(dot(V, N), 0.f) * max(dot(L, N), 0.f); // 4(V.N)(L.N)
+        vec3 specular = cookTorranceNum / max(cookTorranceDenom, EPSILON);
 
-      vec3 BRDF = Kd * lambert + specular; // kd * fDiffuse + ks * fSpecular
+        vec3 BRDF = Kd * lambert + specular; // kd * fDiffuse + ks * fSpecular
 
-      outColor += BRDF  * radiance * max(dot(L, N), 0.f);
+        outColor += BRDF  * radiance * max(dot(L, N), 0.f);
+      }
     }
   }
 
@@ -561,28 +568,35 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuat
 // ----------------------------------------------------------------------------
 vec3 ComputeColor( HitPoint iClosestHit )
 {
-  vec3 lightDir = u_SphereLight._Pos - iClosestHit._Pos;
-  float lightDist = length(lightDir);
+  vec3 pixelColor = vec3(0.f);
 
-  lightDir = normalize(lightDir);
-    
-  vec3 lightIntensity = vec3(0.f, 0.f, 0.f);
-
-  Ray occlusionRay;
-  occlusionRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
-  occlusionRay._Dir = lightDir;
-
-  if ( !AnyHit(occlusionRay, lightDist) )
-    lightIntensity = max(dot(iClosestHit._Normal, lightDir), 0.0f) * u_SphereLight._Emission;
-
-  vec3 pixelColor = u_Materials[iClosestHit._MaterialID]._Albedo;
-  if ( u_Materials[iClosestHit._MaterialID]._BaseColorTexID >= 0 )
+  for ( int i = 0; i < u_NbLights; ++i )
   {
-    int texArrayID = texelFetch(u_TexIndTexture, u_Materials[iClosestHit._MaterialID]._BaseColorTexID).x;
-    if ( texArrayID >= 0 )
-      pixelColor = texture(u_TexArrayTexture, vec3(iClosestHit._UV, float(texArrayID))).rgb;
+    vec3 lightDir = u_Lights[i]._Pos - iClosestHit._Pos;
+    float lightDist = length(lightDir);
+
+    lightDir = normalize(lightDir);
+    
+    vec3 lightIntensity = vec3(0.f, 0.f, 0.f);
+
+    Ray occlusionRay;
+    occlusionRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
+    occlusionRay._Dir = lightDir;
+
+    if ( !AnyHit(occlusionRay, lightDist) )
+      lightIntensity = max(dot(iClosestHit._Normal, lightDir), 0.0f) * u_Lights[i]._Emission;
+
+    vec3 curColor = u_Materials[iClosestHit._MaterialID]._Albedo;
+    if ( u_Materials[iClosestHit._MaterialID]._BaseColorTexID >= 0 )
+    {
+      int texArrayID = texelFetch(u_TexIndTexture, u_Materials[iClosestHit._MaterialID]._BaseColorTexID).x;
+      if ( texArrayID >= 0 )
+        curColor = texture(u_TexArrayTexture, vec3(iClosestHit._UV, float(texArrayID))).rgb;
+    }
+    curColor *= lightIntensity;
+
+    pixelColor += curColor;
   }
-  pixelColor *= lightIntensity;
 
   return pixelColor;
 }
@@ -648,7 +662,7 @@ void main()
 
     if ( closestHit._IsEmitter )
     {
-      pixelColor += u_SphereLight._Emission * multiplier;
+      pixelColor += u_Lights[closestHit._LightID]._Emission * multiplier;
       break;
     }
 

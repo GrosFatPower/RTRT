@@ -344,13 +344,26 @@ int Test3::UpdateUniforms()
 
       if ( _SceneLightsModified )
       {
-        Light * firstLight = _Scene -> GetLight(0);
+        int nbLights = 0;
+
+        for ( int i = 0; i < _Scene -> GetNbLights(); ++i )
         {
-          glUniform3f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Pos"), firstLight -> _Pos.x, firstLight -> _Pos.y, firstLight -> _Pos.z);
-          glUniform3f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Emission"), firstLight -> _Emission.r, firstLight -> _Emission.g, firstLight -> _Emission.b);
-          glUniform1f(glGetUniformLocation(RTTProgramID, "u_SphereLight._Radius"), firstLight -> _Radius);
+          Light * curLight = _Scene -> GetLight(i);
+          if ( !curLight )
+            continue;
+
+          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Pos"     ).c_str()), curLight -> _Pos.x, curLight -> _Pos.y, curLight -> _Pos.z);
+          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Emission").c_str()), curLight -> _Emission.r, curLight -> _Emission.g, curLight -> _Emission.b);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Radius"  ).c_str()), curLight -> _Radius);
+
+          nbLights++;
+          if ( nbLights >= 32 )
+            break;
         }
+
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbLights"), nbLights);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_ShowLights"), (int)_Settings._ShowLights);
+
         _SceneLightsModified = false;
       }
 
