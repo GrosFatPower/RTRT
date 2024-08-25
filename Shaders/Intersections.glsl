@@ -7,7 +7,7 @@
 // https://raytracing.github.io/books/RayTracingInOneWeekend.html#overview
 // Ray direction should be normalized 
 // ----------------------------------------------------------------------------
-bool SphereIntersection( vec4 iSphere, Ray iRay, out float oHitDistance )
+bool SphereIntersection( in vec4 iSphere, in Ray iRay, out float oHitDistance )
 {
   vec3 oc = iRay._Orig - iSphere.xyz;
 
@@ -28,7 +28,7 @@ bool SphereIntersection( vec4 iSphere, Ray iRay, out float oHitDistance )
 // ----------------------------------------------------------------------------
 // PlaneIntersection
 // ----------------------------------------------------------------------------
-bool PlaneIntersection( vec3 iOrig, vec3 iNormal, Ray iRay, out float oHitDistance )
+bool PlaneIntersection( in vec3 iOrig, in vec3 iNormal, in Ray iRay, out float oHitDistance )
 { 
   float denom = dot(iNormal, iRay._Dir);
 
@@ -45,7 +45,7 @@ bool PlaneIntersection( vec3 iOrig, vec3 iNormal, Ray iRay, out float oHitDistan
 // ----------------------------------------------------------------------------
 // QuadIntersection
 // ----------------------------------------------------------------------------
-bool QuadIntersection( vec3 iOrig, vec3 iDirU, vec3 iDirV, Ray iRay, out float oHitDistance )
+bool QuadIntersection( in vec3 iOrig, in vec3 iDirU, in vec3 iDirV, in Ray iRay, out float oHitDistance )
 {
   vec3 n = normalize(cross(iDirU, iDirV));
 
@@ -72,7 +72,7 @@ bool QuadIntersection( vec3 iOrig, vec3 iDirU, vec3 iDirV, Ray iRay, out float o
 // BoxIntersection
 // Intersection method from Real-Time Rendering and Essential Mathematics for Games (p. 581)
 // ----------------------------------------------------------------------------
-bool BoxIntersection( vec3 iLow, vec3 iHigh, mat4 iTransform, Ray iRay, out float oHitDistance )
+bool BoxIntersection( in vec3 iLow, in vec3 iHigh, in mat4 iTransform, in Ray iRay, out float oHitDistance )
 {
   float tMin = -INFINITY;
   float tMax = INFINITY;
@@ -133,7 +133,7 @@ bool BoxIntersection( vec3 iLow, vec3 iHigh, mat4 iTransform, Ray iRay, out floa
 // Journal of Computer Graphics Techniques Vol. 7, No. 3, 2018
 // A Ray-Box Intersection Algorithm and Efficient Dynamic Voxel Rendering
 // ----------------------------------------------------------------------------
-bool BoxIntersection( vec3 iLow, vec3 iHigh, Ray iRay, out float oHitDistance )
+bool BoxIntersection( in vec3 iLow, in vec3 iHigh, in Ray iRay, out float oHitDistance )
 {
   vec3 invRaydir = 1.f / iRay._Dir; // Safe ???
 
@@ -152,7 +152,7 @@ bool BoxIntersection( vec3 iLow, vec3 iHigh, Ray iRay, out float oHitDistance )
 // BoxNormal
 // Adapted from https://gist.github.com/Shtille/1f98c649abeeb7a18c5a56696546d3cf
 // ----------------------------------------------------------------------------
-vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iTransform, vec3 iHitPoint )
+vec3 BoxNormal( in vec3 iLow, in vec3 iHigh, in mat4 iTransform, in vec3 iHitPoint )
 {
   // Resolution in local space
   mat4 invTransfo = inverse(iTransform);
@@ -178,7 +178,7 @@ vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iTransform, vec3 iHitPoint )
 // TriangleIntersection
 // https://www.shadertoy.com/view/MlGcDz
 // ----------------------------------------------------------------------------
-bool TriangleIntersection( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oHitDistance, out vec2 oUV )
+bool TriangleIntersection( in Ray iRay, in vec3 iV0, in vec3 iV1, in vec3 iV2, out float oHitDistance, out vec2 oUV )
 {
   vec3 v0v1 = iV1 - iV0;
   vec3 v0v2 = iV2 - iV0;
@@ -208,7 +208,7 @@ bool TriangleIntersection( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oHi
 // TriangleIntersection2
 // https://www.mathematik.uni-marburg.de/~thormae/lectures/graphics2/graphics_2_2_eng_web.html#1
 // ----------------------------------------------------------------------------
-bool TriangleIntersection2( Ray iRay, vec3 iV0, vec3 iV1, vec3 iV2, out float oHitDistance, out vec2 oUV )
+bool TriangleIntersection2( in Ray iRay, in vec3 iV0, in vec3 iV1, in vec3 iV2, out float oHitDistance, out vec2 oUV )
 { 
   vec3 i = iV1 - iV0;
   vec3 j = iV2 - iV0;

@@ -5,7 +5,7 @@
 // ----------------------------------------------------------------------------
 // GetLightDirSample
 // ----------------------------------------------------------------------------
-vec3 GetLightDirSample( vec3 iSamplePos, vec3 iLightPos, float iLightRadius )
+vec3 GetLightDirSample( in vec3 iSamplePos, in vec3 iLightPos, in float iLightRadius )
 {
   vec3 lightSample = iLightPos + RandomUnitVector() * iLightRadius;
 
@@ -15,7 +15,7 @@ vec3 GetLightDirSample( vec3 iSamplePos, vec3 iLightPos, float iLightRadius )
 // ----------------------------------------------------------------------------
 // GetLightDirSample
 // ----------------------------------------------------------------------------
-vec3 GetLightDirSample( vec3 iSamplePos, vec3 iLightPos, vec3 iDirU, vec3 iDirV )
+vec3 GetLightDirSample( in vec3 iSamplePos, in vec3 iLightPos, in vec3 iDirU, in vec3 iDirV )
 {
   vec3 lightSample = iLightPos + rand() * iDirU + rand() * iDirV;
 
@@ -28,7 +28,7 @@ vec3 GetLightDirSample( vec3 iSamplePos, vec3 iLightPos, vec3 iDirU, vec3 iDirV 
 // iRayDir should be normalized
 // (U,V) = normalized spherical coordinates
 // ----------------------------------------------------------------------------
-vec3 SampleSkybox( vec3 iRayDir, sampler2D iSkyboxTex, float iSkyboxRotation )
+vec3 SampleSkybox( in vec3 iRayDir, in sampler2D iSkyboxTex, in float iSkyboxRotation )
 {
   float theta = asin(iRayDir.y);
   float phi   = atan(iRayDir.z, iRayDir.x);

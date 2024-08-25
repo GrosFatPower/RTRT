@@ -8,7 +8,7 @@
 // ----------------------------------------------------------------------------
 //internal RNG state 
 uvec4 g_Seed;
-void InitRNG( vec2 p, int frame )
+void InitRNG( in vec2 p, in int frame )
 {
   g_Seed = uvec4(p, uint(frame), uint(p.x) + uint(p.y));
 }
@@ -16,7 +16,7 @@ void InitRNG( vec2 p, int frame )
 // ----------------------------------------------------------------------------
 // pcg4d
 // ----------------------------------------------------------------------------
-void pcg4d(inout uvec4 v)
+void pcg4d( inout uvec4 v )
 {
   v = v * 1664525u + 1013904223u;
   v.x += v.y * v.w; v.y += v.z * v.x; v.z += v.x * v.y; v.w += v.y * v.z;

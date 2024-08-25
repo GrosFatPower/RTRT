@@ -8,9 +8,10 @@ out vec4 fragColor;
 #include RNG.glsl
 #include Intersections.glsl
 #include Sampling.glsl
+#include BRDF.glsl
 
-//#define PBR_RENDERING
-#define DIRECT_ILLUMINATION
+#define PBR_RENDERING
+//#define DIRECT_ILLUMINATION
 #define OPTIM_AABB
 #define BLAS_TRAVERSAL
 #define TLAS_TRAVERSAL
@@ -70,7 +71,7 @@ uniform sampler2DArray u_TexArrayTexture;
 // ----------------------------------------------------------------------------
 // TraceRay
 // ----------------------------------------------------------------------------
-bool TraceRay( Ray iRay, out HitPoint oClosestHit )
+bool TraceRay( in Ray iRay, out HitPoint oClosestHit )
 {
   oClosestHit = HitPoint(-1.f, vec3( 0.f, 0.f, 0.f ), vec3( 0.f, 0.f, 0.f ), vec2( 0.f, 0.f ), -1, 0, true, false);
 
@@ -290,7 +291,7 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
 // ----------------------------------------------------------------------------
 // AnyHit
 // ----------------------------------------------------------------------------
-bool AnyHit( Ray iRay, float iMaxDist )
+bool AnyHit( in Ray iRay, in float iMaxDist )
 {
   // Primitives
   // ----------
@@ -411,82 +412,30 @@ bool AnyHit( Ray iRay, float iMaxDist )
 }
 
 // ----------------------------------------------------------------------------
-// D
-// GGX/Trowbridge-Reitz : Normal Distribution Function
-// Larger the more micro-facets are aligned to H
-// NDF = alpha^2 / ( PI * ( (n.h)^2  * ( aplha^2 -1 ) + 1 )^2 )
-// ----------------------------------------------------------------------------
-float D( float iAlpha, vec3 iN, vec3 iH )
-{
-  float num = pow(iAlpha, 2.f);
-
-  float NdotH = max(dot(iN, iH), 0.f);
-  float denom = PI * pow(pow(NdotH, 2.f) * (pow(iAlpha, 2.f) - 1.f) + 1.f, 2.f);
-
-  return num / max(denom, EPSILON);
-}
-
-// ----------------------------------------------------------------------------
-// G1
-// Schlick-Beckmann Geometry Shadowing Function
-// G_SchilickGGX = (n.v) / ( (n.v) * ( 1 - k ) + k )
-// with k = alpha / 2
-// ----------------------------------------------------------------------------
-float G1( float iAlpha, vec3 iN, vec3 iX )
-{
-  float NdotX = max(dot(iN, iX), 0.f);
-
-  float num = NdotX;
-
-  float k = iAlpha / 2.f;
-  float denom = NdotX * ( 1.f - k ) + k;
-
-  return num / max(denom, EPSILON);
-}
-
-// ----------------------------------------------------------------------------
-// G
-// Smith Model
-// Smaller the more micro-facets are shadowed by other micro-facets
-// ----------------------------------------------------------------------------
-float G( float iAlpha, vec3 iN, vec3 iV, vec3 iL )
-{
-  return G1(iAlpha, iN, iV) * G1(iAlpha, iN, iL);
-}
-
-// ----------------------------------------------------------------------------
-// FSchlick
-// Fresnel-Schlick Function
-// Proportion of specular reflectance
-// FSchlick = F0 + (1-F0)(1-(h.v))^5
-// ----------------------------------------------------------------------------
-vec3 FSchlick( vec3 iF0, vec3 iV, vec3 iH )
-{
-  return iF0 + (vec3(1.f) - iF0) * pow(1.f - max(dot(iV, iH), 0.f), 5.f);
-}
-
-// ----------------------------------------------------------------------------
 // PBR
 // Computer Graphics Tutorial - PBR (Physically Based Rendering)
 // https://www.youtube.com/watch?v=RRE-F57fbXw&list=WL&index=109
 // ----------------------------------------------------------------------------
-vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuation )
+vec3 PBR( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuation )
 {
-  vec3 outColor = u_Materials[iClosestHit._MaterialID]._Emission;
-
-  vec3 albedo = u_Materials[iClosestHit._MaterialID]._Albedo;
-  if ( u_Materials[iClosestHit._MaterialID]._BaseColorTexID >= 0 )
+  Material mat = u_Materials[iClosestHit._MaterialID];
+  if ( mat._BaseColorTexID >= 0 )
   {
-    int texArrayID = texelFetch(u_TexIndTexture, u_Materials[iClosestHit._MaterialID]._BaseColorTexID).x;
+    int texArrayID = texelFetch(u_TexIndTexture, mat._BaseColorTexID).x;
     if ( texArrayID >= 0 )
-      albedo = texture(u_TexArrayTexture, vec3(iClosestHit._UV, texArrayID)).rgb;
+      mat._Albedo = texture(u_TexArrayTexture, vec3(iClosestHit._UV, texArrayID)).rgb;
   }
 
-  //vec3 F0 = albedo * u_Materials[iClosestHit._MaterialID]._Metallic * u_Materials[iClosestHit._MaterialID]._Opacity; // test : reflectance value
-  vec3 F0 = mix(vec3(0.), albedo, u_Materials[iClosestHit._MaterialID]._Metallic); // https://www.youtube.com/watch?v=5p0e7YNONr8
+  vec3 outColor = mat._Emission;
+
+  //vec3 F0 = mat._Albedo;
+  //vec3 F0 = mat._Albedo * mat._Metallic * mat._Opacity; // test : reflectance value
+  vec3 F0 = mix(vec3(0.), mat._Albedo, mat._Metallic); // https://www.youtube.com/watch?v=5p0e7YNONr8
 
   if ( iClosestHit._FrontFace )
   {
+    vec3 V = normalize(iRay._Orig - iClosestHit._Pos);
+
     for ( int i = 0; i < u_NbLights; ++i )
     {
       // Soft Shadows
@@ -505,31 +454,10 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuat
       occlusionTestRay._Dir = L;
       if ( !AnyHit(occlusionTestRay, distToLight) )
       {
-        vec3 N = iClosestHit._Normal;
-        vec3 V = normalize(iRay._Orig - iClosestHit._Pos);
-        vec3 H = normalize(V + L);
-
         float attenuation = 1.f / ( distToLight * distToLight );
         vec3 radiance = u_Lights[i]._Emission * attenuation;
 
-        // Diffuse
-        vec3 F  = FSchlick(F0, V, H);
-        vec3 Ks = F;
-        vec3 Kd = vec3(1.f) - Ks;
-        Kd *= ( 1 - u_Materials[iClosestHit._MaterialID]._Metallic ); // pure metals have no diffuse light
-        vec3 lambert = albedo * INV_PI;
-
-        // Specular (cookTorrance)
-        float alpha = pow(u_Materials[iClosestHit._MaterialID]._Roughness, 2.f);
-        float D     = D(alpha, N, H);
-        float G     = G(alpha, N, V, L);
-        vec3 cookTorranceNum =  D * G * F;
-        float cookTorranceDenom = 4.f * max(dot(V, N), 0.f) * max(dot(L, N), 0.f); // 4(V.N)(L.N)
-        vec3 specular = cookTorranceNum / max(cookTorranceDenom, EPSILON);
-
-        vec3 BRDF = Kd * lambert + specular; // kd * fDiffuse + ks * fSpecular
-
-        outColor += BRDF  * radiance * max(dot(L, N), 0.f);
+        outColor += BRDF(iClosestHit._Normal, V, L, F0, mat) * radiance * max(dot(L, iClosestHit._Normal), 0.f);
       }
     }
   }
@@ -537,17 +465,17 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuat
   // Reflect or refract ?
   double sinTheta = 1.f;
   float refractionRatio = 1.f;
-  if ( u_Materials[iClosestHit._MaterialID]._Opacity < 1.f )
+  if ( mat._Opacity < 1.f )
   {
     double cosTheta = dot(-iRay._Dir, iClosestHit._Normal);
     sinTheta = sqrt(1.f - cosTheta * cosTheta);
 
-    refractionRatio = (1. / u_Materials[iClosestHit._MaterialID]._IOR);
+    refractionRatio = (1. / mat._IOR);
     if ( !iClosestHit._FrontFace )
-      refractionRatio = u_Materials[iClosestHit._MaterialID]._IOR;
+      refractionRatio = mat._IOR;
   }
 
-  vec3 normal = normalize(iClosestHit._Normal + u_Materials[iClosestHit._MaterialID]._Roughness * RandomVector());
+  vec3 normal = normalize(iClosestHit._Normal + mat._Roughness * RandomVector());
 
   if ( ( refractionRatio * sinTheta ) >= 1.f )
   {
@@ -570,7 +498,7 @@ vec3 PBR( Ray iRay, HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuat
 // ----------------------------------------------------------------------------
 // ComputeColor
 // ----------------------------------------------------------------------------
-vec3 ComputeColor( HitPoint iClosestHit )
+vec3 ComputeColor( in HitPoint iClosestHit )
 {
   vec3 pixelColor = vec3(0.f);
 
@@ -608,7 +536,7 @@ vec3 ComputeColor( HitPoint iClosestHit )
 // ----------------------------------------------------------------------------
 // Albedo
 // ----------------------------------------------------------------------------
-vec3 Albedo( HitPoint iClosestHit )
+vec3 Albedo( in HitPoint iClosestHit )
 {
   if ( u_Materials[iClosestHit._MaterialID]._BaseColorTexID >= 0 )
   {
@@ -677,6 +605,7 @@ void main()
     pixelColor += PBR(ray, closestHit, scattered, attenuation) * multiplier;
     ray = scattered;
     multiplier *= attenuation;
+    //multiplier *= 0.5f;
 #elif defined(DIRECT_ILLUMINATION)
     // TEST 2 : basic RT
     pixelColor += ComputeColor(closestHit) * multiplier;

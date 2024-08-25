@@ -28,7 +28,7 @@ uniform samplerBuffer  u_BLASPackedUVTexture;
 // ----------------------------------------------------------------------------
 // TraceRay_ThroughBLAS
 // ----------------------------------------------------------------------------
-bool TraceRay_ThroughBLAS( Ray iRay, mat4 iInvTransfo, int iBlasNodesOffset, int iTriOffset, int iMatID, float iMaxDist, out HitPoint oClosestHit )
+bool TraceRay_ThroughBLAS( in Ray iRay, in mat4 iInvTransfo, in int iBlasNodesOffset, in int iTriOffset, in int iMatID, in float iMaxDist, out HitPoint oClosestHit )
 {
   oClosestHit = HitPoint(-1.f, vec3( 0.f, 0.f, 0.f ), vec3( 0.f, 0.f, 0.f ), vec2( 0.f, 0.f ), -1, 0, true, false);
 
@@ -159,7 +159,7 @@ bool TraceRay_ThroughBLAS( Ray iRay, mat4 iInvTransfo, int iBlasNodesOffset, int
 // ----------------------------------------------------------------------------
 // AnyHit_ThroughBLAS
 // ----------------------------------------------------------------------------
-bool AnyHit_ThroughBLAS( Ray iRay, mat4 iInvTransfo, int iBlasNodesOffset, int iTriOffset, float iMaxDist )
+bool AnyHit_ThroughBLAS( in Ray iRay, in mat4 iInvTransfo, in int iBlasNodesOffset, in int iTriOffset, in float iMaxDist )
 {
   int   index       = 0; // BLAS Root
   bool  leftHit     = false;
@@ -263,7 +263,7 @@ bool AnyHit_ThroughBLAS( Ray iRay, mat4 iInvTransfo, int iBlasNodesOffset, int i
 // ----------------------------------------------------------------------------
 // TraceRay_ThroughTLAS
 // ----------------------------------------------------------------------------
-bool TraceRay_ThroughTLAS( Ray iRay, out HitPoint oClosestHit )
+bool TraceRay_ThroughTLAS( in Ray iRay, out HitPoint oClosestHit )
 {
   oClosestHit = HitPoint(-1.f, vec3( 0.f, 0.f, 0.f ), vec3( 0.f, 0.f, 0.f ), vec2( 0.f, 0.f ), -1, 0, true, false);
 
@@ -373,7 +373,7 @@ bool TraceRay_ThroughTLAS( Ray iRay, out HitPoint oClosestHit )
 // ----------------------------------------------------------------------------
 // AnyHit_ThroughTLAS
 // ----------------------------------------------------------------------------
-bool AnyHit_ThroughTLAS( Ray iRay, float iMaxDist )
+bool AnyHit_ThroughTLAS( in Ray iRay, in float iMaxDist )
 {
   int   index       = 0; // TLAS Root
   bool  leftHit     = false;

@@ -3,7 +3,7 @@
 in vec2 fragUV;
 out vec4 fragColor;
 
-uniform float     u_Time;
+uniform float u_Time;
 
 void main()
 {
