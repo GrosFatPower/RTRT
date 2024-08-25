@@ -175,26 +175,6 @@ vec3 BoxNormal( vec3 iLow, vec3 iHigh, mat4 iTransform, vec3 iHitPoint )
 }
 
 // ----------------------------------------------------------------------------
-// GetLightDirSample
-// ----------------------------------------------------------------------------
-vec3 GetLightDirSample( vec3 iSamplePos, vec3 iLightPos, float iLightRadius )
-{
-  vec3 lightSample = iLightPos + RandomUnitVector() * iLightRadius;
-
-  return lightSample - iSamplePos;
-}
-
-// ----------------------------------------------------------------------------
-// GetLightDirSample
-// ----------------------------------------------------------------------------
-vec3 GetLightDirSample( vec3 iSamplePos, vec3 iLightPos, vec3 iDirU, vec3 iDirV )
-{
-  vec3 lightSample = iLightPos + rand() * iDirU + rand() * iDirV;
-
-  return lightSample - iSamplePos;
-}
-
-// ----------------------------------------------------------------------------
 // TriangleIntersection
 // https://www.shadertoy.com/view/MlGcDz
 // ----------------------------------------------------------------------------

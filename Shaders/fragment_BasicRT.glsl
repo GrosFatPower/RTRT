@@ -6,16 +6,17 @@ out vec4 fragColor;
 #include Constants.glsl
 #include Structures.glsl
 #include RNG.glsl
-#include fragment_Intersection.glsl
+#include Intersections.glsl
+#include Sampling.glsl
 
-#define PBR_RENDERING
-//#define DIRECT_ILLUMINATION
+//#define PBR_RENDERING
+#define DIRECT_ILLUMINATION
 #define OPTIM_AABB
 #define BLAS_TRAVERSAL
 #define TLAS_TRAVERSAL
 
 #if defined(BLAS_TRAVERSAL) || defined(BLAS_TRAVERSAL)
-#include fragment_BVH.glsl
+#include BVH.glsl
 #endif
 
 // ============================================================================
@@ -75,7 +76,9 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
 
   float hitDist = 0.f;
 
-  // Objects
+  // Primitives
+  // ----------
+
   for ( int i = 0; i < u_NbSpheres; ++i )
   {
     hitDist = 0.f;
@@ -120,6 +123,42 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
       }
     }
   }
+
+  // Lights
+  // ------
+
+  if ( 0 != u_ShowLights )
+  {
+    for ( int i = 0; i < u_NbLights; ++i )
+    {
+      hitDist = 0.f;
+      if ( ( SPHERE_LIGHT == u_Lights[i]._Type ) && SphereIntersection(vec4(u_Lights[i]._Pos, u_Lights[i]._Radius), iRay, hitDist) )
+      {
+        if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
+        {
+          oClosestHit._Dist       = hitDist;
+          oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+          oClosestHit._MaterialID = -1;
+          oClosestHit._LightID    = i;
+          oClosestHit._IsEmitter  = true;
+        }
+      }
+      else if ( ( QUAD_LIGHT == u_Lights[i]._Type ) && QuadIntersection(u_Lights[i]._Pos, u_Lights[i]._DirU, u_Lights[i]._DirV, iRay, hitDist) )
+      {
+        if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
+        {
+          oClosestHit._Dist       = hitDist;
+          oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+          oClosestHit._MaterialID = -1;
+          oClosestHit._LightID    = i;
+          oClosestHit._IsEmitter  = true;
+        }
+      }
+    }
+  }
+
+  // Meshes
+  // ------
 
 #ifdef TLAS_TRAVERSAL
   HitPoint closestHit;
@@ -234,37 +273,6 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
   }
 #endif
 
-  // Lights
-  if ( 0 != u_ShowLights )
-  {
-    for ( int i = 0; i < u_NbLights; ++i )
-    {
-      hitDist = 0.f;
-      if ( ( SPHERE_LIGHT == u_Lights[i]._Type ) && SphereIntersection(vec4(u_Lights[i]._Pos, u_Lights[i]._Radius), iRay, hitDist) )
-      {
-        if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
-        {
-          oClosestHit._Dist       = hitDist;
-          oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
-          oClosestHit._MaterialID = -1;
-          oClosestHit._LightID    = i;
-          oClosestHit._IsEmitter  = true;
-        }
-      }
-      else if ( ( QUAD_LIGHT == u_Lights[i]._Type ) && QuadIntersection(u_Lights[i]._Pos, u_Lights[i]._DirU, u_Lights[i]._DirV, iRay, hitDist) )
-      {
-        if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
-        {
-          oClosestHit._Dist       = hitDist;
-          oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
-          oClosestHit._MaterialID = -1;
-          oClosestHit._LightID    = i;
-          oClosestHit._IsEmitter  = true;
-        }
-      }
-    }
-  }
-
   if ( -1 == oClosestHit._Dist )
     return false;
 
@@ -284,6 +292,9 @@ bool TraceRay( Ray iRay, out HitPoint oClosestHit )
 // ----------------------------------------------------------------------------
 bool AnyHit( Ray iRay, float iMaxDist )
 {
+  // Primitives
+  // ----------
+
   for ( int i = 0; i < u_NbSpheres; ++i )
   {
     float hitDist = 0.f;
@@ -313,6 +324,9 @@ bool AnyHit( Ray iRay, float iMaxDist )
         return true;
     }
   }
+
+  // Meshes
+  // ------
 
 #ifdef TLAS_TRAVERSAL
   if ( AnyHit_ThroughTLAS( iRay, iMaxDist ) )
@@ -394,33 +408,6 @@ bool AnyHit( Ray iRay, float iMaxDist )
 #endif
 
   return false;
-}
-
-// ----------------------------------------------------------------------------
-// SampleSkybox
-// UV mapping : https://en.wikipedia.org/wiki/UV_mapping
-// iRayDir should be normalized
-// (U,V) = normalized spherical coordinates
-// ----------------------------------------------------------------------------
-vec3 SampleSkybox( vec3 iRayDir )
-{
-  float theta = asin(iRayDir.y);
-  float phi   = atan(iRayDir.z, iRayDir.x);
-  vec2 uv = vec2(.5f + phi * INV_TWO_PI, .5f - theta * INV_PI) + vec2(u_SkyboxRotation, 0.0);
-
-  vec3 skycolor = texture(u_SkyboxTexture, uv).rgb;
-  return skycolor;
-}
-
-// ----------------------------------------------------------------------------
-// Pattern
-// ----------------------------------------------------------------------------
-vec3 Pattern( vec2 uv )
-{
-    vec3 col = vec3(0.6);
-    col += 0.4*smoothstep(-0.01,0.01,cos(uv.x*0.5)*cos(uv.y*0.5)); 
-    col *= smoothstep(-1.0,-0.98,cos(uv.x))*smoothstep(-1.0,-0.98,cos(uv.y));
-    return col;
 }
 
 // ----------------------------------------------------------------------------
@@ -671,7 +658,7 @@ void main()
     if ( closestHit._Dist < -RESOLUTION )
     {
       if ( 0 != u_EnableSkybox )
-        pixelColor += SampleSkybox(ray._Dir) * multiplier;
+        pixelColor += SampleSkybox(ray._Dir, u_SkyboxTexture, u_SkyboxRotation) * multiplier;
       else
         pixelColor += u_BackgroundColor * multiplier;
       break;
