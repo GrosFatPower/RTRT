@@ -214,6 +214,16 @@ int Scene::AddPrimitiveInstance( int iPrimitiveID, int iMaterialID, const Mat4x4
   return -1;
 }
 
+bool Scene::LoadEnvMap( const std::string & iFilename )
+{
+  return _EnvMap.Load(iFilename);
+}
+
+void Scene::ResetEnvMap()
+{
+  return _EnvMap.Reset();
+}
+
 void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, bool iBuildBVH )
 {
   _NbFaces = 0;

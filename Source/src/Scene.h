@@ -9,6 +9,7 @@
 #include "PrimitiveInstance.h"
 #include "Texture.h"
 #include "GpuBvh.h"
+#include "EnvMap.h"
 #include <vector>
 #include <map>
 #include <memory>
@@ -36,6 +37,9 @@ public:
   int AddPrimitiveInstance( PrimitiveInstance & iPrimitiveInstance );
   int AddPrimitiveInstance( int iPrimitiveID, int iMaterialID, const Mat4x4 & iTransform );
 
+  bool LoadEnvMap( const std::string & iFilename );
+  void ResetEnvMap();
+
   void SetCamera( const Camera & iCamera ) { _Camera = iCamera; }
   Camera & GetCamera() { return _Camera; }
 
@@ -47,12 +51,14 @@ public:
 
   std::string FindPrimitiveName( int iPrimitiveInstanceID ) const;
 
-  int GetNbLights()          { return _Lights.size();          }
-  int GetNbMaterials()       { return _Materials.size();       }
-  int GetNbTextures()        { return _Textures.size();        }
-  int GetNbMeshes()          { return _Meshes.size();          }
-  int GetNbMeshInstances()   { return _MeshInstances.size();   }
-  int GetNbPrimitiveInstances() { return _PrimitiveInstances.size(); }
+  int GetNbLights()             const { return _Lights.size();             }
+  int GetNbMaterials()          const { return _Materials.size();          }
+  int GetNbTextures()           const { return _Textures.size();           }
+  int GetNbMeshes()             const { return _Meshes.size();             }
+  int GetNbMeshInstances()      const { return _MeshInstances.size();      }
+  int GetNbPrimitiveInstances() const { return _PrimitiveInstances.size(); }
+
+  const EnvMap & GetEnvMap() const { return _EnvMap; }
 
   std::vector<MeshInstance>      & GetMeshInstances()      { return _MeshInstances;      }
   std::vector<PrimitiveInstance> & GetPrimitiveInstances() { return _PrimitiveInstances; }
@@ -87,6 +93,7 @@ public:
 private:
 
   Camera                         _Camera;
+  EnvMap                         _EnvMap;
   std::vector<Light>             _Lights;
   std::vector<Material>          _Materials;
   std::map<std::string,int>      _MaterialIDs;

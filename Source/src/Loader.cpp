@@ -811,6 +811,7 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSetting
 
   bool hasRenderResolution = false;
   bool hasWindowResolution = false;
+  std::string envMapFile = "none";
 
   State curState = State::ExpectOpenBracket;
   std::string line;
@@ -907,6 +908,16 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSetting
       else
         parsingError++;
     }
+    else if ( IsEqual("envmapfile", tokens[0]) )
+    {
+      if ( 2 == nbTokens )
+      {
+        envMapFile = tokens[1];
+        oSettings._EnableSkybox = true;
+      }
+      else
+        parsingError++;
+    }
     else if ( IsEqual("enableuniformlight", tokens[0]) )
     {
       if ( 2 == nbTokens )
@@ -955,6 +966,9 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSetting
       oSettings._RenderResolution = oSettings._WindowResolution;
     else if ( !hasRenderResolution && !hasWindowResolution )
       oSettings._RenderResolution = oSettings._WindowResolution = { 1920, 1080 };
+
+    if ( envMapFile != "none" )
+      ioScene.LoadEnvMap(envMapFile);
   }
 
   return parsingError;
