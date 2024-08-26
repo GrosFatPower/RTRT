@@ -16,10 +16,10 @@ struct Material
 {
   int   _ID;
   int   _BaseColorTexID;
-  vec3  _Albedo;
+  vec3  _Albedo;         // Albedo for dialectrics, F0 for metals
   vec3  _Emission;
-  vec3  _Reflectance;
-  float _Metallic;
+  float _Metallic;       // Metallic parameter. 0.0 for dialectrics, 1.0 for metals
+  float _Reflectance;    // Fresnel reflectance for dialectircs between [0.0, 1.0]
   float _Roughness;
   float _IOR;
   float _Opacity;

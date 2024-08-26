@@ -36,6 +36,7 @@ struct Material
   float _Roughness              = 0.f;
   float _Subsurface             = 0.f;
   float _SpecularTint           = 0.f;
+  float _Reflectance            = 0.5f;
  
   float _Sheen                  = 0.f;
   float _SheenTint              = 0.f;

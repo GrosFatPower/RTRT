@@ -9,7 +9,7 @@
 // Larger the more micro-facets are aligned to H
 // NDF = alpha^2 / ( PI * ( (n.h)^2  * ( aplha^2 -1 ) + 1 )^2 )
 // ----------------------------------------------------------------------------
-float D( in float iAlpha, in vec3 iN, in vec3 iH )
+float D_GGX( in float iAlpha, in vec3 iN, in vec3 iH )
 {
   float num = pow(iAlpha, 2.f);
 
@@ -42,7 +42,7 @@ float G1( in float iAlpha, in vec3 iN, in vec3 iX )
 // Smith Model
 // Smaller the more micro-facets are shadowed by other micro-facets
 // ----------------------------------------------------------------------------
-float G( in float iAlpha, in vec3 iN, in vec3 iV, in vec3 iL )
+float G_Smith( in float iAlpha, in vec3 iN, in vec3 iV, in vec3 iL )
 {
   return G1(iAlpha, iN, iV) * G1(iAlpha, iN, iL);
 }
@@ -60,23 +60,29 @@ vec3 FSchlick( in vec3 iF0, in vec3 iV, in vec3 iH )
 
 
 // ----------------------------------------------------------------------------
-// BRDF
+// Cook-Torrance Microfacet BRDF
+// iN   : surface normal
+// iV   : view direction
+// iL   : light direction
+// iF0  : base reflectance
+// iMat : surface material
 // ----------------------------------------------------------------------------
 vec3 BRDF( in vec3 iN, in vec3 iV, in vec3 iL, in vec3 iF0, in Material iMat )
 {
   vec3 H = normalize(iV + iL);
 
+  float alpha = pow(iMat._Roughness, 2.f);
+  vec3  F = FSchlick(iF0, iV, H);       // Fresnel reflectance (Schlick approximation)
+  float D = D_GGX(alpha, iN, H);        // Normal distribution function
+  float G = G_Smith(alpha, iN, iV, iL); // Geometry term
+
   // Diffuse
-  vec3 F  = FSchlick(iF0, iV, H);
   vec3 Ks = F;
   vec3 Kd = vec3(1.f) - Ks;
   Kd *= ( 1.f - iMat._Metallic ); // pure metals have no diffuse light
   vec3 lambert = iMat._Albedo * INV_PI;
 
-  // Specular (cookTorrance)
-  float alpha = pow(iMat._Roughness, 2.f);
-  float D     = D(alpha, iN, H);
-  float G     = G(alpha, iN, iV, iL);
+  // Specular (Cook-Torrance)
   vec3 cookTorranceNum =  D * G * F;
   float cookTorranceDenom = 4.f * max(dot(iV, iN), 0.f) * max(dot(iL, iN), 0.f); // 4(V.N)(L.N)
   vec3 specular = cookTorranceNum / max(cookTorranceDenom, EPSILON);

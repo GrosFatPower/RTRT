@@ -430,7 +430,10 @@ vec3 PBR( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAt
 
   //vec3 F0 = mat._Albedo;
   //vec3 F0 = mat._Albedo * mat._Metallic * mat._Opacity; // test : reflectance value
-  vec3 F0 = mix(vec3(0.), mat._Albedo, mat._Metallic); // https://www.youtube.com/watch?v=5p0e7YNONr8
+  //vec3 F0 = mix(vec3(0.), mat._Albedo, mat._Metallic); // https://www.youtube.com/watch?v=5p0e7YNONr8
+
+  vec3 F0 = vec3(0.16f * pow(mat._Reflectance, 2.));
+  F0 = mix(F0, mat._Albedo, mat._Metallic);
 
   if ( iClosestHit._FrontFace )
   {

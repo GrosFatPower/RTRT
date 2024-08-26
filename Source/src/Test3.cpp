@@ -215,6 +215,16 @@ void Test3::ClearSceneData()
   glDeleteTextures(1, &_BLASPackedNormalsTextureID);
   glDeleteTextures(1, &_BLASPackedUVsTextureID);
 
+  _MaterialNames.clear();
+  _PrimitiveNames.clear();
+  _SelectedMaterial = -1;
+
+  _SelectedLight     = -1;
+  _SelectedMaterial  = -1;
+  _SelectedPrimitive = -1;
+  _NbTriangles       = 0;
+  _NbMeshInstances   = 0;
+
   if ( _Scene )
     delete _Scene;
   _Scene = nullptr;
@@ -386,6 +396,7 @@ int Test3::UpdateUniforms()
           glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Emission"       ).c_str()), curMat._Emission.r, curMat._Emission.g, curMat._Emission.b);
           glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Metallic"       ).c_str()), curMat._Metallic);
           glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Roughness"      ).c_str()), curMat._Roughness);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Reflectance"    ).c_str()), curMat._Reflectance);
           glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_IOR"            ).c_str()), curMat._IOR);
           glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Opacity"        ).c_str()), curMat._Opacity);
         }
@@ -742,6 +753,9 @@ int Test3::DrawUI()
           _SceneMaterialsModified = true;
 
         if ( ImGui::SliderFloat("Roughness", &curMat._Roughness, 0.f, 1.f) )
+          _SceneMaterialsModified = true;
+
+        if ( ImGui::SliderFloat("Reflectance", &curMat._Reflectance, 0.f, 1.f) )
           _SceneMaterialsModified = true;
 
         if ( ImGui::SliderFloat("IOR", &curMat._IOR, 1.f, 3.f) )
