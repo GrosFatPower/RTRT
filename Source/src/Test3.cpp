@@ -393,6 +393,7 @@ int Test3::UpdateUniforms()
           glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_BaseColorTexID"         ).c_str()), (int)curMat._BaseColorTexId );
           glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_NormalMapTexID"         ).c_str()), (int)curMat._NormalMapTexID );
           glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_MetallicRoughnessTexID" ).c_str()), (int)curMat._MetallicRoughnessTexID );
+          glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_EmissionMapTexID"       ).c_str()), (int)curMat._EmissionMapTexID );
           glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Albedo"                 ).c_str()), curMat._Albedo.r, curMat._Albedo.g, curMat._Albedo.b);
           glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Emission"               ).c_str()), curMat._Emission.r, curMat._Emission.g, curMat._Emission.b);
           glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Metallic"               ).c_str()), curMat._Metallic);

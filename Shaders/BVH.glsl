@@ -30,7 +30,7 @@ uniform samplerBuffer  u_BLASPackedUVTexture;
 // ----------------------------------------------------------------------------
 bool TraceRay_ThroughBLAS( in Ray iRay, in mat4 iInvTransfo, in int iBlasNodesOffset, in int iTriOffset, in int iMatID, in float iMaxDist, out HitPoint oClosestHit )
 {
-  oClosestHit = HitPoint(-1.f, vec3( 0.f, 0.f, 0.f ), vec3( 0.f, 0.f, 0.f ), vec2( 0.f, 0.f ), -1, 0, true, false);
+  oClosestHit = HitPoint(-1.f, vec3(0.f), vec3(0.f), vec3(0.f), vec3(0.f), vec2(0.f), -1, 0, true, false);
 
   int   index       = 0; // BLAS Root
   bool  leftHit     = false;
@@ -100,6 +100,16 @@ bool TraceRay_ThroughBLAS( in Ray iRay, in mat4 iInvTransfo, in int iBlasNodesOf
             oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
             oClosestHit._UV         = uvID0 * ( 1 - uv.x - uv.y ) + uvID1 * uv.x + uvID2 * uv.y;
             oClosestHit._MaterialID = iMatID;
+
+            // Calculate tangent and bitangent
+            vec3 deltaPos1 = v1 - v0;
+            vec3 deltaPos2 = v2 - v0;
+            vec2 deltaUV1 = uvID1 - uvID0;
+            vec2 deltaUV2 = uvID2 - uvID0;
+
+            float invdet = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV1.y * deltaUV2.x);
+            oClosestHit._Tangent = (deltaPos1 * deltaUV2.y - deltaPos2 * deltaUV1.y) * invdet;
+            oClosestHit._Bitangent = (deltaPos2 * deltaUV1.x - deltaPos1 * deltaUV2.x) * invdet;
           }
         }
       }
@@ -265,7 +275,7 @@ bool AnyHit_ThroughBLAS( in Ray iRay, in mat4 iInvTransfo, in int iBlasNodesOffs
 // ----------------------------------------------------------------------------
 bool TraceRay_ThroughTLAS( in Ray iRay, out HitPoint oClosestHit )
 {
-  oClosestHit = HitPoint(-1.f, vec3( 0.f, 0.f, 0.f ), vec3( 0.f, 0.f, 0.f ), vec2( 0.f, 0.f ), -1, 0, true, false);
+  oClosestHit = HitPoint(-1.f, vec3(0.f), vec3(0.f), vec3(0.f), vec3(0.f), vec2(0.f), -1, 0, true, false);
 
   int   index       = 0; // TLAS Root
   bool  leftHit     = false;

@@ -18,6 +18,7 @@ struct Material
   int   _BaseColorTexID;
   int   _NormalMapTexID;
   int   _MetallicRoughnessTexID;
+  int   _EmissionMapTexID;
   vec3  _Emission;
   vec3  _Albedo;         // Albedo for dialectrics, F0 for metals
   float _Roughness;
@@ -51,6 +52,8 @@ struct HitPoint
   float _Dist;
   vec3  _Pos;
   vec3  _Normal;
+  vec3  _Tangent;
+  vec3  _Bitangent;
   vec2  _UV;
   int   _MaterialID;
   int   _LightID;

@@ -73,7 +73,7 @@ uniform sampler2DArray u_TexArrayTexture;
 // ----------------------------------------------------------------------------
 bool TraceRay( in Ray iRay, out HitPoint oClosestHit )
 {
-  oClosestHit = HitPoint(-1.f, vec3( 0.f, 0.f, 0.f ), vec3( 0.f, 0.f, 0.f ), vec2( 0.f, 0.f ), -1, 0, true, false);
+  oClosestHit = HitPoint(-1.f, vec3(0.f), vec3(0.f), vec3(0.f), vec3(0.f), vec2(0.f), -1, 0, true, false);
 
   float hitDist = 0.f;
 
@@ -87,6 +87,8 @@ bool TraceRay( in Ray iRay, out HitPoint oClosestHit )
     oClosestHit._Dist       = closestHit._Dist;
     oClosestHit._Pos        = closestHit._Pos;
     oClosestHit._Normal     = closestHit._Normal;
+    oClosestHit._Tangent    = closestHit._Tangent;
+    oClosestHit._Bitangent  = closestHit._Bitangent;
     oClosestHit._UV         = closestHit._UV;
     oClosestHit._MaterialID = closestHit._MaterialID;
   }
@@ -152,6 +154,16 @@ bool TraceRay( in Ray iRay, out HitPoint oClosestHit )
             oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
             oClosestHit._UV         = uvMatID0.xy * ( 1 - uv.x - uv.y ) + uvMatID1.xy * uv.x + uvMatID2.xy * uv.y;
             oClosestHit._MaterialID = int(uvMatID0.z);
+
+            // Calculate tangent and bitangent
+            vec3 deltaPos1 = v1 - v0;
+            vec3 deltaPos2 = v2 - v0;
+            vec3 deltaUV1 = uvID1 - uvID0;
+            vec3 deltaUV2 = uvID2 - uvID0;
+
+            float invdet = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV1.y * deltaUV2.x);
+            oClosestHit._Tangent = (deltaPos1 * deltaUV2.y - deltaPos2 * deltaUV1.y) * invdet;
+            oClosestHit._Bitangent = (deltaPos2 * deltaUV1.x - deltaPos1 * deltaUV2.x) * invdet;
           }
         }
       }
@@ -188,6 +200,16 @@ bool TraceRay( in Ray iRay, out HitPoint oClosestHit )
         oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
         oClosestHit._UV         = uvMatID0.xy * ( 1 - uv.x - uv.y ) + uvMatID1.xy * uv.x + uvMatID2.xy * uv.y;
         oClosestHit._MaterialID = int(uvMatID0.z);
+
+        // Calculate tangent and bitangent
+        vec3 deltaPos1 = v1 - v0;
+        vec3 deltaPos2 = v2 - v0;
+        vec3 deltaUV1 = uvID1 - uvID0;
+        vec3 deltaUV2 = uvID2 - uvID0;
+
+        float invdet = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV1.y * deltaUV2.x);
+        oClosestHit._Tangent = (deltaPos1 * deltaUV2.y - deltaPos2 * deltaUV1.y) * invdet;
+        oClosestHit._Bitangent = (deltaPos2 * deltaUV1.x - deltaPos1 * deltaUV2.x) * invdet;
       }
     }
   }
@@ -440,12 +462,22 @@ void SetupMaterial( inout HitPoint ioClosestHit, out Material oMat )
       oMat._Albedo = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rgb;
   }
 
+  if ( oMat._EmissionMapTexID >= 0 )
+  {
+    int texArrayID = texelFetch(u_TexIndTexture, oMat._EmissionMapTexID).x;
+    if ( texArrayID >= 0 )
+      oMat._Emission = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rgb;
+  }
+
   if ( oMat._NormalMapTexID >= 0 )
   {
     int texArrayID = texelFetch(u_TexIndTexture, oMat._NormalMapTexID).x;
     if ( texArrayID >= 0 )
     {  
-      ioClosestHit._Normal = normalize(ioClosestHit._Normal + texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).xyz);
+      vec3 texNormal = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).xyz;
+      texNormal = normalize(texNormal * 2.0 - 1.0);
+      ioClosestHit._Normal = normalize(ioClosestHit._Tangent * texNormal.x + ioClosestHit._Bitangent * texNormal.y + ioClosestHit._Normal * texNormal.z);
+      //ioClosestHit._Normal = normalize(ioClosestHit._Normal + texNormal);
     }
   }
 
