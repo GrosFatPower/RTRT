@@ -36,6 +36,8 @@ Assets/hyperion/
 Assets/spaceship/
 Assets/staircase/
 Assets/stormtrooper/
+Assets/renderman/
+Assets/rank3police/
 
 # Files
 *.vcxproj

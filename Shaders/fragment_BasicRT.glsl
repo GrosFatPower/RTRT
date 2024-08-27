@@ -28,7 +28,7 @@ out vec4 fragColor;
 #define MAX_SPHERE_COUNT   16
 #define MAX_PLANES_COUNT   16
 #define MAX_BOX_COUNT      16
-#define MAX_LIGHT_COUNT    32
+#define MAX_LIGHT_COUNT    16
 
 uniform vec2           u_Resolution;
 uniform float          u_Time;
@@ -427,14 +427,49 @@ vec3 Albedo( in HitPoint iClosestHit )
 }
 
 // ----------------------------------------------------------------------------
+// SetupMaterial
+// ----------------------------------------------------------------------------
+void SetupMaterial( inout HitPoint ioClosestHit, out Material oMat )
+{
+  oMat = u_Materials[ioClosestHit._MaterialID];
+
+  if ( oMat._BaseColorTexID >= 0 )
+  {
+    int texArrayID = texelFetch(u_TexIndTexture, oMat._BaseColorTexID).x;
+    if ( texArrayID >= 0 )
+      oMat._Albedo = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rgb;
+  }
+
+  if ( oMat._NormalMapTexID >= 0 )
+  {
+    int texArrayID = texelFetch(u_TexIndTexture, oMat._NormalMapTexID).x;
+    if ( texArrayID >= 0 )
+    {  
+      ioClosestHit._Normal = normalize(ioClosestHit._Normal + texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).xyz);
+    }
+  }
+
+  if ( oMat._MetallicRoughnessTexID >= 0 )
+  {
+    int texArrayID = texelFetch(u_TexIndTexture, oMat._MetallicRoughnessTexID).x;
+    if ( texArrayID >= 0 )
+    {  
+      vec2 metalRoughness = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rg;
+      oMat._Metallic = metalRoughness.x;
+      oMat._Roughness = metalRoughness.y;
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
 // PBR
 // Computer Graphics Tutorial - PBR (Physically Based Rendering)
 // https://www.youtube.com/watch?v=RRE-F57fbXw&list=WL&index=109
 // ----------------------------------------------------------------------------
 vec3 PBR( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuation )
 {
-  Material mat = u_Materials[iClosestHit._MaterialID];
-  mat._Albedo = Albedo(iClosestHit);
+  Material mat;
+  SetupMaterial(iClosestHit, mat);
 
   vec3 outColor = mat._Emission;
 
@@ -500,7 +535,7 @@ vec3 PBR( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAt
     // Can Refract
     oScattered._Orig = iClosestHit._Pos - normal;
     oScattered._Dir  = refract(iRay._Dir, normal, refractionRatio);
-    oAttenuation = vec3(1.f);
+    oAttenuation = vec3(1.f - mat._Opacity);
   }
 
   return clamp(outColor, 0.f, 1.f);
@@ -571,7 +606,6 @@ void main()
   ray._Dir = normalize(u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward);
 
   vec3 pixelColor = vec3(0.f, 0.f, 0.f);
-  //float multiplier = 1.0f;
   vec3 multiplier = vec3(1.f);
 
   // Ray cast
@@ -595,6 +629,7 @@ void main()
     }
 
 #ifdef PBR_RENDERING
+
     // TEST1 : PBR
     Ray scattered;
     vec3 attenuation;
@@ -602,15 +637,20 @@ void main()
     ray = scattered;
     multiplier *= attenuation;
     //multiplier *= 0.5f;
+
 #elif defined(DIRECT_ILLUMINATION)
+
     // TEST 2 : basic RT
     pixelColor += ComputeColor(closestHit) * multiplier;
     multiplier *= u_Materials[closestHit._MaterialID]._Metallic;
     ray._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
     ray._Dir = reflect(ray._Dir, closestHit._Normal + u_Materials[closestHit._MaterialID]._Roughness * RandomVector() );
+
 #else
+
     pixelColor = Albedo(closestHit);
     break;
+
 #endif
   }
 
