@@ -33,7 +33,7 @@ struct Material
   float _MediumAnisotropy       = 0.f;
 
   float _Metallic               = 0.f;
-  float _Roughness              = 0.f;
+  float _Roughness              = 0.5f;
   float _Subsurface             = 0.f;
   float _SpecularTint           = 0.f;
   float _Reflectance            = 0.5f;
@@ -44,7 +44,7 @@ struct Material
   float _ClearcoatGloss         = 0.f;
  
   float _SpecTrans              = 0.f;
-  float _IOR                    = 2.5f;
+  float _IOR                    = 1.5f;
   float _MediumType             = 0.f;
   float _MediumDensity          = 0.f;
  
