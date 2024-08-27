@@ -25,9 +25,9 @@ out vec4 fragColor;
 // ============================================================================
 
 #define MAX_MATERIAL_COUNT 32
-#define MAX_SPHERE_COUNT   32
-#define MAX_PLANES_COUNT   32
-#define MAX_BOX_COUNT      32
+#define MAX_SPHERE_COUNT   16
+#define MAX_PLANES_COUNT   16
+#define MAX_BOX_COUNT      16
 #define MAX_LIGHT_COUNT    32
 
 uniform vec2           u_Resolution;
@@ -76,87 +76,6 @@ bool TraceRay( in Ray iRay, out HitPoint oClosestHit )
   oClosestHit = HitPoint(-1.f, vec3( 0.f, 0.f, 0.f ), vec3( 0.f, 0.f, 0.f ), vec2( 0.f, 0.f ), -1, 0, true, false);
 
   float hitDist = 0.f;
-
-  // Primitives
-  // ----------
-
-  for ( int i = 0; i < u_NbSpheres; ++i )
-  {
-    hitDist = 0.f;
-    if ( SphereIntersection(u_Spheres[i]._CenterRad, iRay, hitDist) )
-    {
-      if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
-      {
-        oClosestHit._Dist       = hitDist;
-        oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
-        oClosestHit._Normal     = normalize(oClosestHit._Pos - u_Spheres[i]._CenterRad.xyz);
-        oClosestHit._MaterialID = u_Spheres[i]._MaterialID;
-      }
-    }
-  }
-
-  for ( int i = 0; i < u_NbPlanes; ++i )
-  {
-    hitDist = 0.f;
-    if ( PlaneIntersection(u_Planes[i]._Orig, u_Planes[i]._Normal, iRay, hitDist) )
-    {
-      if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
-      {
-        oClosestHit._Dist       = hitDist;
-        oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
-        oClosestHit._Normal     = u_Planes[i]._Normal;
-        oClosestHit._MaterialID = u_Planes[i]._MaterialID;
-      }
-    }
-  }
-
-  for ( int i = 0; i < u_NbBoxes; ++i )
-  {
-    hitDist = 0.f;
-    if ( BoxIntersection(u_Boxes[i]._Low, u_Boxes[i]._High, u_Boxes[i]._Transfom, iRay, hitDist) )
-    {
-      if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
-      {
-        oClosestHit._Dist       = hitDist;
-        oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
-        oClosestHit._Normal     = BoxNormal(u_Boxes[i]._Low, u_Boxes[i]._High, u_Boxes[i]._Transfom, oClosestHit._Pos);
-        oClosestHit._MaterialID = u_Boxes[i]._MaterialID;
-      }
-    }
-  }
-
-  // Lights
-  // ------
-
-  if ( 0 != u_ShowLights )
-  {
-    for ( int i = 0; i < u_NbLights; ++i )
-    {
-      hitDist = 0.f;
-      if ( ( SPHERE_LIGHT == u_Lights[i]._Type ) && SphereIntersection(vec4(u_Lights[i]._Pos, u_Lights[i]._Radius), iRay, hitDist) )
-      {
-        if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
-        {
-          oClosestHit._Dist       = hitDist;
-          oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
-          oClosestHit._MaterialID = -1;
-          oClosestHit._LightID    = i;
-          oClosestHit._IsEmitter  = true;
-        }
-      }
-      else if ( ( QUAD_LIGHT == u_Lights[i]._Type ) && QuadIntersection(u_Lights[i]._Pos, u_Lights[i]._DirU, u_Lights[i]._DirV, iRay, hitDist) )
-      {
-        if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
-        {
-          oClosestHit._Dist       = hitDist;
-          oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
-          oClosestHit._MaterialID = -1;
-          oClosestHit._LightID    = i;
-          oClosestHit._IsEmitter  = true;
-        }
-      }
-    }
-  }
 
   // Meshes
   // ------
@@ -274,6 +193,87 @@ bool TraceRay( in Ray iRay, out HitPoint oClosestHit )
   }
 #endif
 
+  // Primitives
+  // ----------
+
+  for ( int i = 0; i < u_NbSpheres; ++i )
+  {
+    hitDist = 0.f;
+    if ( SphereIntersection(u_Spheres[i]._CenterRad, iRay, hitDist) )
+    {
+      if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
+      {
+        oClosestHit._Dist       = hitDist;
+        oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+        oClosestHit._Normal     = normalize(oClosestHit._Pos - u_Spheres[i]._CenterRad.xyz);
+        oClosestHit._MaterialID = u_Spheres[i]._MaterialID;
+      }
+    }
+  }
+
+  for ( int i = 0; i < u_NbPlanes; ++i )
+  {
+    hitDist = 0.f;
+    if ( PlaneIntersection(u_Planes[i]._Orig, u_Planes[i]._Normal, iRay, hitDist) )
+    {
+      if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
+      {
+        oClosestHit._Dist       = hitDist;
+        oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+        oClosestHit._Normal     = u_Planes[i]._Normal;
+        oClosestHit._MaterialID = u_Planes[i]._MaterialID;
+      }
+    }
+  }
+
+  for ( int i = 0; i < u_NbBoxes; ++i )
+  {
+    hitDist = 0.f;
+    if ( BoxIntersection(u_Boxes[i]._Low, u_Boxes[i]._High, u_Boxes[i]._Transfom, iRay, hitDist) )
+    {
+      if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
+      {
+        oClosestHit._Dist       = hitDist;
+        oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+        oClosestHit._Normal     = BoxNormal(u_Boxes[i]._Low, u_Boxes[i]._High, u_Boxes[i]._Transfom, oClosestHit._Pos);
+        oClosestHit._MaterialID = u_Boxes[i]._MaterialID;
+      }
+    }
+  }
+
+  // Lights
+  // ------
+
+  if ( 0 != u_ShowLights )
+  {
+    for ( int i = 0; i < u_NbLights; ++i )
+    {
+      hitDist = 0.f;
+      if ( ( SPHERE_LIGHT == u_Lights[i]._Type ) && SphereIntersection(vec4(u_Lights[i]._Pos, u_Lights[i]._Radius), iRay, hitDist) )
+      {
+        if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
+        {
+          oClosestHit._Dist       = hitDist;
+          oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+          oClosestHit._MaterialID = -1;
+          oClosestHit._LightID    = i;
+          oClosestHit._IsEmitter  = true;
+        }
+      }
+      else if ( ( QUAD_LIGHT == u_Lights[i]._Type ) && QuadIntersection(u_Lights[i]._Pos, u_Lights[i]._DirU, u_Lights[i]._DirV, iRay, hitDist) )
+      {
+        if ( ( hitDist > 0.f ) && ( ( hitDist < oClosestHit._Dist ) || ( -1.f == oClosestHit._Dist ) ) )
+        {
+          oClosestHit._Dist       = hitDist;
+          oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+          oClosestHit._MaterialID = -1;
+          oClosestHit._LightID    = i;
+          oClosestHit._IsEmitter  = true;
+        }
+      }
+    }
+  }
+
   if ( -1 == oClosestHit._Dist )
     return false;
 
@@ -293,39 +293,6 @@ bool TraceRay( in Ray iRay, out HitPoint oClosestHit )
 // ----------------------------------------------------------------------------
 bool AnyHit( in Ray iRay, in float iMaxDist )
 {
-  // Primitives
-  // ----------
-
-  for ( int i = 0; i < u_NbSpheres; ++i )
-  {
-    float hitDist = 0.f;
-    if ( SphereIntersection(u_Spheres[i]._CenterRad, iRay, hitDist) )
-    {
-      if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
-        return true;
-    }
-  }
-
-  for ( int i = 0; i < u_NbPlanes; ++i )
-  {
-    float hitDist = 0.f;
-    if ( PlaneIntersection(u_Planes[i]._Orig, u_Planes[i]._Normal, iRay, hitDist) )
-    {
-      if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
-        return true;
-    }
-  }
-
-  for ( int i = 0; i < u_NbBoxes; ++i )
-  {
-    float hitDist = 0.f;
-    if ( BoxIntersection(u_Boxes[i]._Low, u_Boxes[i]._High, u_Boxes[i]._Transfom, iRay, hitDist) )
-    {
-      if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
-        return true;
-    }
-  }
-
   // Meshes
   // ------
 
@@ -408,6 +375,39 @@ bool AnyHit( in Ray iRay, in float iMaxDist )
   }
 #endif
 
+  // Primitives
+  // ----------
+
+  for ( int i = 0; i < u_NbSpheres; ++i )
+  {
+    float hitDist = 0.f;
+    if ( SphereIntersection(u_Spheres[i]._CenterRad, iRay, hitDist) )
+    {
+      if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
+        return true;
+    }
+  }
+
+  for ( int i = 0; i < u_NbPlanes; ++i )
+  {
+    float hitDist = 0.f;
+    if ( PlaneIntersection(u_Planes[i]._Orig, u_Planes[i]._Normal, iRay, hitDist) )
+    {
+      if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
+        return true;
+    }
+  }
+
+  for ( int i = 0; i < u_NbBoxes; ++i )
+  {
+    float hitDist = 0.f;
+    if ( BoxIntersection(u_Boxes[i]._Low, u_Boxes[i]._High, u_Boxes[i]._Transfom, iRay, hitDist) )
+    {
+      if ( ( hitDist > 0.f ) && ( hitDist < iMaxDist ) )
+        return true;
+    }
+  }
+
   return false;
 }
 
@@ -478,7 +478,8 @@ vec3 PBR( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAt
       refractionRatio = mat._IOR;
   }
 
-  vec3 normal = normalize(iClosestHit._Normal + mat._Roughness * RandomVector());
+  vec3 normal = iClosestHit._Normal;
+  //vec3 normal = normalize(iClosestHit._Normal + mat._Roughness * RandomVector());
 
   if ( ( refractionRatio * sinTheta ) >= 1.f )
   {

@@ -217,7 +217,6 @@ void Test3::ClearSceneData()
 
   _MaterialNames.clear();
   _PrimitiveNames.clear();
-  _SelectedMaterial = -1;
 
   _SelectedLight     = -1;
   _SelectedMaterial  = -1;
@@ -248,7 +247,7 @@ int Test3::InitializeSceneFiles()
       _SceneNames.push_back(filename);
       _SceneFiles.push_back(g_AssetsDir + std::string(file.name));
 
-      std::size_t found = _SceneFiles[_SceneFiles.size()-1].find("TexturedBox.scene");
+      std::size_t found = _SceneFiles[_SceneFiles.size()-1].find("Sphere.scene");
       if ( std::string::npos != found )
         _CurSceneId = _SceneFiles.size()-1;
     }
@@ -397,6 +396,14 @@ int Test3::UpdateUniforms()
           glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Metallic"       ).c_str()), curMat._Metallic);
           glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Roughness"      ).c_str()), curMat._Roughness);
           glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Reflectance"    ).c_str()), curMat._Reflectance);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Subsurface"     ).c_str()), curMat._Subsurface);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Sheen"          ).c_str()), curMat._Sheen);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_SheenTint"      ).c_str()), curMat._SheenTint);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Anisotropic"    ).c_str()), curMat._Anisotropic);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_SpecularTrans"  ).c_str()), curMat._SpecTrans);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_SpecularTint"   ).c_str()), curMat._SpecularTint);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Clearcoat"      ).c_str()), curMat._Clearcoat);
+          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_ClearcoatGloss" ).c_str()), curMat._ClearcoatGloss);
           glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_IOR"            ).c_str()), curMat._IOR);
           glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Opacity"        ).c_str()), curMat._Opacity);
         }
@@ -619,19 +626,21 @@ int Test3::DrawUI()
 
     if ( ImGui::CollapsingHeader("Lights") )
     {
-      ImGui::ListBoxHeader("##Lights");
-      for (int i = 0; i < _Scene -> GetNbLights(); i++)
+      if ( ImGui::ListBoxHeader("##Lights") )
       {
-        std::string lightName("Light#");
-        lightName += std::to_string(i);
-
-        bool is_selected = ( _SelectedMaterial == i );
-        if (ImGui::Selectable(lightName.c_str(), is_selected))
+        for (int i = 0; i < _Scene -> GetNbLights(); i++)
         {
-          _SelectedLight = i;
+          std::string lightName("Light#");
+          lightName += std::to_string(i);
+
+          bool is_selected = ( _SelectedLight == i );
+          if (ImGui::Selectable(lightName.c_str(), is_selected))
+          {
+            _SelectedLight = i;
+          }
         }
+        ImGui::ListBoxFooter();
       }
-      ImGui::ListBoxFooter();
 
       if (ImGui::Button("Add light"))
       {
@@ -716,16 +725,18 @@ int Test3::DrawUI()
     {
       std::vector<Material> & Materials =  _Scene -> GetMaterials();
 
-      ImGui::ListBoxHeader("##MaterialNames");
-      for (int i = 0; i < _MaterialNames.size(); i++)
+      if ( ImGui::ListBoxHeader("##MaterialNames") )
       {
-        bool is_selected = ( _SelectedMaterial == i );
-        if (ImGui::Selectable(_MaterialNames[i].c_str(), is_selected))
+        for (int i = 0; i < _MaterialNames.size(); i++)
         {
-          _SelectedMaterial = i;
+          bool is_selected = ( _SelectedMaterial == i );
+          if (ImGui::Selectable(_MaterialNames[i].c_str(), is_selected))
+          {
+            _SelectedMaterial = i;
+          }
         }
+        ImGui::ListBoxFooter();
       }
-      ImGui::ListBoxFooter();
 
       if ( _SelectedMaterial >= 0 )
       {
@@ -758,6 +769,27 @@ int Test3::DrawUI()
         if ( ImGui::SliderFloat("Reflectance", &curMat._Reflectance, 0.f, 1.f) )
           _SceneMaterialsModified = true;
 
+        if ( ImGui::SliderFloat("Subsurface", &curMat._Subsurface, 0.f, 1.f) )
+          _SceneMaterialsModified = true;
+
+        if ( ImGui::SliderFloat("Sheen Tint", &curMat._SheenTint, 0.f, 1.f) )
+          _SceneMaterialsModified = true;
+
+        if ( ImGui::SliderFloat("Anisotropic", &curMat._Anisotropic, 0.f, 1.f) )
+          _SceneMaterialsModified = true;
+
+        if ( ImGui::SliderFloat("Specular Trans", &curMat._SpecTrans, 0.f, 1.f) )
+          _SceneMaterialsModified = true;
+
+        if ( ImGui::SliderFloat("Specular Tint", &curMat._SpecularTint, 0.f, 1.f) )
+          _SceneMaterialsModified = true;
+
+        if ( ImGui::SliderFloat("Clearcoat", &curMat._Clearcoat, 0.f, 1.f) )
+          _SceneMaterialsModified = true;
+
+        if ( ImGui::SliderFloat("Clearcoat Gloss", &curMat._ClearcoatGloss, 0.f, 1.f) )
+          _SceneMaterialsModified = true;
+
         if ( ImGui::SliderFloat("IOR", &curMat._IOR, 1.f, 3.f) )
           _SceneMaterialsModified = true;
 
@@ -770,20 +802,29 @@ int Test3::DrawUI()
     {
       std::vector<Primitive*>        & Primitives         = _Scene -> GetPrimitives();
       std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene -> GetPrimitiveInstances();
-      std::vector<Material>          & Materials          = _Scene -> GetMaterials();
 
-      int nbMaterial = Materials.size();
-
-      ImGui::ListBoxHeader("##PrimitivesNames");
-      for (int i = 0; i < _PrimitiveNames.size(); i++)
+      bool lookAtPrimitive = false;
+      if ( ImGui::ListBoxHeader("##PrimitivesNames") )
       {
-        bool is_selected = ( _SelectedPrimitive == i );
-        if (ImGui::Selectable(_PrimitiveNames[i].c_str(), is_selected))
+        for (int i = 0; i < _PrimitiveNames.size(); i++)
         {
-          _SelectedPrimitive = i;
+          bool is_selected = ( _SelectedPrimitive == i );
+          if (ImGui::Selectable(_PrimitiveNames[i].c_str(), is_selected))
+          {
+            _SelectedPrimitive = i;
+            lookAtPrimitive = true;
+          }
+        }
+        ImGui::ListBoxFooter();
+      }
 
-          PrimitiveInstance & primInstance = PrimitiveInstances[_SelectedPrimitive];
+      if ( _SelectedPrimitive >= 0 )
+      {
+        PrimitiveInstance & primInstance = PrimitiveInstances[_SelectedPrimitive];
+        Primitive * prim = Primitives[primInstance._PrimID];
 
+        if ( lookAtPrimitive )
+        {
           Vec3 scale;
           glm::quat rotation;
           Vec3 translation;
@@ -793,13 +834,6 @@ int Test3::DrawUI()
           cam.LookAt(translation);
           _SceneCameraModified = true;
         }
-      }
-      ImGui::ListBoxFooter();
-
-      if ( _SelectedPrimitive >= 0 )
-      {
-        PrimitiveInstance & primInstance = PrimitiveInstances[_SelectedPrimitive];
-        Primitive * prim = Primitives[primInstance._PrimID];
 
         Vec3 scale;
         glm::quat rotation;

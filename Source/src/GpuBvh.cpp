@@ -23,6 +23,8 @@ int GpuTLAS::Build( std::vector<Mesh*> & iMeshes, std::vector<MeshInstance> & iM
 {
   // 1. Compute BVH
   const int nbInstances = iMeshInstances.size();
+  if ( 0 == nbInstances )
+    return 0;
 
   std::vector<RadeonRays::bbox> bounds(nbInstances);
 
@@ -118,6 +120,8 @@ int GpuBLAS::Build( Mesh & iMesh )
 {
   // 1. Compute BVH
   const int nbTris = iMesh.GetIndices().size() / 3;
+  if ( 0 == nbTris )
+    return 0;
 
   std::vector<RadeonRays::bbox> bounds(nbTris);
 

@@ -576,7 +576,11 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
     else if ( IsEqual("emission", tokens[0]) )
     {
       if ( 4 == nbTokens )
+      {
         newLight._Emission = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
+        // Tmp ?
+        newLight._Emission = MathUtil::Min(newLight._Emission, Vec3(1.f));
+      }
       else
         parsingError++;
     }

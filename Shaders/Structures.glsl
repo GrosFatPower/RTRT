@@ -16,11 +16,19 @@ struct Material
 {
   int   _ID;
   int   _BaseColorTexID;
-  vec3  _Albedo;         // Albedo for dialectrics, F0 for metals
   vec3  _Emission;
+  vec3  _Albedo;         // Albedo for dialectrics, F0 for metals
+  float _Roughness;
   float _Metallic;       // Metallic parameter. 0.0 for dialectrics, 1.0 for metals
   float _Reflectance;    // Fresnel reflectance for dialectircs between [0.0, 1.0]
-  float _Roughness;
+  float _Subsurface;     // Disney BRDF
+  float _Sheen;          // Disney BRDF
+  float _SheenTint;      // Disney BRDF
+  float _Anisotropic;    // Disney BRDF
+  float _SpecularTrans;  // Disney BRDF
+  float _SpecularTint;   // Disney BRDF
+  float _Clearcoat;      // Disney BRDF
+  float _ClearcoatGloss; // Disney BRDF
   float _IOR;
   float _Opacity;
 };
