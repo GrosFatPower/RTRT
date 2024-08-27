@@ -412,6 +412,21 @@ bool AnyHit( in Ray iRay, in float iMaxDist )
 }
 
 // ----------------------------------------------------------------------------
+// Albedo
+// ----------------------------------------------------------------------------
+vec3 Albedo( in HitPoint iClosestHit )
+{
+  if ( u_Materials[iClosestHit._MaterialID]._BaseColorTexID >= 0 )
+  {
+    int texArrayID = texelFetch(u_TexIndTexture, u_Materials[iClosestHit._MaterialID]._BaseColorTexID).x;
+    if ( texArrayID >= 0 )
+      return texture(u_TexArrayTexture, vec3(iClosestHit._UV, float(texArrayID))).rgb;
+  }
+
+  return u_Materials[iClosestHit._MaterialID]._Albedo;
+}
+
+// ----------------------------------------------------------------------------
 // PBR
 // Computer Graphics Tutorial - PBR (Physically Based Rendering)
 // https://www.youtube.com/watch?v=RRE-F57fbXw&list=WL&index=109
@@ -419,18 +434,9 @@ bool AnyHit( in Ray iRay, in float iMaxDist )
 vec3 PBR( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuation )
 {
   Material mat = u_Materials[iClosestHit._MaterialID];
-  if ( mat._BaseColorTexID >= 0 )
-  {
-    int texArrayID = texelFetch(u_TexIndTexture, mat._BaseColorTexID).x;
-    if ( texArrayID >= 0 )
-      mat._Albedo = texture(u_TexArrayTexture, vec3(iClosestHit._UV, texArrayID)).rgb;
-  }
+  mat._Albedo = Albedo(iClosestHit);
 
   vec3 outColor = mat._Emission;
-
-  //vec3 F0 = mat._Albedo;
-  //vec3 F0 = mat._Albedo * mat._Metallic * mat._Opacity; // test : reflectance value
-  //vec3 F0 = mix(vec3(0.), mat._Albedo, mat._Metallic); // https://www.youtube.com/watch?v=5p0e7YNONr8
 
   vec3 F0 = vec3(0.16f * pow(mat._Reflectance, 2.));
   F0 = mix(F0, mat._Albedo, mat._Metallic);
@@ -449,18 +455,19 @@ vec3 PBR( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAt
         L = GetLightDirSample(iClosestHit._Pos, u_Lights[i]._Pos, u_Lights[i]._Radius);
       else
         L = u_Lights[i]._Pos;
+
       float distToLight = length(L);
-      L = normalize(L);
+      float invDistToLight = 1. / max(distToLight, EPSILON);
+      L = L * invDistToLight;
     
       Ray occlusionTestRay;
       occlusionTestRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
       occlusionTestRay._Dir = L;
       if ( !AnyHit(occlusionTestRay, distToLight) )
       {
-        float attenuation = 1.f / ( distToLight * distToLight );
-        vec3 radiance = u_Lights[i]._Emission * attenuation;
-
-        outColor += BRDF(iClosestHit._Normal, V, L, F0, mat) * radiance * max(dot(L, iClosestHit._Normal), 0.f);
+        float irradiance = max(dot(L, iClosestHit._Normal), 0.f) * invDistToLight * invDistToLight;
+        if ( irradiance > 0.f )
+          outColor += BRDF(iClosestHit._Normal, V, L, F0, mat) * u_Lights[i]._Emission * irradiance;
       }
     }
   }
@@ -478,8 +485,8 @@ vec3 PBR( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAt
       refractionRatio = mat._IOR;
   }
 
-  vec3 normal = iClosestHit._Normal;
-  //vec3 normal = normalize(iClosestHit._Normal + mat._Roughness * RandomVector());
+  //vec3 normal = iClosestHit._Normal;
+  vec3 normal = normalize(iClosestHit._Normal + mat._Roughness * RandomVector());
 
   if ( ( refractionRatio * sinTheta ) >= 1.f )
   {
@@ -535,21 +542,6 @@ vec3 ComputeColor( in HitPoint iClosestHit )
   }
 
   return pixelColor;
-}
-
-// ----------------------------------------------------------------------------
-// Albedo
-// ----------------------------------------------------------------------------
-vec3 Albedo( in HitPoint iClosestHit )
-{
-  if ( u_Materials[iClosestHit._MaterialID]._BaseColorTexID >= 0 )
-  {
-    int texArrayID = texelFetch(u_TexIndTexture, u_Materials[iClosestHit._MaterialID]._BaseColorTexID).x;
-    if ( texArrayID >= 0 )
-      return texture(u_TexArrayTexture, vec3(iClosestHit._UV, float(texArrayID))).rgb;
-  }
-
-  return u_Materials[iClosestHit._MaterialID]._Albedo;
 }
 
 // ----------------------------------------------------------------------------
