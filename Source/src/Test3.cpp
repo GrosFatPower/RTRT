@@ -226,6 +226,7 @@ void Test3::ClearSceneData()
   glDeleteTextures(1, &_TexArrayTextureID);
   glDeleteTextures(1, &_MeshBBoxTextureID);
   glDeleteTextures(1, &_MeshIdRangeTextureID);
+  glDeleteTextures(1, &_MaterialsTextureID);
   glDeleteTextures(1, &_TLASNodesTextureID);
   glDeleteTextures(1, &_TLASMeshMatIDTextureID);
   glDeleteTextures(1, &_TLASTransformsIDTextureID);
@@ -406,6 +407,7 @@ int Test3::UpdateUniforms()
       {
         const std::vector<Material> & Materials =  _Scene -> GetMaterials();
 
+        /*
         int nbMaterials = Materials.size();
         for ( int i = 0; i < nbMaterials; ++i )
         {
@@ -433,6 +435,11 @@ int Test3::UpdateUniforms()
           glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Opacity"                ).c_str()), curMat._Opacity);
         }
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbMaterials"), nbMaterials);
+        */
+
+        glBindTexture(GL_TEXTURE_2D, _MaterialsTextureID);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, (sizeof(Material) / sizeof(Vec4)) * _Scene -> GetMaterials().size(), 1, 0, GL_RGBA, GL_FLOAT, &_Scene -> GetMaterials()[0]);
+        glBindTexture(GL_TEXTURE_2D, 0);
 
         _SceneMaterialsModified = false;
       }
@@ -497,6 +504,7 @@ int Test3::UpdateUniforms()
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexArrayTexture"),               _TexArrayTextureUnit);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshBBoxTexture"),               _MeshBBoxTextureUnit);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshIDRangeTexture"),            _MeshIdRangeTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MaterialsTexture"),              _MaterialsTextureUnit);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASNodesTexture"),              _TLASNodesTextureUnit);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASTransformsTexture"),         _TLASTransformsIDTextureUnit);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASMeshMatIDTexture"),          _TLASMeshMatIDTextureUnit);
@@ -1191,6 +1199,13 @@ int Test3::InitializeScene()
     glBindTexture(GL_TEXTURE_BUFFER, _MeshIdRangeTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_R32I, _MeshIdRangeBufferID);
 
+    glGenTextures(1, &_MaterialsTextureID);
+    glBindTexture(GL_TEXTURE_2D, _MaterialsTextureID);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, (sizeof(Material) / sizeof(Vec4)) * _Scene -> GetMaterials().size(), 1, 0, GL_RGBA, GL_FLOAT, &_Scene -> GetMaterials()[0]);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
     // BVH
     glGenBuffers(1, &_TLASNodesBufferID);
     glBindBuffer(GL_TEXTURE_BUFFER, _TLASNodesBufferID);
@@ -1425,6 +1440,8 @@ void Test3::RenderToTexture()
   glBindTexture(GL_TEXTURE_BUFFER, _MeshBBoxTextureID);
   glActiveTexture(TEX_UNIT(_MeshIdRangeTextureUnit));
   glBindTexture(GL_TEXTURE_BUFFER, _MeshIdRangeTextureID);
+  glActiveTexture(TEX_UNIT(_MaterialsTextureUnit));
+  glBindTexture(GL_TEXTURE_2D, _MaterialsTextureID);
   glActiveTexture(TEX_UNIT(_TLASNodesTextureUnit));
   glBindTexture(GL_TEXTURE_BUFFER, _TLASNodesTextureID);
   glActiveTexture(TEX_UNIT(_TLASTransformsIDTextureUnit));

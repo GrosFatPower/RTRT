@@ -91,6 +91,7 @@ private:
   GLuint          _TexArrayTextureID               = 0;
   GLuint          _MeshBBoxTextureID               = 0;
   GLuint          _MeshIdRangeTextureID            = 0;
+  GLuint          _MaterialsTextureID              = 0;
   // BVH
   GLuint          _TLASNodesTextureID              = 0;
   GLuint          _TLASMeshMatIDTextureID          = 0;
@@ -114,17 +115,18 @@ private:
   const unsigned int    _TexArrayTextureUnit               = 7;
   const unsigned int    _MeshBBoxTextureUnit               = 8;
   const unsigned int    _MeshIdRangeTextureUnit            = 9;
+  const unsigned int    _MaterialsTextureUnit              = 10;
   // BVH
-  const unsigned int    _TLASNodesTextureUnit              = 10;
-  const unsigned int    _TLASTransformsIDTextureUnit       = 11;
-  const unsigned int    _TLASMeshMatIDTextureUnit          = 12;
-  const unsigned int    _BLASNodesTextureUnit              = 13;
-  const unsigned int    _BLASNodesRangeTextureUnit         = 14;
-  const unsigned int    _BLASPackedIndicesTextureUnit      = 15;
-  const unsigned int    _BLASPackedIndicesRangeTextureUnit = 16;
-  const unsigned int    _BLASPackedVerticesTextureUnit     = 17;
-  const unsigned int    _BLASPackedNormalsTextureUnit      = 18;
-  const unsigned int    _BLASPackedUVsTextureUnit          = 19;
+  const unsigned int    _TLASNodesTextureUnit              = 11;
+  const unsigned int    _TLASTransformsIDTextureUnit       = 12;
+  const unsigned int    _TLASMeshMatIDTextureUnit          = 13;
+  const unsigned int    _BLASNodesTextureUnit              = 14;
+  const unsigned int    _BLASNodesRangeTextureUnit         = 15;
+  const unsigned int    _BLASPackedIndicesTextureUnit      = 16;
+  const unsigned int    _BLASPackedIndicesRangeTextureUnit = 17;
+  const unsigned int    _BLASPackedVerticesTextureUnit     = 18;
+  const unsigned int    _BLASPackedNormalsTextureUnit      = 19;
+  const unsigned int    _BLASPackedUVsTextureUnit          = 20;
 
   const unsigned int    _IMGUIMateralialTextureUnit        = 31;
 
