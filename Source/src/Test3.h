@@ -121,6 +121,7 @@ private:
   std::vector<const char*>  _SceneNames;
   unsigned int              _CurSceneId = 0;
   bool                      _ReloadScene = true;
+  int                       _SkyboxID    = -1;
 
   RenderSettings  _Settings;
   bool            _SceneCameraModified    = false;

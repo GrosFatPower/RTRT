@@ -609,6 +609,18 @@ int Test3::DrawUI()
         _Settings._BackgroundColor = { rgb[0], rgb[1], rgb[2] };
         _RenderSettingsModified = true;
       }
+
+      if ( _Settings._EnableSkybox && ( _SkyboxTextureID > 0 ) )
+      {
+        std::vector<Texture*> & textures = _Scene -> GetTextures();
+
+        Texture * skyboxTexture = textures[_SkyboxID];
+        if ( skyboxTexture )
+        {
+          ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_SkyboxTextureID);
+          ImGui::Image(texture, ImVec2(256, 256));
+        }
+      }
     }
 
     if ( ImGui::CollapsingHeader("Camera") )
@@ -1163,11 +1175,11 @@ int Test3::InitializeScene()
   for ( int i = 0; i < PrimitiveInstances.size(); ++i )
     _PrimitiveNames.push_back(_Scene -> FindPrimitiveName(i));
 
-  int skyboxID =_Scene -> AddTexture(g_AssetsDir + "skyboxes\\alps_field_2k.hdr", 4, TexFormat::TEX_FLOAT);
+  _SkyboxID =_Scene -> AddTexture(g_AssetsDir + "skyboxes\\alps_field_2k.hdr", 4, TexFormat::TEX_FLOAT);
   {
     std::vector<Texture*> & textures = _Scene -> GetTextures();
 
-    Texture * skyboxTexture = textures[skyboxID];
+    Texture * skyboxTexture = textures[_SkyboxID];
     if ( skyboxTexture )
     {
       glGenTextures(1, &_SkyboxTextureID);
