@@ -126,6 +126,8 @@ private:
   const unsigned int    _BLASPackedNormalsTextureUnit      = 18;
   const unsigned int    _BLASPackedUVsTextureUnit          = 19;
 
+  const unsigned int    _IMGUIMateralialTextureUnit        = 31;
+
   double          _MouseX               = 0.;
   double          _MouseY               = 0.;
   double          _OldMouseX            = 0.;
