@@ -90,3 +90,8 @@ struct Camera
   vec3  _Pos;
   float _FOV;
 };
+
+void InitializeHitPoint( inout HitPoint ioHitPoint )
+{
+  ioHitPoint = HitPoint(-1.f, vec3(0.f), vec3(0.f), vec3(0.f), vec3(0.f), vec2(0.f), -1, 0, true, false);
+}

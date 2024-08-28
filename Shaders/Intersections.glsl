@@ -245,3 +245,19 @@ bool TriangleIntersection2( in Ray iRay, in vec3 iV0, in vec3 iV1, in vec3 iV2, 
 
   return true;
 }
+
+// ----------------------------------------------------------------------------
+// TriangleTangents
+// ----------------------------------------------------------------------------
+void TriangleTangents( in vec3 iV0, in vec3 iV1, in vec3 iV2, in vec2 iUV0, in vec2 iUV1, in vec2 iUV2, out vec3 oTangent, out vec3 oBitangent )
+{
+  vec3 deltaPos1 = iV1 - iV0;
+  vec3 deltaPos2 = iV2 - iV0;
+  vec2 deltaUV1  = iUV1 - iUV0;
+  vec2 deltaUV2  = iUV2 - iUV0;
+
+  float invdet = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV1.y * deltaUV2.x);
+
+  oTangent   = (deltaPos1 * deltaUV2.y - deltaPos2 * deltaUV1.y) * invdet;
+  oBitangent = (deltaPos2 * deltaUV1.x - deltaPos1 * deltaUV2.x) * invdet;
+}
