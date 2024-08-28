@@ -67,6 +67,8 @@ void Test3::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
       this_ -> _KeyRight = ( action == GLFW_PRESS ); break;
     case GLFW_KEY_ESCAPE:
       this_ -> _KeyEsc = ( action == GLFW_PRESS ); break;
+    case GLFW_KEY_R:
+      this_ -> _KeyR = ( action == GLFW_PRESS ); break;
     default :
       break;
     }
@@ -1386,6 +1388,12 @@ int Test3::UpdateScene()
     {
       _Scene -> GetCamera().OffsetOrientations(-_TimeDelta * velocity, 0.f);
       _SceneCameraModified = true;
+    }
+
+    if ( _KeyR )
+    {
+      _ReloadScene = true;
+      _KeyR = false;
     }
   }
 

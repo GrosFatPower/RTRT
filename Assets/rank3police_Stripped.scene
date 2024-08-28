@@ -15,17 +15,17 @@ camera
 	fov 18.2
 }
 
-material object10
-{
-	albedotexture rank3police/textures/material_baseColor.png
-	metallicroughnesstexture rank3police/textures/material_metallicRoughness.png
-}
-
-mesh
-{
-	file rank3police/object10.obj
-	material object10
-}
+#material object10
+#{
+#	albedotexture rank3police/textures/material_baseColor.png
+#	metallicroughnesstexture rank3police/textures/material_metallicRoughness.png
+#}
+#
+#mesh
+#{
+#	file rank3police/object10.obj
+#	material object10
+#}
 
 #material object11
 #{
@@ -38,7 +38,7 @@ mesh
 #	file rank3police/object11.obj
 #	material object11
 #}
-#
+
 #material object12
 #{
 #	albedotexture rank3police/textures/comm_block_baseColor.png
@@ -51,7 +51,7 @@ mesh
 #	file rank3police/object12.obj
 #	material object12
 #}
-#
+
 #material object13
 #{
 #	albedotexture rank3police/textures/ctrl_eye_baseColor.png
@@ -64,7 +64,7 @@ mesh
 #	file rank3police/object13.obj
 #	material object13
 #}
-#
+
 #material object14001
 #{
 #	albedotexture rank3police/textures/glass_baseColor.png
@@ -92,7 +92,7 @@ mesh
 #	file rank3police/object15.obj
 #	material object15
 #}
-#
+
 #material object16
 #{
 #	albedotexture rank3police/textures/helmet_baseColor.png
@@ -111,7 +111,7 @@ mesh
 #	file rank3police/object17.obj
 #	material object16
 #}
-#
+
 #material object18
 #{
 #	albedotexture rank3police/textures/helmet_ad_01_baseColor.png
@@ -123,7 +123,7 @@ mesh
 #	file rank3police/object18.obj
 #	material object18
 #}
-#
+
 #material object19
 #{
 #	albedotexture rank3police/textures/helmet_ad_02_baseColor.png
@@ -135,20 +135,20 @@ mesh
 #	file rank3police/object19.obj
 #	material object19
 #}
-#
-#material object20
-#{
-#	albedotexture rank3police/textures/helmet_ad_03_baseColor.png
-#	roughness 0.156508
-#	metallic 0.0
-#}
-#
-#mesh
-#{
-#	file rank3police/object20.obj
-#	material object20
-#}
-#
+
+material object20
+{
+	albedotexture rank3police/textures/helmet_ad_03_baseColor.png
+	roughness 0.156508
+	metallic 0.0
+}
+
+mesh
+{
+	file rank3police/object20.obj
+	material object20
+}
+
 #material object21
 #{
 #	albedotexture rank3police/textures/helmet_logo_baseColor.png

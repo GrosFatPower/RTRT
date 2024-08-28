@@ -141,6 +141,7 @@ private:
   bool            _KeyLeft              = false;
   bool            _KeyRight             = false;
   bool            _KeyEsc               = false;
+  bool            _KeyR                 = false;
 
   Scene         * _Scene = nullptr;
   std::vector<std::string>  _SceneFiles;
