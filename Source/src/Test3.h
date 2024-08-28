@@ -61,46 +61,70 @@ private:
   ShaderProgram * _RTTShader = nullptr;
   ShaderProgram * _RTSShader = nullptr;
 
-  GLuint          _FrameBufferID                    = 0;
-  GLuint          _VtxBufferID                      = 0;
-  GLuint          _VtxNormBufferID                  = 0;
-  GLuint          _VtxUVBufferID                    = 0;
-  GLuint          _VtxIndBufferID                   = 0;
-  GLuint          _TexIndBufferID                   = 0;
-  GLuint          _MeshBBoxBufferID                 = 0;
-  GLuint          _MeshIdRangeBufferID              = 0;
-  // BVH
-  GLuint          _TLASNodesBufferID                = 0;
-  GLuint          _TLASMeshMatIDBufferID            = 0;
-  GLuint          _BLASNodesBufferID                = 0;
-  GLuint          _BLASNodesRangeBufferID           = 0;
-  GLuint          _BLASPackedIndicesBufferID        = 0;
-  GLuint          _BLASPackedIndicesRangeBufferID   = 0;
-  GLuint          _BLASPackedVerticesBufferID       = 0;
-  GLuint          _BLASPackedNormalsBufferID        = 0;
-  GLuint          _BLASPackedUVsBufferID            = 0;
+  GLuint          _FrameBufferID                   = 0;
+  GLuint          _VtxBufferID                     = 0;
+  GLuint          _VtxNormBufferID                 = 0;
+  GLuint          _VtxUVBufferID                   = 0;
+  GLuint          _VtxIndBufferID                  = 0;
+  GLuint          _TexIndBufferID                  = 0;
+  GLuint          _MeshBBoxBufferID                = 0;
+  GLuint          _MeshIdRangeBufferID             = 0;
+  // BVH                                          
+  GLuint          _TLASNodesBufferID               = 0;
+  GLuint          _TLASMeshMatIDBufferID           = 0;
+  GLuint          _BLASNodesBufferID               = 0;
+  GLuint          _BLASNodesRangeBufferID          = 0;
+  GLuint          _BLASPackedIndicesBufferID       = 0;
+  GLuint          _BLASPackedIndicesRangeBufferID  = 0;
+  GLuint          _BLASPackedVerticesBufferID      = 0;
+  GLuint          _BLASPackedNormalsBufferID       = 0;
+  GLuint          _BLASPackedUVsBufferID           = 0;
 
-  GLuint          _ScreenTextureID                  = 0;
-  GLuint          _SkyboxTextureID                  = 0;
-  GLuint          _VtxTextureID                     = 0;
-  GLuint          _VtxNormTextureID                 = 0;
-  GLuint          _VtxUVTextureID                   = 0;
-  GLuint          _VtxIndTextureID                  = 0;
-  GLuint          _TexIndTextureID                  = 0;
-  GLuint          _TexArrayTextureID                = 0;
-  GLuint          _MeshBBoxTextureID                = 0;
-  GLuint          _MeshIdRangeTextureID             = 0;
+  // Texture IDs
+  GLuint          _ScreenTextureID                 = 0;
+  GLuint          _SkyboxTextureID                 = 0;
+  GLuint          _VtxTextureID                    = 0;
+  GLuint          _VtxNormTextureID                = 0;
+  GLuint          _VtxUVTextureID                  = 0;
+  GLuint          _VtxIndTextureID                 = 0;
+  GLuint          _TexIndTextureID                 = 0;
+  GLuint          _TexArrayTextureID               = 0;
+  GLuint          _MeshBBoxTextureID               = 0;
+  GLuint          _MeshIdRangeTextureID            = 0;
   // BVH
-  GLuint          _TLASNodesTextureID               = 0;
-  GLuint          _TLASMeshMatIDTextureID           = 0;
-  GLuint          _TLASTransformsIDTextureID        = 0;
-  GLuint          _BLASNodesTextureID               = 0;
-  GLuint          _BLASNodesRangeTextureID          = 0;
-  GLuint          _BLASPackedIndicesTextureID       = 0;
-  GLuint          _BLASPackedIndicesRangeTextureID  = 0;
-  GLuint          _BLASPackedVerticesTextureID      = 0;
-  GLuint          _BLASPackedNormalsTextureID       = 0;
-  GLuint          _BLASPackedUVsTextureID           = 0;
+  GLuint          _TLASNodesTextureID              = 0;
+  GLuint          _TLASMeshMatIDTextureID          = 0;
+  GLuint          _TLASTransformsIDTextureID       = 0;
+  GLuint          _BLASNodesTextureID              = 0;
+  GLuint          _BLASNodesRangeTextureID         = 0;
+  GLuint          _BLASPackedIndicesTextureID      = 0;
+  GLuint          _BLASPackedIndicesRangeTextureID = 0;
+  GLuint          _BLASPackedVerticesTextureID     = 0;
+  GLuint          _BLASPackedNormalsTextureID      = 0;
+  GLuint          _BLASPackedUVsTextureID          = 0;
+
+  // Texture Units
+  const unsigned int    _ScreenTextureUnit                 = 0;
+  const unsigned int    _SkyboxTextureUnit                 = 1;
+  const unsigned int    _VtxTextureUnit                    = 2;
+  const unsigned int    _VtxNormTextureUnit                = 3;
+  const unsigned int    _VtxUVTextureUnit                  = 4;
+  const unsigned int    _VtxIndTextureUnit                 = 5;
+  const unsigned int    _TexIndTextureUnit                 = 6;
+  const unsigned int    _TexArrayTextureUnit               = 7;
+  const unsigned int    _MeshBBoxTextureUnit               = 8;
+  const unsigned int    _MeshIdRangeTextureUnit            = 9;
+  // BVH
+  const unsigned int    _TLASNodesTextureUnit              = 10;
+  const unsigned int    _TLASTransformsIDTextureUnit       = 11;
+  const unsigned int    _TLASMeshMatIDTextureUnit          = 12;
+  const unsigned int    _BLASNodesTextureUnit              = 13;
+  const unsigned int    _BLASNodesRangeTextureUnit         = 14;
+  const unsigned int    _BLASPackedIndicesTextureUnit      = 15;
+  const unsigned int    _BLASPackedIndicesRangeTextureUnit = 16;
+  const unsigned int    _BLASPackedVerticesTextureUnit     = 17;
+  const unsigned int    _BLASPackedNormalsTextureUnit      = 18;
+  const unsigned int    _BLASPackedUVsTextureUnit          = 19;
 
   double          _MouseX               = 0.;
   double          _MouseY               = 0.;

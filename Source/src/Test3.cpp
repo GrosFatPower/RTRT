@@ -333,8 +333,8 @@ int Test3::UpdateUniforms()
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_EnableSkybox"), (int)_Settings._EnableSkybox);
       glUniform1f(glGetUniformLocation(RTTProgramID, "u_SkyboxRotation"), _Settings._SkyBoxRotation / 360.f);
       glUniform1f(glGetUniformLocation(RTTProgramID, "u_Gamma"), _Settings._Gamma);
-      glUniform1i(glGetUniformLocation(RTTProgramID, "u_ScreenTexture"), 0);
-      glUniform1i(glGetUniformLocation(RTTProgramID, "u_SkyboxTexture"), 1);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_ScreenTexture"), _ScreenTextureUnit);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_SkyboxTexture"), _SkyboxTextureUnit);
       _RenderSettingsModified = false;
     }
 
@@ -467,24 +467,24 @@ int Test3::UpdateUniforms()
           }
         }
 
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxTexture"),                      2);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxNormTexture"),                  3);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxUVTexture"),                    4);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxIndTexture"),                   5);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexIndTexture"),                   6);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexArrayTexture"),                 7);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshBBoxTexture"),                 8);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshIDRangeTexture"),              9);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASNodesTexture"),               10);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASTransformsTexture"),          11);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASMeshMatIDTexture"),           12);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASNodesTexture"),               13);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASNodesRangeTexture"),          14);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedIndicesTexture"),       15);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedIndicesRangeTexture"),  16);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedVtxTexture"),           17);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedNormTexture"),          18);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedUVTexture"),            19);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxTexture"),                    _VtxTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxNormTexture"),                _VtxNormTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxUVTexture"),                  _VtxUVTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxIndTexture"),                 _VtxIndTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexIndTexture"),                 _TexIndTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexArrayTexture"),               _TexArrayTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshBBoxTexture"),               _MeshBBoxTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshIDRangeTexture"),            _MeshIdRangeTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASNodesTexture"),              _TLASNodesTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASTransformsTexture"),         _TLASTransformsIDTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASMeshMatIDTexture"),          _TLASMeshMatIDTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASNodesTexture"),              _BLASNodesTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASNodesRangeTexture"),         _BLASNodesRangeTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedIndicesTexture"),      _BLASPackedIndicesTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedIndicesRangeTexture"), _BLASPackedIndicesRangeTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedVtxTexture"),          _BLASPackedVerticesTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedNormTexture"),         _BLASPackedNormalsTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedUVTexture"),           _BLASPackedUVsTextureUnit);
 
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbSpheres"), nbSpheres);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbPlanes"), nbPlanes);
@@ -504,7 +504,7 @@ int Test3::UpdateUniforms()
   {
     _RTSShader -> Use();
     GLuint RTSProgramID = _RTSShader -> GetShaderProgramID();
-    glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), 0);
+    glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), _ScreenTextureUnit);
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedFrames"), _AccumulatedFrames);
     _RTSShader -> StopUsing();
   }
@@ -1302,45 +1302,45 @@ void Test3::RenderToTexture()
   glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
   glViewport(0, 0, RenderWidth(), RenderHeight());
 
-  glActiveTexture(GL_TEXTURE0);
+  glActiveTexture(GL_TEXTURE0+_ScreenTextureUnit);
   glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
-  glActiveTexture(GL_TEXTURE1);
+  glActiveTexture(GL_TEXTURE0+_SkyboxTextureUnit);
   glBindTexture(GL_TEXTURE_2D, _SkyboxTextureID);
-  glActiveTexture(GL_TEXTURE2);
+  glActiveTexture(GL_TEXTURE0+_VtxTextureUnit);
   glBindTexture(GL_TEXTURE_BUFFER, _VtxTextureID);
-  glActiveTexture(GL_TEXTURE3);
+  glActiveTexture(GL_TEXTURE0+_VtxNormTextureUnit);
   glBindTexture(GL_TEXTURE_BUFFER, _VtxNormTextureID);
-  glActiveTexture(GL_TEXTURE4);
+  glActiveTexture(GL_TEXTURE0+_VtxUVTextureUnit);
   glBindTexture(GL_TEXTURE_BUFFER, _VtxUVTextureID);
-  glActiveTexture(GL_TEXTURE5);
+  glActiveTexture(GL_TEXTURE0+_VtxIndTextureUnit);
   glBindTexture(GL_TEXTURE_BUFFER, _VtxIndTextureID);
-  glActiveTexture(GL_TEXTURE6);
+  glActiveTexture(GL_TEXTURE0+_TexIndTextureUnit);
   glBindTexture(GL_TEXTURE_BUFFER, _TexIndTextureID);
-  glActiveTexture(GL_TEXTURE7);
+  glActiveTexture(GL_TEXTURE0+_TexArrayTextureUnit);
   glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTextureID);
-  glActiveTexture(GL_TEXTURE8);
+  glActiveTexture(GL_TEXTURE0+_MeshBBoxTextureUnit);
   glBindTexture(GL_TEXTURE_BUFFER, _MeshBBoxTextureID);
-  glActiveTexture(GL_TEXTURE9);
+  glActiveTexture(GL_TEXTURE0+_MeshIdRangeTextureUnit);
   glBindTexture(GL_TEXTURE_BUFFER, _MeshIdRangeTextureID);
-  glActiveTexture(GL_TEXTURE10);
+  glActiveTexture(GL_TEXTURE0+_TLASNodesTextureUnit);
   glBindTexture(GL_TEXTURE_BUFFER, _TLASNodesTextureID);
-  glActiveTexture(GL_TEXTURE11);
+  glActiveTexture(GL_TEXTURE0+_TLASTransformsIDTextureUnit);
   glBindTexture(GL_TEXTURE_2D, _TLASTransformsIDTextureID);
-  glActiveTexture(GL_TEXTURE12);
+  glActiveTexture(GL_TEXTURE0+_TLASMeshMatIDTextureUnit);
   glBindTexture(GL_TEXTURE_BUFFER, _TLASMeshMatIDTextureID);
-  glActiveTexture(GL_TEXTURE13);
+  glActiveTexture(GL_TEXTURE0+_BLASNodesTextureUnit);
   glBindTexture(GL_TEXTURE_BUFFER, _BLASNodesTextureID);
-  glActiveTexture(GL_TEXTURE14);
+  glActiveTexture(GL_TEXTURE0+_BLASNodesRangeTextureUnit);
   glBindTexture(GL_TEXTURE_BUFFER, _BLASNodesRangeTextureID);
-  glActiveTexture(GL_TEXTURE15);
+  glActiveTexture(GL_TEXTURE0+_BLASPackedIndicesTextureUnit);
   glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedIndicesTextureID);
-  glActiveTexture(GL_TEXTURE16);
+  glActiveTexture(GL_TEXTURE0+_BLASPackedIndicesRangeTextureUnit);
   glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedIndicesRangeTextureID);
-  glActiveTexture(GL_TEXTURE17);
+  glActiveTexture(GL_TEXTURE0+_BLASPackedVerticesTextureUnit);
   glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedVerticesTextureID);
-  glActiveTexture(GL_TEXTURE18);
+  glActiveTexture(GL_TEXTURE0+_BLASPackedNormalsTextureUnit);
   glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedNormalsTextureID);
-  glActiveTexture(GL_TEXTURE19);
+  glActiveTexture(GL_TEXTURE0+_BLASPackedUVsTextureUnit);
   glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedUVsTextureID);
   
   _Quad -> Render(*_RTTShader);
