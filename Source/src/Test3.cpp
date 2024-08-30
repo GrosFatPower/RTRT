@@ -604,18 +604,15 @@ int Test3::DrawUI()
         _RenderSettingsModified = true;
       }
 
-      if ( ImGui::Checkbox("Enable skybox", &_Settings._EnableSkybox) )
-        _RenderSettingsModified = true;
-
-      if ( ImGui::SliderFloat("Skybox rotation", &_Settings._SkyBoxRotation, 0.f, 360.f) )
-        _RenderSettingsModified = true;
-
-      if ( _Settings._EnableSkybox && ( _SkyboxTextureID >= 0 ) )
+      if ( _Scene -> GetEnvMap().IsInitialized() )
       {
-        std::vector<Texture*> & textures = _Scene -> GetTextures();
+        if ( ImGui::Checkbox("Enable skybox", &_Settings._EnableSkybox) )
+          _RenderSettingsModified = true;
 
-        Texture * skyboxTexture = textures[_SkyboxID];
-        if ( skyboxTexture )
+        if ( ImGui::SliderFloat("Skybox rotation", &_Settings._SkyBoxRotation, 0.f, 360.f) )
+          _RenderSettingsModified = true;
+
+        if ( _Settings._EnableSkybox && ( _SkyboxTextureID >= 0 ) )
         {
           ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_SkyboxTextureID);
           ImGui::Image(texture, ImVec2(128, 128));
@@ -1257,26 +1254,25 @@ int Test3::InitializeScene()
   for ( int i = 0; i < PrimitiveInstances.size(); ++i )
     _PrimitiveNames.push_back(_Scene -> FindPrimitiveName(i));
 
-  _SkyboxID =_Scene -> AddTexture(g_AssetsDir + "skyboxes\\alps_field_2k.hdr", 4, TexFormat::TEX_FLOAT);
+  if ( !_Scene -> GetEnvMap().IsInitialized() )
   {
-    std::vector<Texture*> & textures = _Scene -> GetTextures();
-
-    Texture * skyboxTexture = textures[_SkyboxID];
-    if ( skyboxTexture )
-    {
-      glGenTextures(1, &_SkyboxTextureID);
-      glActiveTexture(TEX_UNIT(_SkyboxTextureUnit));
-      glBindTexture(GL_TEXTURE_2D, _SkyboxTextureID);
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, skyboxTexture -> GetWidth(), skyboxTexture -> GetHeight(), 0, GL_RGBA, GL_FLOAT, skyboxTexture -> GetFData());
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      glBindTexture(GL_TEXTURE_2D, 0);
-
-      //_Settings._EnableSkybox = true;
-    }
-    else
-      return 1;
+    // Default background
+    _Scene -> LoadEnvMap(g_AssetsDir + "HDR\\alps_field_2k.hdr");
+    _Settings._EnableSkybox = false;
   }
+
+  if ( _Scene -> GetEnvMap().IsInitialized() )
+  {
+    glGenTextures(1, &_SkyboxTextureID);
+    glActiveTexture(TEX_UNIT(_SkyboxTextureUnit));
+    glBindTexture(GL_TEXTURE_2D, _SkyboxTextureID);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, _Scene -> GetEnvMap().GetWidth(), _Scene -> GetEnvMap().GetHeight(), 0, GL_RGB, GL_FLOAT, _Scene -> GetEnvMap().GetRawData());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
+  else
+    _Settings._EnableSkybox = false;
 
   _RenderSettingsModified = true;
   _SceneCameraModified    = true;

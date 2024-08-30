@@ -27,7 +27,7 @@ private:
   static int ParseBox( std::ifstream & iStr, Scene & ioScene );
   static int ParsePlane( std::ifstream & iStr, Scene & ioScene );
   static int ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scene & ioScene );
-  static int ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSettings, Scene & ioScene );
+  static int ParseRenderSettings( std::ifstream & iStr, const std::string & iPath, RenderSettings & oSettings, Scene & ioScene );
   static int ParseGLTF( std::ifstream & iStr, Scene & ioScene );
 
   Loader();

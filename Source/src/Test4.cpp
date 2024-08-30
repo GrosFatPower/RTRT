@@ -326,7 +326,7 @@ int Test4::InitializeSceneFiles()
 // ----------------------------------------------------------------------------
 int Test4::InitializeBackgroundFiles()
 {
-  std::string bgdPath = g_AssetsDir + "skyboxes\\";
+  std::string bgdPath = g_AssetsDir + "HDR\\";
 
   tinydir_dir dir;
   tinydir_open_sorted(&dir, bgdPath.c_str());

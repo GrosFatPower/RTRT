@@ -233,7 +233,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
       std::cout << "New renderer" << std::endl;
 
       RenderSettings settings;
-      parsingError += Loader::ParseRenderSettings(file, settings, *oScene);
+      parsingError += Loader::ParseRenderSettings(file, path, settings, *oScene);
 
       if ( !parsingError )
       {
@@ -809,7 +809,7 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
   return parsingError;
 }
 
-int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSettings, Scene & ioScene )
+int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath, RenderSettings & oSettings, Scene & ioScene )
 {
   int parsingError = 0;
 
@@ -912,7 +912,7 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSetting
       else
         parsingError++;
     }
-    else if ( IsEqual("envmapfile", tokens[0]) )
+    else if ( IsEqual("envmap", tokens[0]) )
     {
       if ( 2 == nbTokens )
       {
@@ -972,7 +972,7 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, RenderSettings & oSetting
       oSettings._RenderResolution = oSettings._WindowResolution = { 1920, 1080 };
 
     if ( envMapFile != "none" )
-      ioScene.LoadEnvMap(envMapFile);
+      ioScene.LoadEnvMap(iPath + envMapFile);
   }
 
   return parsingError;
