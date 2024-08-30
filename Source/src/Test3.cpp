@@ -407,36 +407,6 @@ int Test3::UpdateUniforms()
       {
         const std::vector<Material> & Materials =  _Scene -> GetMaterials();
 
-        /*
-        int nbMaterials = Materials.size();
-        for ( int i = 0; i < nbMaterials; ++i )
-        {
-          const Material & curMat = Materials[i];
-
-          glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_ID"                     ).c_str()), i);
-          glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_BaseColorTexID"         ).c_str()), (int)curMat._BaseColorTexId );
-          glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_NormalMapTexID"         ).c_str()), (int)curMat._NormalMapTexID );
-          glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_MetallicRoughnessTexID" ).c_str()), (int)curMat._MetallicRoughnessTexID );
-          glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_EmissionMapTexID"       ).c_str()), (int)curMat._EmissionMapTexID );
-          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Albedo"                 ).c_str()), curMat._Albedo.r, curMat._Albedo.g, curMat._Albedo.b);
-          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Emission"               ).c_str()), curMat._Emission.r, curMat._Emission.g, curMat._Emission.b);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Metallic"               ).c_str()), curMat._Metallic);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Roughness"              ).c_str()), curMat._Roughness);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Reflectance"            ).c_str()), curMat._Reflectance);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Subsurface"             ).c_str()), curMat._Subsurface);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Sheen"                  ).c_str()), curMat._Sheen);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_SheenTint"              ).c_str()), curMat._SheenTint);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Anisotropic"            ).c_str()), curMat._Anisotropic);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_SpecularTrans"          ).c_str()), curMat._SpecTrans);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_SpecularTint"           ).c_str()), curMat._SpecularTint);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Clearcoat"              ).c_str()), curMat._Clearcoat);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_ClearcoatGloss"         ).c_str()), curMat._ClearcoatGloss);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_IOR"                    ).c_str()), curMat._IOR);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Materials",i,"_Opacity"                ).c_str()), curMat._Opacity);
-        }
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbMaterials"), nbMaterials);
-        */
-
         glBindTexture(GL_TEXTURE_2D, _MaterialsTextureID);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, (sizeof(Material) / sizeof(Vec4)) * _Scene -> GetMaterials().size(), 1, 0, GL_RGBA, GL_FLOAT, &_Scene -> GetMaterials()[0]);
         glBindTexture(GL_TEXTURE_2D, 0);

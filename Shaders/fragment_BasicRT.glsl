@@ -24,11 +24,10 @@ out vec4 fragColor;
 // Uniforms
 // ============================================================================
 
-#define MAX_MATERIAL_COUNT 32
-#define MAX_SPHERE_COUNT   16
-#define MAX_PLANES_COUNT   16
-#define MAX_BOX_COUNT      16
-#define MAX_LIGHT_COUNT    16
+#define MAX_SPHERE_COUNT   32
+#define MAX_PLANES_COUNT   32
+#define MAX_BOX_COUNT      32
+#define MAX_LIGHT_COUNT    32
 
 uniform vec2           u_Resolution;
 uniform float          u_Time;
@@ -41,8 +40,6 @@ uniform Camera         u_Camera;
 uniform Light          u_Lights[MAX_LIGHT_COUNT];
 uniform int            u_NbLights;
 uniform int            u_ShowLights;
-//uniform int            u_NbMaterials;
-//uniform Material       u_Materials[MAX_MATERIAL_COUNT];
 uniform int            u_NbSpheres;
 uniform Sphere         u_Spheres[MAX_SPHERE_COUNT];
 uniform int            u_NbPlanes;
@@ -413,69 +410,6 @@ bool AnyHit( in Ray iRay, in float iMaxDist )
 }
 
 // ----------------------------------------------------------------------------
-// Albedo
-// ----------------------------------------------------------------------------
-/*
-vec3 Albedo( in HitPoint iClosestHit )
-{
-  if ( u_Materials[iClosestHit._MaterialID]._BaseColorTexID >= 0 )
-  {
-    int texArrayID = texelFetch(u_TexIndTexture, u_Materials[iClosestHit._MaterialID]._BaseColorTexID).x;
-    if ( texArrayID >= 0 )
-      return texture(u_TexArrayTexture, vec3(iClosestHit._UV, float(texArrayID))).rgb;
-  }
-
-  return u_Materials[iClosestHit._MaterialID]._Albedo;
-}
-*/
-
-// ----------------------------------------------------------------------------
-// SetupMaterial
-// ----------------------------------------------------------------------------
-/*
-void SetupMaterial( inout HitPoint ioClosestHit, out Material oMat )
-{
-  oMat = u_Materials[ioClosestHit._MaterialID];
-
-  if ( oMat._BaseColorTexID >= 0 )
-  {
-    int texArrayID = texelFetch(u_TexIndTexture, oMat._BaseColorTexID).x;
-    if ( texArrayID >= 0 )
-      oMat._Albedo = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rgb;
-  }
-
-  if ( oMat._EmissionMapTexID >= 0 )
-  {
-    int texArrayID = texelFetch(u_TexIndTexture, oMat._EmissionMapTexID).x;
-    if ( texArrayID >= 0 )
-      oMat._Emission = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rgb;
-  }
-
-  if ( oMat._NormalMapTexID >= 0 )
-  {
-    int texArrayID = texelFetch(u_TexIndTexture, oMat._NormalMapTexID).x;
-    if ( texArrayID >= 0 )
-    {  
-      vec3 texNormal = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).xyz;
-      texNormal = normalize(texNormal * 2.0 - 1.0);
-      ioClosestHit._Normal = normalize(ioClosestHit._Tangent * texNormal.x + ioClosestHit._Bitangent * texNormal.y + ioClosestHit._Normal * texNormal.z);
-    }
-  }
-
-  if ( oMat._MetallicRoughnessTexID >= 0 )
-  {
-    int texArrayID = texelFetch(u_TexIndTexture, oMat._MetallicRoughnessTexID).x;
-    if ( texArrayID >= 0 )
-    {  
-      vec2 metalRoughness = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rg;
-      oMat._Metallic = metalRoughness.x;
-      oMat._Roughness = metalRoughness.y;
-    }
-  }
-}
-*/
-
-// ----------------------------------------------------------------------------
 // LoadMaterial
 // ----------------------------------------------------------------------------
 void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
@@ -518,33 +452,26 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
   // oMat._MediumType            = Params6.z;
   // oMat._MediumDensity         = Params6.w;
 
-  oMat._BaseColorTexID         = int(Params7.x);
-  oMat._MetallicRoughnessTexID = int(Params7.y);
-  oMat._NormalMapTexID         = int(Params7.z);
-  oMat._EmissionMapTexID       = int(Params7.w);
+  int baseColorTexID           = int(Params7.x);
+  int metallicRoughnessTexID   = int(Params7.y);
+  int normalMapTexID           = int(Params7.z);
+  int emissionMapTexID         = int(Params7.w);
 
   oMat._Opacity                = Params8.x;
   // oMat._AlphaMode             = Params8.y;
   // oMat._AlphaCutoff           = Params8.z;
   oMat._Reflectance            = Params8.w;
 
-  if ( oMat._BaseColorTexID >= 0 )
+  if ( baseColorTexID >= 0 )
   {
-    int texArrayID = texelFetch(u_TexIndTexture, oMat._BaseColorTexID).x;
+    int texArrayID = texelFetch(u_TexIndTexture, baseColorTexID).x;
     if ( texArrayID >= 0 )
       oMat._Albedo = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rgb;
   }
 
-  if ( oMat._EmissionMapTexID >= 0 )
+  if ( normalMapTexID >= 0 )
   {
-    int texArrayID = texelFetch(u_TexIndTexture, oMat._EmissionMapTexID).x;
-    if ( texArrayID >= 0 )
-      oMat._Emission = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rgb;
-  }
-
-  if ( oMat._NormalMapTexID >= 0 )
-  {
-    int texArrayID = texelFetch(u_TexIndTexture, oMat._NormalMapTexID).x;
+    int texArrayID = texelFetch(u_TexIndTexture, normalMapTexID).x;
     if ( texArrayID >= 0 )
     {  
       vec3 texNormal = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).xyz;
@@ -553,15 +480,22 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
     }
   }
 
-  if ( oMat._MetallicRoughnessTexID >= 0 )
+  if ( metallicRoughnessTexID >= 0 )
   {
-    int texArrayID = texelFetch(u_TexIndTexture, oMat._MetallicRoughnessTexID).x;
+    int texArrayID = texelFetch(u_TexIndTexture, metallicRoughnessTexID).x;
     if ( texArrayID >= 0 )
     {  
       vec2 metalRoughness = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rg;
       oMat._Metallic = metalRoughness.x;
       oMat._Roughness = metalRoughness.y;
     }
+  }
+
+  if ( emissionMapTexID >= 0 )
+  {
+    int texArrayID = texelFetch(u_TexIndTexture, emissionMapTexID).x;
+    if ( texArrayID >= 0 )
+      oMat._Emission = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rgb;
   }
 }
 
@@ -573,7 +507,6 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
 vec3 PBR( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuation )
 {
   Material mat;
-  //SetupMaterial(iClosestHit, mat);
   LoadMaterial(iClosestHit, mat);
 
   vec3 outColor = mat._Emission;
@@ -649,9 +582,10 @@ vec3 PBR( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAt
 // ----------------------------------------------------------------------------
 // ComputeColor
 // ----------------------------------------------------------------------------
-/*
-vec3 ComputeColor( in HitPoint iClosestHit )
+vec3 ComputeColor( in HitPoint iClosestHit, inout Material ioMat )
 {
+  LoadMaterial(iClosestHit, ioMat);
+
   vec3 pixelColor = vec3(0.f);
 
   for ( int i = 0; i < u_NbLights; ++i )
@@ -670,21 +604,11 @@ vec3 ComputeColor( in HitPoint iClosestHit )
     if ( !AnyHit(occlusionRay, lightDist) )
       lightIntensity = max(dot(iClosestHit._Normal, lightDir), 0.0f) * u_Lights[i]._Emission;
 
-    vec3 curColor = u_Materials[iClosestHit._MaterialID]._Albedo;
-    if ( u_Materials[iClosestHit._MaterialID]._BaseColorTexID >= 0 )
-    {
-      int texArrayID = texelFetch(u_TexIndTexture, u_Materials[iClosestHit._MaterialID]._BaseColorTexID).x;
-      if ( texArrayID >= 0 )
-        curColor = texture(u_TexArrayTexture, vec3(iClosestHit._UV, float(texArrayID))).rgb;
-    }
-    curColor *= lightIntensity;
-
-    pixelColor += curColor;
+    pixelColor += ioMat._Albedo * lightIntensity;
   }
 
   return pixelColor;
 }
-*/
 
 // ----------------------------------------------------------------------------
 // main
@@ -737,25 +661,26 @@ void main()
 
 #ifdef PBR_RENDERING
 
-    // TEST1 : PBR
     Ray scattered;
     vec3 attenuation;
     pixelColor += PBR(ray, closestHit, scattered, attenuation) * multiplier;
     ray = scattered;
     multiplier *= attenuation;
-    //multiplier *= 0.5f;
 
 #elif defined(DIRECT_ILLUMINATION)
 
-    // TEST 2 : basic RT
-    pixelColor += ComputeColor(closestHit) * multiplier;
-    multiplier *= u_Materials[closestHit._MaterialID]._Metallic;
+    Material mat;
+    pixelColor += ComputeColor(closestHit, mat) * multiplier;
+    multiplier *= mat._Metallic;
+
     ray._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
-    ray._Dir = reflect(ray._Dir, closestHit._Normal + u_Materials[closestHit._MaterialID]._Roughness * RandomVector() );
+    ray._Dir = reflect(ray._Dir, closestHit._Normal + mat._Roughness * RandomVector() );
 
 #else
 
-    pixelColor = Albedo(closestHit);
+    Material mat;
+    LoadMaterial(closestHit, mat);
+    pixelColor = mat._Albedo;
     break;
 
 #endif

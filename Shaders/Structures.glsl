@@ -15,10 +15,6 @@ struct Ray
 struct Material
 {
   int   _ID;
-  int   _BaseColorTexID;
-  int   _NormalMapTexID;
-  int   _MetallicRoughnessTexID;
-  int   _EmissionMapTexID;
   vec3  _Emission;
   vec3  _Albedo;         // Albedo for dialectrics, F0 for metals
   float _Roughness;
