@@ -553,8 +553,9 @@ vec3 PBR( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAt
     double cosTheta = dot(-iRay._Dir, iClosestHit._Normal);
     sinTheta = sqrt(1.f - cosTheta * cosTheta);
 
-    refractionRatio = (1. / mat._IOR);
-    if ( !iClosestHit._FrontFace )
+    if ( iClosestHit._FrontFace )
+      refractionRatio = (1. / mat._IOR);
+    else
       refractionRatio = mat._IOR;
   }
 
