@@ -687,12 +687,12 @@ void main()
 #endif
   }
 
-  // Tone mapping
-  //pixelColor /= pixelColor + vec3(1.);
+  // Reinhard Tone mapping
+  pixelColor /= pixelColor + vec3(1.);
   // Gamma correction
   pixelColor = pow(pixelColor, vec3(1. / u_Gamma));
 
-  pixelColor = clamp(pixelColor, 0.f, 1.f);
+  //pixelColor = clamp(pixelColor, 0.f, 1.f);
   fragColor = vec4(pixelColor, 0.f);
 
   if ( 1 == u_Accumulate )
