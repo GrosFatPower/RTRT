@@ -545,10 +545,15 @@ vec3 PBR( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAt
             outColor += BRDF(iClosestHit._Normal, V, L, F0, mat) * u_Lights[i]._Emission * irradiance;
         }
       }
-      else if ( 0 != u_EnableSkybox )
+      else
       {
         vec3 L = RandomVector();
-        vec3 skyColor = SampleSkybox(L, u_SkyboxTexture, u_SkyboxRotation);
+
+        vec3 envColor;
+        if ( 0 != u_EnableSkybox )
+          envColor = SampleSkybox(L, u_SkyboxTexture, u_SkyboxRotation);
+        else
+          envColor = u_BackgroundColor;
 
         float distToLight = INFINITY;
 
@@ -557,9 +562,9 @@ vec3 PBR( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAt
         occlusionTestRay._Dir = L;
         if ( !AnyHit(occlusionTestRay, distToLight) )
         {
-          float irradiance = max(dot(L, iClosestHit._Normal), 0.f);
+          float irradiance = max(dot(L, iClosestHit._Normal), 0.f) * 0.1f;
           if ( irradiance > 0.f )
-            outColor += BRDF(iClosestHit._Normal, V, L, F0, mat) * skyColor * irradiance;
+            outColor += BRDF(iClosestHit._Normal, V, L, F0, mat) * envColor * irradiance;
         }
       }
     }
