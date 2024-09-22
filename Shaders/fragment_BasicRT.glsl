@@ -518,29 +518,49 @@ vec3 PBR( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAt
   {
     vec3 V = normalize(iRay._Orig - iClosestHit._Pos);
 
-    for ( int i = 0; i < u_NbLights; ++i )
+    for ( int i = 0; i < u_NbLights + 1; ++i )
     {
       // Soft Shadows
       vec3 L;
-      if ( QUAD_LIGHT == u_Lights[i]._Type )
-        L = GetLightDirSample(iClosestHit._Pos, u_Lights[i]._Pos, u_Lights[i]._DirU, u_Lights[i]._DirV);
-      else if ( SPHERE_LIGHT == u_Lights[i]._Type )
-        L = GetLightDirSample(iClosestHit._Pos, u_Lights[i]._Pos, u_Lights[i]._Radius);
-      else
-        L = u_Lights[i]._Pos;
-
-      float distToLight = length(L);
-      float invDistToLight = 1. / max(distToLight, EPSILON);
-      L = L * invDistToLight;
-    
-      Ray occlusionTestRay;
-      occlusionTestRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
-      occlusionTestRay._Dir = L;
-      if ( !AnyHit(occlusionTestRay, distToLight) )
+      if ( i < u_NbLights )
       {
-        float irradiance = max(dot(L, iClosestHit._Normal), 0.f) * invDistToLight * invDistToLight;
-        if ( irradiance > 0.f )
-          outColor += BRDF(iClosestHit._Normal, V, L, F0, mat) * u_Lights[i]._Emission * irradiance;
+        if ( QUAD_LIGHT == u_Lights[i]._Type )
+          L = GetLightDirSample(iClosestHit._Pos, u_Lights[i]._Pos, u_Lights[i]._DirU, u_Lights[i]._DirV);
+        else if ( SPHERE_LIGHT == u_Lights[i]._Type )
+          L = GetLightDirSample(iClosestHit._Pos, u_Lights[i]._Pos, u_Lights[i]._Radius);
+        else
+          L = u_Lights[i]._Pos;
+
+        float distToLight = length(L);
+        float invDistToLight = 1. / max(distToLight, EPSILON);
+        L = L * invDistToLight;
+    
+        Ray occlusionTestRay;
+        occlusionTestRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
+        occlusionTestRay._Dir = L;
+        if ( !AnyHit(occlusionTestRay, distToLight) )
+        {
+          float irradiance = max(dot(L, iClosestHit._Normal), 0.f) * invDistToLight * invDistToLight;
+          if ( irradiance > 0.f )
+            outColor += BRDF(iClosestHit._Normal, V, L, F0, mat) * u_Lights[i]._Emission * irradiance;
+        }
+      }
+      else if ( 0 != u_EnableSkybox )
+      {
+        vec3 L = RandomVector();
+        vec3 skyColor = SampleSkybox(L, u_SkyboxTexture, u_SkyboxRotation);
+
+        float distToLight = INFINITY;
+
+        Ray occlusionTestRay;
+        occlusionTestRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
+        occlusionTestRay._Dir = L;
+        if ( !AnyHit(occlusionTestRay, distToLight) )
+        {
+          float irradiance = max(dot(L, iClosestHit._Normal), 0.f);
+          if ( irradiance > 0.f )
+            outColor += BRDF(iClosestHit._Normal, V, L, F0, mat) * skyColor * irradiance;
+        }
       }
     }
   }
