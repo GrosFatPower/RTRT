@@ -1378,6 +1378,31 @@ int Test3::UpdateScene()
     }
   }
 
+  bool updateFrameBufferSize = false;
+  if ( _SceneCameraModified )
+  {
+    if ( ( 25 != _Settings._RenderScale ) && ( 25 != _RealRenderScale ) )
+    {
+      _RealRenderScale = _Settings._RenderScale;
+      _Settings._RenderScale = 25;
+      updateFrameBufferSize = true;
+    }
+  }
+  else if ( _Settings._RenderScale != _RealRenderScale )
+  {
+    _Settings._RenderScale = _RealRenderScale;
+    updateFrameBufferSize = true;
+  }
+
+  if ( updateFrameBufferSize )
+  {
+    _RenderSettingsModified = true;
+
+    glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
+
   return 0;
 }
 

@@ -158,6 +158,7 @@ private:
   bool            _SceneMaterialsModified = false;
   bool            _SceneInstancesModified = false;
   bool            _RenderSettingsModified = false;
+  float           _RealRenderScale        = _Settings._RenderScale;
 
   int                      _SelectedLight = -1;
 
