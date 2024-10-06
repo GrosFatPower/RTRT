@@ -500,11 +500,11 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
 }
 
 // ----------------------------------------------------------------------------
-// PBR
+// DirectIllumination (PBR)
 // Computer Graphics Tutorial - PBR (Physically Based Rendering)
 // https://www.youtube.com/watch?v=RRE-F57fbXw&list=WL&index=109
 // ----------------------------------------------------------------------------
-vec3 PBR( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuation )
+vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuation )
 {
   Material mat;
   LoadMaterial(iClosestHit, mat);
@@ -525,7 +525,12 @@ vec3 PBR( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAt
       if ( i < u_NbLights )
       {
         if ( QUAD_LIGHT == u_Lights[i]._Type )
+        {
           L = GetLightDirSample(iClosestHit._Pos, u_Lights[i]._Pos, u_Lights[i]._DirU, u_Lights[i]._DirV);
+          //vec3 lightNormal = cross(u_Lights[i]._DirU, u_Lights[i]._DirV);
+          //if ( dot(L, lightNormal) > EPSILON )
+          //  continue;
+        }
         else if ( SPHERE_LIGHT == u_Lights[i]._Type )
           L = GetLightDirSample(iClosestHit._Pos, u_Lights[i]._Pos, u_Lights[i]._Radius);
         else
@@ -549,22 +554,21 @@ vec3 PBR( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAt
       {
         vec3 L = RandomVector();
 
-        vec3 envColor;
-        if ( 0 != u_EnableSkybox )
-          envColor = SampleSkybox(L, u_SkyboxTexture, u_SkyboxRotation);
-        else
-          envColor = u_BackgroundColor;
-
-        float distToLight = INFINITY;
-
-        Ray occlusionTestRay;
-        occlusionTestRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
-        occlusionTestRay._Dir = L;
-        if ( !AnyHit(occlusionTestRay, distToLight) )
+        float irradiance = max(dot(L, iClosestHit._Normal), 0.f) * 0.1f;
+        if ( irradiance > 0.f )
         {
-          float irradiance = max(dot(L, iClosestHit._Normal), 0.f) * 0.1f;
-          if ( irradiance > 0.f )
+          Ray occlusionTestRay;
+          occlusionTestRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
+          occlusionTestRay._Dir = L;
+          if ( !AnyHit(occlusionTestRay, INFINITY) )
+          {
+            vec3 envColor;
+            if ( 0 != u_EnableSkybox )
+              envColor = SampleSkybox(L, u_SkyboxTexture, u_SkyboxRotation);
+            else
+              envColor = u_BackgroundColor;
             outColor += BRDF(iClosestHit._Normal, V, L, F0, mat) * envColor * irradiance;
+          }
         }
       }
     }
@@ -689,7 +693,7 @@ void main()
 
     Ray scattered;
     vec3 attenuation;
-    pixelColor += PBR(ray, closestHit, scattered, attenuation) * multiplier;
+    pixelColor += DirectIllumination(ray, closestHit, scattered, attenuation) * multiplier;
     ray = scattered;
     multiplier *= attenuation;
 
