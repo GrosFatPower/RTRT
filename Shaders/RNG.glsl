@@ -59,6 +59,30 @@ vec3 RandomInUnitSphere()
 }
 
 // ----------------------------------------------------------------------------
+// SampleHemisphere
+// ----------------------------------------------------------------------------
+vec3 SampleHemisphere( in vec3 iNormal )
+{
+  vec3 v;
+
+  while ( true )
+  {
+    v = RandomVector();
+
+    float dotProd = dot(v, v);
+    if ( ( dotProd < 1.f ) && ( dotProd != 0 ) )
+    {
+      v /= dotProd;
+      if ( dot(iNormal,v) < 0.f )
+        v *= -1.f;
+      break;
+    }
+  }
+
+  return v;
+}
+
+// ----------------------------------------------------------------------------
 // RandomUnitVector
 // ----------------------------------------------------------------------------
 vec3 RandomUnitVector()

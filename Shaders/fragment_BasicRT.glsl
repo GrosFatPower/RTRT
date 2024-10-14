@@ -552,7 +552,8 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
       }
       else
       {
-        vec3 L = RandomVector();
+        //vec3 L = RandomVector();
+        vec3 L = SampleHemisphere(iClosestHit._Normal);
 
         float irradiance = max(dot(L, iClosestHit._Normal), 0.f) * 0.1f;
         if ( irradiance > 0.f )
