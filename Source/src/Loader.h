@@ -20,7 +20,7 @@ public:
 private:
 
   static bool LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, RenderSettings & oRenderSettings);
-  static bool LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 iTranfoMat, Scene & ioScene, RenderSettings & ioRenderSettings, bool isBinary=false);
+  static bool LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTranfoMat, Scene *& ioScene, RenderSettings & ioRenderSettings, bool isBinary=false);
 
   static int ParseMaterial( std::ifstream & iStr, const std::string & iPath, const std::string & iMaterialName, Scene & ioScene );
   static int ParseLight( std::ifstream & iStr, Scene & ioScene );
@@ -30,7 +30,7 @@ private:
   static int ParsePlane( std::ifstream & iStr, Scene & ioScene );
   static int ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scene & ioScene );
   static int ParseRenderSettings( std::ifstream & iStr, const std::string & iPath, RenderSettings & oSettings, Scene & ioScene );
-  static int ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & ioScene, RenderSettings & ioSettings );
+  static int ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene *& ioScene, RenderSettings & ioSettings );
 
   Loader();
   Loader( const Loader &);

@@ -25,7 +25,7 @@ Mesh::~Mesh()
 
 }
 
-bool Mesh::Load( const std::string & iFilename )
+bool Mesh::LoadOBJ( const std::string & iFilename )
 {
   tinyobj::attrib_t attrib;
   std::vector<tinyobj::shape_t> shapes;

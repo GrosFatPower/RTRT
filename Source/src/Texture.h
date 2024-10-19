@@ -17,6 +17,7 @@ class Texture
 {
 public:
   Texture() {}
+  Texture(const std::string & iTexName, unsigned char * iTexData, int iWidth, int iHeight, int iNbComponents);
   virtual ~Texture();
 
   bool Load( const std::string & iFilename, int iNbComponents = 4, TexFormat iFormat = TexFormat::TEX_UNSIGNED_BYTE );

@@ -28,6 +28,7 @@ public:
   virtual ~Scene();
 
   int AddTexture( const std::string & iFilename, int iNbComponents = 4, TexFormat iFormat = TexFormat::TEX_UNSIGNED_BYTE );
+  int AddTexture( const std::string & iTexName, unsigned char * iTexData, int iWidth, int iHeight, int iNbComponents );
   int AddMaterial( Material & ioMaterial, const std::string & iName );
 
   int AddMesh( const std::string & iFilename );

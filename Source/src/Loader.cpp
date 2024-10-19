@@ -10,7 +10,6 @@
 #include "Light.h"
 #include "Camera.h"
 #include "RenderSettings.h"
-#include "tiny_gltf.h"
 #include <map>
 #include <vector>
 #include <iostream>
@@ -18,6 +17,9 @@
 #include <filesystem> // C++17
 #include <sstream>
 #include <fstream>
+
+#define TINYGLTF_IMPLEMENTATION
+#include "tiny_gltf.h"
 
 namespace fs = std::filesystem;
 
@@ -31,6 +33,9 @@ enum class State
   ExpectClosingBracket,
 };
 
+// ----------------------------------------------------------------------------
+// Helper functions
+// ----------------------------------------------------------------------------
 void Tokenize( std::string iStr, std::vector<std::string> & oTokens )
 {
   oTokens.clear();
@@ -65,6 +70,28 @@ bool IsEqual( const std::string & iStr1, const std::string & iStr2 )
         && std::equal(iStr1.begin(), iStr1.end(), iStr2.begin(), &CompareChar) );
 }
 
+bool LoadTextures( Scene & ioScene, tinygltf::Model & iGltfModel )
+{
+  for ( tinygltf::Texture & gltfTex : iGltfModel.textures )
+  {
+    tinygltf::Image & image = iGltfModel.images[gltfTex.source];
+
+    std::string texName = gltfTex.name;
+    if ( 0 == strcmp(gltfTex.name.c_str(), "") )
+      texName = image.uri;
+
+    if ( image.image.data() && image.width && image.height && image.component )
+      ioScene.AddTexture(texName, image.image.data(), image.width, image.height, image.component);
+    else
+      return false;
+  }
+
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// LoadScene
+// ----------------------------------------------------------------------------
 bool Loader::LoadScene(const std::string & iFilename, Scene *& oScene, RenderSettings & oRenderSettings)
 {
   oScene = nullptr;
@@ -73,10 +100,15 @@ bool Loader::LoadScene(const std::string & iFilename, Scene *& oScene, RenderSet
 
   if ( ".scene" == filepath.extension() )
     return Loader::LoadFromSceneFile(iFilename, oScene, oRenderSettings);
+  else if ( ".gltf" == filepath.extension() )
+    return Loader::LoadFromGLTF(iFilename, Mat4x4{1.f}, oScene, oRenderSettings);
 
   return false;
 }
 
+// ----------------------------------------------------------------------------
+// LoadFromSceneFile
+// ----------------------------------------------------------------------------
 bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, RenderSettings & oRenderSettings )
 {
   oScene = nullptr;
@@ -252,7 +284,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
     {
       std::cout << "New gltf model" << std::endl;
 
-      parsingError += Loader::ParseGLTF(file, path, *oScene, oRenderSettings);
+      parsingError += Loader::ParseGLTF(file, path, oScene, oRenderSettings);
 
       if ( !parsingError )
         curState = State::ExpectNewBlock;
@@ -277,6 +309,69 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
   return false;
 }
 
+// ----------------------------------------------------------------------------
+// LoadFromGLTF
+// Adapted from accompanying code for Ray Tracing Gems II, Chapter 14: The Reference Path Tracer
+// https://github.com/boksajak/referencePT
+// ----------------------------------------------------------------------------
+bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTranfoMat, Scene *& ioScene, RenderSettings & ioRenderSettings, bool isBinary)
+{
+  bool ret = false;
+
+  do
+  {
+    printf("Loading GLTF %s\n", iGltfFilename.c_str());
+
+    tinygltf::Model gltfModel;
+    {
+      tinygltf::TinyGLTF loader;
+      std::string err;
+      std::string warn;
+      if ( isBinary )
+        ret = loader.LoadBinaryFromFile(&gltfModel, &err, &warn, iGltfFilename);
+      else
+        ret = loader.LoadASCIIFromFile(&gltfModel, &err, &warn, iGltfFilename);
+
+      if ( !ret )
+      {
+        printf("Unable to load file %s. Error: %s\n", iGltfFilename.c_str(), err.c_str());
+        break;
+      }
+    }
+
+    printf("Loading Scene from gltf...\n");
+
+    if ( !ioScene )
+      ioScene = new Scene;
+
+    // ToDo
+    //LoadMeshes(*ioScene, gltfModel);
+    //if ( !ret )
+    //  break;
+
+    // ToDo
+    //LoadMaterials(*ioScene, gltfModel);
+    //if ( !ret )
+    //  break;
+
+    ret = LoadTextures(*ioScene, gltfModel);
+    if ( !ret )
+      break;
+
+    // ToDo
+    //LoadInstances(*ioScene, gltfModel, iTranfoMat);
+    //if ( !ret )
+    //  break;
+    ret = false; // TMP
+
+  } while ( 0 );
+
+  return ret;
+}
+
+// ----------------------------------------------------------------------------
+// ParseMaterial
+// ----------------------------------------------------------------------------
 int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, const std::string & iMaterialName, Scene & ioScene )
 {
   int parsingError = 0;
@@ -526,6 +621,9 @@ int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, cons
   return parsingError;
 }
 
+// ----------------------------------------------------------------------------
+// ParseLight
+// ----------------------------------------------------------------------------
 int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
 {
   int parsingError = 0;
@@ -648,6 +746,9 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
   return parsingError;
 }
 
+// ----------------------------------------------------------------------------
+// ParseCamera
+// ----------------------------------------------------------------------------
 int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
 {
   int parsingError = 0;
@@ -657,8 +758,8 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
   float fov = 80.f;
   float focalDist = -1.f;
   float aperture  = -1.f;
-  float near = -1.f;
-  float far  = -1.f;
+  float nearPlane = -1.f;
+  float farPlane  = -1.f;
 
   Mat4x4 xform;
   bool hasMatrix = false;
@@ -734,14 +835,14 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
     else if ( IsEqual("near", tokens[0]) )
     {
       if ( 2 == nbTokens )
-        near = std::stof(tokens[1]);
+        nearPlane = std::stof(tokens[1]);
       else
         parsingError++;
     }
     else if ( IsEqual("far", tokens[0]) )
     {
       if ( 2 == nbTokens )
-        far = std::stof(tokens[1]);
+        farPlane = std::stof(tokens[1]);
       else
         parsingError++;
     }
@@ -790,15 +891,15 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
     if ( focalDist >= 0 )
       newCamera.SetFocalDist(focalDist);
 
-    if ( ( near > 0.f ) || ( far > 0.f ) )
+    if ( ( nearPlane > 0.f ) || ( farPlane > 0.f ) )
     {
       float nNear, nFar;
       newCamera.GetZNearFar(nNear, nFar);
 
-      if ( near > 0.f )
-        nNear = near;
-      if ( far > 0.f )
-        nFar = far;
+      if ( nearPlane > 0.f )
+        nNear = nearPlane;
+      if ( farPlane > 0.f )
+        nFar = farPlane;
 
       newCamera.SetZNearFar(nNear, nFar);
     }
@@ -809,6 +910,9 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
   return parsingError;
 }
 
+// ----------------------------------------------------------------------------
+// ParseRenderSettings
+// ----------------------------------------------------------------------------
 int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath, RenderSettings & oSettings, Scene & ioScene )
 {
   int parsingError = 0;
@@ -978,6 +1082,9 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath
   return parsingError;
 }
 
+// ----------------------------------------------------------------------------
+// ParseSphere
+// ----------------------------------------------------------------------------
 int Loader::ParseSphere( std::ifstream & iStr, Scene & ioScene )
 {
   int parsingError = 0;
@@ -1126,6 +1233,9 @@ int Loader::ParseSphere( std::ifstream & iStr, Scene & ioScene )
   return parsingError;
 }
 
+// ----------------------------------------------------------------------------
+// ParseBox
+// ----------------------------------------------------------------------------
 int Loader::ParseBox( std::ifstream & iStr, Scene & ioScene )
 {
   int parsingError = 0;
@@ -1281,6 +1391,9 @@ int Loader::ParseBox( std::ifstream & iStr, Scene & ioScene )
   return parsingError;
 }
 
+// ----------------------------------------------------------------------------
+// ParsePlane
+// ----------------------------------------------------------------------------
 int Loader::ParsePlane( std::ifstream & iStr, Scene & ioScene )
 {
   int parsingError = 0;
@@ -1436,6 +1549,9 @@ int Loader::ParsePlane( std::ifstream & iStr, Scene & ioScene )
   return parsingError;
 }
 
+// ----------------------------------------------------------------------------
+// ParseMeshData
+// ----------------------------------------------------------------------------
 int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scene & ioScene )
 {
   int parsingError = 0;
@@ -1598,7 +1714,10 @@ int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scen
   return parsingError;
 }
 
-int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & ioScene, RenderSettings & ioSettings )
+// ----------------------------------------------------------------------------
+// ParseGLTF
+// ----------------------------------------------------------------------------
+int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene *& ioScene, RenderSettings & ioSettings )
 {
   int parsingError = 0;
 
@@ -1647,9 +1766,9 @@ int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & 
       {
         filepath = iPath + tokens[1];
 
-        if ( filepath.extension() == "gltf" )
+        if ( filepath.extension() == ".gltf" )
           isBinary = false;
-        else if ( filepath.extension() == "glb" )
+        else if ( filepath.extension() == ".glb" )
           isBinary = true;
         else
           parsingError++;
@@ -1728,18 +1847,14 @@ int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & 
     if ( !hasMatrix )
       xform = transMat * rotMat * scaleMat;
 
-    bool success = success = Loader::LoadFromGLTF(filepath.string(), xform, ioScene, ioSettings, isBinary);
+    if ( !Loader::LoadFromGLTF(filepath.string(), xform, ioScene, ioSettings, isBinary) )
+      parsingError++;
 
-    if ( parsingError || !success )
+    if ( parsingError )
       printf("Unable to load gltf %s\n", filepath.string().c_str());
   }
 
   return parsingError;
-}
-
-bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 iTranfoMat, Scene & ioScene, RenderSettings & ioRenderSettings, bool isBinary)
-{
-  return false;
 }
 
 }

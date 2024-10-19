@@ -17,7 +17,7 @@ public:
   Mesh();
   virtual ~Mesh();
 
-  bool Load( const std::string & iFilename );
+  bool LoadOBJ( const std::string & iFilename );
 
   const std::string & Filename() const { return _Filename; }
 

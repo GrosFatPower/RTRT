@@ -1,4 +1,6 @@
 #include "Texture.h"
+#include <iostream>
+
 #ifndef STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -7,10 +9,23 @@
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include "stb_image_resize.h"
 #endif
-#include <iostream>
+#ifndef STB_IMAGE_WRITE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+#endif
 
 namespace RTRT
 {
+
+Texture::Texture(const std::string & iTexName, unsigned char * iTexData, int iWidth, int iHeight, int iNbComponents)
+: _Filename(iTexName)
+, _Width(iWidth)
+, _Height(iHeight)
+, _NbComponents(iNbComponents)
+{
+  _TexData = new unsigned char[iWidth * iHeight * iNbComponents];
+  memcpy(_TexData, iTexData, iWidth * iHeight * iNbComponents);
+}
 
 Texture::~Texture()
 {

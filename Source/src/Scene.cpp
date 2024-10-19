@@ -66,6 +66,35 @@ int Scene::AddTexture( const std::string & iFilename, int iNbComponents, TexForm
   return texID;
 }
 
+int Scene::AddTexture( const std::string & iTexName, unsigned char * iTexData, int iWidth, int iHeight, int iNbComponents )
+{
+  int texID = -1;
+
+  for ( auto & tex : _Textures )
+  {
+    if ( tex && ( tex -> Filename() == iTexName ) )
+    {
+      texID = tex -> GetTexID();
+      break;
+    }
+  }
+  
+  if ( texID < 0 )
+  {
+    std::cout << "Scene : Loading texture " << iTexName << std::endl;
+    Texture * texture = new Texture(iTexName, iTexData, iWidth, iHeight, iNbComponents);
+
+    texID = _Textures.size();
+    texture -> SetTexID(texID);
+    _Textures.push_back(texture);
+  }
+
+  if ( texID < 0 )
+    std::cout << "Scene : ERROR. Unable to load texture " << iTexName << std::endl;
+
+  return texID;
+}
+
 int Scene::AddMesh( const std::string & iFilename )
 {
   int meshID = -1;
@@ -84,7 +113,7 @@ int Scene::AddMesh( const std::string & iFilename )
     Mesh * newMesh = new Mesh;
 
     std::cout << "Scene : Loading mesh " << iFilename << std::endl;
-    if ( newMesh -> Load(iFilename) )
+    if ( newMesh -> LoadOBJ(iFilename) )
     {
       meshID = _Meshes.size();
       newMesh -> SetMeshID(meshID);
