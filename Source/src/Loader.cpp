@@ -10,7 +10,7 @@
 #include "Light.h"
 #include "Camera.h"
 #include "RenderSettings.h"
-#include "MathUtil.h"
+#include "tiny_gltf.h"
 #include <map>
 #include <vector>
 #include <iostream>
@@ -252,7 +252,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
     {
       std::cout << "New gltf model" << std::endl;
 
-      parsingError += Loader::ParseGLTF(file, *oScene);
+      parsingError += Loader::ParseGLTF(file, path, *oScene, oRenderSettings);
 
       if ( !parsingError )
         curState = State::ExpectNewBlock;
@@ -1598,9 +1598,15 @@ int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scen
   return parsingError;
 }
 
-int Loader::ParseGLTF( std::ifstream & iStr, Scene & ioScene )
+int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & ioScene, RenderSettings & ioSettings )
 {
   int parsingError = 0;
+
+  fs::path filepath;
+  Mat4x4 transMat(1.f), rotMat(1.f), scaleMat(1.f);
+  Mat4x4 xform(1.f);
+  bool hasMatrix = false;
+  bool isBinary = false;
 
   State curState = State::ExpectOpenBracket;
   std::string line;
@@ -1635,12 +1641,105 @@ int Loader::ParseGLTF( std::ifstream & iStr, Scene & ioScene )
       }
     }
 
-    // TODO
+    if ( IsEqual("file", tokens[0]) )
+    {
+      if ( 2 == nbTokens )
+      {
+        filepath = iPath + tokens[1];
+
+        if ( filepath.extension() == "gltf" )
+          isBinary = false;
+        else if ( filepath.extension() == "glb" )
+          isBinary = true;
+        else
+          parsingError++;
+      }
+      else
+        parsingError++;
+    }
+    else if ( IsEqual("position", tokens[0]) )
+    {
+      if ( 4 == nbTokens )
+      {
+        transMat[3][0] = std::stof(tokens[1]);
+        transMat[3][1] = std::stof(tokens[2]);
+        transMat[3][2] = std::stof(tokens[3]);
+      }
+      else
+        parsingError++;
+    }
+    else if ( IsEqual("scale", tokens[0]) )
+    {
+      if ( 4 == nbTokens )
+      {
+        scaleMat[0][0] = std::stof(tokens[1]);
+        scaleMat[1][1] = std::stof(tokens[2]);
+        scaleMat[2][2] = std::stof(tokens[3]);
+      }
+      else
+        parsingError++;
+    }
+    else if ( IsEqual("rotation", tokens[0]) )
+    {
+      if ( 5 == nbTokens )
+      {
+        Vec4 quaternion; // { x, y, z, s } -> q = s + ix + jy + kz
+        quaternion.x = std::stof(tokens[1]);
+        quaternion.y = std::stof(tokens[2]);
+        quaternion.z = std::stof(tokens[3]);
+        quaternion.w = std::stof(tokens[4]);
+
+        rotMat = MathUtil::QuatToMatrix(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+      }
+      else
+        parsingError++;
+    }
+    else if ( IsEqual("matrix", tokens[0]) )
+    {
+      if ( 17 == nbTokens )
+      {
+        xform[0][0] = std::stof(tokens[1]);
+        xform[1][0] = std::stof(tokens[2]);
+        xform[2][0] = std::stof(tokens[3]);
+        xform[3][0] = std::stof(tokens[4]);
+        xform[0][1] = std::stof(tokens[5]);
+        xform[1][1] = std::stof(tokens[6]);
+        xform[2][1] = std::stof(tokens[7]);
+        xform[3][1] = std::stof(tokens[8]);
+        xform[0][2] = std::stof(tokens[9]);
+        xform[1][2] = std::stof(tokens[10]);
+        xform[2][2] = std::stof(tokens[11]);
+        xform[3][2] = std::stof(tokens[12]);
+        xform[0][3] = std::stof(tokens[13]);
+        xform[1][3] = std::stof(tokens[14]);
+        xform[2][3] = std::stof(tokens[15]);
+        xform[3][3] = std::stof(tokens[16]);
+        hasMatrix = true;
+      }
+      else
+        parsingError++;
+    }
   }
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
+  if ( !parsingError && fs::exists(filepath) )
+  {
+    if ( !hasMatrix )
+      xform = transMat * rotMat * scaleMat;
+
+    bool success = success = Loader::LoadFromGLTF(filepath.string(), xform, ioScene, ioSettings, isBinary);
+
+    if ( parsingError || !success )
+      printf("Unable to load gltf %s\n", filepath.string().c_str());
+  }
+
   return parsingError;
+}
+
+bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 iTranfoMat, Scene & ioScene, RenderSettings & ioRenderSettings, bool isBinary)
+{
+  return false;
 }
 
 }
