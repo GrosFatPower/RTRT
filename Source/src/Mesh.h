@@ -15,6 +15,11 @@ class Mesh
 {
 public:
   Mesh();
+  Mesh(const std::string        & iName,
+       const std::vector<Vec3>  & iVertices,
+       const std::vector<Vec3>  & iNormals,
+       const std::vector<Vec2>  & iUVs,
+       const std::vector<Vec3i> & iIndices);
   virtual ~Mesh();
 
   bool LoadOBJ( const std::string & iFilename );

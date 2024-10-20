@@ -229,11 +229,14 @@ bool LoadMeshes( Scene & ioScene, tinygltf::Model & iGltfModel )
 
   for ( tinygltf::Mesh & gltfMesh : iGltfModel.meshes )
   {
-    for ( tinygltf::Primitive& prim : gltfMesh.primitives )
+    int nbPrimitives = 0;
+    for ( tinygltf::Primitive & prim : gltfMesh.primitives )
     {
       // Skip points and lines
       if ( TINYGLTF_MODE_TRIANGLES != prim.mode )
         continue;
+
+      nbPrimitives++;
 
       // Accessors
       tinygltf::Accessor indexAccessor, positionAccessor, normalAccessor, uv0Accessor;
@@ -241,21 +244,21 @@ bool LoadMeshes( Scene & ioScene, tinygltf::Model & iGltfModel )
       if ( prim.indices >= 0 )
         indexAccessor = iGltfModel.accessors[prim.indices];
 
-      if ( prim.attributes.count( "POSITION" ) > 0 )
+      if ( prim.attributes.count("POSITION") > 0 )
       {
         int positionIndex = prim.attributes["POSITION"];
         if ( positionIndex >= 0 )
           positionAccessor = iGltfModel.accessors[positionIndex];
       }
 
-      if ( prim.attributes.count( "NORMAL" ) > 0 )
+      if ( prim.attributes.count("NORMAL") > 0 )
       {
         int normalIndex = prim.attributes["NORMAL"];
         if ( normalIndex >= 0 )
           normalAccessor = iGltfModel.accessors[normalIndex];
       }
 
-      if ( prim.attributes.count( "TEXCOORD_0" ) > 0 )
+      if ( prim.attributes.count("TEXCOORD_0") > 0 )
       {
         int uv0Index = prim.attributes["TEXCOORD_0"];
         if ( uv0Index >= 0 )
@@ -271,9 +274,128 @@ bool LoadMeshes( Scene & ioScene, tinygltf::Model & iGltfModel )
 
       // Buffer views
       tinygltf::BufferView indexBufferView, positionBufferView, normalBufferView, uv0BufferView;
+      const uint8_t* pIndexBuffer = nullptr, * pPositionBuffer = nullptr, * pNormalBuffer = nullptr, * pUV0Buffer = nullptr;
+      size_t indexBufferStride = 0, positionBufferStride = 0, normalBufferStride = 0, uv0BufferStride = 0;
 
+      indexBufferView = iGltfModel.bufferViews[indexAccessor.bufferView];
+      pIndexBuffer = iGltfModel.buffers[indexBufferView.buffer].data.data() + indexBufferView.byteOffset + indexAccessor.byteOffset;
+      indexBufferStride = tinygltf::GetComponentSizeInBytes(indexAccessor.componentType) * tinygltf::GetNumComponentsInType(indexAccessor.type);
+      if ( indexBufferView.byteStride > 0 )
+        indexBufferStride = indexBufferView.byteStride; // ? different
 
+      positionBufferView = iGltfModel.bufferViews[positionAccessor.bufferView];
+      pPositionBuffer = iGltfModel.buffers[positionBufferView.buffer].data.data() + positionBufferView.byteOffset + positionAccessor.byteOffset;
+      positionBufferStride = tinygltf::GetComponentSizeInBytes(positionAccessor.componentType) * tinygltf::GetNumComponentsInType(positionAccessor.type);
+      if ( positionBufferView.byteStride > 0 )
+        positionBufferStride = positionBufferView.byteStride; // ? different
 
+      if ( normalAccessor.type >= 0 )
+      {
+        normalBufferView = iGltfModel.bufferViews[normalAccessor.bufferView];
+        pNormalBuffer = iGltfModel.buffers[normalBufferView.buffer].data.data() + normalBufferView.byteOffset + normalAccessor.byteOffset;
+        normalBufferStride = tinygltf::GetComponentSizeInBytes(normalAccessor.componentType) * tinygltf::GetNumComponentsInType(normalAccessor.type);
+        if ( normalBufferView.byteStride > 0 )
+          normalBufferStride = normalBufferView.byteStride; // ? different
+      }
+
+      if ( uv0Accessor.type >= 0 )
+      {
+        uv0BufferView = iGltfModel.bufferViews[uv0Accessor.bufferView];
+        pUV0Buffer = iGltfModel.buffers[uv0BufferView.buffer].data.data() + uv0BufferView.byteOffset + uv0Accessor.byteOffset;
+        uv0BufferStride = tinygltf::GetComponentSizeInBytes(uv0Accessor.componentType) * tinygltf::GetNumComponentsInType(uv0Accessor.type);
+        if ( uv0BufferView.byteStride > 0 )
+          uv0BufferStride = uv0BufferView.byteStride; // ? different
+      }
+
+      // Get per-vertex data
+      std::vector<Vec3> vertices(positionAccessor.count);
+      std::vector<Vec3> normals;
+      std::vector<Vec2> uvs;
+
+      if ( pNormalBuffer )
+        normals.resize( positionAccessor.count );
+      if ( pUV0Buffer )
+        uvs.resize( positionAccessor.count );
+
+      for ( size_t vtxInd = 0; vtxInd < positionAccessor.count; ++vtxInd )
+      {
+        {
+          const uint8_t* address = pPositionBuffer + ( vtxInd * positionBufferStride );
+          memcpy(&vertices[vtxInd], address, sizeof(Vec3));
+        }
+
+        if ( pNormalBuffer )
+        {
+          const uint8_t* address = pNormalBuffer + ( vtxInd * normalBufferStride );
+          memcpy(&normals[vtxInd], address, sizeof(Vec3));
+        }
+
+        if ( pUV0Buffer )
+        {
+          const uint8_t* address = pUV0Buffer + ( vtxInd * uv0BufferStride );
+          memcpy(&uvs[vtxInd], address, sizeof(Vec2));
+        }
+      }
+
+      // Get index data
+      std::vector<int> triIndices(indexAccessor.count);
+      if ( ( 1 == indexBufferStride ) || ( 2 == indexBufferStride ) )
+      {
+        for ( size_t triInd = 0; triInd < indexAccessor.count; ++triInd )
+        {
+          const uint8_t * quarter = pIndexBuffer + ( triInd * indexBufferStride );
+
+          if ( 2 == indexBufferStride )
+          {
+            uint16_t * half = (uint16_t*)quarter;
+            triIndices[triInd] = *half;
+          }
+          else
+            triIndices[triInd] = *quarter;
+        }
+      }
+      else
+        memcpy( triIndices.data(), pIndexBuffer, ( indexAccessor.count * indexBufferStride ));
+
+      std::vector<Vec3i> indices;
+      indices.reserve(triIndices.size());
+
+      for ( int index : triIndices )
+      {
+        Vec3i inds(index);
+        if ( !pNormalBuffer )
+          inds.y = -1;
+        if ( !pUV0Buffer )
+          inds.z = -1;
+        indices.push_back(inds);
+      }
+
+      // Mesh attributes
+      std::string meshName = gltfMesh.name;
+      if ( gltfMesh.primitives.size() > 1 )
+        meshName += std::to_string(nbPrimitives);
+
+      int matID = 0;
+      if ( prim.material >= 0 )
+      {
+        const tinygltf::Material & gltfMaterial = iGltfModel.materials[prim.material];
+        matID = ioScene.FindMaterialID(gltfMaterial.name);
+      }
+      else
+        matID = ioScene.FindMaterialID("Default Material");
+
+      // Intanciate mesh object
+      Mesh * newMesh = new Mesh( meshName, vertices, normals, uvs, indices);
+      int meshID = ioScene.AddMesh(newMesh);
+      if ( -1 == meshID )
+      {
+        ret = false;
+        break;
+      }
+
+      // TMP : create mesh instance
+      MeshInstance instance( meshName, meshID, matID, Mat4x4{ 1 });
+      ioScene.AddMeshInstance(instance);
     }
 
     if ( !ret )
@@ -555,8 +677,9 @@ bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTra
       ret = LoadMaterials(*ioScene, gltfModel);
     if ( ret )
       ret = LoadMeshes(*ioScene, gltfModel);
-    if ( ret )
-      ret = LoadInstances(*ioScene, gltfModel, iTransfoMat);
+    // ToDo
+    //if ( ret )
+    //  ret = LoadInstances(*ioScene, gltfModel, iTransfoMat);
 
     if ( !ret )
     {

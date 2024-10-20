@@ -86,6 +86,30 @@ int Scene::AddTexture( const std::string & iTexName, unsigned char * iTexData, i
   return texID;
 }
 
+int Scene::AddMesh( Mesh * iMesh )
+{
+  int meshID = -1;
+
+  for ( auto& mesh : _Meshes )
+  {
+    if ( mesh && ( mesh -> Filename() == iMesh -> Filename() ) )
+    {
+      std::cout << "Scene : ERROR. Trying to load 2 meshes with same name " << iMesh -> Filename() << std::endl;
+      return meshID;
+    }
+  }
+
+  if ( meshID < 0 )
+  {
+    meshID = _Meshes.size();
+    iMesh -> SetMeshID( meshID );
+    _Meshes.push_back( iMesh );
+  }
+
+  return meshID;
+}
+
+
 int Scene::AddMesh( const std::string & iFilename )
 {
   int meshID = -1;

@@ -20,6 +20,46 @@ Mesh::Mesh()
                             -std::numeric_limits<float>::max());
 }
 
+Mesh::Mesh(const std::string        & iName,
+           const std::vector<Vec3>  & iVertices,
+           const std::vector<Vec3>  & iNormals,
+           const std::vector<Vec2>  & iUVs,
+           const std::vector<Vec3i> & iIndices)
+: _Filename( iName )
+, _Vertices( iVertices )
+, _Normals( iNormals )
+, _UVs( iUVs )
+, _Indices( iIndices )
+{
+  _NbFaces = _Indices.size() / 3;
+
+  _Bvh = std::make_shared<GpuBLAS>();
+
+  _BoundingBox._Low = Vec3( std::numeric_limits<float>::max(),
+                             std::numeric_limits<float>::max(),
+                             std::numeric_limits<float>::max() );
+  _BoundingBox._High = Vec3( -std::numeric_limits<float>::max(),
+                            -std::numeric_limits<float>::max(),
+                            -std::numeric_limits<float>::max() );
+
+  for ( Vec3 vert : _Vertices )
+  {
+    if ( vert.x < _BoundingBox._Low.x )
+      _BoundingBox._Low.x = vert.x;
+    if ( vert.y < _BoundingBox._Low.y )
+      _BoundingBox._Low.y = vert.y;
+    if ( vert.z < _BoundingBox._Low.z )
+      _BoundingBox._Low.z = vert.z;
+    if ( vert.x > _BoundingBox._High.x )
+      _BoundingBox._High.x = vert.x;
+    if ( vert.y > _BoundingBox._High.y )
+      _BoundingBox._High.y = vert.y;
+    if ( vert.z > _BoundingBox._High.z )
+      _BoundingBox._High.z = vert.z;
+  }
+}
+
+
 Mesh::~Mesh()
 {
 

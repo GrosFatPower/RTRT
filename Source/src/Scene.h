@@ -31,7 +31,8 @@ public:
   int AddTexture( const std::string & iTexName, unsigned char * iTexData, int iWidth, int iHeight, int iNbComponents );
   int AddMaterial( Material & ioMaterial, const std::string & iName );
 
-  int AddMesh( const std::string & iFilename );
+  int AddMesh( Mesh * iMesh );
+  int AddMesh( const std::string& iFilename );
   int AddMeshInstance( MeshInstance & iMeshInstance );
 
   int AddPrimitive( const Primitive & iPrimitive );

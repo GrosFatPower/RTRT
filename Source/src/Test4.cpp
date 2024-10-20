@@ -303,7 +303,7 @@ int Test4::InitializeSceneFiles()
     tinydir_readfile_n(&dir, &file, i);
   
     std::string extension(file.extension);
-    if ( "scene" == extension )
+    if ( ( "scene" == extension ) || ( "gltf" == extension ) )
     {
       char * filename = new char[256];
       snprintf(filename, 256, "%s", file.name);
@@ -1568,104 +1568,117 @@ int Test4::Run()
 {
   int ret = 0;
 
-  if ( !_MainWindow )
-    return 1;
-
-  glfwSetWindowTitle(_MainWindow.get(), GetTestHeader());
-  glfwSetWindowUserPointer(_MainWindow.get(), this);
-
-  glfwSetFramebufferSizeCallback(_MainWindow.get(), Test4::FramebufferSizeCallback);
-  glfwSetMouseButtonCallback(_MainWindow.get(), Test4::MousebuttonCallback);
-  glfwSetKeyCallback(_MainWindow.get(), Test4::KeyCallback);
-
-  glfwMakeContextCurrent(_MainWindow.get());
-  glfwSwapInterval(1); // Enable vsync
-
-  // Setup Dear ImGui context
-  if ( 0 != InitializeUI() )
+  do
   {
-    std::cout << "Failed to initialize ImGui!" << std::endl;
-    return 1;
-  }
-
-  // Init openGL scene
-  glewExperimental = GL_TRUE;
-  if ( glewInit() != GLEW_OK )
-  {
-    std::cout << "Failed to initialize GLEW!" << std::endl;
-    return 1;
-  }
-
-  // Initialize the scene
-  if ( ( 0 != InitializeSceneFiles() ) || ( 0 != InitializeScene() ) )
-  {
-    std::cout << "ERROR: Scene initialization failed!" << std::endl;
-    return 1;
-  }
-
-  // Initialize the Background
-  if ( ( 0 != InitializeBackgroundFiles() ) || ( 0 != InitializeBackground() ) )
-  {
-    std::cout << "ERROR: Background initialization failed!" << std::endl;
-    return 1;
-  }
-
-  // Shader compilation
-  if ( ( 0 != RecompileShaders() ) || !_RTTShader || !_RTSShader )
-  {
-    std::cout << "Shader compilation failed!" << std::endl;
-    return 1;
-  }
-
-  // Quad
-  _Quad = std::make_unique<QuadMesh>();
-
-  // Frame buffer
-  if ( 0 != InitializeFrameBuffer() )
-  {
-    std::cout << "ERROR: Framebuffer is not complete!" << std::endl;
-    return 1;
-  }
-
-  // Main loop
-  glfwSetWindowSize(_MainWindow.get(), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
-  glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
-  glDisable(GL_DEPTH_TEST);
-
-  glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
-  glBindTexture(GL_TEXTURE_2D, 0);
-
-  //ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
-  _CPULoopTime = glfwGetTime();
-  while ( !glfwWindowShouldClose(_MainWindow.get()) && !_KeyState._KeyEsc )
-  {
-    UpdateCPUTime();
-
-    glfwPollEvents();
-
-    ProcessInput();
-
-    if ( 0 != UpdateScene() )
+    if ( !_MainWindow )
+    {
+      ret = 1;
       break;
+    }
 
-    UpdateImage();
+    glfwSetWindowTitle( _MainWindow.get(), GetTestHeader() );
+    glfwSetWindowUserPointer( _MainWindow.get(), this );
 
-    UpdateTextures();
+    glfwSetFramebufferSizeCallback( _MainWindow.get(), Test4::FramebufferSizeCallback );
+    glfwSetMouseButtonCallback( _MainWindow.get(), Test4::MousebuttonCallback );
+    glfwSetKeyCallback( _MainWindow.get(), Test4::KeyCallback );
 
-    UpdateUniforms();
+    glfwMakeContextCurrent( _MainWindow.get() );
+    glfwSwapInterval( 1 ); // Enable vsync
 
-    // Render to texture
-    RenderToTexture();
+    // Setup Dear ImGui context
+    if ( 0 != InitializeUI() )
+    {
+      std::cout << "Failed to initialize ImGui!" << std::endl;
+      ret = 1;
+      break;
+    }
 
-    // Render to screen
-    RenderToSceen();
+    // Init openGL scene
+    glewExperimental = GL_TRUE;
+    if ( glewInit() != GLEW_OK )
+    {
+      std::cout << "Failed to initialize GLEW!" << std::endl;
+      ret = 1;
+      break;
+    }
 
-    DrawUI();
+    // Initialize the scene
+    if ( ( 0 != InitializeSceneFiles() ) || ( 0 != InitializeScene() ) )
+    {
+      std::cout << "ERROR: Scene initialization failed!" << std::endl;
+      ret = 1;
+      break;
+    }
 
-    glfwSwapBuffers(_MainWindow.get());
-  }
+    // Initialize the Background
+    if ( ( 0 != InitializeBackgroundFiles() ) || ( 0 != InitializeBackground() ) )
+    {
+      std::cout << "ERROR: Background initialization failed!" << std::endl;
+      ret = 1;
+      break;
+    }
+
+    // Shader compilation
+    if ( ( 0 != RecompileShaders() ) || !_RTTShader || !_RTSShader )
+    {
+      std::cout << "Shader compilation failed!" << std::endl;
+      ret = 1;
+      break;
+    }
+
+    // Quad
+    _Quad = std::make_unique<QuadMesh>();
+
+    // Frame buffer
+    if ( 0 != InitializeFrameBuffer() )
+    {
+      std::cout << "ERROR: Framebuffer is not complete!" << std::endl;
+      ret = 1;
+      break;
+    }
+
+    // Main loop
+    glfwSetWindowSize( _MainWindow.get(), _Settings._WindowResolution.x, _Settings._WindowResolution.y );
+    glViewport( 0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y );
+    glDisable( GL_DEPTH_TEST );
+
+    glBindTexture( GL_TEXTURE_2D, _ScreenTextureID );
+    glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, NULL );
+    glBindTexture( GL_TEXTURE_2D, 0 );
+
+    //ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+    _CPULoopTime = glfwGetTime();
+    while ( !glfwWindowShouldClose( _MainWindow.get() ) && !_KeyState._KeyEsc )
+    {
+      UpdateCPUTime();
+
+      glfwPollEvents();
+
+      ProcessInput();
+
+      if ( 0 != UpdateScene() )
+        break;
+
+      UpdateImage();
+
+      UpdateTextures();
+
+      UpdateUniforms();
+
+      // Render to texture
+      RenderToTexture();
+
+      // Render to screen
+      RenderToSceen();
+
+      DrawUI();
+
+      glfwSwapBuffers( _MainWindow.get() );
+    }
+
+  } while ( 0 );
 
   // Cleanup
   ImGui_ImplOpenGL3_Shutdown();
