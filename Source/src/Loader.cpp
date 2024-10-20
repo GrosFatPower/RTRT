@@ -70,6 +70,9 @@ bool IsEqual( const std::string & iStr1, const std::string & iStr2 )
         && std::equal(iStr1.begin(), iStr1.end(), iStr2.begin(), &CompareChar) );
 }
 
+// ----------------------------------------------------------------------------
+// GLTF loader : GetTextureName
+// ----------------------------------------------------------------------------
 void GetTextureName( const tinygltf::Model & iGltfModel, const tinygltf::Texture & iGltfTex, std::string & oTexName )
 {
   oTexName = iGltfTex.name;
@@ -81,6 +84,9 @@ void GetTextureName( const tinygltf::Model & iGltfModel, const tinygltf::Texture
   }
 }
 
+// ----------------------------------------------------------------------------
+// GLTF loader : LoadTextures
+// ----------------------------------------------------------------------------
 bool LoadTextures( Scene & ioScene, tinygltf::Model & iGltfModel )
 {
   for ( const tinygltf::Texture & gltfTex : iGltfModel.textures )
@@ -99,6 +105,9 @@ bool LoadTextures( Scene & ioScene, tinygltf::Model & iGltfModel )
   return true;
 }
 
+// ----------------------------------------------------------------------------
+// GLTF loader : LoadMaterials
+// ----------------------------------------------------------------------------
 bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
 {
   bool ret = true;
@@ -207,6 +216,81 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
     Material defaultMat;
     ioScene.AddMaterial(defaultMat, "Default Material");
   }
+
+  return ret;
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : LoadMeshes
+// ----------------------------------------------------------------------------
+bool LoadMeshes( Scene & ioScene, tinygltf::Model & iGltfModel )
+{
+  bool ret = true;
+
+  for ( tinygltf::Mesh & gltfMesh : iGltfModel.meshes )
+  {
+    for ( tinygltf::Primitive& prim : gltfMesh.primitives )
+    {
+      // Skip points and lines
+      if ( TINYGLTF_MODE_TRIANGLES != prim.mode )
+        continue;
+
+      // Accessors
+      tinygltf::Accessor indexAccessor, positionAccessor, normalAccessor, uv0Accessor;
+
+      if ( prim.indices >= 0 )
+        indexAccessor = iGltfModel.accessors[prim.indices];
+
+      if ( prim.attributes.count( "POSITION" ) > 0 )
+      {
+        int positionIndex = prim.attributes["POSITION"];
+        if ( positionIndex >= 0 )
+          positionAccessor = iGltfModel.accessors[positionIndex];
+      }
+
+      if ( prim.attributes.count( "NORMAL" ) > 0 )
+      {
+        int normalIndex = prim.attributes["NORMAL"];
+        if ( normalIndex >= 0 )
+          normalAccessor = iGltfModel.accessors[normalIndex];
+      }
+
+      if ( prim.attributes.count( "TEXCOORD_0" ) > 0 )
+      {
+        int uv0Index = prim.attributes["TEXCOORD_0"];
+        if ( uv0Index >= 0 )
+          uv0Accessor = iGltfModel.accessors[uv0Index];
+      }
+
+      if ( ( indexAccessor.type < 0 )
+        || ( positionAccessor.type < 0 ) )
+      {
+        ret = false;
+        break;
+      }
+
+      // Buffer views
+      tinygltf::BufferView indexBufferView, positionBufferView, normalBufferView, uv0BufferView;
+
+
+
+    }
+
+    if ( !ret )
+      break;
+  }
+
+  return ret;
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : LoadInstances
+// ----------------------------------------------------------------------------
+bool LoadInstances( Scene & ioScene, tinygltf::Model & iGltfModel, const Mat4x4 & iTransfoMat )
+{
+  bool ret = false;
+
+  // ToDo
 
   return ret;
 }
@@ -436,7 +520,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
 // Adapted from accompanying code for Ray Tracing Gems II, Chapter 14: The Reference Path Tracer
 // https://github.com/boksajak/referencePT
 // ----------------------------------------------------------------------------
-bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTranfoMat, Scene *& ioScene, RenderSettings & ioRenderSettings, bool isBinary)
+bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTransfoMat, Scene *& ioScene, RenderSettings & ioRenderSettings, bool isBinary)
 {
   bool ret = false;
 
@@ -466,24 +550,19 @@ bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTra
     if ( !ioScene )
       ioScene = new Scene;
 
-    // ToDo
-    //ret = LoadMeshes(*ioScene, gltfModel);
-    //if ( !ret )
-    //  break;
-
     ret = LoadTextures(*ioScene, gltfModel);
-    if ( !ret )
-      break;
+    if ( ret )
+      ret = LoadMaterials(*ioScene, gltfModel);
+    if ( ret )
+      ret = LoadMeshes(*ioScene, gltfModel);
+    if ( ret )
+      ret = LoadInstances(*ioScene, gltfModel, iTransfoMat);
 
-    ret = LoadMaterials(*ioScene, gltfModel);
     if ( !ret )
+    {
+      printf("Error while to loading scene from gltf file %s\n", iGltfFilename.c_str());
       break;
-
-    // ToDo
-    //ret = LoadInstances(*ioScene, gltfModel, iTranfoMat);
-    //if ( !ret )
-    //  break;
-    ret = false; // TMP
+    }
 
   } while ( 0 );
 

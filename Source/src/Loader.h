@@ -20,7 +20,7 @@ public:
 private:
 
   static bool LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, RenderSettings & oRenderSettings);
-  static bool LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTranfoMat, Scene *& ioScene, RenderSettings & ioRenderSettings, bool isBinary=false);
+  static bool LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTransfoMat, Scene *& ioScene, RenderSettings & ioRenderSettings, bool isBinary=false);
 
   static int ParseMaterial( std::ifstream & iStr, const std::string & iPath, const std::string & iMaterialName, Scene & ioScene );
   static int ParseLight( std::ifstream & iStr, Scene & ioScene );
