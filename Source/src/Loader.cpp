@@ -70,15 +70,25 @@ bool IsEqual( const std::string & iStr1, const std::string & iStr2 )
         && std::equal(iStr1.begin(), iStr1.end(), iStr2.begin(), &CompareChar) );
 }
 
+void GetTextureName( const tinygltf::Model & iGltfModel, const tinygltf::Texture & iGltfTex, std::string & oTexName )
+{
+  oTexName = iGltfTex.name;
+
+  if ( !strcmp(iGltfTex.name.c_str(), "") )
+  {
+    const tinygltf::Image & image = iGltfModel.images[iGltfTex.source];
+    oTexName = image.uri;
+  }
+}
+
 bool LoadTextures( Scene & ioScene, tinygltf::Model & iGltfModel )
 {
-  for ( tinygltf::Texture & gltfTex : iGltfModel.textures )
+  for ( const tinygltf::Texture & gltfTex : iGltfModel.textures )
   {
     tinygltf::Image & image = iGltfModel.images[gltfTex.source];
 
-    std::string texName = gltfTex.name;
-    if ( 0 == strcmp(gltfTex.name.c_str(), "") )
-      texName = image.uri;
+    std::string texName;
+    GetTextureName(iGltfModel, gltfTex, texName);
 
     if ( image.image.data() && image.width && image.height && image.component )
       ioScene.AddTexture(texName, image.image.data(), image.width, image.height, image.component);
@@ -87,6 +97,118 @@ bool LoadTextures( Scene & ioScene, tinygltf::Model & iGltfModel )
   }
 
   return true;
+}
+
+bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
+{
+  bool ret = true;
+
+  for ( const tinygltf::Material gltfMaterial : iGltfModel.materials )
+  {
+    const tinygltf::PbrMetallicRoughness & pbr = gltfMaterial.pbrMetallicRoughness;
+
+    // Convert glTF material
+    Material material;
+
+    // Albedo
+    material._Albedo = Vec3((float)pbr.baseColorFactor[0], (float)pbr.baseColorFactor[1], (float)pbr.baseColorFactor[2]);
+    if ( pbr.baseColorTexture.index > -1 )
+    {
+      const tinygltf::Texture & gltfTex = iGltfModel.textures[pbr.baseColorTexture.index];
+
+      std::string texName;
+      GetTextureName(iGltfModel, gltfTex, texName);
+
+      material._BaseColorTexId = ioScene.FindTextureID(texName);
+      if ( material._BaseColorTexId < 0 )
+      {
+        ret = false;
+        break;
+      }
+    }
+
+    // Opacity
+    material._Opacity = (float)pbr.baseColorFactor[3];
+
+    // Alpha
+    material._AlphaCutoff = (float)gltfMaterial.alphaCutoff;
+    if ( !strcmp(gltfMaterial.alphaMode.c_str(), "OPAQUE") )
+      material._AlphaMode = (float)AlphaMode::Opaque;
+    else if (strcmp(gltfMaterial.alphaMode.c_str(), "BLEND") == 0)
+      material._AlphaMode = (float)AlphaMode::Blend;
+    else if (strcmp(gltfMaterial.alphaMode.c_str(), "MASK") == 0)
+      material._AlphaMode = (float)AlphaMode::Mask;
+
+    // Roughness and Metallic
+    material._Roughness = sqrtf((float)pbr.roughnessFactor); // Repo's disney material doesn't use squared roughness
+    material._Metallic = (float)pbr.metallicFactor;
+    if ( pbr.metallicRoughnessTexture.index > -1 )
+    {
+      const tinygltf::Texture & gltfTex = iGltfModel.textures[pbr.metallicRoughnessTexture.index];
+
+      std::string texName;
+      GetTextureName(iGltfModel, gltfTex, texName);
+
+      material._MetallicRoughnessTexID = ioScene.FindTextureID(texName);
+      if ( material._MetallicRoughnessTexID < 0 )
+      {
+        ret = false;
+        break;
+      }
+    }
+
+    // Normal Map
+    if ( gltfMaterial.normalTexture.index > -1 )
+    {
+      const tinygltf::Texture & gltfTex = iGltfModel.textures[gltfMaterial.normalTexture.index];
+
+      std::string texName;
+      GetTextureName(iGltfModel, gltfTex, texName);
+
+      material._NormalMapTexID = ioScene.FindTextureID(texName);
+      if ( material._NormalMapTexID < 0 )
+      {
+        ret = false;
+        break;
+      }
+    }
+
+    // Emission
+    material._Emission = Vec3((float)gltfMaterial.emissiveFactor[0], (float)gltfMaterial.emissiveFactor[1], (float)gltfMaterial.emissiveFactor[2]);
+    if ( gltfMaterial.emissiveTexture.index > -1 )
+    {
+      const tinygltf::Texture & gltfTex = iGltfModel.textures[gltfMaterial.emissiveTexture.index];
+
+      std::string texName;
+      GetTextureName(iGltfModel, gltfTex, texName);
+
+      material._EmissionMapTexID = ioScene.FindTextureID(texName);
+      if ( material._EmissionMapTexID < 0 )
+      {
+        ret = false;
+        break;
+      }
+    }
+
+    // KHR_materials_transmission
+    if ( gltfMaterial.extensions.find("KHR_materials_transmission") != gltfMaterial.extensions.end() )
+    {
+      const auto & ext = gltfMaterial.extensions.find("KHR_materials_transmission") -> second;
+      if ( ext.Has("transmissionFactor") )
+        material._SpecTrans = (float)(ext.Get("transmissionFactor").Get<double>());
+    }
+
+    ioScene.AddMaterial(material, gltfMaterial.name);
+  }
+
+  // Default material
+  if ( ret && ( 0 == ioScene.GetMaterials().size() ) )
+  {
+    Material defaultMat;
+    ioScene.AddMaterial(defaultMat, "Default Material");
+  }
+
+  return ret;
 }
 
 // ----------------------------------------------------------------------------
@@ -345,12 +467,7 @@ bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTra
       ioScene = new Scene;
 
     // ToDo
-    //LoadMeshes(*ioScene, gltfModel);
-    //if ( !ret )
-    //  break;
-
-    // ToDo
-    //LoadMaterials(*ioScene, gltfModel);
+    //ret = LoadMeshes(*ioScene, gltfModel);
     //if ( !ret )
     //  break;
 
@@ -358,8 +475,12 @@ bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTra
     if ( !ret )
       break;
 
+    ret = LoadMaterials(*ioScene, gltfModel);
+    if ( !ret )
+      break;
+
     // ToDo
-    //LoadInstances(*ioScene, gltfModel, iTranfoMat);
+    //ret = LoadInstances(*ioScene, gltfModel, iTranfoMat);
     //if ( !ret )
     //  break;
     ret = false; // TMP

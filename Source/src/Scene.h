@@ -50,6 +50,8 @@ public:
   int FindMaterialID( const std::string & iMateralName ) const;
   std::string FindMaterialName( int iMaterialID ) const;
 
+  int FindTextureID( const std::string & iTextureName ) const;
+
   std::string FindPrimitiveName( int iPrimitiveInstanceID ) const;
 
   int GetNbLights()             const { return _Lights.size();             }

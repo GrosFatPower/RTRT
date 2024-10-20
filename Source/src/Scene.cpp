@@ -68,16 +68,7 @@ int Scene::AddTexture( const std::string & iFilename, int iNbComponents, TexForm
 
 int Scene::AddTexture( const std::string & iTexName, unsigned char * iTexData, int iWidth, int iHeight, int iNbComponents )
 {
-  int texID = -1;
-
-  for ( auto & tex : _Textures )
-  {
-    if ( tex && ( tex -> Filename() == iTexName ) )
-    {
-      texID = tex -> GetTexID();
-      break;
-    }
-  }
+  int texID = this -> FindTextureID(iTexName);
   
   if ( texID < 0 )
   {
@@ -170,6 +161,22 @@ std::string Scene::FindMaterialName( int iMaterialID ) const
   }
 
   return "";
+}
+
+int Scene::FindTextureID( const std::string & iTextureName ) const
+{
+  int texID = -1;
+
+  for ( auto & tex : _Textures )
+  {
+    if ( tex && ( tex -> Filename() == iTextureName ) )
+    {
+      texID = tex -> GetTexID();
+      break;
+    }
+  }
+
+  return texID;
 }
 
 std::string Scene::FindPrimitiveName( int iPrimitiveInstanceID ) const
