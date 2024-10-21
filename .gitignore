@@ -40,6 +40,9 @@ Assets/renderman/
 Assets/rank3police/
 Assets/tungsten-material-testball/
 Assets/textures
+Assets/*.gltf
+Assets/*.glb
+Assets/*.bin
 
 # Files
 *.vcxproj
