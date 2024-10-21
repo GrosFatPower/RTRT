@@ -52,6 +52,7 @@ public:
   std::string FindMaterialName( int iMaterialID ) const;
 
   int FindTextureID( const std::string & iTextureName ) const;
+  int FindMeshID( const std::string& iMeshName ) const;
 
   std::string FindPrimitiveName( int iPrimitiveInstanceID ) const;
 

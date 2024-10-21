@@ -203,6 +203,22 @@ int Scene::FindTextureID( const std::string & iTextureName ) const
   return texID;
 }
 
+int Scene::FindMeshID( const std::string& iMeshName ) const
+{
+  int meshID = -1;
+
+  for ( auto & mesh : _Meshes )
+  {
+    if ( mesh && ( mesh -> Filename() == iMeshName ) )
+    {
+      meshID = mesh -> GetMeshID();
+      break;
+    }
+  }
+
+  return meshID;
+}
+
 std::string Scene::FindPrimitiveName( int iPrimitiveInstanceID ) const
 {
   for ( auto it = _PrimitiveNames.begin(); it != _PrimitiveNames.end(); ++it )

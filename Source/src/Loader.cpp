@@ -85,6 +85,71 @@ void GetTextureName( const tinygltf::Model & iGltfModel, const tinygltf::Texture
 }
 
 // ----------------------------------------------------------------------------
+// GLTF loader : GetMeshName
+// ----------------------------------------------------------------------------
+void GetMeshName( const tinygltf::Mesh & iGltfMesh, int iIndPrim, std::string& oMeshName )
+{
+  oMeshName = iGltfMesh.name;
+
+  if ( iGltfMesh.primitives.size() > 1 )
+  {
+    oMeshName += "_Prim";
+    oMeshName += std::to_string(iIndPrim);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : GetLocalTransfo
+// ----------------------------------------------------------------------------
+void GetLocalTransfo( const tinygltf::Node & iGltfNode, Mat4x4 & oLocalTransfoMat )
+{
+  if ( iGltfNode.matrix.size() > 0 )
+  {
+    oLocalTransfoMat = { iGltfNode.matrix[0],
+                         iGltfNode.matrix[1],
+                         iGltfNode.matrix[2],
+                         iGltfNode.matrix[3],
+                         iGltfNode.matrix[4],
+                         iGltfNode.matrix[5],
+                         iGltfNode.matrix[6],
+                         iGltfNode.matrix[7],
+                         iGltfNode.matrix[8],
+                         iGltfNode.matrix[9],
+                         iGltfNode.matrix[10],
+                         iGltfNode.matrix[11],
+                         iGltfNode.matrix[12],
+                         iGltfNode.matrix[13],
+                         iGltfNode.matrix[14],
+                         iGltfNode.matrix[15] };
+  }
+  else
+  {
+    Mat4x4 translate( 1.f ), rot( 1.f ), scale( 1.f );
+
+    if ( iGltfNode.translation.size() > 0 )
+    {
+      translate[3][0] = iGltfNode.translation[0];
+      translate[3][1] = iGltfNode.translation[1];
+      translate[3][2] = iGltfNode.translation[2];
+    }
+
+    if ( iGltfNode.rotation.size() > 0 )
+    {
+      rot = MathUtil::QuatToMatrix( iGltfNode.rotation[0], iGltfNode.rotation[1], iGltfNode.rotation[2], iGltfNode.rotation[3] );
+    }
+
+    if ( iGltfNode.scale.size() > 0 )
+    {
+      scale[0][0] = iGltfNode.scale[0];
+      scale[1][1] = iGltfNode.scale[1];
+      scale[2][2] = iGltfNode.scale[2];
+    }
+
+    oLocalTransfoMat = scale * rot * translate;
+  }
+}
+
+// ----------------------------------------------------------------------------
 // GLTF loader : LoadTextures
 // ----------------------------------------------------------------------------
 bool LoadTextures( Scene & ioScene, tinygltf::Model & iGltfModel )
@@ -229,14 +294,12 @@ bool LoadMeshes( Scene & ioScene, tinygltf::Model & iGltfModel )
 
   for ( tinygltf::Mesh & gltfMesh : iGltfModel.meshes )
   {
-    int nbPrimitives = 0;
-    for ( tinygltf::Primitive & prim : gltfMesh.primitives )
+    for ( size_t indPrim = 0; indPrim < gltfMesh.primitives.size(); ++indPrim )
     {
+      tinygltf::Primitive & prim = gltfMesh.primitives[indPrim];
       // Skip points and lines
       if ( TINYGLTF_MODE_TRIANGLES != prim.mode )
         continue;
-
-      nbPrimitives++;
 
       // Accessors
       tinygltf::Accessor indexAccessor, positionAccessor, normalAccessor, uv0Accessor;
@@ -370,32 +433,17 @@ bool LoadMeshes( Scene & ioScene, tinygltf::Model & iGltfModel )
         indices.push_back(inds);
       }
 
-      // Mesh attributes
-      std::string meshName = gltfMesh.name;
-      if ( gltfMesh.primitives.size() > 1 )
-        meshName += std::to_string(nbPrimitives);
-
-      int matID = 0;
-      if ( prim.material >= 0 )
-      {
-        const tinygltf::Material & gltfMaterial = iGltfModel.materials[prim.material];
-        matID = ioScene.FindMaterialID(gltfMaterial.name);
-      }
-      else
-        matID = ioScene.FindMaterialID("Default Material");
-
       // Intanciate mesh object
-      Mesh * newMesh = new Mesh( meshName, vertices, normals, uvs, indices);
-      int meshID = ioScene.AddMesh(newMesh);
+      std::string meshName;
+      GetMeshName( gltfMesh, indPrim, meshName );
+
+      Mesh* newMesh = new Mesh( meshName, vertices, normals, uvs, indices );
+      int meshID = ioScene.AddMesh( newMesh );
       if ( -1 == meshID )
       {
         ret = false;
         break;
       }
-
-      // TMP : create mesh instance
-      MeshInstance instance( meshName, meshID, matID, Mat4x4{ 1 });
-      ioScene.AddMeshInstance(instance);
     }
 
     if ( !ret )
@@ -406,13 +454,85 @@ bool LoadMeshes( Scene & ioScene, tinygltf::Model & iGltfModel )
 }
 
 // ----------------------------------------------------------------------------
+// GLTF loader : TraverseNodes
+// ----------------------------------------------------------------------------
+void TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx, const Mat4x4 & iParentTransfoMat )
+{
+  tinygltf::Node gltfNode = iGltfModel.nodes[iNodeIdx];
+
+  Mat4x4 localTransfoMat;
+  GetLocalTransfo( gltfNode , localTransfoMat );
+
+  Mat4x4 transfoMat = localTransfoMat * iParentTransfoMat;
+
+  if ( 0 == gltfNode.children.size() )
+  {
+    // Leaf
+    if ( gltfNode.mesh >= 0 )
+    {
+      tinygltf::Mesh & gltfMesh = iGltfModel.meshes[gltfNode.mesh];
+
+      for ( size_t indPrim = 0; indPrim < gltfMesh.primitives.size(); ++indPrim )
+      {
+        tinygltf::Primitive & prim = gltfMesh.primitives[indPrim];
+        if ( TINYGLTF_MODE_TRIANGLES != prim.mode )
+          continue;
+
+        std::string meshName;
+        GetMeshName( gltfMesh, indPrim, meshName );
+
+        int meshID = ioScene.FindMeshID( meshName );
+        if ( meshID < 0 )
+          continue;
+
+        int matID = 0;
+        if ( prim.material >= 0 )
+        {
+          const tinygltf::Material & gltfMaterial = iGltfModel.materials[prim.material];
+          matID = ioScene.FindMaterialID( gltfMaterial.name );
+        }
+        else
+          matID = ioScene.FindMaterialID( "Default Material" );
+        if ( matID < 0 )
+          continue;
+
+        std::string instanceName( gltfNode.name );
+        instanceName += "_inst";
+        instanceName += std::to_string(indPrim);
+
+        MeshInstance instance( instanceName, meshID, matID, transfoMat );
+        ioScene.AddMeshInstance(instance);
+      }
+    }
+  }
+  else
+  {
+    // Traverse children
+    for ( size_t i = 0; i < gltfNode.children.size(); ++i )
+    {
+      TraverseNodes( ioScene, iGltfModel, gltfNode.children[i], transfoMat );
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
 // GLTF loader : LoadInstances
 // ----------------------------------------------------------------------------
 bool LoadInstances( Scene & ioScene, tinygltf::Model & iGltfModel, const Mat4x4 & iTransfoMat )
 {
   bool ret = false;
 
-  // ToDo
+  if ( iGltfModel.defaultScene < 0 )
+    return ret;
+
+  const tinygltf::Scene gltfScene = iGltfModel.scenes[iGltfModel.defaultScene];
+
+  for ( int nodeIdx : gltfScene.nodes )
+  {
+    TraverseNodes( ioScene, iGltfModel, nodeIdx, iTransfoMat );
+  }
+
+  ret = true;
 
   return ret;
 }
@@ -677,9 +797,10 @@ bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTra
       ret = LoadMaterials(*ioScene, gltfModel);
     if ( ret )
       ret = LoadMeshes(*ioScene, gltfModel);
-    // ToDo
-    //if ( ret )
-    //  ret = LoadInstances(*ioScene, gltfModel, iTransfoMat);
+    if ( ret )
+      ret = LoadInstances(*ioScene, gltfModel, iTransfoMat);
+
+    // ToDo : load lights & camera
 
     if ( !ret )
     {
@@ -1339,7 +1460,7 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath
       else
         parsingError++;
     }
-    else if ( IsEqual("envmap", tokens[0]) )
+    else if ( IsEqual("envmap", tokens[0]) || IsEqual( "envmapfile", tokens[0] ) )
     {
       if ( 2 == nbTokens )
       {
