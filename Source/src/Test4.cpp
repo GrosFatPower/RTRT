@@ -303,7 +303,7 @@ int Test4::InitializeSceneFiles()
     tinydir_readfile_n(&dir, &file, i);
   
     std::string extension(file.extension);
-    if ( ( "scene" == extension ) || ( "gltf" == extension ) )
+    if ( ( "scene" == extension ) || ( "gltf" == extension ) || ( "glb" == extension ) )
     {
       char * filename = new char[256];
       snprintf(filename, 256, "%s", file.name);

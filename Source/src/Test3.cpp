@@ -263,7 +263,7 @@ int Test3::InitializeSceneFiles()
     tinydir_readfile_n(&dir, &file, i);
   
     std::string extension(file.extension);
-    if ( ( "scene" == extension ) || ( "gltf" == extension ) )
+    if ( ( "scene" == extension ) || ( "gltf" == extension ) || ( "glb" == extension ) )
     {
       char * filename = new char[256];
       snprintf(filename, 256, "%s", file.name);
@@ -1258,7 +1258,8 @@ int Test3::InitializeScene()
   if ( !_Scene -> GetEnvMap().IsInitialized() )
   {
     // Default background
-    _Scene -> LoadEnvMap(g_AssetsDir + "HDR\\alps_field_2k.hdr");
+    //_Scene -> LoadEnvMap(g_AssetsDir + "HDR\\alps_field_2k.hdr");
+    _Scene->LoadEnvMap( g_AssetsDir + "HDR\\artist_workshop_1k.hdr" );
     _Settings._EnableSkybox = false;
   }
 

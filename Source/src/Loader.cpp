@@ -77,19 +77,25 @@ void GetTextureName( const tinygltf::Model & iGltfModel, const tinygltf::Texture
 {
   oTexName = iGltfTex.name;
 
-  if ( !strcmp(iGltfTex.name.c_str(), "") )
+  if ( iGltfTex.name.empty() )
   {
     const tinygltf::Image & image = iGltfModel.images[iGltfTex.source];
-    oTexName = image.uri;
+    if ( !image.name.empty() )
+      oTexName = image.name;
+    else
+      oTexName = image.uri;
   }
 }
 
 // ----------------------------------------------------------------------------
 // GLTF loader : GetMeshName
 // ----------------------------------------------------------------------------
-void GetMeshName( const tinygltf::Mesh & iGltfMesh, int iIndPrim, std::string& oMeshName )
+void GetMeshName( const tinygltf::Mesh & iGltfMesh, int iIndMesh, int iIndPrim, std::string& oMeshName )
 {
   oMeshName = iGltfMesh.name;
+
+  if ( oMeshName.empty() )
+    oMeshName = "Mesh_" + std::to_string( iIndMesh );
 
   if ( iGltfMesh.primitives.size() > 1 )
   {
@@ -292,8 +298,10 @@ bool LoadMeshes( Scene & ioScene, tinygltf::Model & iGltfModel )
 {
   bool ret = true;
 
-  for ( tinygltf::Mesh & gltfMesh : iGltfModel.meshes )
+  for ( size_t indMesh = 0; indMesh < iGltfModel.meshes.size(); ++indMesh )
   {
+    tinygltf::Mesh & gltfMesh = iGltfModel.meshes[indMesh];
+
     for ( size_t indPrim = 0; indPrim < gltfMesh.primitives.size(); ++indPrim )
     {
       tinygltf::Primitive & prim = gltfMesh.primitives[indPrim];
@@ -435,7 +443,7 @@ bool LoadMeshes( Scene & ioScene, tinygltf::Model & iGltfModel )
 
       // Intanciate mesh object
       std::string meshName;
-      GetMeshName( gltfMesh, indPrim, meshName );
+      GetMeshName( gltfMesh, indMesh, indPrim, meshName );
 
       Mesh* newMesh = new Mesh( meshName, vertices, normals, uvs, indices );
       int meshID = ioScene.AddMesh( newMesh );
@@ -479,7 +487,7 @@ void TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx,
           continue;
 
         std::string meshName;
-        GetMeshName( gltfMesh, indPrim, meshName );
+        GetMeshName( gltfMesh, gltfNode.mesh, indPrim, meshName );
 
         int meshID = ioScene.FindMeshID( meshName );
         if ( meshID < 0 )
@@ -550,6 +558,8 @@ bool Loader::LoadScene(const std::string & iFilename, Scene *& oScene, RenderSet
     return Loader::LoadFromSceneFile(iFilename, oScene, oRenderSettings);
   else if ( ".gltf" == filepath.extension() )
     return Loader::LoadFromGLTF(iFilename, Mat4x4{1.f}, oScene, oRenderSettings);
+  else if ( ".glb" == filepath.extension() )
+    return Loader::LoadFromGLTF(iFilename, Mat4x4{ 1.f }, oScene, oRenderSettings, true);
 
   return false;
 }
