@@ -357,9 +357,11 @@ int Test3::UpdateUniforms()
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_EnableSkybox"), (int)_Settings._EnableSkybox);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_EnableBackground" ), (int)_Settings._EnableBackGround);
       glUniform1f(glGetUniformLocation(RTTProgramID, "u_SkyboxRotation"), _Settings._SkyBoxRotation / 360.f);
-      glUniform1f(glGetUniformLocation(RTTProgramID, "u_Gamma"), _Settings._Gamma);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_ScreenTexture"), _ScreenTextureUnit);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_SkyboxTexture"), _SkyboxTextureUnit);
+      glUniform1f(glGetUniformLocation(RTTProgramID, "u_Gamma"), _Settings._Gamma);
+      glUniform1f(glGetUniformLocation(RTTProgramID, "u_Exposure"), _Settings._Exposure);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_ToneMapping"), _Settings._ToneMapping);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_DebugMode" ), _DebugMode );
       _RenderSettingsModified = false;
     }
@@ -509,6 +511,9 @@ int Test3::UpdateUniforms()
     GLuint RTSProgramID = _RTSShader -> GetShaderProgramID();
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), _ScreenTextureUnit);
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedFrames"), _AccumulatedFrames);
+    glUniform1f(glGetUniformLocation(RTSProgramID, "u_Gamma"), _Settings._Gamma);
+    glUniform1f(glGetUniformLocation(RTSProgramID, "u_Exposure"), _Settings._Exposure);
+    glUniform1i(glGetUniformLocation(RTSProgramID, "u_ToneMapping"), 0);
     _RTSShader -> StopUsing();
   }
   else
@@ -598,6 +603,9 @@ int Test3::DrawUI()
       }
 
       if ( ImGui::SliderFloat("Gamma", &_Settings._Gamma, .5f, 3.f) )
+        _RenderSettingsModified = true;
+
+      if ( ImGui::SliderFloat( "Exposure", &_Settings._Exposure, .1f, 5.f ) )
         _RenderSettingsModified = true;
 
       float rgb[3] = { _Settings._BackgroundColor.r, _Settings._BackgroundColor.g, _Settings._BackgroundColor.b };
@@ -1390,7 +1398,7 @@ int Test3::UpdateScene()
   }
 
   bool updateFrameBufferSize = false;
-  if ( _SceneCameraModified )
+  if ( _SceneCameraModified || _RenderSettingsModified )
   {
     if ( ( 25 != _Settings._RenderScale ) && ( 25 != _RealRenderScale ) )
     {

@@ -9,6 +9,7 @@ out vec4 fragColor;
 #include Intersections.glsl
 #include Sampling.glsl
 #include BRDF.glsl
+#include ToneMapping.glsl
 
 #define OPTIM_AABB
 #define BLAS_TRAVERSAL
@@ -29,10 +30,10 @@ out vec4 fragColor;
 
 uniform vec2           u_Resolution;
 uniform float          u_Time;
-uniform float          u_Gamma;
 uniform int            u_FrameNum;
 uniform int            u_Accumulate;
 uniform int            u_Bounces;
+uniform int            u_ToneMapping;
 uniform vec3           u_BackgroundColor;
 uniform Camera         u_Camera;
 uniform Light          u_Lights[MAX_LIGHT_COUNT];
@@ -710,10 +711,11 @@ void main()
     }
   }
 
-  // Reinhard Tone mapping
-  pixelColor /= pixelColor + vec3(1.);
-  // Gamma correction
-  pixelColor = pow(pixelColor, vec3(1. / u_Gamma));
+  if ( 0 != u_ToneMapping )
+  {
+    pixelColor = ReinhardToneMapping( pixelColor );
+    pixelColor = GammaCorrection( pixelColor );
+  }
 
   //pixelColor = clamp(pixelColor, 0.f, 1.f);
   fragColor = vec4(pixelColor, 0.f);
