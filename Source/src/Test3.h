@@ -179,6 +179,8 @@ private:
   double          _AccuDelta            = 0.;
   double          _LastAdjustmentTime   = 0.;
   int             _NbFrames             = 0;
+
+  int             _DebugMode            = 0;
 };
 
 }

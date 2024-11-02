@@ -355,11 +355,12 @@ int Test3::UpdateUniforms()
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_Bounces"), _Settings._Bounces);
       glUniform3f(glGetUniformLocation(RTTProgramID, "u_BackgroundColor"), _Settings._BackgroundColor.r, _Settings._BackgroundColor.g, _Settings._BackgroundColor.b);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_EnableSkybox"), (int)_Settings._EnableSkybox);
-      glUniform1i(glGetUniformLocation( RTTProgramID, "u_EnableBackground" ), (int)_Settings._EnableBackGround);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_EnableBackground" ), (int)_Settings._EnableBackGround);
       glUniform1f(glGetUniformLocation(RTTProgramID, "u_SkyboxRotation"), _Settings._SkyBoxRotation / 360.f);
       glUniform1f(glGetUniformLocation(RTTProgramID, "u_Gamma"), _Settings._Gamma);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_ScreenTexture"), _ScreenTextureUnit);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_SkyboxTexture"), _SkyboxTextureUnit);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_DebugMode" ), _DebugMode );
       _RenderSettingsModified = false;
     }
 
@@ -623,6 +624,10 @@ int Test3::DrawUI()
           ImGui::Image(texture, ImVec2(128, 128));
         }
       }
+
+      static const char * DEBUG_MODES[] = { "Off", "Albedo", "Metalness", "Roughness", "Normals", "UV" };
+      if ( ImGui::Combo( "Debug view", &_DebugMode, DEBUG_MODES, 6 ) )
+        _RenderSettingsModified = true;
     }
 
     if ( ImGui::CollapsingHeader("Camera") )

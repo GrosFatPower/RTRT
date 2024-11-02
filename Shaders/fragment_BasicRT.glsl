@@ -10,8 +10,6 @@ out vec4 fragColor;
 #include Sampling.glsl
 #include BRDF.glsl
 
-#define PBR_RENDERING
-//#define DIRECT_ILLUMINATION
 #define OPTIM_AABB
 #define BLAS_TRAVERSAL
 #define TLAS_TRAVERSAL
@@ -62,6 +60,8 @@ uniform isamplerBuffer u_VtxIndTexture;
 uniform isamplerBuffer u_TexIndTexture;
 uniform isamplerBuffer u_MeshIDRangeTexture;
 uniform sampler2DArray u_TexArrayTexture;
+
+uniform int            u_DebugMode;
 
 // ============================================================================
 // Ray tracing
@@ -467,7 +467,7 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
   {
     int texArrayID = texelFetch(u_TexIndTexture, baseColorTexID).x;
     if ( texArrayID >= 0 )
-      oMat._Albedo = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rgb;
+      oMat._Albedo = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rgb * oMat._Albedo;
   }
 
   if ( normalMapTexID >= 0 )
@@ -553,7 +553,6 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
       }
       else
       {
-        //vec3 L = RandomVector();
         vec3 L = SampleHemisphere(iClosestHit._Normal);
 
         float irradiance = max(dot(L, iClosestHit._Normal), 0.f) * 0.1f;
@@ -612,34 +611,37 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
 }
 
 // ----------------------------------------------------------------------------
-// ComputeColor
+// DebugColor
 // ----------------------------------------------------------------------------
-vec3 ComputeColor( in HitPoint iClosestHit, inout Material ioMat )
+vec3 DebugColor( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuation )
 {
-  LoadMaterial(iClosestHit, ioMat);
+  vec3 outColor;
 
-  vec3 pixelColor = vec3(0.f);
+  Material mat;
+  LoadMaterial( iClosestHit, mat );
 
-  for ( int i = 0; i < u_NbLights; ++i )
+  if ( 1 == u_DebugMode )
   {
-    vec3 lightDir = u_Lights[i]._Pos - iClosestHit._Pos;
-    float lightDist = length(lightDir);
-
-    lightDir = normalize(lightDir);
-    
-    vec3 lightIntensity = vec3(0.f, 0.f, 0.f);
-
-    Ray occlusionRay;
-    occlusionRay._Orig = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
-    occlusionRay._Dir = lightDir;
-
-    if ( !AnyHit(occlusionRay, lightDist) )
-      lightIntensity = max(dot(iClosestHit._Normal, lightDir), 0.0f) * u_Lights[i]._Emission;
-
-    pixelColor += ioMat._Albedo * lightIntensity;
+    outColor = mat._Albedo;
+  }
+  else if ( 2 == u_DebugMode )
+  {
+    outColor = vec3(mat._Metallic);
+  }
+  else if ( 3 == u_DebugMode )
+  {
+    outColor = vec3(mat._Roughness);
+  }
+  else if ( 4 == u_DebugMode )
+  {
+    outColor = iClosestHit._Normal;
+  }
+  else if ( 5 == u_DebugMode )
+  {
+    outColor = vec3(iClosestHit._UV.x, iClosestHit._UV.y, 0.f);
   }
 
-  return pixelColor;
+  return outColor;
 }
 
 // ----------------------------------------------------------------------------
@@ -694,31 +696,19 @@ void main()
       break;
     }
 
-#ifdef PBR_RENDERING
-
     Ray scattered;
     vec3 attenuation;
-    pixelColor += DirectIllumination(ray, closestHit, scattered, attenuation) * multiplier;
-    ray = scattered;
-    multiplier *= attenuation;
-
-#elif defined(DIRECT_ILLUMINATION)
-
-    Material mat;
-    pixelColor += ComputeColor(closestHit, mat) * multiplier;
-    multiplier *= mat._Metallic;
-
-    ray._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
-    ray._Dir = reflect(ray._Dir, closestHit._Normal + mat._Roughness * RandomVector() );
-
-#else
-
-    Material mat;
-    LoadMaterial(closestHit, mat);
-    pixelColor = mat._Albedo;
-    break;
-
-#endif
+    if ( 0 == u_DebugMode )
+    {
+      pixelColor += DirectIllumination( ray, closestHit, scattered, attenuation ) * multiplier;
+      ray = scattered;
+      multiplier *= attenuation;
+    }
+    else
+    {
+      pixelColor += DebugColor( ray, closestHit, scattered, attenuation ) * multiplier;
+      break;
+    }
   }
 
   // Reinhard Tone mapping
