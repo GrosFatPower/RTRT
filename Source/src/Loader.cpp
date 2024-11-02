@@ -328,6 +328,8 @@ bool LoadMeshes( Scene & ioScene, tinygltf::Model & iGltfModel )
         if ( normalIndex >= 0 )
           normalAccessor = iGltfModel.accessors[normalIndex];
       }
+      else
+        return false; // Temporary limitation : no normal pre-computation
 
       if ( prim.attributes.count("TEXCOORD_0") > 0 )
       {
@@ -511,6 +513,51 @@ void TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx,
         MeshInstance instance( instanceName, meshID, matID, transfoMat );
         ioScene.AddMeshInstance(instance);
       }
+    }
+  }
+  else if ( gltfNode.light >= 0 )
+  {
+
+  }
+  else if ( gltfNode.camera >= 0 )
+  {
+    const tinygltf::Camera & curCam = iGltfModel.cameras[gltfNode.camera];
+    if ( "perspective" == curCam.type )
+    { 
+      float fov = 80.f;
+      float focalDist = -1.f;
+      float aperture = -1.f;
+      float nearPlane = (float)curCam.perspective.znear;
+      float farPlane = (float)curCam.perspective.zfar;
+
+      Vec3 forward = { transfoMat[2][0], transfoMat[2][1], transfoMat[2][2] };
+      Vec3 pos = { transfoMat[3][0], transfoMat[3][1], transfoMat[3][2] };
+      Vec3 lookAt = pos + forward;
+
+      Camera newCamera( pos, lookAt, fov );
+      if ( aperture >= 0 )
+        newCamera.SetAperture( aperture );
+      if ( focalDist >= 0 )
+        newCamera.SetFocalDist( focalDist );
+
+      if ( ( nearPlane > 0.f ) || ( farPlane > 0.f ) )
+      {
+        float nNear, nFar;
+        newCamera.GetZNearFar( nNear, nFar );
+
+        if ( nearPlane > 0.f )
+          nNear = nearPlane;
+        if ( farPlane > 0.f )
+          nFar = farPlane;
+
+        newCamera.SetZNearFar( nNear, nFar );
+      }
+
+      ioScene.SetCamera( newCamera );
+    }
+    else if ( "orthographic" == curCam.type )
+    {
+      // Not implemented
     }
   }
   else
@@ -809,8 +856,6 @@ bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTra
       ret = LoadMeshes(*ioScene, gltfModel);
     if ( ret )
       ret = LoadInstances(*ioScene, gltfModel, iTransfoMat);
-
-    // ToDo : load lights & camera
 
     if ( !ret )
     {
