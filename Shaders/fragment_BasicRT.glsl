@@ -49,6 +49,7 @@ uniform Box            u_Boxes[MAX_BOX_COUNT];
 uniform int            u_NbTriangles;
 uniform int            u_NbMeshInstances;
 uniform int            u_EnableSkybox;
+uniform int            u_EnableBackground;
 uniform float          u_SkyboxRotation;
 uniform sampler2D      u_SkyboxTexture;
 uniform sampler2D      u_ScreenTexture;
@@ -677,7 +678,10 @@ void main()
     TraceRay(ray, closestHit);
     if ( closestHit._Dist < -RESOLUTION )
     {
-      if ( 0 != u_EnableSkybox )
+      if ( ( 0 == i ) && ( 0 == u_EnableBackground ) )
+        break;
+
+      else if ( 0 != u_EnableSkybox )
         pixelColor += SampleSkybox(ray._Dir, u_SkyboxTexture, u_SkyboxRotation) * multiplier;
       else
         pixelColor += u_BackgroundColor * multiplier;

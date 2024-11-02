@@ -355,6 +355,7 @@ int Test3::UpdateUniforms()
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_Bounces"), _Settings._Bounces);
       glUniform3f(glGetUniformLocation(RTTProgramID, "u_BackgroundColor"), _Settings._BackgroundColor.r, _Settings._BackgroundColor.g, _Settings._BackgroundColor.b);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_EnableSkybox"), (int)_Settings._EnableSkybox);
+      glUniform1i(glGetUniformLocation( RTTProgramID, "u_EnableBackground" ), (int)_Settings._EnableBackGround);
       glUniform1f(glGetUniformLocation(RTTProgramID, "u_SkyboxRotation"), _Settings._SkyBoxRotation / 360.f);
       glUniform1f(glGetUniformLocation(RTTProgramID, "u_Gamma"), _Settings._Gamma);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_ScreenTexture"), _ScreenTextureUnit);
@@ -607,6 +608,9 @@ int Test3::DrawUI()
 
       if ( _Scene -> GetEnvMap().IsInitialized() )
       {
+        if ( ImGui::Checkbox( "Show background", &_Settings._EnableBackGround ) )
+          _RenderSettingsModified = true;
+
         if ( ImGui::Checkbox("Enable skybox", &_Settings._EnableSkybox) )
           _RenderSettingsModified = true;
 
