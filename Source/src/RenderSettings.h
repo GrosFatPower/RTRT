@@ -18,9 +18,10 @@ struct RenderSettings
   bool  _EnableSkybox       = true;
   bool  _EnableUniformLight = true;
   bool  _AutoScale          = false;
+  bool  _ToneMapping        = true;
+  bool  _FXAA               = false;
   int   _Bounces            = 1;
   int   _RenderScale        = 100;
-  int   _ToneMapping        = 1;
   float _TargetFPS          = 60.f;
   float _Gamma              = 2.f;
   float _Exposure           = 1.5f;

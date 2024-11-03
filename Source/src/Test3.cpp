@@ -361,7 +361,7 @@ int Test3::UpdateUniforms()
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_SkyboxTexture"), _SkyboxTextureUnit);
       glUniform1f(glGetUniformLocation(RTTProgramID, "u_Gamma"), _Settings._Gamma);
       glUniform1f(glGetUniformLocation(RTTProgramID, "u_Exposure"), _Settings._Exposure);
-      glUniform1i(glGetUniformLocation(RTTProgramID, "u_ToneMapping"), _Settings._ToneMapping);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_ToneMapping"), ( _Settings._ToneMapping ? 1 : 0 ));
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_DebugMode" ), _DebugMode );
       _RenderSettingsModified = false;
     }
@@ -511,9 +511,11 @@ int Test3::UpdateUniforms()
     GLuint RTSProgramID = _RTSShader -> GetShaderProgramID();
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), _ScreenTextureUnit);
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedFrames"), _AccumulatedFrames);
+    glUniform2f(glGetUniformLocation(RTSProgramID, "u_RenderRes" ), _Settings._RenderResolution.x, _Settings._RenderResolution.y);
     glUniform1f(glGetUniformLocation(RTSProgramID, "u_Gamma"), _Settings._Gamma);
     glUniform1f(glGetUniformLocation(RTSProgramID, "u_Exposure"), _Settings._Exposure);
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_ToneMapping"), 0);
+    glUniform1i(glGetUniformLocation(RTSProgramID, "u_FXAA"), (_Settings._FXAA ?  1 : 0 ));
     _RTSShader -> StopUsing();
   }
   else
@@ -634,11 +636,20 @@ int Test3::DrawUI()
         this -> AdjustRenderScale();
       }
 
-      if ( ImGui::SliderFloat("Gamma", &_Settings._Gamma, .5f, 3.f) )
+      if ( ImGui::Checkbox( "FXAA", &_Settings._FXAA ) )
         _RenderSettingsModified = true;
 
-      if ( ImGui::SliderFloat( "Exposure", &_Settings._Exposure, .1f, 5.f ) )
+      if ( ImGui::Checkbox( "Tone mapping", &_Settings._ToneMapping ) )
         _RenderSettingsModified = true;
+
+      if ( _Settings._ToneMapping )
+      {
+        if ( ImGui::SliderFloat( "Gamma", &_Settings._Gamma, .5f, 3.f ) )
+          _RenderSettingsModified = true;
+
+        if ( ImGui::SliderFloat( "Exposure", &_Settings._Exposure, .1f, 5.f ) )
+          _RenderSettingsModified = true;
+      }
 
       float rgb[3] = { _Settings._BackgroundColor.r, _Settings._BackgroundColor.g, _Settings._BackgroundColor.b };
       if ( ImGui::ColorEdit3("Background", rgb) )

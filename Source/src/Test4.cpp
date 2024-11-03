@@ -264,6 +264,9 @@ Test4::Test4( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iSc
   _Settings._RenderResolution.y = iScreenHeight * ( _Settings._RenderScale * 0.01f );
   ResizeImageBuffers();
 
+  _Settings._Gamma = 1.5f;
+  _Settings._Exposure = 1.f;
+
   _NbThreadsMax = std::thread::hardware_concurrency();
   _NbThreads = _NbThreadsMax;
 
@@ -482,6 +485,11 @@ int Test4::UpdateUniforms()
     GLuint RTSProgramID = _RTSShader -> GetShaderProgramID();
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), 0);
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedFrames"), 1);
+    glUniform2f(glGetUniformLocation(RTSProgramID, "u_RenderRes"), _Settings._RenderResolution.x, _Settings._RenderResolution.y );
+    glUniform1f(glGetUniformLocation(RTSProgramID, "u_Gamma"), _Settings._Gamma );
+    glUniform1f(glGetUniformLocation(RTSProgramID, "u_Exposure"), _Settings._Exposure );
+    glUniform1i(glGetUniformLocation(RTSProgramID, "u_ToneMapping"), ( _Settings._ToneMapping ? 1 : 0 ) );
+    glUniform1i(glGetUniformLocation(RTSProgramID, "u_FXAA"), ( _Settings._FXAA ? 1 : 0 ) );
     _RTSShader -> StopUsing();
   }
   else
@@ -698,6 +706,16 @@ void Test4::DrawUI()
       int showWires = !!_ShowWires;
       ImGui::Combo("Show wires", &showWires, YESorNO, 2);
       _ShowWires = !!showWires;
+
+      ImGui::Checkbox( "FXAA", &_Settings._FXAA );
+
+      ImGui::Checkbox( "Tone mapping", &_Settings._ToneMapping );
+
+      if ( _Settings._ToneMapping )
+      {
+        ImGui::SliderFloat( "Gamma", &_Settings._Gamma, .5f, 3.f );
+        ImGui::SliderFloat( "Exposure", &_Settings._Exposure, .1f, 5.f );
+      }
 
       int numThreads = _NbThreads;
       if ( ImGui::SliderInt("Nb Threads", &numThreads, 1, _NbThreadsMax) && ( numThreads > 0 ) )
@@ -1414,6 +1432,9 @@ int Test4::InitializeScene()
 
   // Resize Image Buffer
   this -> ResizeImageBuffers();
+
+  _Settings._Gamma = 1.5f;
+  _Settings._Exposure = 1.f;
 
   _ReloadScene = false;
 
