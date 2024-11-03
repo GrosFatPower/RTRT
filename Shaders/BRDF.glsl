@@ -2,6 +2,10 @@
  *
  */
 
+#ifndef _BRDF_GLSL_
+#define _BRDF_GLSL_
+
+#include Constants.glsl
 
 // ----------------------------------------------------------------------------
 // DistributionGGX
@@ -116,3 +120,5 @@ vec3 BRDF( in vec3 iN, in vec3 iV, in vec3 iL, in vec3 iF0, in Material iMat )
   return Kd * lambert + specular; // kd * fDiffuse + ks * fSpecular
   //return diffuse + specular;
 }
+
+#endif

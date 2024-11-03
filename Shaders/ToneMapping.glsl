@@ -2,6 +2,9 @@
  *
  */
 
+#ifndef _TONEMAPPING_GLSL_
+#define _TONEMAPPING_GLSL_
+
 // ============================================================================
 // Uniforms
 // ============================================================================
@@ -26,3 +29,5 @@ vec3 GammaCorrection(in vec3 iColor)
 {
   return pow(iColor, vec3(1. / u_Gamma));
 }
+
+#endif /* _TONEMAPPING_GLSL_ */

@@ -2,6 +2,9 @@
  *
  */
 
+#ifndef _RNG_GLSL_
+#define _RNG_GLSL_
+
 // ----------------------------------------------------------------------------
 // InitRNG
 // RNG from code by Moroz Mykhailo (https://www.shadertoy.com/view/wltcRS)
@@ -94,3 +97,5 @@ vec3 RandomUnitVector()
 //{
 //  return normalize(RandomInUnitSphere());
 //}
+
+#endif

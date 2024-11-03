@@ -2,9 +2,12 @@
  *
  */
 
-// Requires
-//#include Constants.glsl
-//#include Structures.glsl
+#ifndef _BVH_GLSL_
+#define _BVH_GLSL_
+
+#include Constants.glsl
+#include Structures.glsl
+#include Intersections.glsl
 
 // ============================================================================
 // Uniforms
@@ -474,3 +477,5 @@ bool AnyHit_ThroughTLAS( in Ray iRay, in float iMaxDist )
 
   return false;
 }
+
+#endif

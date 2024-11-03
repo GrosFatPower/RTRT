@@ -2,6 +2,11 @@
  *
  */
 
+#ifndef _SAMPLING_GLSL_
+#define _SAMPLING_GLSL_
+
+#include Constants.glsl
+
 // ----------------------------------------------------------------------------
 // GetLightDirSample
 // ----------------------------------------------------------------------------
@@ -37,3 +42,5 @@ vec3 SampleSkybox( in vec3 iRayDir, in sampler2D iSkyboxTex, in float iSkyboxRot
   vec3 skycolor = texture(iSkyboxTex, uv).rgb;
   return skycolor;
 }
+
+#endif

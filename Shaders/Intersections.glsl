@@ -2,6 +2,11 @@
  *
  */
 
+#ifndef _INTERSECTIONS_GLSL_
+#define _INTERSECTIONS_GLSL_
+
+#include Constants.glsl
+
 // ----------------------------------------------------------------------------
 // SphereIntersection
 // https://raytracing.github.io/books/RayTracingInOneWeekend.html#overview
@@ -261,3 +266,5 @@ void TriangleTangents( in vec3 iV0, in vec3 iV1, in vec3 iV2, in vec2 iUV0, in v
   oTangent   = (deltaPos1 * deltaUV2.y - deltaPos2 * deltaUV1.y) * invdet;
   oBitangent = (deltaPos2 * deltaUV1.x - deltaPos1 * deltaUV2.x) * invdet;
 }
+
+#endif

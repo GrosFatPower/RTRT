@@ -2,6 +2,9 @@
  *
  */
 
+#ifndef _STRUCTURES_GLSL_
+#define _STRUCTURES_GLSL_
+
 #define QUAD_LIGHT    0
 #define SPHERE_LIGHT  1
 #define DISTANT_LIGHT 2
@@ -91,3 +94,5 @@ void InitializeHitPoint( inout HitPoint ioHitPoint )
 {
   ioHitPoint = HitPoint(-1.f, vec3(0.f), vec3(0.f), vec3(0.f), vec3(0.f), vec2(0.f), -1, 0, true, false);
 }
+
+#endif

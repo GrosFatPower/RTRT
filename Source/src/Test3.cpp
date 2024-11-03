@@ -575,7 +575,7 @@ int Test3::DrawUI()
       }
 
       s_AccumTime += _TimeDelta;
-      while ( s_AccumTime > 0.1 )
+      while ( s_AccumTime > ( 1.f / 60 ) )
       {
         s_AccumTime -= 0.1;
         s_Max = *std::max_element( s_FrameRateHistory.begin(), s_FrameRateHistory.end() );
@@ -1067,15 +1067,18 @@ int Test3::UpdateCPUTime()
   _AccuDelta += _TimeDelta;
   _NbFrames++;
 
-  if ( ( _FrameRate == 0. ) && _AccuDelta && ( _NbFrames > 1 ) )
+  double nbSeconds = 0.;
+  while ( _AccuDelta > 1. )
   {
-    _FrameRate = std::min(_NbFrames / _AccuDelta, 300.);
+    _AccuDelta -= 1.;
+    nbSeconds++;
   }
-  else if ( _AccuDelta >= 1. )
+
+  if ( nbSeconds >= 1. )
   {
-    _FrameRate = (double)_NbFrames * .75 + _FrameRate * .25;
-    while ( _AccuDelta > 1. )
-      _AccuDelta -= 1.;
+    nbSeconds += _AccuDelta;
+
+    _FrameRate = (double)_NbFrames / nbSeconds;
     _NbFrames = 0;
   }
 
