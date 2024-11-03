@@ -170,15 +170,15 @@ private:
   int                      _NbMeshInstances = 0;
 
   // Frame rate
-  long            _FrameNum             = 0;
-  int             _AccumulatedFrames    = 0;
-  double          _CPULoopTime          = 0.;
-  double          _FrameRate            = 0.;
-  double          _TimeDelta            = 0.;
-  double          _AverageDelta         = 0.;
-  double          _AccuDelta            = 0.;
-  double          _LastAdjustmentTime   = 0.;
-  int             _NbFrames             = 0;
+  long               _FrameNum             = 0;
+  int                _AccumulatedFrames    = 0;
+  double             _CPULoopTime          = 0.;
+  double             _FrameRate            = 0.;
+  double             _TimeDelta            = 0.;
+  double             _AverageDelta         = 0.;
+  double             _AccuDelta            = 0.;
+  double             _LastAdjustmentTime   = 0.;
+  int                _NbFrames             = 0;
 
   int             _DebugMode            = 0;
 };

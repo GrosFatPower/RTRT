@@ -561,6 +561,38 @@ int Test3::DrawUI()
 
     ImGui::Text("Accumulated frames : %d", _AccumulatedFrames);
 
+    {
+      static std::vector<float> s_FrameRateHistory;
+      static int                s_LastFrameIndex = -1;
+      static double             s_AccumTime = 0.f;
+      static float              s_Max = 300.;
+
+      if ( -1 == s_LastFrameIndex )
+      {
+        s_FrameRateHistory.assign( 120, 0.f );
+        s_LastFrameIndex = 0;
+        s_FrameRateHistory[s_LastFrameIndex] = (float)_FrameRate;
+      }
+
+      s_AccumTime += _TimeDelta;
+      while ( s_AccumTime > 0.1 )
+      {
+        s_AccumTime -= 0.1;
+        s_Max = *std::max_element( s_FrameRateHistory.begin(), s_FrameRateHistory.end() );
+
+        s_LastFrameIndex++;
+        if ( s_LastFrameIndex >= 120 )
+          s_LastFrameIndex = 0;
+        s_FrameRateHistory[s_LastFrameIndex] = (float)_FrameRate;
+      }
+
+      int offset = ( s_LastFrameIndex >= 119 ) ? ( 0 ) : ( s_LastFrameIndex + 1 );
+
+      char overlay[32];
+      sprintf( overlay, "%.1f FPS", _FrameRate );
+      ImGui::PlotLines( "Frame rate", &s_FrameRateHistory[0], s_FrameRateHistory.size(), offset, overlay, -0.1f, s_Max, ImVec2( 0, 80.0f ) );
+    }
+
     int selectedSceneId = _CurSceneId;
     if ( ImGui::Combo("Scene", &selectedSceneId, _SceneNames.data(), _SceneNames.size()) )
     {
@@ -1037,7 +1069,7 @@ int Test3::UpdateCPUTime()
 
   if ( ( _FrameRate == 0. ) && _AccuDelta && ( _NbFrames > 1 ) )
   {
-    _FrameRate = _NbFrames / _AccuDelta;
+    _FrameRate = std::min(_NbFrames / _AccuDelta, 300.);
   }
   else if ( _AccuDelta >= 1. )
   {
@@ -1051,9 +1083,6 @@ int Test3::UpdateCPUTime()
     _AverageDelta = _TimeDelta;
   else
     _AverageDelta = _TimeDelta * .25 + _AverageDelta * .75;
-
-  if ( _AverageDelta > 0. )
-    _FrameRate = 1. / (float)_AverageDelta;
 
   return 0;
 }
@@ -1398,19 +1427,22 @@ int Test3::UpdateScene()
   }
 
   bool updateFrameBufferSize = false;
-  if ( _SceneCameraModified || _RenderSettingsModified )
+  if ( !_Settings._AutoScale )
   {
-    if ( ( 25 != _Settings._RenderScale ) && ( 25 != _RealRenderScale ) )
+    if ( _SceneCameraModified || _RenderSettingsModified )
     {
-      _RealRenderScale = _Settings._RenderScale;
-      _Settings._RenderScale = 25;
+      if ( ( 25 != _Settings._RenderScale ) && ( 25 != _RealRenderScale ) )
+      {
+        _RealRenderScale = _Settings._RenderScale;
+        _Settings._RenderScale = 25;
+        updateFrameBufferSize = true;
+      }
+    }
+    else if ( _Settings._RenderScale != _RealRenderScale )
+    {
+      _Settings._RenderScale = _RealRenderScale;
       updateFrameBufferSize = true;
     }
-  }
-  else if ( _Settings._RenderScale != _RealRenderScale )
-  {
-    _Settings._RenderScale = _RealRenderScale;
-    updateFrameBufferSize = true;
   }
 
   if ( updateFrameBufferSize )
