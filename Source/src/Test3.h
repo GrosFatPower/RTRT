@@ -31,6 +31,7 @@ public:
 private:
 
   int InitializeSceneFiles();
+  int InitializeBackgroundFiles();
   int InitializeScene();
   int UpdateScene();
   void ClearSceneData();
@@ -148,11 +149,16 @@ private:
   Scene         * _Scene = nullptr;
   std::vector<std::string>  _SceneFiles;
   std::vector<const char*>  _SceneNames;
+  std::vector<std::string>  _BackgroundFiles;
+  std::vector<const char*>  _BackgroundNames;
   unsigned int              _CurSceneId = 0;
+  unsigned int              _CurBackgroundId = 0;
   bool                      _ReloadScene = true;
+  bool                      _ReloadBackground = true;
   int                       _SkyboxID    = -1;
 
   RenderSettings  _Settings;
+  bool            _AccumulateFrames       = true;
   bool            _SceneCameraModified    = false;
   bool            _SceneLightsModified    = false;
   bool            _SceneMaterialsModified = false;
@@ -180,7 +186,7 @@ private:
   double             _LastAdjustmentTime   = 0.;
   int                _NbFrames             = 0;
 
-  int             _DebugMode            = 0;
+  int                _DebugMode            = 0;
 };
 
 }

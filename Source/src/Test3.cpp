@@ -38,12 +38,16 @@ namespace RTRT
 const char * Test3::GetTestHeader() { return "Test 3 : Basic ray tracing"; }
 
 // ----------------------------------------------------------------------------
-// Global variables
+// GLOBAL VARIABLES
 // ----------------------------------------------------------------------------
 static std::string g_AssetsDir = "..\\..\\Assets\\";
 
 // ----------------------------------------------------------------------------
-// Global functions
+// GLOBAL FUNCTIONS
+// ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// KeyCallback
 // ----------------------------------------------------------------------------
 void Test3::KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
@@ -75,6 +79,9 @@ void Test3::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
   }
 }
 
+// ----------------------------------------------------------------------------
+// MousebuttonCallback
+// ----------------------------------------------------------------------------
 void Test3::MousebuttonCallback(GLFWwindow* window, int button, int action, int mods)
 {
   if ( !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) )
@@ -111,6 +118,9 @@ void Test3::MousebuttonCallback(GLFWwindow* window, int button, int action, int 
   }
 }
 
+// ----------------------------------------------------------------------------
+// FramebufferSizeCallback
+// ----------------------------------------------------------------------------
 void Test3::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 {
   auto * const this_ = static_cast<Test3*>(glfwGetWindowUserPointer(window));
@@ -197,6 +207,9 @@ Test3::~Test3()
     delete[] fileName;
 }
 
+// ----------------------------------------------------------------------------
+// ClearSceneData
+// ----------------------------------------------------------------------------
 void Test3::ClearSceneData()
 {
   glDeleteBuffers(1, &_VtxBufferID);
@@ -252,6 +265,9 @@ void Test3::ClearSceneData()
   _Scene = nullptr;
 }
 
+// ----------------------------------------------------------------------------
+// InitializeSceneFiles
+// ----------------------------------------------------------------------------
 int Test3::InitializeSceneFiles()
 {
   tinydir_dir dir;
@@ -282,6 +298,43 @@ int Test3::InitializeSceneFiles()
   return 0;
 }
 
+// ----------------------------------------------------------------------------
+// InitializeBackgroundFiles
+// ----------------------------------------------------------------------------
+int Test3::InitializeBackgroundFiles()
+{
+  std::string bgdPath = g_AssetsDir + "HDR\\";
+
+  tinydir_dir dir;
+  tinydir_open_sorted( &dir, bgdPath.c_str() );
+
+  for ( int i = 0; i < dir.n_files; ++i )
+  {
+    tinydir_file file;
+    tinydir_readfile_n( &dir, &file, i );
+
+    std::string extension( file.extension );
+    if ( ( "hdr" == extension ) || ( "HDR" == extension ) )
+    {
+      char * filename = new char[256];
+      snprintf( filename, 256, "%s", file.name );
+      _BackgroundNames.push_back( filename );
+      _BackgroundFiles.push_back( bgdPath + std::string( file.name ) );
+
+      std::size_t found = _BackgroundFiles[_BackgroundFiles.size() - 1].find( "artist_workshop_1k.hdr" );
+      if ( std::string::npos != found )
+        _CurBackgroundId = _BackgroundFiles.size() - 1;
+    }
+  }
+
+  tinydir_close( &dir );
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeFrameBuffer
+// ----------------------------------------------------------------------------
 int Test3::InitializeFrameBuffer()
 {
   // Screen texture
@@ -305,6 +358,9 @@ int Test3::InitializeFrameBuffer()
   return 0;
 }
 
+// ----------------------------------------------------------------------------
+// RecompileShaders
+// ----------------------------------------------------------------------------
 int Test3::RecompileShaders()
 {
   if (_RTTShader)
@@ -329,6 +385,9 @@ int Test3::RecompileShaders()
   return 0;
 }
 
+// ----------------------------------------------------------------------------
+// UpdateUniforms
+// ----------------------------------------------------------------------------
 int Test3::UpdateUniforms()
 {
   if ( _RTTShader )
@@ -339,7 +398,7 @@ int Test3::UpdateUniforms()
     glUniform1f(glGetUniformLocation(RTTProgramID, "u_Time"), _CPULoopTime);
     glUniform1i(glGetUniformLocation(RTTProgramID, "u_FrameNum"), _FrameNum);  
 
-    if ( !(_RenderSettingsModified + _SceneCameraModified + _SceneLightsModified + _SceneInstancesModified + _SceneMaterialsModified) )
+    if ( !(_RenderSettingsModified + _SceneCameraModified + _SceneLightsModified + _SceneInstancesModified + _SceneMaterialsModified) && _AccumulateFrames )
     {
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_Accumulate"), 1);
       _AccumulatedFrames++;
@@ -524,6 +583,9 @@ int Test3::UpdateUniforms()
   return 0;
 }
 
+// ----------------------------------------------------------------------------
+// InitializeUI
+// ----------------------------------------------------------------------------
 int Test3::InitializeUI()
 {
   // Setup Dear ImGui context
@@ -547,6 +609,9 @@ int Test3::InitializeUI()
   return 0;
 }
 
+// ----------------------------------------------------------------------------
+// DrawUI
+// ----------------------------------------------------------------------------
 int Test3::DrawUI()
 {
   // Start the Dear ImGui frame
@@ -636,6 +701,9 @@ int Test3::DrawUI()
         this -> AdjustRenderScale();
       }
 
+      if ( ImGui::Checkbox( "Accumulate", &_AccumulateFrames ) )
+        _RenderSettingsModified = true;
+
       if ( ImGui::Checkbox( "FXAA", &_Settings._FXAA ) )
         _RenderSettingsModified = true;
 
@@ -658,21 +726,35 @@ int Test3::DrawUI()
         _RenderSettingsModified = true;
       }
 
-      if ( _Scene -> GetEnvMap().IsInitialized() )
+      if ( ImGui::Checkbox( "Show background", &_Settings._EnableBackGround ) )
+        _RenderSettingsModified = true;
+
+      if ( _BackgroundFiles.size() )
       {
-        if ( ImGui::Checkbox( "Show background", &_Settings._EnableBackGround ) )
+        if ( ImGui::Checkbox("Enable environment mapping", &_Settings._EnableSkybox) )
           _RenderSettingsModified = true;
 
-        if ( ImGui::Checkbox("Enable skybox", &_Settings._EnableSkybox) )
-          _RenderSettingsModified = true;
-
-        if ( ImGui::SliderFloat("Skybox rotation", &_Settings._SkyBoxRotation, 0.f, 360.f) )
-          _RenderSettingsModified = true;
-
-        if ( _Settings._EnableSkybox && ( _SkyboxTextureID >= 0 ) )
+        if ( _Settings._EnableSkybox )
         {
-          ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_SkyboxTextureID);
-          ImGui::Image(texture, ImVec2(128, 128));
+          int selectedBgdId = _CurBackgroundId;
+          if ( ImGui::Combo( "Background", &selectedBgdId, _BackgroundNames.data(), _BackgroundNames.size() ) )
+          {
+            if ( selectedBgdId != _CurBackgroundId )
+            {
+              _CurBackgroundId = selectedBgdId;
+              _ReloadBackground = true;
+            }
+            _RenderSettingsModified = true;
+          }
+
+          if ( ImGui::SliderFloat("Skybox rotation", &_Settings._SkyBoxRotation, 0.f, 360.f) )
+            _RenderSettingsModified = true;
+
+          if ( _SkyboxTextureID >= 0 )
+          {
+            ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_SkyboxTextureID);
+            ImGui::Image(texture, ImVec2(128, 128));
+          }
         }
       }
 
@@ -1067,6 +1149,9 @@ int Test3::DrawUI()
   return 0;
 }
 
+// ----------------------------------------------------------------------------
+// UpdateCPUTime
+// ----------------------------------------------------------------------------
 int Test3::UpdateCPUTime()
 {
   double oldCpuTime = _CPULoopTime;
@@ -1101,6 +1186,9 @@ int Test3::UpdateCPUTime()
   return 0;
 }
 
+// ----------------------------------------------------------------------------
+// AdjustRenderScale
+// ----------------------------------------------------------------------------
 void Test3::AdjustRenderScale()
 {
   if ( !_Settings._AutoScale )
@@ -1137,6 +1225,9 @@ void Test3::AdjustRenderScale()
   }
 }
 
+// ----------------------------------------------------------------------------
+// InitializeScene
+// ----------------------------------------------------------------------------
 int Test3::InitializeScene()
 {
   if ( _Scene )
@@ -1317,10 +1408,11 @@ int Test3::InitializeScene()
 
   if ( !_Scene -> GetEnvMap().IsInitialized() )
   {
-    // Default background
-    //_Scene -> LoadEnvMap(g_AssetsDir + "HDR\\alps_field_2k.hdr");
-    _Scene->LoadEnvMap( g_AssetsDir + "HDR\\artist_workshop_1k.hdr" );
-    _Settings._EnableSkybox = false;
+    if ( _CurBackgroundId > 0 )
+    {
+      _Scene->LoadEnvMap( _BackgroundFiles[_CurBackgroundId] );
+      _Settings._EnableSkybox = false;
+    }
   }
 
   if ( _Scene -> GetEnvMap().IsInitialized() )
@@ -1347,6 +1439,9 @@ int Test3::InitializeScene()
   return 0;
 }
 
+// ----------------------------------------------------------------------------
+// UpdateScene
+// ----------------------------------------------------------------------------
 int Test3::UpdateScene()
 {
   if ( _ReloadScene )
@@ -1363,6 +1458,28 @@ int Test3::UpdateScene()
   }
   if ( !_Scene )
     return 1;
+
+  if ( _ReloadBackground )
+  {
+    if ( _CurBackgroundId > 0 )
+    {
+      _Scene -> LoadEnvMap( _BackgroundFiles[_CurBackgroundId] );
+
+      if ( _Scene -> GetEnvMap().IsInitialized() )
+      {
+        if ( 0 == _SkyboxTextureID )
+          glGenTextures( 1, &_SkyboxTextureID );
+        glActiveTexture( TEX_UNIT( _SkyboxTextureUnit ) );
+        glBindTexture( GL_TEXTURE_2D, _SkyboxTextureID );
+        glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB32F, _Scene -> GetEnvMap().GetWidth(), _Scene -> GetEnvMap().GetHeight(), 0, GL_RGB, GL_FLOAT, _Scene -> GetEnvMap().GetRawData() );
+        glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+        glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+        glBindTexture( GL_TEXTURE_2D, 0 );
+      }
+    }
+
+    _ReloadBackground = false;
+  }
 
   // Mouse input
   {
@@ -1471,6 +1588,9 @@ int Test3::UpdateScene()
   return 0;
 }
 
+// ----------------------------------------------------------------------------
+// RenderToTexture
+// ----------------------------------------------------------------------------
 void Test3::RenderToTexture()
 {
   glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
@@ -1522,6 +1642,9 @@ void Test3::RenderToTexture()
   _Quad -> Render(*_RTTShader);
 }
 
+// ----------------------------------------------------------------------------
+// RenderToSceen
+// ----------------------------------------------------------------------------
 void Test3::RenderToSceen()
 {
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -1534,6 +1657,9 @@ void Test3::RenderToSceen()
   _Quad -> Render(*_RTSShader);
 }
 
+// ----------------------------------------------------------------------------
+// Run
+// ----------------------------------------------------------------------------
 int Test3::Run()
 {
   int ret = 0;
@@ -1588,7 +1714,7 @@ int Test3::Run()
     }
 
     // Initialize the scene
-    if ( ( 0 != InitializeSceneFiles() ) || ( 0 != InitializeScene() ) )
+    if ( ( 0 != InitializeSceneFiles() ) || ( 0 != InitializeBackgroundFiles() ) || ( 0 != InitializeScene() ) )
     {
       std::cout << "ERROR: Scene initialization failed!" << std::endl;
       ret = 1;
