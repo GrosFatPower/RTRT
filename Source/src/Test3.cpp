@@ -488,7 +488,7 @@ int Test3::UpdateUniforms()
         int nbSpheres = 0;
         int nbPlanes = 0;
         int nbBoxes = 0;
-        for ( auto prim : PrimitiveInstances )
+        for ( auto & prim : PrimitiveInstances )
         {
           if ( ( prim._PrimID < 0 ) || ( prim._PrimID >= Primitives.size() ) )
             continue;
@@ -1399,7 +1399,7 @@ int Test3::InitializeScene()
   }
 
   const std::vector<Material> & Materials =  _Scene -> GetMaterials();
-  for ( auto mat : Materials )
+  for ( auto & mat : Materials )
     _MaterialNames.push_back(_Scene -> FindMaterialName(mat._ID));
 
   const std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene -> GetPrimitiveInstances();
