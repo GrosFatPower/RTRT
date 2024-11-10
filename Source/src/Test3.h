@@ -53,6 +53,7 @@ private:
 
   void RenderToTexture();
   void RenderToSceen();
+  bool RenderToFile( const std::string & iFilename );
 
   static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
   static void MousebuttonCallback(GLFWwindow * window, int button, int action, int mods);
@@ -129,6 +130,7 @@ private:
   const unsigned int    _BLASPackedNormalsTextureUnit      = 19;
   const unsigned int    _BLASPackedUVsTextureUnit          = 20;
 
+  const unsigned int    _TemporaryTextureUnit              = 30;
   const unsigned int    _IMGUIMateralialTextureUnit        = 31;
 
   double          _MouseX               = 0.;

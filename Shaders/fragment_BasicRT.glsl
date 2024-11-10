@@ -718,7 +718,7 @@ void main()
   }
 
   //pixelColor = clamp(pixelColor, 0.f, 1.f);
-  fragColor = vec4(pixelColor, 0.f);
+  fragColor = vec4(pixelColor, 1.f);
 
   if ( 1 == u_Accumulate )
     fragColor += texture(u_ScreenTexture, fragUV);

@@ -14,6 +14,8 @@
 
 #include "tinydir.h"
 
+#include "stb_image_write.h"
+
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
@@ -29,6 +31,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <format>
 
 #define TEX_UNIT(x) ( GL_TEXTURE0 + x )
 
@@ -41,6 +44,9 @@ const char * Test3::GetTestHeader() { return "Test 3 : Basic ray tracing"; }
 // GLOBAL VARIABLES
 // ----------------------------------------------------------------------------
 static std::string g_AssetsDir = "..\\..\\Assets\\";
+
+static bool g_RenderToFile = false;
+static std::string g_FilePath;
 
 // ----------------------------------------------------------------------------
 // GLOBAL FUNCTIONS
@@ -622,11 +628,11 @@ int Test3::DrawUI()
   {
     ImGui::Begin("Test 3");
 
+    ImGui::Text( "Window width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y );
+
+    ImGui::Text( "Accumulated frames : %d", _AccumulatedFrames );
+
     ImGui::Text("Render time %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
-
-    ImGui::Text("Window width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
-
-    ImGui::Text("Accumulated frames : %d", _AccumulatedFrames);
 
     {
       static std::vector<float> s_FrameRateHistory;
@@ -668,6 +674,12 @@ int Test3::DrawUI()
         _CurSceneId = selectedSceneId;
         _ReloadScene = true;
       }
+    }
+
+    if ( ImGui::Button( "Capture image" ) )
+    {
+      g_FilePath = "./" + std::string( _SceneNames[_CurSceneId] ) + "_" + std::to_string( _AccumulatedFrames ) + "frames.png";
+      g_RenderToFile = true;
     }
 
     if ( ImGui::CollapsingHeader("Render settings") )
@@ -1658,6 +1670,75 @@ void Test3::RenderToSceen()
 }
 
 // ----------------------------------------------------------------------------
+// RenderToFile
+// ----------------------------------------------------------------------------
+bool Test3::RenderToFile( const std::string & iFilename )
+{
+  // Generate output texture
+  GLuint frameCaptureTextureID = 0;
+  glGenTextures( 1, &frameCaptureTextureID );
+  glActiveTexture( TEX_UNIT(_TemporaryTextureUnit) );
+  glBindTexture( GL_TEXTURE_2D, frameCaptureTextureID );
+  glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, NULL );
+  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+  glBindTexture( GL_TEXTURE_2D, 0 );
+
+  // FrameBuffer
+  GLuint frameBufferID = 0;
+  glGenFramebuffers( 1, &frameBufferID );
+  glBindFramebuffer( GL_FRAMEBUFFER, frameBufferID );
+  glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, frameCaptureTextureID, 0 );
+  if ( glCheckFramebufferStatus( GL_FRAMEBUFFER ) != GL_FRAMEBUFFER_COMPLETE )
+  {
+    glDeleteTextures( 1, &frameCaptureTextureID );
+    std::cout << "ERROR : Failed to save capture in " << iFilename << std::endl;
+    return false;
+  }
+
+  // Render to texture
+  {
+    glBindFramebuffer( GL_FRAMEBUFFER, frameBufferID );
+    glViewport( 0, 0, _Settings._RenderResolution.x, _Settings._RenderResolution.y );
+
+    glActiveTexture( TEX_UNIT( _TemporaryTextureUnit ) );
+    glBindTexture( GL_TEXTURE_2D, frameCaptureTextureID );
+    glActiveTexture( TEX_UNIT( _ScreenTextureUnit ) );
+    glBindTexture( GL_TEXTURE_2D, _ScreenTextureID );
+
+    _Quad -> Render( *_RTSShader );
+
+    glBindTexture( GL_TEXTURE_2D, 0 );
+    glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+  }
+
+  // Retrieve image et save to file
+  int saved = 0;
+  {
+    int w = _Settings._RenderResolution.x;
+    int h = _Settings._RenderResolution.y;
+    unsigned char * frameData = new unsigned char[w * h * 4];
+
+    glActiveTexture( TEX_UNIT( _TemporaryTextureUnit ) );
+    glBindTexture( GL_TEXTURE_2D, frameCaptureTextureID );
+    glGetTexImage( GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, frameData );
+    stbi_flip_vertically_on_write( true );
+    saved = stbi_write_png( iFilename.c_str(), w, h, 4, frameData, w * 4 );
+
+    delete[] frameData;
+    glDeleteFramebuffers( 1, &frameBufferID );
+    glDeleteTextures( 1, &frameCaptureTextureID );
+  }
+
+  if ( saved )
+    std::cout << "Frame saved in " << iFilename << std::endl;
+  else
+    std::cout << "ERROR : Failed to save screen capture in " << iFilename << std::endl;
+
+  return saved ? true : false;
+}
+
+// ----------------------------------------------------------------------------
 // Run
 // ----------------------------------------------------------------------------
 int Test3::Run()
@@ -1749,6 +1830,13 @@ int Test3::Run()
 
       // Render to screen
       RenderToSceen();
+
+      // Screenshot
+      if ( g_RenderToFile )
+      {
+        RenderToFile(g_FilePath);
+        g_RenderToFile = false;
+      }
 
       // UI
       DrawUI();
