@@ -12,6 +12,8 @@
 
 #include "tinydir.h"
 
+#include "stb_image_write.h"
+
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
@@ -27,6 +29,8 @@
 #include <thread>
 
 constexpr std::execution::parallel_policy policy = std::execution::par;
+
+namespace fs = std::filesystem;
 
 /**
  * The vertices vector contains a lot of duplicated vertex data,
@@ -59,6 +63,9 @@ const char * Test4::GetTestHeader() { return "Test 4 : CPU Rasterizer"; }
 // Global variables
 // ----------------------------------------------------------------------------
 static std::string g_AssetsDir = "..\\..\\Assets\\";
+
+static bool g_RenderToFile = false;
+static fs::path g_FilePath;
 
 // ----------------------------------------------------------------------------
 // KeyCallback
@@ -551,6 +558,75 @@ void Test4::RenderToSceen()
 }
 
 // ----------------------------------------------------------------------------
+// RenderToFile
+// ----------------------------------------------------------------------------
+bool Test4::RenderToFile( const std::filesystem::path & iFilepath )
+{
+  // Generate output texture
+  GLuint frameCaptureTextureID = 0;
+  glGenTextures( 1, &frameCaptureTextureID );
+  glActiveTexture( GL_TEXTURE30 );
+  glBindTexture( GL_TEXTURE_2D, frameCaptureTextureID );
+  glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, NULL );
+  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+  glBindTexture( GL_TEXTURE_2D, 0 );
+
+  // FrameBuffer
+  GLuint frameBufferID = 0;
+  glGenFramebuffers( 1, &frameBufferID );
+  glBindFramebuffer( GL_FRAMEBUFFER, frameBufferID );
+  glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, frameCaptureTextureID, 0 );
+  if ( glCheckFramebufferStatus( GL_FRAMEBUFFER ) != GL_FRAMEBUFFER_COMPLETE )
+  {
+    glDeleteTextures( 1, &frameCaptureTextureID );
+    std::cout << "ERROR : Failed to save capture in " << iFilepath.c_str() << std::endl;
+    return false;
+  }
+
+  // Render to texture
+  {
+    glBindFramebuffer( GL_FRAMEBUFFER, frameBufferID );
+    glViewport( 0, 0, _Settings._RenderResolution.x, _Settings._RenderResolution.y );
+
+    glActiveTexture( GL_TEXTURE30  );
+    glBindTexture( GL_TEXTURE_2D, frameCaptureTextureID );
+    glActiveTexture( GL_TEXTURE0 );
+    glBindTexture( GL_TEXTURE_2D, _ScreenTextureID );
+
+    _Quad -> Render( *_RTSShader );
+
+    glBindTexture( GL_TEXTURE_2D, 0 );
+    glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+  }
+
+  // Retrieve image et save to file
+  int saved = 0;
+  {
+    int w = _Settings._RenderResolution.x;
+    int h = _Settings._RenderResolution.y;
+    unsigned char * frameData = new unsigned char[w * h * 4];
+
+    glActiveTexture( GL_TEXTURE30 );
+    glBindTexture( GL_TEXTURE_2D, frameCaptureTextureID );
+    glGetTexImage( GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, frameData );
+    stbi_flip_vertically_on_write( true );
+    saved = stbi_write_png( iFilepath.string().c_str(), w, h, 4, frameData, w * 4 );
+
+    delete[] frameData;
+    glDeleteFramebuffers( 1, &frameBufferID );
+    glDeleteTextures( 1, &frameCaptureTextureID );
+  }
+
+  if ( saved && fs::exists( iFilepath ) )
+    std::cout << "Frame saved in " << fs::absolute( iFilepath ) << std::endl;
+  else
+    std::cout << "ERROR : Failed to save screen capture in " << fs::absolute( iFilepath ) << std::endl;
+
+  return saved ? true : false;
+}
+
+// ----------------------------------------------------------------------------
 // InitializeUI
 // ----------------------------------------------------------------------------
 int Test4::InitializeUI()
@@ -601,6 +677,12 @@ void Test4::DrawUI()
     ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255,255,0,255));
     ImGui::Text("Frame time : %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
     ImGui::PopStyleColor();
+
+    if ( ImGui::Button( "Capture image" ) )
+    {
+      g_FilePath = "./Test4_" + std::string( _SceneNames[_CurSceneId] ) + ".png";
+      g_RenderToFile = true;
+    }
 
     if (ImGui::CollapsingHeader("Scene "))
     {
@@ -1693,6 +1775,13 @@ int Test4::Run()
 
       // Render to screen
       RenderToSceen();
+
+      // Screenshot
+      if ( g_RenderToFile )
+      {
+        RenderToFile( g_FilePath );
+        g_RenderToFile = false;
+      }
 
       DrawUI();
 

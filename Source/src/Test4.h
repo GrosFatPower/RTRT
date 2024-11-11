@@ -10,6 +10,7 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <filesystem> // C++17
 #include "GL/glew.h"
 
 struct GLFWwindow;
@@ -182,6 +183,7 @@ private:
 
   void RenderToTexture();
   void RenderToSceen();
+  bool RenderToFile( const std::filesystem::path & iFilepath );
   void DrawUI();
 
   void ProcessInput();

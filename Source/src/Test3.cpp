@@ -39,7 +39,7 @@ namespace fs = std::filesystem;
 namespace RTRT
 {
 
-const char * Test3::GetTestHeader() { return "Test 3 : Basic ray tracing"; }
+const char * Test3::GetTestHeader() { return "Test 3 : Simple path tracer"; }
 
 // ----------------------------------------------------------------------------
 // GLOBAL VARIABLES
@@ -378,7 +378,7 @@ int Test3::RecompileShaders()
   _RTSShader = nullptr;
 
   ShaderSource vertexShaderSrc = Shader::LoadShader("..\\..\\shaders\\vertex_Default.glsl");
-  ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_BasicRT.glsl");
+  ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_RTRenderer.glsl");
 
   _RTTShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !_RTTShader )
@@ -679,7 +679,7 @@ int Test3::DrawUI()
 
     if ( ImGui::Button( "Capture image" ) )
     {
-      g_FilePath = "./" + std::string( _SceneNames[_CurSceneId] ) + "_" + std::to_string( _AccumulatedFrames ) + "frames.png";
+      g_FilePath = "./Test3_" + std::string( _SceneNames[_CurSceneId] ) + "_" + std::to_string( _AccumulatedFrames ) + "frames.png";
       g_RenderToFile = true;
     }
 
