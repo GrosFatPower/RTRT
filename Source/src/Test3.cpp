@@ -31,9 +31,10 @@
 
 #include <algorithm>
 #include <iostream>
-#include <format>
 
 #define TEX_UNIT(x) ( GL_TEXTURE0 + x )
+
+namespace fs = std::filesystem;
 
 namespace RTRT
 {
@@ -46,7 +47,7 @@ const char * Test3::GetTestHeader() { return "Test 3 : Basic ray tracing"; }
 static std::string g_AssetsDir = "..\\..\\Assets\\";
 
 static bool g_RenderToFile = false;
-static std::string g_FilePath;
+static fs::path g_FilePath;
 
 // ----------------------------------------------------------------------------
 // GLOBAL FUNCTIONS
@@ -1672,7 +1673,7 @@ void Test3::RenderToSceen()
 // ----------------------------------------------------------------------------
 // RenderToFile
 // ----------------------------------------------------------------------------
-bool Test3::RenderToFile( const std::string & iFilename )
+bool Test3::RenderToFile( const std::filesystem::path & iFilepath )
 {
   // Generate output texture
   GLuint frameCaptureTextureID = 0;
@@ -1692,7 +1693,7 @@ bool Test3::RenderToFile( const std::string & iFilename )
   if ( glCheckFramebufferStatus( GL_FRAMEBUFFER ) != GL_FRAMEBUFFER_COMPLETE )
   {
     glDeleteTextures( 1, &frameCaptureTextureID );
-    std::cout << "ERROR : Failed to save capture in " << iFilename << std::endl;
+    std::cout << "ERROR : Failed to save capture in " << iFilepath.c_str() << std::endl;
     return false;
   }
 
@@ -1723,17 +1724,17 @@ bool Test3::RenderToFile( const std::string & iFilename )
     glBindTexture( GL_TEXTURE_2D, frameCaptureTextureID );
     glGetTexImage( GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, frameData );
     stbi_flip_vertically_on_write( true );
-    saved = stbi_write_png( iFilename.c_str(), w, h, 4, frameData, w * 4 );
+    saved = stbi_write_png( iFilepath.string().c_str(), w, h, 4, frameData, w * 4 );
 
     delete[] frameData;
     glDeleteFramebuffers( 1, &frameBufferID );
     glDeleteTextures( 1, &frameCaptureTextureID );
   }
 
-  if ( saved )
-    std::cout << "Frame saved in " << iFilename << std::endl;
+  if ( saved && fs::exists( iFilepath ) )
+    std::cout << "Frame saved in " << fs::absolute(iFilepath) << std::endl;
   else
-    std::cout << "ERROR : Failed to save screen capture in " << iFilename << std::endl;
+    std::cout << "ERROR : Failed to save screen capture in " << fs::absolute( iFilepath ) << std::endl;
 
   return saved ? true : false;
 }

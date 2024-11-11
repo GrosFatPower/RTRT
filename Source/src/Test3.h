@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 #include <deque>
+#include <filesystem> // C++17
 #include "GL/glew.h"
 
 struct GLFWwindow;
@@ -53,7 +54,7 @@ private:
 
   void RenderToTexture();
   void RenderToSceen();
-  bool RenderToFile( const std::string & iFilename );
+  bool RenderToFile( const std::filesystem::path & iFilepath );
 
   static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
   static void MousebuttonCallback(GLFWwindow * window, int button, int action, int mods);
