@@ -15,6 +15,7 @@ A (poorly lit) physically based path tracer written in c++ and GLSL.
 
 ![mustang_red](./Captures/PathTracer_mustang_red.scene_40frames.png)
 
+![spaceship_PT](./Captures/PathTracer_spaceship.scene_50frames.png)
 
 Test4 : CPU Rasterizer
 --------
@@ -29,6 +30,8 @@ Basic phong reflecton model.
 ![mustang_red](./Captures/Rasterizer_mustang_red.scene.png)
 
 ![rank3police](./Captures/Rasterizer_rank3police.scene.png)
+
+![spaceship_Rast](./Captures/Rasterizer_spaceship.scene.png)
 
 
 References/Credits
