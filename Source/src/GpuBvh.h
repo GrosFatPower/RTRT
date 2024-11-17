@@ -3,7 +3,6 @@
 
 #include "MathUtil.h"
 #include "MeshInstance.h"
-#include "split_bvh.h"
 #include <vector>
 
 namespace RTRT
@@ -15,22 +14,15 @@ class GpuBvh
 {
 public:
 
+  GpuBvh() {};
+  virtual ~GpuBvh() = 0;
+
   struct Node
   {
     Vec3 _BBoxMin;
     Vec3 _BBoxMax;
     Vec3 _LcRcLeaf; // LeftChildren/RightChildren/Leaf=0  FirstPrimitiveIdx/NbPrimitives/Leaf=-1 (TLAS) FirstTriangleIdx/NbTriangles/Leaf=1 (BLAS)
   };
-
-  const std::vector<Node> & GetNodes() const { return _Nodes; }
-
-public:
-  GpuBvh() {}
-  virtual ~GpuBvh();
-
-protected:
-
-  virtual int ProcessNodes(RadeonRays::Bvh::Node * iNode) = 0;
 
   int               _CurNode = 0;
   std::vector<Node> _Nodes;
@@ -48,8 +40,6 @@ public:
 
 private:
 
-  int ProcessNodes(RadeonRays::Bvh::Node * iNode);
-
   std::vector<MeshInstance> _PackedMeshInstances;
 };
 
@@ -64,8 +54,6 @@ public:
   const std::vector<Vec3i> & GetPackedTriangleIdx() const { return _PackedTriangleIdx; }
 
 private:
-
-  int ProcessNodes(RadeonRays::Bvh::Node * iNode);
 
   std::vector<Vec3i> _PackedTriangleIdx;
 };

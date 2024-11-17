@@ -84,7 +84,7 @@ public:
   const std::vector<unsigned char> & GetTextureArray()           const { return _TextureArray;            }
   const std::vector<Vec3>          & GetMeshBBoxes()             const { return _MeshBBoxes;              }
   const std::vector<int>           & GetMeshIdxRange()           const { return _MeshIdxRange;            }
-  const std::vector<GpuBvh::Node>  & GetTLASNode()               const { return _TLAS.GetNodes();         }
+  const std::vector<GpuBvh::Node>  & GetTLASNode()               const { return _TLAS._Nodes;             }
   const std::vector<Mat4x4>        & GetTLASPackedTransforms()   const { return _TLASPackedTransforms;    }
   const std::vector<Vec2i>         & GetTLASPackedMeshMatID()    const { return _TLASPackedMeshMatID;     }
   const std::vector<GpuBvh::Node>  & GetBLASNode()               const { return _BLASNodes;               }

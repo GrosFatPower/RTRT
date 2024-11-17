@@ -44,6 +44,7 @@ target_include_directories(${EXE_NAME}
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinyobjloader
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinydir
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinygltf
+  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinybvh
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/RadeonRays
   PUBLIC ${GLEW_INCLUDE_DIRS}
 )

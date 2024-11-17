@@ -491,9 +491,9 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
 
       std::shared_ptr<GpuBLAS> curBLAS = mesh -> GetBvh();
 
-      int nbNodes = curBLAS -> GetNodes().size();
+      int nbNodes = curBLAS -> _Nodes.size();
       int startIdx = _BLASNodes.size();
-      _BLASNodes.insert(_BLASNodes.end(), curBLAS -> GetNodes().begin(), curBLAS -> GetNodes().end());
+      _BLASNodes.insert(_BLASNodes.end(), curBLAS -> _Nodes.begin(), curBLAS -> _Nodes.end());
       _BLASNodesRange.emplace_back(startIdx, nbNodes);
 
       const std::vector<Vec3>  & curVertices = mesh -> GetVertices();

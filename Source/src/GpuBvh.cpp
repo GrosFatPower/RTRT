@@ -5,8 +5,23 @@
 #include <iostream>
 #include <memory>
 
+#include "split_bvh.h"
+//#define USE_TINYBVH
+#ifdef USE_TINYBVH
+#define TINYBVH_IMPLEMENTATION
+#include "tiny_bvh.h"
+#endif
+
 namespace RTRT
 {
+
+using TLASNode = RadeonRays::Bvh::Node;
+#ifdef USE_TINYBVH
+using BLASNode = tinybvh::BVH::BVHNode;
+using namespace tinybvh;
+#else
+using BLASNode = RadeonRays::Bvh::Node;
+#endif
 
 GpuBvh::~GpuBvh()
 {
@@ -17,6 +32,33 @@ GpuBvh::~GpuBvh()
 // ----------------------------------------------------------------------------
 GpuTLAS::~GpuTLAS()
 {
+}
+
+int ProcessNodes( TLASNode * iNode, GpuTLAS * ioGpuTLAS )
+{
+  const RadeonRays::bbox & bbox = iNode -> bounds;
+
+  ioGpuTLAS -> _Nodes[ioGpuTLAS -> _CurNode]._BBoxMin = bbox.pmin;
+  ioGpuTLAS -> _Nodes[ioGpuTLAS -> _CurNode]._BBoxMax = bbox.pmax;
+  ioGpuTLAS -> _Nodes[ioGpuTLAS -> _CurNode]._LcRcLeaf.z = 0;
+
+  int index = ioGpuTLAS -> _CurNode;
+
+  if ( iNode -> type == RadeonRays::Bvh::NodeType::kLeaf )
+  {
+    ioGpuTLAS -> _Nodes[ioGpuTLAS -> _CurNode]._LcRcLeaf.x = iNode -> startidx;
+    ioGpuTLAS -> _Nodes[ioGpuTLAS -> _CurNode]._LcRcLeaf.y = iNode -> numprims;
+    ioGpuTLAS -> _Nodes[ioGpuTLAS -> _CurNode]._LcRcLeaf.z = -1;
+  }
+  else
+  {
+    ioGpuTLAS -> _CurNode++;
+    ioGpuTLAS -> _Nodes[index]._LcRcLeaf.x = ProcessNodes( iNode -> lc, ioGpuTLAS );
+    ioGpuTLAS -> _CurNode++;
+    ioGpuTLAS -> _Nodes[index]._LcRcLeaf.y = ProcessNodes( iNode -> rc, ioGpuTLAS );
+  }
+
+  return index;
 }
 
 int GpuTLAS::Build( std::vector<Mesh*> & iMeshes, std::vector<MeshInstance> & iMeshInstances )
@@ -61,7 +103,7 @@ int GpuTLAS::Build( std::vector<Mesh*> & iMeshes, std::vector<MeshInstance> & iM
 
   _Nodes.clear();
   _Nodes.resize(bvh -> GetNodeCount());
-  ProcessNodes(bvh ->GetRootNode());
+  ProcessNodes(bvh ->GetRootNode(), this);
 
   // 3. Remplissage de _PackedMeshInstances
 
@@ -82,33 +124,6 @@ int GpuTLAS::Build( std::vector<Mesh*> & iMeshes, std::vector<MeshInstance> & iM
   return 0;
 }
 
-int GpuTLAS::ProcessNodes(RadeonRays::Bvh::Node * iNode)
-{
-  RadeonRays::bbox bbox = iNode -> bounds;
-
-  _Nodes[_CurNode]._BBoxMin = bbox.pmin;
-  _Nodes[_CurNode]._BBoxMax = bbox.pmax;
-  _Nodes[_CurNode]._LcRcLeaf.z = 0;
-
-  int index = _CurNode;
-
-  if ( iNode -> type == RadeonRays::Bvh::NodeType::kLeaf )
-  {
-    _Nodes[_CurNode]._LcRcLeaf.x = iNode -> startidx;
-    _Nodes[_CurNode]._LcRcLeaf.y = iNode -> numprims;
-    _Nodes[_CurNode]._LcRcLeaf.z = -1;
-  }
-  else
-  {
-    _CurNode++;
-    _Nodes[index]._LcRcLeaf.x = ProcessNodes(iNode -> lc);
-    _CurNode++;
-    _Nodes[index]._LcRcLeaf.y = ProcessNodes(iNode -> rc);
-  }
-
-  return index;
-}
-
 // ----------------------------------------------------------------------------
 // BLAS
 // ----------------------------------------------------------------------------
@@ -116,13 +131,117 @@ GpuBLAS::~GpuBLAS()
 {
 }
 
+#ifdef USE_TINYBVH
+int ProcessNodes( tinybvh::BVH & iBVH, BLASNode * iNode, GpuBLAS * ioGpuBLAS )
+{
+  ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._BBoxMin = Vec3(iNode -> aabbMin.x, iNode -> aabbMin.y, iNode -> aabbMin.z);
+  ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._BBoxMax = Vec3(iNode -> aabbMax.x, iNode -> aabbMax.y, iNode -> aabbMax.z);
+  ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.z = 0;
+
+  int index = ioGpuBLAS -> _CurNode;
+
+  if ( iNode -> triCount )
+  {
+    ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.x = iNode -> leftFirst;
+    ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.y = iNode -> triCount;
+    ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.z = 1;
+  }
+  else
+  {
+    ioGpuBLAS -> _CurNode++;
+    ioGpuBLAS -> _Nodes[index]._LcRcLeaf.x = ProcessNodes( iBVH , &(iBVH.bvhNode[iNode -> leftFirst]), ioGpuBLAS );
+    ioGpuBLAS -> _CurNode++;
+    ioGpuBLAS -> _Nodes[index]._LcRcLeaf.y = ProcessNodes( iBVH, &( iBVH.bvhNode[iNode -> leftFirst+1] ), ioGpuBLAS );
+  }
+
+  return index;
+}
+#else
+int ProcessNodes( BLASNode * iNode, GpuBLAS * ioGpuBLAS )
+{
+  const RadeonRays::bbox & bbox = iNode -> bounds;
+
+  ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._BBoxMin = bbox.pmin;
+  ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._BBoxMax = bbox.pmax;
+  ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.z = 0;
+
+  int index = ioGpuBLAS -> _CurNode;
+
+  if ( iNode -> type == RadeonRays::Bvh::NodeType::kLeaf )
+  {
+    ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.x = iNode -> startidx;
+    ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.y = iNode -> numprims;
+    ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.z = 1;
+  }
+  else
+  {
+    ioGpuBLAS -> _CurNode++;
+    ioGpuBLAS -> _Nodes[index]._LcRcLeaf.x = ProcessNodes( iNode -> lc, ioGpuBLAS );
+    ioGpuBLAS -> _CurNode++;
+    ioGpuBLAS -> _Nodes[index]._LcRcLeaf.y = ProcessNodes( iNode -> rc, ioGpuBLAS );
+  }
+
+  return index;
+}
+#endif
+
 int GpuBLAS::Build( Mesh & iMesh )
 {
   // 1. Compute BVH
   const int nbTris = iMesh.GetIndices().size() / 3;
   if ( 0 == nbTris )
-    return 0;
+    return 1;
 
+  #ifdef USE_TINYBVH
+  std::vector<bvhvec4> triangles(nbTris*3);
+
+  for ( int i = 0; i < nbTris; ++i )
+  {
+    for ( int j = 0; j < 3; ++j )
+    {
+      Vec3i indices = iMesh.GetIndices()[i * 3 + j];
+      triangles[i * 3 + j] = bvhvec4(iMesh.GetVertices()[indices.x].x, iMesh.GetVertices()[indices.x].y, iMesh.GetVertices()[indices.x].z, 0.f);
+    }
+  }
+
+  tinybvh::BVH bvh;
+  //bvh.Build( &(triangles[0]) , nbTris );
+  bvh.BuildHQ( &( triangles[0] ), nbTris );
+
+  // 2. Remplissage du BVH
+
+  int nodeCount = bvh.NodeCount();
+  if ( !nodeCount )
+    return 1;
+
+  _Nodes.clear();
+  _Nodes.resize(nodeCount);
+  ProcessNodes( bvh, bvh.bvhNode, this );
+
+  // 3. Remplissage de _PackedTriangleIdx
+
+  size_t nbPackedTriangles = bvh.idxCount;
+  _PackedTriangleIdx.clear();
+  _PackedTriangleIdx.reserve( nbPackedTriangles * 3 );
+
+  if ( bvh.triIdx )
+  {
+    for ( int i = 0; i < nbPackedTriangles; ++i )
+    {
+      unsigned int triangleIdx = bvh.triIdx[i];
+
+      Vec3i indices1 = iMesh.GetIndices()[triangleIdx * 3];
+      Vec3i indices2 = iMesh.GetIndices()[triangleIdx * 3 + 1];
+      Vec3i indices3 = iMesh.GetIndices()[triangleIdx * 3 + 2];
+      _PackedTriangleIdx.push_back( indices1 );
+      _PackedTriangleIdx.push_back( indices2 );
+      _PackedTriangleIdx.push_back( indices3 );
+    }
+  }
+  else
+    return 1;
+
+  #else
   std::vector<RadeonRays::bbox> bounds(nbTris);
 
 //#pragma omp parallel for
@@ -143,7 +262,7 @@ int GpuBLAS::Build( Mesh & iMesh )
 
   _Nodes.clear();
   _Nodes.resize(bvh -> GetNodeCount());
-  ProcessNodes(bvh ->GetRootNode());
+  ProcessNodes(bvh ->GetRootNode(), this);
 
   // 3. Remplissage de _PackedTriangleIdx
 
@@ -166,35 +285,9 @@ int GpuBLAS::Build( Mesh & iMesh )
       _PackedTriangleIdx.push_back(indices3);
     }
   }
+  #endif
 
   return 0;
-}
-
-int GpuBLAS::ProcessNodes(RadeonRays::Bvh::Node * iNode)
-{
-  RadeonRays::bbox bbox = iNode -> bounds;
-
-  _Nodes[_CurNode]._BBoxMin = bbox.pmin;
-  _Nodes[_CurNode]._BBoxMax = bbox.pmax;
-  _Nodes[_CurNode]._LcRcLeaf.z = 0;
-
-  int index = _CurNode;
-
-  if ( iNode -> type == RadeonRays::Bvh::NodeType::kLeaf )
-  {
-    _Nodes[_CurNode]._LcRcLeaf.x = iNode -> startidx;
-    _Nodes[_CurNode]._LcRcLeaf.y = iNode -> numprims;
-    _Nodes[_CurNode]._LcRcLeaf.z = 1;
-  }
-  else
-  {
-    _CurNode++;
-    _Nodes[index]._LcRcLeaf.x = ProcessNodes(iNode -> lc);
-    _CurNode++;
-    _Nodes[index]._LcRcLeaf.y = ProcessNodes(iNode -> rc);
-  }
-
-  return index;
 }
 
 }
