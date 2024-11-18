@@ -18,7 +18,6 @@ namespace RTRT
 using TLASNode = RadeonRays::Bvh::Node;
 #ifdef USE_TINYBVH
 using BLASNode = tinybvh::BVH::BVHNode;
-using namespace tinybvh;
 #else
 using BLASNode = RadeonRays::Bvh::Node;
 #endif
@@ -132,26 +131,27 @@ GpuBLAS::~GpuBLAS()
 }
 
 #ifdef USE_TINYBVH
-int ProcessNodes( tinybvh::BVH & iBVH, BLASNode * iNode, GpuBLAS * ioGpuBLAS )
+int ProcessNodes( tinybvh::BVH::BVHNode * iBVHNodes, unsigned int iCurIndex, GpuBLAS * ioGpuBLAS )
 {
-  ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._BBoxMin = Vec3(iNode -> aabbMin.x, iNode -> aabbMin.y, iNode -> aabbMin.z);
-  ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._BBoxMax = Vec3(iNode -> aabbMax.x, iNode -> aabbMax.y, iNode -> aabbMax.z);
+  const BLASNode & curBVHNode = iBVHNodes[iCurIndex];
+  ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._BBoxMin = Vec3(curBVHNode.aabbMin.x, curBVHNode.aabbMin.y, curBVHNode.aabbMin.z);
+  ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._BBoxMax = Vec3(curBVHNode.aabbMax.x, curBVHNode.aabbMax.y, curBVHNode.aabbMax.z);
   ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.z = 0;
 
   int index = ioGpuBLAS -> _CurNode;
 
-  if ( iNode -> triCount )
+  if ( curBVHNode.triCount )
   {
-    ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.x = iNode -> leftFirst;
-    ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.y = iNode -> triCount;
+    ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.x = curBVHNode.leftFirst;
+    ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.y = curBVHNode.triCount;
     ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.z = 1;
   }
   else
   {
     ioGpuBLAS -> _CurNode++;
-    ioGpuBLAS -> _Nodes[index]._LcRcLeaf.x = ProcessNodes( iBVH , &(iBVH.bvhNode[iNode -> leftFirst]), ioGpuBLAS );
+    ioGpuBLAS -> _Nodes[index]._LcRcLeaf.x = ProcessNodes( iBVHNodes, curBVHNode.leftFirst, ioGpuBLAS );
     ioGpuBLAS -> _CurNode++;
-    ioGpuBLAS -> _Nodes[index]._LcRcLeaf.y = ProcessNodes( iBVH, &( iBVH.bvhNode[iNode -> leftFirst+1] ), ioGpuBLAS );
+    ioGpuBLAS -> _Nodes[index]._LcRcLeaf.y = ProcessNodes( iBVHNodes, curBVHNode.leftFirst+1, ioGpuBLAS );
   }
 
   return index;
@@ -193,14 +193,14 @@ int GpuBLAS::Build( Mesh & iMesh )
     return 1;
 
   #ifdef USE_TINYBVH
-  std::vector<bvhvec4> triangles(nbTris*3);
+  std::vector<tinybvh::bvhvec4> triangles(nbTris*3);
 
   for ( int i = 0; i < nbTris; ++i )
   {
     for ( int j = 0; j < 3; ++j )
     {
       Vec3i indices = iMesh.GetIndices()[i * 3 + j];
-      triangles[i * 3 + j] = bvhvec4(iMesh.GetVertices()[indices.x].x, iMesh.GetVertices()[indices.x].y, iMesh.GetVertices()[indices.x].z, 0.f);
+      triangles[i * 3 + j] = tinybvh::bvhvec4(iMesh.GetVertices()[indices.x].x, iMesh.GetVertices()[indices.x].y, iMesh.GetVertices()[indices.x].z, 0.f);
     }
   }
 
@@ -211,12 +211,12 @@ int GpuBLAS::Build( Mesh & iMesh )
   // 2. Remplissage du BVH
 
   int nodeCount = bvh.NodeCount();
-  if ( !nodeCount )
+  if ( !nodeCount || !bvh.bvhNode )
     return 1;
 
   _Nodes.clear();
   _Nodes.resize(nodeCount);
-  ProcessNodes( bvh, bvh.bvhNode, this );
+  ProcessNodes( bvh.bvhNode, 0, this );
 
   // 3. Remplissage de _PackedTriangleIdx
 
