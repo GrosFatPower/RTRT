@@ -5,6 +5,7 @@
 #include "stb_image_resize.h"
 #include <iostream>
 #include <memory>
+#include <chrono>
 
 namespace RTRT
 {
@@ -302,6 +303,8 @@ void Scene::ResetEnvMap()
 
 void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, bool iBuildBVH )
 {
+  auto startTime = std::chrono::system_clock::now();
+
   _NbFaces = 0;
   _Vertices.clear();
   _Normals.clear();
@@ -513,6 +516,9 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
     }
   }
 
+  auto endTime = std::chrono::system_clock::now();
+  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>( endTime - startTime ).count();
+  std::cout << "Scene compiled in " << elapsed << "ms\n";
 }
 
 }

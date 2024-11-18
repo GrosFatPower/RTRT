@@ -4,6 +4,7 @@
 #include "MathUtil.h"
 #include <iostream>
 #include <memory>
+#include <chrono>
 
 #include "split_bvh.h"
 //#define USE_TINYBVH
@@ -62,6 +63,8 @@ int ProcessNodes( TLASNode * iNode, GpuTLAS * ioGpuTLAS )
 
 int GpuTLAS::Build( std::vector<Mesh*> & iMeshes, std::vector<MeshInstance> & iMeshInstances )
 {
+  auto startTime = std::chrono::system_clock::now();
+
   // 1. Compute BVH
   const int nbInstances = iMeshInstances.size();
   if ( 0 == nbInstances )
@@ -119,6 +122,10 @@ int GpuTLAS::Build( std::vector<Mesh*> & iMeshes, std::vector<MeshInstance> & iM
       _PackedMeshInstances.push_back(iMeshInstances[instanceId]);
     }
   }
+
+  auto endTime = std::chrono::system_clock::now();
+  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>( endTime - startTime ).count();
+  std::cout << "GpuTLAS built in " << elapsed << "ms\n";
 
   return 0;
 }
@@ -187,6 +194,8 @@ int ProcessNodes( BLASNode * iNode, GpuBLAS * ioGpuBLAS )
 
 int GpuBLAS::Build( Mesh & iMesh )
 {
+  auto startTime = std::chrono::system_clock::now();
+
   // 1. Compute BVH
   const int nbTris = iMesh.GetIndices().size() / 3;
   if ( 0 == nbTris )
@@ -286,6 +295,10 @@ int GpuBLAS::Build( Mesh & iMesh )
     }
   }
   #endif
+
+  auto endTime = std::chrono::system_clock::now();
+  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>( endTime - startTime ).count();
+  std::cout << "GpuBLAS built in " << elapsed << "ms\n";
 
   return 0;
 }
