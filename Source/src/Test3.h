@@ -40,9 +40,10 @@ private:
   int InitializeUI();
   int DrawUI();
 
-  int InitializeFrameBuffer();
+  int InitializeFrameBuffers();
   int RecompileShaders();
   int UpdateUniforms();
+  int ResizeTextures();
 
   int UpdateCPUTime();
 
@@ -65,6 +66,7 @@ private:
   ShaderProgram * _RTSShader = nullptr;
 
   GLuint          _FrameBufferID                   = 0;
+  GLuint          _FrameBufferLowResID             = 0;
   GLuint          _VtxBufferID                     = 0;
   GLuint          _VtxNormBufferID                 = 0;
   GLuint          _VtxUVBufferID                   = 0;
@@ -85,6 +87,7 @@ private:
 
   // Texture IDs
   GLuint          _ScreenTextureID                 = 0;
+  GLuint          _ScreenTextureLowResID           = 0;
   GLuint          _SkyboxTextureID                 = 0;
   GLuint          _VtxTextureID                    = 0;
   GLuint          _VtxNormTextureID                = 0;
@@ -109,27 +112,28 @@ private:
 
   // Texture Units
   const unsigned int    _ScreenTextureUnit                 = 0;
-  const unsigned int    _SkyboxTextureUnit                 = 1;
-  const unsigned int    _VtxTextureUnit                    = 2;
-  const unsigned int    _VtxNormTextureUnit                = 3;
-  const unsigned int    _VtxUVTextureUnit                  = 4;
-  const unsigned int    _VtxIndTextureUnit                 = 5;
-  const unsigned int    _TexIndTextureUnit                 = 6;
-  const unsigned int    _TexArrayTextureUnit               = 7;
-  const unsigned int    _MeshBBoxTextureUnit               = 8;
-  const unsigned int    _MeshIdRangeTextureUnit            = 9;
-  const unsigned int    _MaterialsTextureUnit              = 10;
+  const unsigned int    _ScreenTextureLowResUnit           = 1;
+  const unsigned int    _SkyboxTextureUnit                 = 2;
+  const unsigned int    _VtxTextureUnit                    = 3;
+  const unsigned int    _VtxNormTextureUnit                = 4;
+  const unsigned int    _VtxUVTextureUnit                  = 5;
+  const unsigned int    _VtxIndTextureUnit                 = 6;
+  const unsigned int    _TexIndTextureUnit                 = 7;
+  const unsigned int    _TexArrayTextureUnit               = 8;
+  const unsigned int    _MeshBBoxTextureUnit               = 9;
+  const unsigned int    _MeshIdRangeTextureUnit            = 10;
+  const unsigned int    _MaterialsTextureUnit              = 11;
   // BVH
-  const unsigned int    _TLASNodesTextureUnit              = 11;
-  const unsigned int    _TLASTransformsIDTextureUnit       = 12;
-  const unsigned int    _TLASMeshMatIDTextureUnit          = 13;
-  const unsigned int    _BLASNodesTextureUnit              = 14;
-  const unsigned int    _BLASNodesRangeTextureUnit         = 15;
-  const unsigned int    _BLASPackedIndicesTextureUnit      = 16;
-  const unsigned int    _BLASPackedIndicesRangeTextureUnit = 17;
-  const unsigned int    _BLASPackedVerticesTextureUnit     = 18;
-  const unsigned int    _BLASPackedNormalsTextureUnit      = 19;
-  const unsigned int    _BLASPackedUVsTextureUnit          = 20;
+  const unsigned int    _TLASNodesTextureUnit              = 12;
+  const unsigned int    _TLASTransformsIDTextureUnit       = 13;
+  const unsigned int    _TLASMeshMatIDTextureUnit          = 14;
+  const unsigned int    _BLASNodesTextureUnit              = 15;
+  const unsigned int    _BLASNodesRangeTextureUnit         = 16;
+  const unsigned int    _BLASPackedIndicesTextureUnit      = 17;
+  const unsigned int    _BLASPackedIndicesRangeTextureUnit = 18;
+  const unsigned int    _BLASPackedVerticesTextureUnit     = 19;
+  const unsigned int    _BLASPackedNormalsTextureUnit      = 20;
+  const unsigned int    _BLASPackedUVsTextureUnit          = 21;
 
   const unsigned int    _TemporaryTextureUnit              = 30;
   const unsigned int    _IMGUIMateralialTextureUnit        = 31;
@@ -167,7 +171,7 @@ private:
   bool            _SceneMaterialsModified = false;
   bool            _SceneInstancesModified = false;
   bool            _RenderSettingsModified = false;
-  float           _RealRenderScale        = _Settings._RenderScale;
+  bool            _Dirty                  = true;
 
   int                      _SelectedLight = -1;
 

@@ -33,6 +33,7 @@
 #include <iostream>
 
 #define TEX_UNIT(x) ( GL_TEXTURE0 + x )
+#define LOW_RES_RATIO 0.1
 
 namespace fs = std::filesystem;
 
@@ -144,9 +145,7 @@ void Test3::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
   glViewport(0, 0, this_ -> _Settings._RenderResolution.x, this_ -> _Settings._RenderResolution.y);
   this_ -> _RenderSettingsModified = true;
 
-  glBindTexture(GL_TEXTURE_2D, this_->_ScreenTextureID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, this_ -> RenderWidth(), this_ -> RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
-  glBindTexture(GL_TEXTURE_2D, 0);
+  this_ -> ResizeTextures();
 }
 
 std::string UniformArrayElementName( const char * iUniformArrayName, int iIndex, const char * iAttributeName )
@@ -199,6 +198,8 @@ Test3::~Test3()
 
   glDeleteFramebuffers(1, &_FrameBufferID);
   glDeleteTextures(1, &_ScreenTextureID);
+  glDeleteFramebuffers(1, &_FrameBufferLowResID);
+  glDeleteTextures(1, &_ScreenTextureLowResID);
   
   if (_Quad)
     delete _Quad;
@@ -340,9 +341,9 @@ int Test3::InitializeBackgroundFiles()
 }
 
 // ----------------------------------------------------------------------------
-// InitializeFrameBuffer
+// InitializeFrameBuffers
 // ----------------------------------------------------------------------------
-int Test3::InitializeFrameBuffer()
+int Test3::InitializeFrameBuffers()
 {
   // Screen texture
   glGenTextures(1, &_ScreenTextureID);
@@ -359,6 +360,24 @@ int Test3::InitializeFrameBuffer()
   glGenFramebuffers(1, &_FrameBufferID);
   glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _ScreenTextureID, 0);
+  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+    return 1;
+
+  // Screen texture (Low resolution)
+  glGenTextures(1, &_ScreenTextureLowResID);
+  glActiveTexture(TEX_UNIT(_ScreenTextureLowResUnit));
+  glBindTexture(GL_TEXTURE_2D, _ScreenTextureLowResID);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth()*LOW_RES_RATIO, RenderHeight()*LOW_RES_RATIO, 0, GL_RGBA, GL_FLOAT, NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glBindTexture(GL_TEXTURE_2D, 0);
+
+  // FrameBuffer
+  glGenFramebuffers(1, &_FrameBufferLowResID);
+  glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferLowResID);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _ScreenTextureLowResID, 0);
   if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
     return 1;
 
@@ -405,9 +424,13 @@ int Test3::UpdateUniforms()
     glUniform1f(glGetUniformLocation(RTTProgramID, "u_Time"), _CPULoopTime);
     glUniform1i(glGetUniformLocation(RTTProgramID, "u_FrameNum"), _FrameNum);  
 
-    if ( !(_RenderSettingsModified + _SceneCameraModified + _SceneLightsModified + _SceneInstancesModified + _SceneMaterialsModified) && _AccumulateFrames )
+    if ( _RenderSettingsModified || _SceneCameraModified || _SceneLightsModified || _SceneInstancesModified || _SceneMaterialsModified )
+      _Dirty = true;
+
+    if ( !_Dirty && _AccumulateFrames )
     {
-      glUniform1i(glGetUniformLocation(RTTProgramID, "u_Accumulate"), 1);
+      if ( _AccumulatedFrames >= 1 )
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_Accumulate"), 1);
       _AccumulatedFrames++;
     }
     else
@@ -575,7 +598,10 @@ int Test3::UpdateUniforms()
   {
     _RTSShader -> Use();
     GLuint RTSProgramID = _RTSShader -> GetShaderProgramID();
-    glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), _ScreenTextureUnit);
+    if ( _Dirty && !_Settings._AutoScale )
+      glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), _ScreenTextureLowResUnit);
+    else
+      glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), _ScreenTextureUnit);
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedFrames"), _AccumulatedFrames);
     glUniform2f(glGetUniformLocation(RTSProgramID, "u_RenderRes" ), _Settings._RenderResolution.x, _Settings._RenderResolution.y);
     glUniform1f(glGetUniformLocation(RTSProgramID, "u_Gamma"), _Settings._Gamma);
@@ -586,6 +612,21 @@ int Test3::UpdateUniforms()
   }
   else
     return 1;
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ResizeTextures
+// ----------------------------------------------------------------------------
+int Test3::ResizeTextures()
+{
+  glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glBindTexture(GL_TEXTURE_2D, _ScreenTextureLowResID);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth()*LOW_RES_RATIO, RenderHeight()*LOW_RES_RATIO, 0, GL_RGBA, GL_FLOAT, NULL);
+  glBindTexture(GL_TEXTURE_2D, 0);
 
   return 0;
 }
@@ -690,10 +731,7 @@ int Test3::DrawUI()
 
       if ( ImGui::SliderInt("Render scale", &_Settings._RenderScale, 25, 200) )
       {
-        glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
-        glBindTexture(GL_TEXTURE_2D, 0);
-
+        ResizeTextures();
         _RenderSettingsModified = true;
       }
       ImGui::SameLine();
@@ -1231,10 +1269,7 @@ void Test3::AdjustRenderScale()
   {
     _Settings._RenderScale = newScale;
     _RenderSettingsModified = true;
-
-    glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    ResizeTextures();
   }
 }
 
@@ -1465,9 +1500,7 @@ int Test3::UpdateScene()
     glfwSetWindowSize(_MainWindow.get(), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
     glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
 
-    glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    ResizeTextures();
   }
   if ( !_Scene )
     return 1;
@@ -1570,34 +1603,6 @@ int Test3::UpdateScene()
     }
   }
 
-  bool updateFrameBufferSize = false;
-  if ( !_Settings._AutoScale )
-  {
-    if ( _SceneCameraModified || _RenderSettingsModified )
-    {
-      if ( ( 25 != _Settings._RenderScale ) && ( 25 != _RealRenderScale ) )
-      {
-        _RealRenderScale = _Settings._RenderScale;
-        _Settings._RenderScale = 25;
-        updateFrameBufferSize = true;
-      }
-    }
-    else if ( _Settings._RenderScale != _RealRenderScale )
-    {
-      _Settings._RenderScale = _RealRenderScale;
-      updateFrameBufferSize = true;
-    }
-  }
-
-  if ( updateFrameBufferSize )
-  {
-    _RenderSettingsModified = true;
-
-    glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
-    glBindTexture(GL_TEXTURE_2D, 0);
-  }
-
   return 0;
 }
 
@@ -1606,9 +1611,6 @@ int Test3::UpdateScene()
 // ----------------------------------------------------------------------------
 void Test3::RenderToTexture()
 {
-  glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
-  glViewport(0, 0, RenderWidth(), RenderHeight());
-
   glActiveTexture(TEX_UNIT(_ScreenTextureUnit));
   glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
   glActiveTexture(TEX_UNIT(_SkyboxTextureUnit));
@@ -1651,6 +1653,17 @@ void Test3::RenderToTexture()
   glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedNormalsTextureID);
   glActiveTexture(TEX_UNIT(_BLASPackedUVsTextureUnit));
   glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedUVsTextureID);
+
+  if ( _Dirty && !_Settings._AutoScale )
+  {
+    glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferLowResID);
+    glViewport(0, 0, RenderWidth()*LOW_RES_RATIO, RenderHeight()*LOW_RES_RATIO);
+  }
+  else
+  {
+    glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
+    glViewport(0, 0, RenderWidth(), RenderHeight());
+  }
   
   _Quad -> Render(*_RTTShader);
 }
@@ -1661,11 +1674,20 @@ void Test3::RenderToTexture()
 void Test3::RenderToSceen()
 {
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glActiveTexture(TEX_UNIT(_ScreenTextureUnit));
+  if ( _Dirty && !_Settings._AutoScale )
+  {
+    glActiveTexture(TEX_UNIT(_ScreenTextureLowResUnit));
+    glBindTexture(GL_TEXTURE_2D, _ScreenTextureLowResID);
+    _Dirty = false;
+    _AccumulatedFrames = 0;
+  }
+  else
+  {
+    glActiveTexture(TEX_UNIT(_ScreenTextureUnit));
+    glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
+  }
   
   glViewport(0, 0, _Settings._RenderResolution.x, _Settings._RenderResolution.y);
-
-  glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
 
   _Quad -> Render(*_RTSShader);
 }
@@ -1788,7 +1810,7 @@ int Test3::Run()
     _Quad = new QuadMesh();
 
     // Frame buffer
-    if ( 0 != InitializeFrameBuffer() )
+    if ( 0 != InitializeFrameBuffers() )
     {
       std::cout << "ERROR: Framebuffer is not complete!" << std::endl;
       ret = 1;
@@ -1808,9 +1830,7 @@ int Test3::Run()
     glViewport( 0, 0, _Settings._RenderResolution.x, _Settings._RenderResolution.y );
     glDisable( GL_DEPTH_TEST );
 
-    glBindTexture( GL_TEXTURE_2D, _ScreenTextureID );
-    glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL );
-    glBindTexture( GL_TEXTURE_2D, 0 );
+    ResizeTextures();
 
     _CPULoopTime = glfwGetTime();
     while ( !glfwWindowShouldClose( _MainWindow.get() ) && !_KeyEsc )
