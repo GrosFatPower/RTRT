@@ -1,0 +1,6 @@
+- Fix shading for transparent dieletrics
+- Tiled rendering
+- Back face culling
+- Separate renderers (RT, rasterizer)
+- Real time switch between renderers
+- 
