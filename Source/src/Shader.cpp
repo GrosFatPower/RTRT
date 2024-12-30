@@ -8,6 +8,11 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <filesystem>
+
+namespace fs = std::filesystem;
+
+static bool S_DEBUG_SHADERS = true;
 
 // Remove the file name and store the path to this folder
 void GetFilePath(const std::string & iFullPath, std::string& oPathWithoutFileName)
@@ -27,6 +32,22 @@ Shader::Shader(const ShaderSource & iShaderSource, GLuint iShaderType)
 
   if ( 0 )
     std::cout << iShaderSource._Src << std::endl;
+  if ( S_DEBUG_SHADERS )
+  {
+    std::string filename;
+    if ( GL_VERTEX_SHADER == iShaderType )
+      filename += "VertexShader_";
+    else if ( GL_FRAGMENT_SHADER == iShaderType )
+      filename += "FragmentShader_";
+
+    fs::path filepath = iShaderSource._Path;
+    filename += filepath.filename().stem().string();
+    filename += ".glsl";
+
+    std::ofstream out(filename);
+    out << iShaderSource._Src;
+    out.close();
+  }
 
   printf("Compiling Shader %s\n", iShaderSource._Path.c_str());
   const GLchar* src = (const GLchar*)iShaderSource._Src.c_str();
