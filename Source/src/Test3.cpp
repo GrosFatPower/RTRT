@@ -139,11 +139,12 @@ void Test3::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
   if ( !width || !height )
     return;
 
-  this_ -> _Settings._RenderResolution.x = width;
-  this_ -> _Settings._RenderResolution.y = height;
-  glViewport(0, 0, this_ -> _Settings._RenderResolution.x, this_ -> _Settings._RenderResolution.y);
+  this_ -> _Settings._WindowResolution.x = width;
+  this_ -> _Settings._WindowResolution.y = height;
+  glViewport(0, 0, this_ -> _Settings._WindowResolution.x, this_ -> _Settings._WindowResolution.y);
   this_ -> _RenderSettingsModified = true;
 
+  this_ -> UpdateRenderResolution();
   this_ -> ResizeTextures();
 }
 
@@ -184,8 +185,9 @@ void LoadTexture( unsigned int iTexUnit, const Texture * iTexture, GLuint & ioTe
 Test3::Test3( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iScreenHeight )
 : BaseTest(iMainWindow, iScreenWidth, iScreenHeight)
 {
-  _Settings._RenderResolution.x = iScreenWidth;
-  _Settings._RenderResolution.y = iScreenHeight;
+  _Settings._WindowResolution.x = iScreenWidth;
+  _Settings._WindowResolution.y = iScreenHeight;
+  UpdateRenderResolution();
 }
 
 // ----------------------------------------------------------------------------
@@ -614,7 +616,7 @@ int Test3::UpdateUniforms()
     else
       glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), (int)TexType::Render1);
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedFrames"), _AccumulatedFrames);
-    glUniform2f(glGetUniformLocation(RTSProgramID, "u_RenderRes" ), _Settings._RenderResolution.x, _Settings._RenderResolution.y);
+    glUniform2f(glGetUniformLocation(RTSProgramID, "u_RenderRes" ), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
     glUniform1f(glGetUniformLocation(RTSProgramID, "u_Gamma"), _Settings._Gamma);
     glUniform1f(glGetUniformLocation(RTSProgramID, "u_Exposure"), _Settings._Exposure);
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_ToneMapping"), 0);
@@ -684,7 +686,7 @@ int Test3::DrawUI()
   {
     ImGui::Begin("Test 3");
 
-    ImGui::Text( "Window width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y );
+    ImGui::Text( "Window width %d: height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y );
 
     ImGui::Text( "Accumulated frames : %d", _AccumulatedFrames );
 
@@ -1258,6 +1260,15 @@ int Test3::UpdateCPUTime()
 }
 
 // ----------------------------------------------------------------------------
+// UpdateRenderResolution
+// ----------------------------------------------------------------------------
+void Test3::UpdateRenderResolution()
+{
+  _Settings._RenderResolution.x = int(_Settings._WindowResolution.x * RenderScale());
+  _Settings._RenderResolution.y = int(_Settings._WindowResolution.y * RenderScale());
+}
+
+// ----------------------------------------------------------------------------
 // AdjustRenderScale
 // ----------------------------------------------------------------------------
 void Test3::AdjustRenderScale()
@@ -1520,6 +1531,7 @@ int Test3::UpdateScene()
     glfwSetWindowSize(_MainWindow.get(), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
     glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
 
+    UpdateRenderResolution();
     ResizeTextures();
   }
   if ( !_Scene )
@@ -1707,7 +1719,7 @@ void Test3::RenderToSceen()
     glBindTexture(GL_TEXTURE_2D, _RenderTexture1ID);
   }
   
-  glViewport(0, 0, _Settings._RenderResolution.x, _Settings._RenderResolution.y);
+  glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
 
   _Quad -> Render(*_RTSShader);
 }
@@ -1722,7 +1734,7 @@ bool Test3::RenderToFile( const std::filesystem::path & iFilepath )
   glGenTextures( 1, &frameCaptureTextureID );
   glActiveTexture( TEX_UNIT(TexType::Temporary) );
   glBindTexture( GL_TEXTURE_2D, frameCaptureTextureID );
-  glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, NULL );
+  glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._WindowResolution.x, _Settings._WindowResolution.y, 0, GL_RGBA, GL_FLOAT, NULL );
   glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
   glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
   glBindTexture( GL_TEXTURE_2D, 0 );
@@ -1742,7 +1754,7 @@ bool Test3::RenderToFile( const std::filesystem::path & iFilepath )
   // Render to texture
   {
     glBindFramebuffer( GL_FRAMEBUFFER, frameBufferID );
-    glViewport( 0, 0, _Settings._RenderResolution.x, _Settings._RenderResolution.y );
+    glViewport( 0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y );
 
     glActiveTexture( TEX_UNIT(TexType::Temporary) );
     glBindTexture( GL_TEXTURE_2D, frameCaptureTextureID );
@@ -1758,8 +1770,8 @@ bool Test3::RenderToFile( const std::filesystem::path & iFilepath )
   // Retrieve image et save to file
   int saved = 0;
   {
-    int w = _Settings._RenderResolution.x;
-    int h = _Settings._RenderResolution.y;
+    int w = _Settings._WindowResolution.x;
+    int h = _Settings._WindowResolution.y;
     unsigned char * frameData = new unsigned char[w * h * 4];
 
     glActiveTexture( TEX_UNIT(TexType::Temporary) );
@@ -1846,8 +1858,8 @@ int Test3::Run()
     }
 
     // Main loop
-    glfwSetWindowSize( _MainWindow.get(), _Settings._RenderResolution.x, _Settings._RenderResolution.y );
-    glViewport( 0, 0, _Settings._RenderResolution.x, _Settings._RenderResolution.y );
+    glfwSetWindowSize( _MainWindow.get(), _Settings._WindowResolution.x, _Settings._WindowResolution.y );
+    glViewport( 0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y );
     glDisable( GL_DEPTH_TEST );
 
     ResizeTextures();

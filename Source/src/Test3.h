@@ -75,12 +75,13 @@ private:
 
   int UpdateCPUTime();
 
+  void UpdateRenderResolution();
   void AdjustRenderScale();
 
   float RenderScale()       const { return ( _Settings._RenderScale * 0.01f ); }
   float LowResRenderScale() const { return ( RenderScale() * _Settings._LowResRatio ); }
-  int RenderWidth()         const { return int( _Settings._RenderResolution.x * RenderScale() ); }
-  int RenderHeight()        const { return int( _Settings._RenderResolution.y * RenderScale() ); }
+  int RenderWidth()         const { return _Settings._RenderResolution.x; }
+  int RenderHeight()        const { return _Settings._RenderResolution.y; }
   int LowResRenderWidth()   const { return int( _Settings._RenderResolution.x * LowResRenderScale() ); }
   int LowResRenderHeight()  const { return int( _Settings._RenderResolution.y * LowResRenderScale() ); }
 
