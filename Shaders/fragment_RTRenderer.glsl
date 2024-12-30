@@ -29,6 +29,8 @@ out vec4 fragColor;
 #define MAX_LIGHT_COUNT    32
 
 uniform vec2           u_Resolution;
+uniform vec2           u_TileOffset;
+uniform vec2           u_InvNbTiles;
 uniform float          u_Time;
 uniform int            u_FrameNum;
 uniform int            u_Accumulate;
@@ -660,7 +662,9 @@ void main()
   jitter.y = ( r2 < 1.0 ) ? ( sqrt(r2) - 1.0 ) : ( 1.0 - sqrt(2.0 - r2) ) ;
   jitter /= (u_Resolution * 0.5);
 
-  vec2 centeredUV = ( 2. * fragUV - 1. ) + jitter;
+  vec2 tileUV = mix(u_TileOffset, u_TileOffset + u_InvNbTiles, fragUV);
+
+  vec2 centeredUV = ( 2. * tileUV - 1. ) + jitter;
 
   float scale = tan(u_Camera._FOV * .5);
   centeredUV.x *= scale;
@@ -721,5 +725,5 @@ void main()
   fragColor = vec4(pixelColor, 1.f);
 
   if ( 1 == u_Accumulate )
-    fragColor += texture(u_ScreenTexture, fragUV);
+    fragColor += texture(u_ScreenTexture, tileUV);
 }

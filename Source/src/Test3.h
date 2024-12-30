@@ -84,6 +84,11 @@ private:
   int LowResRenderWidth()   const { return int( _Settings._RenderResolution.x * LowResRenderScale() ); }
   int LowResRenderHeight()  const { return int( _Settings._RenderResolution.y * LowResRenderScale() ); }
 
+  Vec2 TileOffset()         const { return Vec2(0.f); }
+
+  //Vec2 InvNbTiles()         const { return Vec2(((float)RenderWidth())/_Settings._TileResolution.x, ((float)RenderHeight())/_Settings._TileResolution.y); }
+  Vec2 InvNbTiles()         const { return Vec2(1.f); }
+
   void RenderToTexture();
   void RenderToSceen();
   bool RenderToFile( const std::filesystem::path & iFilepath );

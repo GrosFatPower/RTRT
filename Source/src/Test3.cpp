@@ -430,8 +430,10 @@ int Test3::UpdateUniforms()
     _RTTShader -> Use();
     GLuint RTTProgramID = _RTTShader -> GetShaderProgramID();
     glUniform2f(glGetUniformLocation(RTTProgramID, "u_Resolution"), RenderWidth(), RenderHeight());
+    glUniform2f(glGetUniformLocation(RTTProgramID, "u_TileOffset"), TileOffset().x, TileOffset().y);
+    glUniform2f(glGetUniformLocation(RTTProgramID, "u_InvNbTiles"), InvNbTiles().x, InvNbTiles().y);
     glUniform1f(glGetUniformLocation(RTTProgramID, "u_Time"), _CPULoopTime);
-    glUniform1i(glGetUniformLocation(RTTProgramID, "u_FrameNum"), _FrameNum);  
+    glUniform1i(glGetUniformLocation(RTTProgramID, "u_FrameNum"), _FrameNum);
 
     if ( _RenderSettingsModified || _SceneCameraModified || _SceneLightsModified || _SceneInstancesModified || _SceneMaterialsModified )
       _Dirty = true;
