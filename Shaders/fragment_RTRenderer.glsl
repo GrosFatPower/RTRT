@@ -34,6 +34,7 @@ uniform vec2           u_InvNbTiles;
 uniform float          u_Time;
 uniform int            u_FrameNum;
 uniform int            u_Accumulate;
+uniform int            u_TiledRendering;
 uniform int            u_Bounces;
 uniform int            u_ToneMapping;
 uniform vec3           u_BackgroundColor;
@@ -662,9 +663,11 @@ void main()
   jitter.y = ( r2 < 1.0 ) ? ( sqrt(r2) - 1.0 ) : ( 1.0 - sqrt(2.0 - r2) ) ;
   jitter /= (u_Resolution * 0.5);
 
-  vec2 tileUV = mix(u_TileOffset, u_TileOffset + u_InvNbTiles, fragUV);
+  vec2 coordUV = fragUV;
+  if( 1 == u_TiledRendering )
+    coordUV = mix(u_TileOffset, u_TileOffset + u_InvNbTiles, fragUV);
 
-  vec2 centeredUV = ( 2. * tileUV - 1. ) + jitter;
+  vec2 centeredUV = ( 2. * coordUV - 1. ) + jitter;
 
   float scale = tan(u_Camera._FOV * .5);
   centeredUV.x *= scale;
@@ -725,5 +728,5 @@ void main()
   fragColor = vec4(pixelColor, 1.f);
 
   if ( 1 == u_Accumulate )
-    fragColor += texture(u_ScreenTexture, tileUV);
+    fragColor += texture(u_ScreenTexture, coordUV);
 }

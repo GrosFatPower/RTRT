@@ -175,6 +175,7 @@ private:
   int                       _SkyboxID    = -1;
 
   RenderSettings  _Settings;
+  bool            _TiledRendering         = false;
   bool            _AccumulateFrames       = true;
   bool            _SceneCameraModified    = false;
   bool            _SceneLightsModified    = false;
