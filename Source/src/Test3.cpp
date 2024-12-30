@@ -32,8 +32,7 @@
 #include <algorithm>
 #include <iostream>
 
-#define TEX_UNIT(x) ( GL_TEXTURE0 + x )
-#define LOW_RES_RATIO 0.1
+#define TEX_UNIT(x) ( GL_TEXTURE0 + (int)x )
 
 namespace fs = std::filesystem;
 
@@ -197,9 +196,9 @@ Test3::~Test3()
   ClearSceneData();
 
   glDeleteFramebuffers(1, &_FrameBufferID);
-  glDeleteTextures(1, &_ScreenTextureID);
+  glDeleteTextures(1, &_RenderTexture1ID);
   glDeleteFramebuffers(1, &_FrameBufferLowResID);
-  glDeleteTextures(1, &_ScreenTextureLowResID);
+  glDeleteTextures(1, &_RenderTextureLowResID);
   
   if (_Quad)
     delete _Quad;
@@ -345,10 +344,20 @@ int Test3::InitializeBackgroundFiles()
 // ----------------------------------------------------------------------------
 int Test3::InitializeFrameBuffers()
 {
-  // Screen texture
-  glGenTextures(1, &_ScreenTextureID);
-  glActiveTexture(TEX_UNIT(_ScreenTextureUnit));
-  glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
+  // Screen texture 1
+  glGenTextures(1, &_RenderTexture1ID);
+  glActiveTexture(TEX_UNIT(TexType::Render1));
+  glBindTexture(GL_TEXTURE_2D, _RenderTexture1ID);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glBindTexture(GL_TEXTURE_2D, 0);
+
+  glGenTextures(1, &_RenderTexture2ID);
+  glActiveTexture(TEX_UNIT(TexType::Render2));
+  glBindTexture(GL_TEXTURE_2D, _RenderTexture2ID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -359,15 +368,15 @@ int Test3::InitializeFrameBuffers()
   // FrameBuffer
   glGenFramebuffers(1, &_FrameBufferID);
   glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _ScreenTextureID, 0);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _RenderTexture1ID, 0);
   if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
     return 1;
 
   // Screen texture (Low resolution)
-  glGenTextures(1, &_ScreenTextureLowResID);
-  glActiveTexture(TEX_UNIT(_ScreenTextureLowResUnit));
-  glBindTexture(GL_TEXTURE_2D, _ScreenTextureLowResID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth()*LOW_RES_RATIO, RenderHeight()*LOW_RES_RATIO, 0, GL_RGBA, GL_FLOAT, NULL);
+  glGenTextures(1, &_RenderTextureLowResID);
+  glActiveTexture(TEX_UNIT(TexType::RenderLowRes));
+  glBindTexture(GL_TEXTURE_2D, _RenderTextureLowResID);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, LowResRenderWidth(), LowResRenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -377,7 +386,7 @@ int Test3::InitializeFrameBuffers()
   // FrameBuffer
   glGenFramebuffers(1, &_FrameBufferLowResID);
   glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferLowResID);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _ScreenTextureLowResID, 0);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _RenderTextureLowResID, 0);
   if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
     return 1;
 
@@ -446,8 +455,8 @@ int Test3::UpdateUniforms()
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_EnableSkybox"), (int)_Settings._EnableSkybox);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_EnableBackground" ), (int)_Settings._EnableBackGround);
       glUniform1f(glGetUniformLocation(RTTProgramID, "u_SkyboxRotation"), _Settings._SkyBoxRotation / 360.f);
-      glUniform1i(glGetUniformLocation(RTTProgramID, "u_ScreenTexture"), _ScreenTextureUnit);
-      glUniform1i(glGetUniformLocation(RTTProgramID, "u_SkyboxTexture"), _SkyboxTextureUnit);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_ScreenTexture"), (int)TexType::Render1);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_SkyboxTexture"), (int)TexType::Skybox);
       glUniform1f(glGetUniformLocation(RTTProgramID, "u_Gamma"), _Settings._Gamma);
       glUniform1f(glGetUniformLocation(RTTProgramID, "u_Exposure"), _Settings._Exposure);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_ToneMapping"), ( _Settings._ToneMapping ? 1 : 0 ));
@@ -560,25 +569,25 @@ int Test3::UpdateUniforms()
           }
         }
 
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxTexture"),                    _VtxTextureUnit);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxNormTexture"),                _VtxNormTextureUnit);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxUVTexture"),                  _VtxUVTextureUnit);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxIndTexture"),                 _VtxIndTextureUnit);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexIndTexture"),                 _TexIndTextureUnit);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexArrayTexture"),               _TexArrayTextureUnit);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshBBoxTexture"),               _MeshBBoxTextureUnit);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshIDRangeTexture"),            _MeshIdRangeTextureUnit);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MaterialsTexture"),              _MaterialsTextureUnit);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASNodesTexture"),              _TLASNodesTextureUnit);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASTransformsTexture"),         _TLASTransformsIDTextureUnit);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASMeshMatIDTexture"),          _TLASMeshMatIDTextureUnit);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASNodesTexture"),              _BLASNodesTextureUnit);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASNodesRangeTexture"),         _BLASNodesRangeTextureUnit);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedIndicesTexture"),      _BLASPackedIndicesTextureUnit);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedIndicesRangeTexture"), _BLASPackedIndicesRangeTextureUnit);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedVtxTexture"),          _BLASPackedVerticesTextureUnit);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedNormTexture"),         _BLASPackedNormalsTextureUnit);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedUVTexture"),           _BLASPackedUVsTextureUnit);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxTexture"),                    (int)TexType::Vertices);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxNormTexture"),                (int)TexType::Normals);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxUVTexture"),                  (int)TexType::UVs);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxIndTexture"),                 (int)TexType::VertInd);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexIndTexture"),                 (int)TexType::TexInd);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexArrayTexture"),               (int)TexType::TexArray);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshBBoxTexture"),               (int)TexType::MeshBBox);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshIDRangeTexture"),            (int)TexType::MeshIdRange);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MaterialsTexture"),              (int)TexType::Materials);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASNodesTexture"),              (int)TexType::TLASNodes);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASTransformsTexture"),         (int)TexType::TLASTransformsID);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASMeshMatIDTexture"),          (int)TexType::TLASMeshMatID);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASNodesTexture"),              (int)TexType::BLASNodes);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASNodesRangeTexture"),         (int)TexType::BLASNodesRange);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedIndicesTexture"),      (int)TexType::BLASPackedIndices);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedIndicesRangeTexture"), (int)TexType::BLASPackedIndicesRange);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedVtxTexture"),          (int)TexType::BLASPackedVertices);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedNormTexture"),         (int)TexType::BLASPackedNormals);
+        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedUVTexture"),           (int)TexType::BLASPackedUVs);
 
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbSpheres"), nbSpheres);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbPlanes"), nbPlanes);
@@ -599,9 +608,9 @@ int Test3::UpdateUniforms()
     _RTSShader -> Use();
     GLuint RTSProgramID = _RTSShader -> GetShaderProgramID();
     if ( _Dirty && !_Settings._AutoScale )
-      glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), _ScreenTextureLowResUnit);
+      glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), (int)TexType::RenderLowRes);
     else
-      glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), _ScreenTextureUnit);
+      glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), (int)TexType::Render1);
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedFrames"), _AccumulatedFrames);
     glUniform2f(glGetUniformLocation(RTSProgramID, "u_RenderRes" ), _Settings._RenderResolution.x, _Settings._RenderResolution.y);
     glUniform1f(glGetUniformLocation(RTSProgramID, "u_Gamma"), _Settings._Gamma);
@@ -621,11 +630,14 @@ int Test3::UpdateUniforms()
 // ----------------------------------------------------------------------------
 int Test3::ResizeTextures()
 {
-  glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
+  glBindTexture(GL_TEXTURE_2D, _RenderTexture1ID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
   glBindTexture(GL_TEXTURE_2D, 0);
-  glBindTexture(GL_TEXTURE_2D, _ScreenTextureLowResID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth()*LOW_RES_RATIO, RenderHeight()*LOW_RES_RATIO, 0, GL_RGBA, GL_FLOAT, NULL);
+  glBindTexture(GL_TEXTURE_2D, _RenderTexture2ID);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glBindTexture(GL_TEXTURE_2D, _RenderTextureLowResID);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, LowResRenderWidth(), LowResRenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
   glBindTexture(GL_TEXTURE_2D, 0);
 
   return 0;
@@ -750,6 +762,12 @@ int Test3::DrawUI()
         }
 
         this -> AdjustRenderScale();
+      }
+
+      if ( ImGui::SliderFloat("Interaction Ratio", &_Settings._LowResRatio, 0.05f, 1.f) )
+      {
+        ResizeTextures();
+        _RenderSettingsModified = true;
       }
 
       if ( ImGui::Checkbox( "Accumulate", &_AccumulateFrames ) )
@@ -1012,7 +1030,7 @@ int Test3::DrawUI()
           {
             static GLuint S_ImGUI_TexID = 0;
             if ( newMaterial )
-              LoadTexture(_IMGUIMateralialTextureUnit, basecolorTexture, S_ImGUI_TexID);
+              LoadTexture((int)TexType::IMGUIMaterial, basecolorTexture, S_ImGUI_TexID);
 
             if ( S_ImGUI_TexID )
             {
@@ -1030,7 +1048,7 @@ int Test3::DrawUI()
           {
             static GLuint S_ImGUI_TexID = 0;
             if ( newMaterial )
-              LoadTexture(_IMGUIMateralialTextureUnit, metallicRoughnessTexture, S_ImGUI_TexID);
+              LoadTexture((int)TexType::IMGUIMaterial, metallicRoughnessTexture, S_ImGUI_TexID);
 
             if ( S_ImGUI_TexID )
             {
@@ -1048,7 +1066,7 @@ int Test3::DrawUI()
           {
             static GLuint S_ImGUI_TexID = 0;
             if ( newMaterial )
-              LoadTexture(_IMGUIMateralialTextureUnit, normalMapTexture, S_ImGUI_TexID);
+              LoadTexture((int)TexType::IMGUIMaterial, normalMapTexture, S_ImGUI_TexID);
 
             if ( S_ImGUI_TexID )
             {
@@ -1066,7 +1084,7 @@ int Test3::DrawUI()
           {
             static GLuint S_ImGUI_TexID = 0;
             if ( newMaterial )
-              LoadTexture(_IMGUIMateralialTextureUnit, emissionMapTexture, S_ImGUI_TexID);
+              LoadTexture((int)TexType::IMGUIMaterial, emissionMapTexture, S_ImGUI_TexID);
 
             if ( S_ImGUI_TexID )
             {
@@ -1466,7 +1484,7 @@ int Test3::InitializeScene()
   if ( _Scene -> GetEnvMap().IsInitialized() )
   {
     glGenTextures(1, &_SkyboxTextureID);
-    glActiveTexture(TEX_UNIT(_SkyboxTextureUnit));
+    glActiveTexture(TEX_UNIT(TexType::Skybox));
     glBindTexture(GL_TEXTURE_2D, _SkyboxTextureID);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, _Scene -> GetEnvMap().GetWidth(), _Scene -> GetEnvMap().GetHeight(), 0, GL_RGB, GL_FLOAT, _Scene -> GetEnvMap().GetRawData());
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -1515,7 +1533,7 @@ int Test3::UpdateScene()
       {
         if ( 0 == _SkyboxTextureID )
           glGenTextures( 1, &_SkyboxTextureID );
-        glActiveTexture( TEX_UNIT( _SkyboxTextureUnit ) );
+        glActiveTexture( TEX_UNIT(TexType::Skybox) );
         glBindTexture( GL_TEXTURE_2D, _SkyboxTextureID );
         glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB32F, _Scene -> GetEnvMap().GetWidth(), _Scene -> GetEnvMap().GetHeight(), 0, GL_RGB, GL_FLOAT, _Scene -> GetEnvMap().GetRawData() );
         glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
@@ -1611,53 +1629,53 @@ int Test3::UpdateScene()
 // ----------------------------------------------------------------------------
 void Test3::RenderToTexture()
 {
-  glActiveTexture(TEX_UNIT(_ScreenTextureUnit));
-  glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
-  glActiveTexture(TEX_UNIT(_SkyboxTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::Render1));
+  glBindTexture(GL_TEXTURE_2D, _RenderTexture1ID);
+  glActiveTexture(TEX_UNIT(TexType::Skybox));
   glBindTexture(GL_TEXTURE_2D, _SkyboxTextureID);
-  glActiveTexture(TEX_UNIT(_VtxTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::Vertices));
   glBindTexture(GL_TEXTURE_BUFFER, _VtxTextureID);
-  glActiveTexture(TEX_UNIT(_VtxNormTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::Normals));
   glBindTexture(GL_TEXTURE_BUFFER, _VtxNormTextureID);
-  glActiveTexture(TEX_UNIT(_VtxUVTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::UVs));
   glBindTexture(GL_TEXTURE_BUFFER, _VtxUVTextureID);
-  glActiveTexture(TEX_UNIT(_VtxIndTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::VertInd));
   glBindTexture(GL_TEXTURE_BUFFER, _VtxIndTextureID);
-  glActiveTexture(TEX_UNIT(_TexIndTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::TexInd));
   glBindTexture(GL_TEXTURE_BUFFER, _TexIndTextureID);
-  glActiveTexture(TEX_UNIT(_TexArrayTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::TexArray));
   glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTextureID);
-  glActiveTexture(TEX_UNIT(_MeshBBoxTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::MeshBBox));
   glBindTexture(GL_TEXTURE_BUFFER, _MeshBBoxTextureID);
-  glActiveTexture(TEX_UNIT(_MeshIdRangeTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::MeshIdRange));
   glBindTexture(GL_TEXTURE_BUFFER, _MeshIdRangeTextureID);
-  glActiveTexture(TEX_UNIT(_MaterialsTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::Materials));
   glBindTexture(GL_TEXTURE_2D, _MaterialsTextureID);
-  glActiveTexture(TEX_UNIT(_TLASNodesTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::TLASNodes));
   glBindTexture(GL_TEXTURE_BUFFER, _TLASNodesTextureID);
-  glActiveTexture(TEX_UNIT(_TLASTransformsIDTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::TLASTransformsID));
   glBindTexture(GL_TEXTURE_2D, _TLASTransformsIDTextureID);
-  glActiveTexture(TEX_UNIT(_TLASMeshMatIDTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::TLASMeshMatID));
   glBindTexture(GL_TEXTURE_BUFFER, _TLASMeshMatIDTextureID);
-  glActiveTexture(TEX_UNIT(_BLASNodesTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::BLASNodes));
   glBindTexture(GL_TEXTURE_BUFFER, _BLASNodesTextureID);
-  glActiveTexture(TEX_UNIT(_BLASNodesRangeTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::BLASNodesRange));
   glBindTexture(GL_TEXTURE_BUFFER, _BLASNodesRangeTextureID);
-  glActiveTexture(TEX_UNIT(_BLASPackedIndicesTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::BLASPackedIndices));
   glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedIndicesTextureID);
-  glActiveTexture(TEX_UNIT(_BLASPackedIndicesRangeTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::BLASPackedIndicesRange));
   glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedIndicesRangeTextureID);
-  glActiveTexture(TEX_UNIT(_BLASPackedVerticesTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::BLASPackedVertices));
   glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedVerticesTextureID);
-  glActiveTexture(TEX_UNIT(_BLASPackedNormalsTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::BLASPackedNormals));
   glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedNormalsTextureID);
-  glActiveTexture(TEX_UNIT(_BLASPackedUVsTextureUnit));
+  glActiveTexture(TEX_UNIT(TexType::BLASPackedUVs));
   glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedUVsTextureID);
 
   if ( _Dirty && !_Settings._AutoScale )
   {
     glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferLowResID);
-    glViewport(0, 0, RenderWidth()*LOW_RES_RATIO, RenderHeight()*LOW_RES_RATIO);
+    glViewport(0, 0, LowResRenderWidth(), LowResRenderHeight());
   }
   else
   {
@@ -1676,15 +1694,15 @@ void Test3::RenderToSceen()
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   if ( _Dirty && !_Settings._AutoScale )
   {
-    glActiveTexture(TEX_UNIT(_ScreenTextureLowResUnit));
-    glBindTexture(GL_TEXTURE_2D, _ScreenTextureLowResID);
+    glActiveTexture(TEX_UNIT(TexType::RenderLowRes));
+    glBindTexture(GL_TEXTURE_2D, _RenderTextureLowResID);
     _Dirty = false;
     _AccumulatedFrames = 0;
   }
   else
   {
-    glActiveTexture(TEX_UNIT(_ScreenTextureUnit));
-    glBindTexture(GL_TEXTURE_2D, _ScreenTextureID);
+    glActiveTexture(TEX_UNIT(TexType::Render1));
+    glBindTexture(GL_TEXTURE_2D, _RenderTexture1ID);
   }
   
   glViewport(0, 0, _Settings._RenderResolution.x, _Settings._RenderResolution.y);
@@ -1700,7 +1718,7 @@ bool Test3::RenderToFile( const std::filesystem::path & iFilepath )
   // Generate output texture
   GLuint frameCaptureTextureID = 0;
   glGenTextures( 1, &frameCaptureTextureID );
-  glActiveTexture( TEX_UNIT(_TemporaryTextureUnit) );
+  glActiveTexture( TEX_UNIT(TexType::Temporary) );
   glBindTexture( GL_TEXTURE_2D, frameCaptureTextureID );
   glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0, GL_RGBA, GL_FLOAT, NULL );
   glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
@@ -1724,10 +1742,10 @@ bool Test3::RenderToFile( const std::filesystem::path & iFilepath )
     glBindFramebuffer( GL_FRAMEBUFFER, frameBufferID );
     glViewport( 0, 0, _Settings._RenderResolution.x, _Settings._RenderResolution.y );
 
-    glActiveTexture( TEX_UNIT( _TemporaryTextureUnit ) );
+    glActiveTexture( TEX_UNIT(TexType::Temporary) );
     glBindTexture( GL_TEXTURE_2D, frameCaptureTextureID );
-    glActiveTexture( TEX_UNIT( _ScreenTextureUnit ) );
-    glBindTexture( GL_TEXTURE_2D, _ScreenTextureID );
+    glActiveTexture( TEX_UNIT(TexType::Render1) );
+    glBindTexture( GL_TEXTURE_2D, _RenderTexture1ID );
 
     _Quad -> Render( *_RTSShader );
 
@@ -1742,7 +1760,7 @@ bool Test3::RenderToFile( const std::filesystem::path & iFilepath )
     int h = _Settings._RenderResolution.y;
     unsigned char * frameData = new unsigned char[w * h * 4];
 
-    glActiveTexture( TEX_UNIT( _TemporaryTextureUnit ) );
+    glActiveTexture( TEX_UNIT(TexType::Temporary) );
     glBindTexture( GL_TEXTURE_2D, frameCaptureTextureID );
     glGetTexImage( GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, frameData );
     stbi_flip_vertically_on_write( true );

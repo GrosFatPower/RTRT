@@ -18,6 +18,34 @@ class QuadMesh;
 class ShaderProgram;
 class Scene;
 
+enum class TexType
+{
+  Render1 = 0,
+  Render2,
+  RenderLowRes,
+  Skybox,
+  Vertices,
+  Normals,
+  UVs,
+  VertInd,
+  TexInd,
+  TexArray,
+  MeshBBox,
+  MeshIdRange,
+  Materials,
+  TLASNodes,
+  TLASTransformsID,
+  TLASMeshMatID,
+  BLASNodes,
+  BLASNodesRange,
+  BLASPackedIndices,
+  BLASPackedIndicesRange,
+  BLASPackedVertices,
+  BLASPackedNormals,
+  BLASPackedUVs,
+  Temporary,
+  IMGUIMaterial
+};
 
 class Test3 : public BaseTest
 {
@@ -49,9 +77,12 @@ private:
 
   void AdjustRenderScale();
 
-  float RenderScale() const { return ( _Settings._RenderScale * 0.01f ); }
-  int RenderWidth()   const { return int( _Settings._RenderResolution.x * RenderScale() ); }
-  int RenderHeight()  const { return int( _Settings._RenderResolution.y * RenderScale() ); }
+  float RenderScale()       const { return ( _Settings._RenderScale * 0.01f ); }
+  float LowResRenderScale() const { return ( RenderScale() * _Settings._LowResRatio ); }
+  int RenderWidth()         const { return int( _Settings._RenderResolution.x * RenderScale() ); }
+  int RenderHeight()        const { return int( _Settings._RenderResolution.y * RenderScale() ); }
+  int LowResRenderWidth()   const { return int( _Settings._RenderResolution.x * LowResRenderScale() ); }
+  int LowResRenderHeight()  const { return int( _Settings._RenderResolution.y * LowResRenderScale() ); }
 
   void RenderToTexture();
   void RenderToSceen();
@@ -86,8 +117,9 @@ private:
   GLuint          _BLASPackedUVsBufferID           = 0;
 
   // Texture IDs
-  GLuint          _ScreenTextureID                 = 0;
-  GLuint          _ScreenTextureLowResID           = 0;
+  GLuint          _RenderTexture1ID                = 0;
+  GLuint          _RenderTexture2ID                = 0;
+  GLuint          _RenderTextureLowResID           = 0;
   GLuint          _SkyboxTextureID                 = 0;
   GLuint          _VtxTextureID                    = 0;
   GLuint          _VtxNormTextureID                = 0;
@@ -109,34 +141,6 @@ private:
   GLuint          _BLASPackedVerticesTextureID     = 0;
   GLuint          _BLASPackedNormalsTextureID      = 0;
   GLuint          _BLASPackedUVsTextureID          = 0;
-
-  // Texture Units
-  const unsigned int    _ScreenTextureUnit                 = 0;
-  const unsigned int    _ScreenTextureLowResUnit           = 1;
-  const unsigned int    _SkyboxTextureUnit                 = 2;
-  const unsigned int    _VtxTextureUnit                    = 3;
-  const unsigned int    _VtxNormTextureUnit                = 4;
-  const unsigned int    _VtxUVTextureUnit                  = 5;
-  const unsigned int    _VtxIndTextureUnit                 = 6;
-  const unsigned int    _TexIndTextureUnit                 = 7;
-  const unsigned int    _TexArrayTextureUnit               = 8;
-  const unsigned int    _MeshBBoxTextureUnit               = 9;
-  const unsigned int    _MeshIdRangeTextureUnit            = 10;
-  const unsigned int    _MaterialsTextureUnit              = 11;
-  // BVH
-  const unsigned int    _TLASNodesTextureUnit              = 12;
-  const unsigned int    _TLASTransformsIDTextureUnit       = 13;
-  const unsigned int    _TLASMeshMatIDTextureUnit          = 14;
-  const unsigned int    _BLASNodesTextureUnit              = 15;
-  const unsigned int    _BLASNodesRangeTextureUnit         = 16;
-  const unsigned int    _BLASPackedIndicesTextureUnit      = 17;
-  const unsigned int    _BLASPackedIndicesRangeTextureUnit = 18;
-  const unsigned int    _BLASPackedVerticesTextureUnit     = 19;
-  const unsigned int    _BLASPackedNormalsTextureUnit      = 20;
-  const unsigned int    _BLASPackedUVsTextureUnit          = 21;
-
-  const unsigned int    _TemporaryTextureUnit              = 30;
-  const unsigned int    _IMGUIMateralialTextureUnit        = 31;
 
   double          _MouseX               = 0.;
   double          _MouseY               = 0.;

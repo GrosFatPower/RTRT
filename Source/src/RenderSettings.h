@@ -22,6 +22,7 @@ struct RenderSettings
   bool  _FXAA               = false;
   int   _Bounces            = 1;
   int   _RenderScale        = 100;
+  float _LowResRatio        = 0.1f;
   float _TargetFPS          = 60.f;
   float _Gamma              = 2.f;
   float _Exposure           = 1.5f;
