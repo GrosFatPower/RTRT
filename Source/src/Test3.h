@@ -103,11 +103,13 @@ private:
   static void MousebuttonCallback(GLFWwindow * window, int button, int action, int mods);
   static void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
 
-  QuadMesh      * _Quad      = nullptr;
-  ShaderProgram * _RTTShader = nullptr;
-  ShaderProgram * _RTSShader = nullptr;
+  QuadMesh      * _Quad             = nullptr;
+  ShaderProgram * _RTTShader        = nullptr;
+  ShaderProgram * _RTileToTexShader = nullptr;
+  ShaderProgram * _RTSShader        = nullptr;
 
   GLuint          _FrameBufferID                   = 0;
+  GLuint          _TileFrameBufferID               = 0;
   GLuint          _FrameBufferLowResID             = 0;
   GLuint          _VtxBufferID                     = 0;
   GLuint          _VtxNormBufferID                 = 0;
