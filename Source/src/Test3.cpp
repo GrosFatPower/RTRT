@@ -426,42 +426,48 @@ int Test3::RecompileShaders()
 }
 
 // ----------------------------------------------------------------------------
+// NextTile
+// ----------------------------------------------------------------------------
+void Test3::NextTile()
+{
+  _CurTile.x++;
+  if ( _CurTile.x >= NbTiles().x )
+  {
+    _CurTile.x = 0;
+    _CurTile.y--;
+    if ( _CurTile.y < 0 )
+    {
+      ResetTiles();
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
+// ResetTiles
+// ----------------------------------------------------------------------------
+void Test3::ResetTiles()
+{
+  _CurTile.x = 0;
+  _CurTile.y = NbTiles().y - 1;
+}
+
+// ----------------------------------------------------------------------------
 // UpdateUniforms
 // ----------------------------------------------------------------------------
 int Test3::UpdateUniforms()
 {
-  if ( _RenderSettingsModified || _SceneCameraModified || _SceneLightsModified || _SceneInstancesModified || _SceneMaterialsModified )
-  {
-    _Dirty = true;
-    _CurTile = Vec2i(-1, NbTiles().y -1);
-  }
-  else
-  {
-    _CurTile.x++;
-    if ( _CurTile.x >= NbTiles().x )
-    {
-      _CurTile.x = 0;
-      _CurTile.y--;
-      if ( _CurTile.y < 0 )
-      {
-        _CurTile.x = 0;
-        _CurTile.y = NbTiles().y - 1;
-      }
-    }
-  }
-
   if ( _RTTShader )
   {
     _RTTShader -> Use();
     GLuint RTTProgramID = _RTTShader -> GetShaderProgramID();
     glUniform2f(glGetUniformLocation(RTTProgramID, "u_Resolution"), RenderWidth(), RenderHeight());
-    glUniform1i(glGetUniformLocation(RTTProgramID, "u_TiledRendering"), ( _TiledRendering && !_Dirty ) ? ( 1 ) : ( 0 ));
+    glUniform1i(glGetUniformLocation(RTTProgramID, "u_TiledRendering"), ( _TiledRendering && !Dirty() ) ? ( 1 ) : ( 0 ));
     glUniform2f(glGetUniformLocation(RTTProgramID, "u_TileOffset"), TileOffset().x, TileOffset().y);
     glUniform2f(glGetUniformLocation(RTTProgramID, "u_InvNbTiles"), InvNbTiles().x, InvNbTiles().y);
     glUniform1f(glGetUniformLocation(RTTProgramID, "u_Time"), _CPULoopTime);
     glUniform1i(glGetUniformLocation(RTTProgramID, "u_FrameNum"), _FrameNum);
 
-    if ( !_Dirty && _AccumulateFrames )
+    if ( !Dirty() && _AccumulateFrames )
     {
       if ( _AccumulatedFrames >= 1 )
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_Accumulate"), 1);
@@ -499,7 +505,6 @@ int Test3::UpdateUniforms()
         glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Forward"), cam.GetForward().x, cam.GetForward().y, cam.GetForward().z);
         glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Pos"), cam.GetPos().x, cam.GetPos().y, cam.GetPos().z);
         glUniform1f(glGetUniformLocation(RTTProgramID, "u_Camera._FOV"), cam.GetFOV());
-        _SceneCameraModified = false;
       }
 
       if ( _SceneLightsModified )
@@ -527,8 +532,6 @@ int Test3::UpdateUniforms()
 
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbLights"), nbLights);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_ShowLights"), (int)_Settings._ShowLights);
-
-        _SceneLightsModified = false;
       }
 
       if ( _SceneMaterialsModified )
@@ -538,8 +541,6 @@ int Test3::UpdateUniforms()
         glBindTexture(GL_TEXTURE_2D, _MaterialsTextureID);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, (sizeof(Material) / sizeof(Vec4)) * _Scene -> GetMaterials().size(), 1, 0, GL_RGBA, GL_FLOAT, &_Scene -> GetMaterials()[0]);
         glBindTexture(GL_TEXTURE_2D, 0);
-
-        _SceneMaterialsModified = false;
       }
 
       if ( _SceneInstancesModified )
@@ -619,8 +620,6 @@ int Test3::UpdateUniforms()
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbBoxes"), nbBoxes);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbTriangles"), _NbTriangles);
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbMeshInstances"), _NbMeshInstances);
-
-        _SceneInstancesModified = false;
       }
     }
     _RTTShader -> StopUsing();
@@ -632,7 +631,7 @@ int Test3::UpdateUniforms()
   {
     _RTSShader -> Use();
     GLuint RTSProgramID = _RTSShader -> GetShaderProgramID();
-    if ( _Dirty && !_Settings._AutoScale )
+    if ( Dirty() && !_Settings._AutoScale )
       glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), (int)TexType::RenderTargetLowRes);
     else
       glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), (int)TexType::RenderTarget1);
@@ -667,6 +666,11 @@ int Test3::ResizeTextures()
   glBindTexture(GL_TEXTURE_2D, _RenderTextureLowResID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, LowResRenderWidth(), LowResRenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
   glBindTexture(GL_TEXTURE_2D, 0);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
+  glClear(GL_COLOR_BUFFER_BIT);
+  glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferLowResID);
+  glClear(GL_COLOR_BUFFER_BIT);
 
   return 0;
 }
@@ -807,6 +811,17 @@ int Test3::DrawUI()
         _RenderSettingsModified = true;
       }
 
+      if ( _TiledRendering )
+      {
+        int tileSize = _Settings._TileResolution.x;
+        if ( ImGui::SliderInt("Tile size", &tileSize, 64, 1024) )
+        {
+          _Settings._TileResolution = Vec2i(tileSize);
+          ResizeTextures();
+          _RenderSettingsModified = true;
+        }
+      }
+
       if ( ImGui::Checkbox( "FXAA", &_Settings._FXAA ) )
         _RenderSettingsModified = true;
 
@@ -861,8 +876,8 @@ int Test3::DrawUI()
         }
       }
 
-      static const char * DEBUG_MODES[] = { "Off", "Albedo", "Metalness", "Roughness", "Normals", "UV" };
-      if ( ImGui::Combo( "Debug view", &_DebugMode, DEBUG_MODES, 6 ) )
+      static const char * DEBUG_MODES[] = { "Off", "Albedo", "Metalness", "Roughness", "Normals", "UV", "Tiles"};
+      if ( ImGui::Combo( "Debug view", &_DebugMode, DEBUG_MODES, 7 ) )
         _RenderSettingsModified = true;
     }
 
@@ -1668,6 +1683,11 @@ int Test3::UpdateScene()
     }
   }
 
+  if ( Dirty() )
+    ResetTiles();
+  else
+    NextTile();
+
   return 0;
 }
 
@@ -1719,7 +1739,7 @@ void Test3::RenderToTexture()
   glActiveTexture(TEX_UNIT(TexType::BLASPackedUVs));
   glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedUVsTextureID);
 
-  if ( _Dirty && !_Settings._AutoScale )
+  if ( Dirty() && !_Settings._AutoScale )
   {
     glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferLowResID);
     glViewport(0, 0, LowResRenderWidth(), LowResRenderHeight());
@@ -1737,16 +1757,15 @@ void Test3::RenderToTexture()
 }
 
 // ----------------------------------------------------------------------------
-// RenderToSceen
+// RenderToScreen
 // ----------------------------------------------------------------------------
-void Test3::RenderToSceen()
+void Test3::RenderToScreen()
 {
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  if ( _Dirty && !_Settings._AutoScale )
+  if ( Dirty() && !_Settings._AutoScale )
   {
     glActiveTexture(TEX_UNIT(TexType::RenderTargetLowRes));
     glBindTexture(GL_TEXTURE_2D, _RenderTextureLowResID);
-    _Dirty = false;
     _AccumulatedFrames = 0;
 
     glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
@@ -1761,7 +1780,6 @@ void Test3::RenderToSceen()
     else
       glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
   }
-  
 
   _Quad -> Render(*_RTSShader);
 }
@@ -1924,7 +1942,7 @@ int Test3::Run()
       RenderToTexture();
 
       // Render to screen
-      RenderToSceen();
+      RenderToScreen();
 
       // Screenshot
       if ( g_RenderToFile )
@@ -1932,6 +1950,8 @@ int Test3::Run()
         RenderToFile(g_FilePath);
         g_RenderToFile = false;
       }
+
+      ClearState();
 
       // UI
       DrawUI();

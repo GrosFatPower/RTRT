@@ -673,6 +673,19 @@ void main()
   centeredUV.x *= scale;
   centeredUV.y *= ( u_Resolution.y / u_Resolution.x ) * scale;
 
+ if ( 6 == u_DebugMode )
+  {
+    if( 1 == u_TiledRendering )
+    {
+      if ( ( fragUV.x < 0.01f )         || ( fragUV.y < 0.01f )
+        || ( fragUV.x > ( 1.- 0.01f ) ) || ( fragUV.y > ( 1.- 0.01f ) ) )
+      {
+        fragColor = vec4(1.f, 0.f, 0.f, 1.f);
+        return;
+      }
+    }
+  }
+
   Ray ray;
   ray._Orig = u_Camera._Pos;
   ray._Dir = normalize(u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward);
@@ -705,7 +718,7 @@ void main()
 
     Ray scattered;
     vec3 attenuation;
-    if ( 0 == u_DebugMode )
+    if ( ( 0 == u_DebugMode ) || ( 6 == u_DebugMode ) )
     {
       pixelColor += DirectIllumination( ray, closestHit, scattered, attenuation ) * multiplier;
       ray = scattered;
@@ -713,7 +726,7 @@ void main()
     }
     else
     {
-      pixelColor += DebugColor( ray, closestHit, scattered, attenuation ) * multiplier;
+      pixelColor += DebugColor( ray, closestHit, scattered, attenuation );
       break;
     }
   }

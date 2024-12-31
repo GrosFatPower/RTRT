@@ -89,9 +89,14 @@ private:
   Vec2i NbTiles()           const { return Vec2i(std::ceil(((float)RenderWidth())/_Settings._TileResolution.x), std::ceil(((float)RenderHeight())/_Settings._TileResolution.y)); }
   Vec2  TileOffset()        const { return Vec2(_CurTile.x * InvNbTiles().x, _CurTile.y * InvNbTiles().y); }
   Vec2  InvNbTiles()        const { return Vec2(((float)_Settings._TileResolution.x)/RenderWidth(), ((float)_Settings._TileResolution.y)/RenderHeight()); }
+  void  NextTile();
+  void  ResetTiles();
+
+  bool Dirty()              const { return (_SceneCameraModified || _SceneLightsModified || _SceneMaterialsModified || _SceneInstancesModified || _RenderSettingsModified); }
+  void ClearState()               { _SceneCameraModified = _SceneLightsModified = _SceneMaterialsModified = _SceneInstancesModified = _RenderSettingsModified = false; }
 
   void RenderToTexture();
-  void RenderToSceen();
+  void RenderToScreen();
   bool RenderToFile( const std::filesystem::path & iFilepath );
 
   static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
@@ -174,15 +179,15 @@ private:
   bool                      _ReloadBackground = true;
   int                       _SkyboxID    = -1;
 
+  bool                      _SceneCameraModified    = true;
+  bool                      _SceneLightsModified    = true;
+  bool                      _SceneMaterialsModified = true;
+  bool                      _SceneInstancesModified = true;
+  bool                      _RenderSettingsModified = true;
+
   RenderSettings  _Settings;
   bool            _TiledRendering         = false;
   bool            _AccumulateFrames       = true;
-  bool            _SceneCameraModified    = false;
-  bool            _SceneLightsModified    = false;
-  bool            _SceneMaterialsModified = false;
-  bool            _SceneInstancesModified = false;
-  bool            _RenderSettingsModified = false;
-  bool            _Dirty                  = true;
 
   Vec2i           _CurTile;
   Vec2i           _NbTiles;
