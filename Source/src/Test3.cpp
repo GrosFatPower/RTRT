@@ -350,7 +350,10 @@ int Test3::InitializeFrameBuffers()
   glGenTextures(1, &_RenderTexture1ID);
   glActiveTexture(TEX_UNIT(TexType::RenderTarget1));
   glBindTexture(GL_TEXTURE_2D, _RenderTexture1ID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
+  if ( _TiledRendering )
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._TileResolution.x, _Settings._TileResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
+  else
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -427,6 +430,26 @@ int Test3::RecompileShaders()
 // ----------------------------------------------------------------------------
 int Test3::UpdateUniforms()
 {
+  if ( _RenderSettingsModified || _SceneCameraModified || _SceneLightsModified || _SceneInstancesModified || _SceneMaterialsModified )
+  {
+    _Dirty = true;
+    _CurTile = Vec2i(-1, NbTiles().y -1);
+  }
+  else
+  {
+    _CurTile.x++;
+    if ( _CurTile.x >= NbTiles().x )
+    {
+      _CurTile.x = 0;
+      _CurTile.y--;
+      if ( _CurTile.y < 0 )
+      {
+        _CurTile.x = 0;
+        _CurTile.y = NbTiles().y - 1;
+      }
+    }
+  }
+
   if ( _RTTShader )
   {
     _RTTShader -> Use();
@@ -437,9 +460,6 @@ int Test3::UpdateUniforms()
     glUniform2f(glGetUniformLocation(RTTProgramID, "u_InvNbTiles"), InvNbTiles().x, InvNbTiles().y);
     glUniform1f(glGetUniformLocation(RTTProgramID, "u_Time"), _CPULoopTime);
     glUniform1i(glGetUniformLocation(RTTProgramID, "u_FrameNum"), _FrameNum);
-
-    if ( _RenderSettingsModified || _SceneCameraModified || _SceneLightsModified || _SceneInstancesModified || _SceneMaterialsModified )
-      _Dirty = true;
 
     if ( !_Dirty && _AccumulateFrames )
     {
@@ -636,7 +656,10 @@ int Test3::UpdateUniforms()
 int Test3::ResizeTextures()
 {
   glBindTexture(GL_TEXTURE_2D, _RenderTexture1ID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
+  if ( _TiledRendering )
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._TileResolution.x, _Settings._TileResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
+  else
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
   glBindTexture(GL_TEXTURE_2D, 0);
   glBindTexture(GL_TEXTURE_2D, _RenderTexture2ID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
@@ -741,18 +764,18 @@ int Test3::DrawUI()
       g_RenderToFile = true;
     }
 
-    if ( ImGui::CollapsingHeader("Render settings") )
+    if ( ImGui::CollapsingHeader( "Render settings" ) )
     {
-      if ( ImGui::SliderInt("Bounces", &_Settings._Bounces, 1, 10) )
+      if ( ImGui::SliderInt( "Bounces", &_Settings._Bounces, 1, 10 ) )
         _RenderSettingsModified = true;
 
-      if ( ImGui::SliderInt("Render scale", &_Settings._RenderScale, 25, 200) )
+      if ( ImGui::SliderInt( "Render scale", &_Settings._RenderScale, 25, 200 ) )
       {
         ResizeTextures();
         _RenderSettingsModified = true;
       }
       ImGui::SameLine();
-      if ( ImGui::Checkbox("Auto", &_Settings._AutoScale) )
+      if ( ImGui::Checkbox( "Auto", &_Settings._AutoScale ) )
       {
         _RenderSettingsModified = true;
       }
@@ -760,7 +783,7 @@ int Test3::DrawUI()
       if ( _Settings._AutoScale )
       {
         int targetFrameRate = _Settings._TargetFPS;
-        if ( ImGui::SliderInt("Target FPS", &targetFrameRate, 1, 200) )
+        if ( ImGui::SliderInt( "Target FPS", &targetFrameRate, 1, 200 ) )
         {
           _Settings._TargetFPS = (float)targetFrameRate;
           _RenderSettingsModified = true;
@@ -769,7 +792,7 @@ int Test3::DrawUI()
         this -> AdjustRenderScale();
       }
 
-      if ( ImGui::SliderFloat("Interaction Ratio", &_Settings._LowResRatio, 0.05f, 1.f) )
+      if ( ImGui::SliderFloat( "Interaction Ratio", &_Settings._LowResRatio, 0.05f, 1.f ) )
       {
         ResizeTextures();
         _RenderSettingsModified = true;
@@ -777,6 +800,12 @@ int Test3::DrawUI()
 
       if ( ImGui::Checkbox( "Accumulate", &_AccumulateFrames ) )
         _RenderSettingsModified = true;
+
+      if ( ImGui::Checkbox( "Tiled rendering", &_TiledRendering ) )
+      {
+        ResizeTextures();
+        _RenderSettingsModified = true;
+      }
 
       if ( ImGui::Checkbox( "FXAA", &_Settings._FXAA ) )
         _RenderSettingsModified = true;
@@ -1267,6 +1296,9 @@ void Test3::UpdateRenderResolution()
 {
   _Settings._RenderResolution.x = int(_Settings._WindowResolution.x * RenderScale());
   _Settings._RenderResolution.y = int(_Settings._WindowResolution.y * RenderScale());
+
+  _CurTile = Vec2i(-1, NbTiles().y - 1);
+  _NbTiles = Vec2i(0);
 }
 
 // ----------------------------------------------------------------------------
@@ -1695,7 +1727,10 @@ void Test3::RenderToTexture()
   else
   {
     glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
-    glViewport(0, 0, RenderWidth(), RenderHeight());
+    if ( _TiledRendering )
+      glViewport(0, 0, _Settings._TileResolution.x, _Settings._TileResolution.y);
+    else
+      glViewport(0, 0, RenderWidth(), RenderHeight());
   }
   
   _Quad -> Render(*_RTTShader);
@@ -1713,14 +1748,20 @@ void Test3::RenderToSceen()
     glBindTexture(GL_TEXTURE_2D, _RenderTextureLowResID);
     _Dirty = false;
     _AccumulatedFrames = 0;
+
+    glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
   }
   else
   {
     glActiveTexture(TEX_UNIT(TexType::RenderTarget1));
     glBindTexture(GL_TEXTURE_2D, _RenderTexture1ID);
+
+    if ( _TiledRendering )
+      glViewport(_Settings._TileResolution.x * _CurTile.x, _Settings._TileResolution.y * _CurTile.y, _Settings._TileResolution.x, _Settings._TileResolution.y);
+    else
+      glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
   }
   
-  glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
 
   _Quad -> Render(*_RTSShader);
 }
