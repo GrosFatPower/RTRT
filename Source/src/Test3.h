@@ -20,9 +20,9 @@ class Scene;
 
 enum class TexType
 {
-  Render1 = 0,
-  Render2,
-  RenderLowRes,
+  RenderTarget1 = 0,
+  RenderTarget2,
+  RenderTargetLowRes,
   Skybox,
   Vertices,
   Normals,
