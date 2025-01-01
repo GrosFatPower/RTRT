@@ -21,8 +21,8 @@ class Scene;
 
 enum class TexType
 {
-  RenderTarget1 = 0,
-  RenderTarget2,
+  RenderTarget = 0,
+  RenderTargetTile,
   RenderTargetLowRes,
   Skybox,
   Vertices,
@@ -130,8 +130,8 @@ private:
   GLuint          _BLASPackedUVsBufferID           = 0;
 
   // Texture IDs
-  GLuint          _RenderTexture1ID                = 0;
-  GLuint          _RenderTexture2ID                = 0;
+  GLuint          _RenderTextureID                 = 0;
+  GLuint          _RenderTextureTileID             = 0;
   GLuint          _RenderTextureLowResID           = 0;
   GLuint          _SkyboxTextureID                 = 0;
   GLuint          _VtxTextureID                    = 0;
