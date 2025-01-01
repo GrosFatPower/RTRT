@@ -741,9 +741,20 @@ void main()
     pixelColor = GammaCorrection( pixelColor );
   }
 
+  if ( 1 == u_Accumulate )
+  {
+    if ( 1 == u_TiledRendering )
+    {
+      if ( u_NbCompleteFrames > 0 )
+      {
+        float multiplier = 1. / ( u_NbCompleteFrames + 1 );
+        pixelColor.xyz = ( texture(u_ScreenTexture, coordUV).xyz * u_NbCompleteFrames + pixelColor.xyz ) * multiplier;
+      }
+    }
+    else
+      pixelColor += texture(u_ScreenTexture, coordUV).xyz;
+  }
+
   //pixelColor = clamp(pixelColor, 0.f, 1.f);
   fragColor = vec4(pixelColor, 1.f);
-
-  if ( 1 == u_Accumulate )
-    fragColor += texture(u_ScreenTexture, coordUV);
 }

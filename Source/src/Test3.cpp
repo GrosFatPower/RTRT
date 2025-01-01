@@ -436,6 +436,7 @@ int Test3::RecompileShaders()
   if ( !_RenderToTextureShader )
     return 1;
 
+  fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Postpro.glsl");
   _RenderToScreenShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !_RenderToScreenShader )
     return 1;
@@ -654,15 +655,9 @@ int Test3::UpdateUniforms()
     _RenderToTextureShader -> Use();
     GLuint RTSProgramID = _RenderToTextureShader -> GetShaderProgramID();
     if ( LowResPass() )
-      glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), (int)TexType::RenderTargetLowRes);
+      glUniform1i(glGetUniformLocation(RTSProgramID, "u_Texture"), (int)TexType::RenderTargetLowRes);
     else
-      glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), (int)TexType::RenderTargetTile);
-    glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedFrames"), _AccumulatedFrames);
-    glUniform2f(glGetUniformLocation(RTSProgramID, "u_RenderRes" ), RenderWidth(), RenderHeight());
-    glUniform1f(glGetUniformLocation(RTSProgramID, "u_Gamma"), _Settings._Gamma);
-    glUniform1f(glGetUniformLocation(RTSProgramID, "u_Exposure"), _Settings._Exposure);
-    glUniform1i(glGetUniformLocation(RTSProgramID, "u_ToneMapping"), 0);
-    glUniform1i(glGetUniformLocation(RTSProgramID, "u_FXAA"), 0);
+      glUniform1i(glGetUniformLocation(RTSProgramID, "u_Texture"), (int)TexType::RenderTargetTile);
     _RenderToTextureShader -> StopUsing();
   }
   else
@@ -673,7 +668,7 @@ int Test3::UpdateUniforms()
     _RenderToScreenShader -> Use();
     GLuint RTSProgramID = _RenderToScreenShader -> GetShaderProgramID();
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), (int)TexType::RenderTarget);
-    glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedFrames"), _AccumulatedFrames);
+    glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedFrames"), (_TiledRendering) ? (0) :(_AccumulatedFrames));
     glUniform2f(glGetUniformLocation(RTSProgramID, "u_RenderRes" ), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
     glUniform1f(glGetUniformLocation(RTSProgramID, "u_Gamma"), _Settings._Gamma);
     glUniform1f(glGetUniformLocation(RTSProgramID, "u_Exposure"), _Settings._Exposure);
@@ -753,7 +748,7 @@ int Test3::DrawUI()
 
     ImGui::Text( "Window width %d: height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y );
 
-    ImGui::Text( "Accumulated frames : %d", _AccumulatedFrames );
+    ImGui::Text( "Accumulated frames : %d", (_TiledRendering) ? (_NbCompleteFrames) : (_AccumulatedFrames) );
 
     ImGui::Text("Render time %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
 
