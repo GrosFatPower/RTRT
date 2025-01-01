@@ -207,15 +207,15 @@ Test3::~Test3()
   if (_Quad)
     delete _Quad;
   _Quad = nullptr;
-  if (_RTTShader)
-    delete _RTTShader;
-  _RTTShader = nullptr;
-  if (_RTileToTexShader)
-    delete _RTileToTexShader;
-  _RTileToTexShader = nullptr;
-  if (_RTSShader)
-    delete _RTSShader;
-  _RTSShader = nullptr;
+  if (_RayTraceShader)
+    delete _RayTraceShader;
+  _RayTraceShader = nullptr;
+  if (_RenderToTextureShader)
+    delete _RenderToTextureShader;
+  _RenderToTextureShader = nullptr;
+  if (_RenderToScreenShader)
+    delete _RenderToScreenShader;
+  _RenderToScreenShader = nullptr;
 
   for ( auto fileName : _SceneNames )
     delete[] fileName;
@@ -414,30 +414,30 @@ int Test3::InitializeFrameBuffers()
 // ----------------------------------------------------------------------------
 int Test3::RecompileShaders()
 {
-  if (_RTTShader)
-    delete _RTTShader;
-  _RTTShader = nullptr;
-  if (_RTileToTexShader)
-    delete _RTileToTexShader;
-  _RTileToTexShader = nullptr;
-  if (_RTSShader)
-    delete _RTSShader;
-  _RTSShader = nullptr;
+  if (_RayTraceShader)
+    delete _RayTraceShader;
+  _RayTraceShader = nullptr;
+  if (_RenderToTextureShader)
+    delete _RenderToTextureShader;
+  _RenderToTextureShader = nullptr;
+  if (_RenderToScreenShader)
+    delete _RenderToScreenShader;
+  _RenderToScreenShader = nullptr;
 
   ShaderSource vertexShaderSrc = Shader::LoadShader("..\\..\\shaders\\vertex_Default.glsl");
   ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_RTRenderer.glsl");
 
-  _RTTShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
-  if ( !_RTTShader )
+  _RayTraceShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
+  if ( !_RayTraceShader )
     return 1;
 
   fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Output.glsl");
-  _RTileToTexShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
-  if ( !_RTileToTexShader )
+  _RenderToTextureShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
+  if ( !_RenderToTextureShader )
     return 1;
 
-  _RTSShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
-  if ( !_RTSShader )
+  _RenderToScreenShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
+  if ( !_RenderToScreenShader )
     return 1;
 
   return 0;
@@ -457,6 +457,7 @@ void Test3::NextTile()
     {
       _CurTile.x = 0;
       _CurTile.y = NbTiles().y - 1;
+      _NbCompleteFrames++;
     }
   }
 }
@@ -468,6 +469,7 @@ void Test3::ResetTiles()
 {
   _CurTile.x = -1;
   _CurTile.y = NbTiles().y - 1;
+  _NbCompleteFrames = 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -475,14 +477,15 @@ void Test3::ResetTiles()
 // ----------------------------------------------------------------------------
 int Test3::UpdateUniforms()
 {
-  if ( _RTTShader )
+  if ( _RayTraceShader )
   {
-    _RTTShader -> Use();
-    GLuint RTTProgramID = _RTTShader -> GetShaderProgramID();
+    _RayTraceShader -> Use();
+    GLuint RTTProgramID = _RayTraceShader -> GetShaderProgramID();
     glUniform2f(glGetUniformLocation(RTTProgramID, "u_Resolution"), RenderWidth(), RenderHeight());
     glUniform1i(glGetUniformLocation(RTTProgramID, "u_TiledRendering"), ( _TiledRendering && !Dirty() ) ? ( 1 ) : ( 0 ));
     glUniform2f(glGetUniformLocation(RTTProgramID, "u_TileOffset"), TileOffset().x, TileOffset().y);
     glUniform2f(glGetUniformLocation(RTTProgramID, "u_InvNbTiles"), InvNbTiles().x, InvNbTiles().y);
+    glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbCompleteFrames"), (int)_NbCompleteFrames);
     glUniform1f(glGetUniformLocation(RTTProgramID, "u_Time"), _CPULoopTime);
     glUniform1i(glGetUniformLocation(RTTProgramID, "u_FrameNum"), _FrameNum);
 
@@ -641,16 +644,16 @@ int Test3::UpdateUniforms()
         glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbMeshInstances"), _NbMeshInstances);
       }
     }
-    _RTTShader -> StopUsing();
+    _RayTraceShader -> StopUsing();
   }
   else
     return 1;
 
-  if ( _RTileToTexShader )
+  if ( _RenderToTextureShader )
   {
-    _RTileToTexShader -> Use();
-    GLuint RTSProgramID = _RTileToTexShader -> GetShaderProgramID();
-    if ( Dirty() && !_Settings._AutoScale )
+    _RenderToTextureShader -> Use();
+    GLuint RTSProgramID = _RenderToTextureShader -> GetShaderProgramID();
+    if ( LowResPass() )
       glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), (int)TexType::RenderTargetLowRes);
     else
       glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), (int)TexType::RenderTargetTile);
@@ -660,15 +663,15 @@ int Test3::UpdateUniforms()
     glUniform1f(glGetUniformLocation(RTSProgramID, "u_Exposure"), _Settings._Exposure);
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_ToneMapping"), 0);
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_FXAA"), 0);
-    _RTileToTexShader -> StopUsing();
+    _RenderToTextureShader -> StopUsing();
   }
   else
     return 1;
 
-  if ( _RTSShader )
+  if ( _RenderToScreenShader )
   {
-    _RTSShader -> Use();
-    GLuint RTSProgramID = _RTSShader -> GetShaderProgramID();
+    _RenderToScreenShader -> Use();
+    GLuint RTSProgramID = _RenderToScreenShader -> GetShaderProgramID();
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), (int)TexType::RenderTarget);
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedFrames"), _AccumulatedFrames);
     glUniform2f(glGetUniformLocation(RTSProgramID, "u_RenderRes" ), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
@@ -676,7 +679,7 @@ int Test3::UpdateUniforms()
     glUniform1f(glGetUniformLocation(RTSProgramID, "u_Exposure"), _Settings._Exposure);
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_ToneMapping"), 0);
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_FXAA"), (_Settings._FXAA ?  1 : 0 ));
-    _RTSShader -> StopUsing();
+    _RenderToScreenShader -> StopUsing();
   }
   else
     return 1;
@@ -1777,36 +1780,36 @@ void Test3::RenderToTexture()
   glActiveTexture(TEX_UNIT(TexType::BLASPackedUVs));
   glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedUVsTextureID);
 
-  if ( Dirty() && !_Settings._AutoScale )
+  if ( LowResPass() )
   {
     glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferLowResID);
     glViewport(0, 0, LowResRenderWidth(), LowResRenderHeight());
 
-    _Quad -> Render(*_RTTShader);
+    _Quad -> Render(*_RayTraceShader);
 
     glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
     glViewport(0, 0, RenderWidth(), RenderHeight());
 
-    _Quad -> Render(*_RTileToTexShader);
+    _Quad -> Render(*_RenderToTextureShader);
   }
   else if ( _TiledRendering )
   {
     glBindFramebuffer(GL_FRAMEBUFFER, _TileFrameBufferID);
     glViewport(0, 0, _Settings._TileResolution.x, _Settings._TileResolution.y);
 
-    _Quad -> Render(*_RTTShader);
+    _Quad -> Render(*_RayTraceShader);
 
     glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
     glViewport(_Settings._TileResolution.x * _CurTile.x, _Settings._TileResolution.y * _CurTile.y, _Settings._TileResolution.x, _Settings._TileResolution.y);
 
-    _Quad -> Render(*_RTileToTexShader);
+    _Quad -> Render(*_RenderToTextureShader);
   }
   else
   {
     glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
     glViewport(0, 0, RenderWidth(), RenderHeight());
 
-    _Quad -> Render(*_RTTShader);
+    _Quad -> Render(*_RayTraceShader);
   }
 }
 
@@ -1822,7 +1825,7 @@ void Test3::RenderToScreen()
 
   glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
 
-  _Quad -> Render(*_RTSShader);
+  _Quad -> Render(*_RenderToScreenShader);
 }
 
 // ----------------------------------------------------------------------------
@@ -1862,7 +1865,7 @@ bool Test3::RenderToFile( const std::filesystem::path & iFilepath )
     glActiveTexture( TEX_UNIT(TexType::RenderTarget) );
     glBindTexture( GL_TEXTURE_2D, _RenderTextureID );
 
-    _Quad -> Render( *_RTSShader );
+    _Quad -> Render( *_RenderToScreenShader );
 
     glBindTexture( GL_TEXTURE_2D, 0 );
     glBindFramebuffer( GL_FRAMEBUFFER, 0 );
@@ -1932,7 +1935,7 @@ int Test3::Run()
     }
 
     // Shader compilation
-    if ( ( 0 != RecompileShaders() ) || !_RTTShader || !_RTSShader )
+    if ( ( 0 != RecompileShaders() ) || !_RayTraceShader || !_RenderToTextureShader || !_RenderToScreenShader )
     {
       std::cout << "Shader compilation failed!" << std::endl;
       ret = 1;

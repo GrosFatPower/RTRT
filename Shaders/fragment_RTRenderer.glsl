@@ -35,6 +35,7 @@ uniform float          u_Time;
 uniform int            u_FrameNum;
 uniform int            u_Accumulate;
 uniform int            u_TiledRendering;
+uniform int            u_NbCompleteFrames;
 uniform int            u_Bounces;
 uniform int            u_ToneMapping;
 uniform vec3           u_BackgroundColor;
@@ -680,7 +681,10 @@ void main()
       if ( ( fragUV.x < 0.01f )         || ( fragUV.y < 0.01f )
         || ( fragUV.x > ( 1.- 0.01f ) ) || ( fragUV.y > ( 1.- 0.01f ) ) )
       {
-        fragColor = vec4(1.f, 0.f, 0.f, 1.f);
+        fragColor.r = (u_NbCompleteFrames % 3) / 2.f;
+        fragColor.g = (u_NbCompleteFrames % 4) / 3.f;
+        fragColor.b = (u_NbCompleteFrames % 5) / 4.f;
+        fragColor.a = 1.f;
         return;
       }
     }
