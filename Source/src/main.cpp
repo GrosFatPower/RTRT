@@ -2,6 +2,7 @@
 #include "Test2.h"
 #include "Test3.h"
 #include "Test4.h"
+#include "Test5.h"
 
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
@@ -59,7 +60,8 @@ int TestSelectionPanel( GLFWwindow * iMainWindow )
   const char * TestNames[] = { RTRT::Test1::GetTestHeader(),
                                RTRT::Test2::GetTestHeader(),
                                RTRT::Test3::GetTestHeader(),
-                               RTRT::Test4::GetTestHeader() };
+                               RTRT::Test4::GetTestHeader(),
+                               RTRT::Test5::GetTestHeader() };
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   while (!glfwWindowShouldClose(iMainWindow) && !selectedTest)
@@ -75,16 +77,9 @@ int TestSelectionPanel( GLFWwindow * iMainWindow )
       ImGui::Begin("Test selection");
 
       int comboSelection = 0;
-      if ( ImGui::Combo("Test selection", &comboSelection, TestNames, 4) )
+      if ( ImGui::Combo("Test selection", &comboSelection, TestNames, 5) )
       {
-        if ( 0 == comboSelection )
-          selectedTest = 1;
-        else if ( 1 == comboSelection )
-          selectedTest = 2;
-        else if ( 2 == comboSelection )
-          selectedTest = 3;
-        else if ( 3 == comboSelection )
-          selectedTest = 4;
+        selectedTest = comboSelection + 1;
       }
 
       ImGui::End();
@@ -167,6 +162,12 @@ int main(int, char**)
       {
         RTRT::Test4 test4(mainWindow, g_ScreenWidth, g_ScreenHeight);
         failure = test4.Run();
+      }
+
+      else if ( 5 == selectedTest )
+      {
+        RTRT::Test5 test5(mainWindow, g_ScreenWidth, g_ScreenHeight);
+        failure = test5.Run();
       }
 
       else
