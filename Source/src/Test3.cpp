@@ -274,6 +274,8 @@ void Test3::ClearSceneData()
   _NbTriangles       = 0;
   _NbMeshInstances   = 0;
 
+  _TiledRendering    = false;
+
   if ( _Scene )
     delete _Scene;
   _Scene = nullptr;
@@ -374,7 +376,10 @@ int Test3::InitializeFrameBuffers()
   glGenTextures(1, &_RenderTextureTileID);
   glActiveTexture(TEX_UNIT(TexType::RenderTargetTile));
   glBindTexture(GL_TEXTURE_2D, _RenderTextureTileID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._TileResolution.x, _Settings._TileResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
+  if ( ( _Settings._TileResolution.x > 0 ) && ( _Settings._TileResolution.y > 0 ) )
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._TileResolution.x, _Settings._TileResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
+  else
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 64, 64, 0, GL_RGBA, GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -839,6 +844,9 @@ int Test3::DrawUI()
 
       if ( ImGui::Checkbox( "Tiled rendering", &_TiledRendering ) )
       {
+        if ( _TiledRendering && ( ( _Settings._TileResolution.x <= 0 ) || ( _Settings._TileResolution.y <= 0 ) ) )
+          _Settings._TileResolution.x = _Settings._TileResolution.y = 256;
+
         ResizeTextures();
         _RenderSettingsModified = true;
       }
@@ -1397,6 +1405,10 @@ int Test3::InitializeScene()
     std::cout << "Failed to load scene : " << _SceneFiles[_CurSceneId] << std::endl;
     return 1;
   }
+
+  // Tiles
+  if ( ( _Settings._TileResolution.x > 0 ) && ( _Settings._TileResolution.y > 0 ) )
+    _TiledRendering = true;
 
   // Scene should contain at least one light
   Light * firstLight = _Scene -> GetLight(0);

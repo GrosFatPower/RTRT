@@ -1418,6 +1418,7 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath
 
   bool hasRenderResolution = false;
   bool hasWindowResolution = false;
+  Vec2i tileResolution = { -1, -1 };
   std::string envMapFile = "none";
 
   State curState = State::ExpectOpenBracket;
@@ -1561,6 +1562,20 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath
     //  else
     //    parsingError++;
     //}
+    else if ( IsEqual("tilewidth", tokens[0]) )
+    {
+      if ( 2 == nbTokens )
+        tileResolution.x =  std::stoi(tokens[1]);
+      else
+        parsingError++;
+    }
+    else if ( IsEqual("tileheight", tokens[0]) )
+    {
+      if ( 2 == nbTokens )
+        tileResolution.y =  std::stoi(tokens[1]);
+      else
+        parsingError++;
+    }
   }
   if ( State::ExpectNewBlock != curState )
     parsingError++;
@@ -1573,6 +1588,15 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath
       oSettings._RenderResolution = oSettings._WindowResolution;
     else if ( !hasRenderResolution && !hasWindowResolution )
       oSettings._RenderResolution = oSettings._WindowResolution = { 1920, 1080 };
+
+    if ( ( tileResolution.x > 0 ) || ( tileResolution.y > 0 ) )
+    {
+      if ( tileResolution.y <= 0 )
+        tileResolution.y = tileResolution.x;
+      else if ( tileResolution.x <= 0 )
+        tileResolution.x = tileResolution.y;
+      oSettings._TileResolution = tileResolution;
+    }
 
     if ( envMapFile != "none" )
       ioScene.LoadEnvMap(iPath + envMapFile);
