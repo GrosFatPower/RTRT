@@ -1423,8 +1423,8 @@ int Test4::UpdateImage()
 // ----------------------------------------------------------------------------
 int Test4::InitializeScene()
 {
-  Scene * newScene = nullptr;
-  if ( !Loader::LoadScene(_SceneFiles[_CurSceneId], newScene, _Settings) || !newScene )
+  Scene * newScene = new Scene;
+  if ( !newScene || !Loader::LoadScene(_SceneFiles[_CurSceneId], *newScene, _Settings) )
   {
     std::cout << "Failed to load scene : " << _SceneFiles[_CurSceneId] << std::endl;
     return 1;

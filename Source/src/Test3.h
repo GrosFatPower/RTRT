@@ -3,6 +3,7 @@
 
 #include "BaseTest.h"
 #include "RenderSettings.h"
+#include "Scene.h"
 #include <vector>
 #include <string>
 #include <deque>
@@ -172,7 +173,7 @@ private:
   bool                       _KeyEsc                          = false;
   bool                       _KeyR                            = false;
 
-  Scene                    * _Scene                           = nullptr;
+  Scene                      _Scene;
   std::vector<std::string>   _SceneFiles;
   std::vector<const char*>   _SceneNames;
   std::vector<std::string>   _BackgroundFiles;

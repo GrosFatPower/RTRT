@@ -595,10 +595,8 @@ bool LoadInstances( Scene & ioScene, tinygltf::Model & iGltfModel, const Mat4x4 
 // ----------------------------------------------------------------------------
 // LoadScene
 // ----------------------------------------------------------------------------
-bool Loader::LoadScene(const std::string & iFilename, Scene *& oScene, RenderSettings & oRenderSettings)
+bool Loader::LoadScene(const std::string & iFilename, Scene & oScene, RenderSettings & oRenderSettings)
 {
-  oScene = nullptr;
-
   fs::path filepath = iFilename;
 
   if ( ".scene" == filepath.extension() )
@@ -614,10 +612,8 @@ bool Loader::LoadScene(const std::string & iFilename, Scene *& oScene, RenderSet
 // ----------------------------------------------------------------------------
 // LoadFromSceneFile
 // ----------------------------------------------------------------------------
-bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, RenderSettings & oRenderSettings )
+bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene & oScene, RenderSettings & oRenderSettings )
 {
-  oScene = nullptr;
-
   fs::path filepath = iFilename;
   filepath.remove_filename();
   std::string path = filepath.string();
@@ -631,8 +627,6 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
   }
 
   printf("Loading Scene...\n");
-
-  oScene = new Scene;
 
   int parsingError = 0;
   State curState = State::ExpectNewBlock;
@@ -664,7 +658,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
 
       std::string materialName = tokens[1];
 
-      parsingError += Loader::ParseMaterial(file, path, materialName, *oScene);
+      parsingError += Loader::ParseMaterial(file, path, materialName, oScene);
 
       if ( !parsingError )
         curState = State::ExpectNewBlock;
@@ -679,7 +673,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
     {
       std::cout << "New mesh" << std::endl;
 
-      parsingError += Loader::ParseMeshData(file, path, *oScene);
+      parsingError += Loader::ParseMeshData(file, path, oScene);
 
       if ( !parsingError )
         curState = State::ExpectNewBlock;
@@ -694,7 +688,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
     {
       std::cout << "New sphere" << std::endl;
 
-      parsingError += Loader::ParseSphere(file, *oScene);
+      parsingError += Loader::ParseSphere(file, oScene);
 
       if ( !parsingError )
         curState = State::ExpectNewBlock;
@@ -709,7 +703,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
     {
       std::cout << "New box" << std::endl;
 
-      parsingError += Loader::ParseBox(file, *oScene);
+      parsingError += Loader::ParseBox(file, oScene);
 
       if ( !parsingError )
         curState = State::ExpectNewBlock;
@@ -724,7 +718,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
     {
       std::cout << "New plane" << std::endl;
 
-      parsingError += Loader::ParsePlane(file, *oScene);
+      parsingError += Loader::ParsePlane(file, oScene);
 
       if ( !parsingError )
         curState = State::ExpectNewBlock;
@@ -739,7 +733,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
     {
       std::cout << "New light" << std::endl;
 
-      parsingError += Loader::ParseLight(file, *oScene);
+      parsingError += Loader::ParseLight(file, oScene);
 
       if ( !parsingError )
         curState = State::ExpectNewBlock;
@@ -754,7 +748,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
     {
       std::cout << "New camera" << std::endl;
 
-      parsingError += Loader::ParseCamera(file, *oScene);
+      parsingError += Loader::ParseCamera(file, oScene);
 
       if ( !parsingError )
         curState = State::ExpectNewBlock;
@@ -770,7 +764,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
       std::cout << "New renderer" << std::endl;
 
       RenderSettings settings;
-      parsingError += Loader::ParseRenderSettings(file, path, settings, *oScene);
+      parsingError += Loader::ParseRenderSettings(file, path, settings, oScene);
 
       if ( !parsingError )
       {
@@ -803,15 +797,13 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
   if ( parsingError )
   {
     printf("ERROR\n");
-    delete oScene;
-    oScene = nullptr;
+    oScene.Clear();
+    return false;
   }
   else
     printf("DONE\n");
 
-  if ( oScene )
-    return true;
-  return false;
+  return true;
 }
 
 // ----------------------------------------------------------------------------
@@ -819,7 +811,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene *& oScene, R
 // Adapted from accompanying code for Ray Tracing Gems II, Chapter 14: The Reference Path Tracer
 // https://github.com/boksajak/referencePT
 // ----------------------------------------------------------------------------
-bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTransfoMat, Scene *& ioScene, RenderSettings & ioRenderSettings, bool isBinary)
+bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTransfoMat, Scene & ioScene, RenderSettings & ioRenderSettings, bool isBinary)
 {
   bool ret = false;
 
@@ -846,16 +838,13 @@ bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTra
 
     printf("Loading Scene from gltf...\n");
 
-    if ( !ioScene )
-      ioScene = new Scene;
-
-    ret = LoadTextures(*ioScene, gltfModel);
+    ret = LoadTextures(ioScene, gltfModel);
     if ( ret )
-      ret = LoadMaterials(*ioScene, gltfModel);
+      ret = LoadMaterials(ioScene, gltfModel);
     if ( ret )
-      ret = LoadMeshes(*ioScene, gltfModel);
+      ret = LoadMeshes(ioScene, gltfModel);
     if ( ret )
-      ret = LoadInstances(*ioScene, gltfModel, iTransfoMat);
+      ret = LoadInstances(ioScene, gltfModel, iTransfoMat);
 
     if ( !ret )
     {
@@ -2240,7 +2229,7 @@ int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scen
 // ----------------------------------------------------------------------------
 // ParseGLTF
 // ----------------------------------------------------------------------------
-int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene *& ioScene, RenderSettings & ioSettings )
+int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & ioScene, RenderSettings & ioSettings )
 {
   int parsingError = 0;
 

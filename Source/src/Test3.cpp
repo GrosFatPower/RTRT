@@ -1,7 +1,6 @@
 #include "Test3.h"
 #include "QuadMesh.h"
 #include "ShaderProgram.h"
-#include "Scene.h"
 #include "Camera.h"
 #include "Light.h"
 #include "Primitive.h"
@@ -276,9 +275,7 @@ void Test3::ClearSceneData()
 
   _TiledRendering    = false;
 
-  if ( _Scene )
-    delete _Scene;
-  _Scene = nullptr;
+  _Scene.Clear();
 }
 
 // ----------------------------------------------------------------------------
@@ -523,133 +520,131 @@ int Test3::UpdateUniforms()
       _RenderSettingsModified = false;
     }
 
-    if ( _Scene )
+    if ( _SceneCameraModified )
     {
-      if ( _SceneCameraModified )
-      {
-        Camera & cam = _Scene -> GetCamera();
-        glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Up"), cam.GetUp().x, cam.GetUp().y, cam.GetUp().z);
-        glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Right"), cam.GetRight().x, cam.GetRight().y, cam.GetRight().z);
-        glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Forward"), cam.GetForward().x, cam.GetForward().y, cam.GetForward().z);
-        glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Pos"), cam.GetPos().x, cam.GetPos().y, cam.GetPos().z);
-        glUniform1f(glGetUniformLocation(RTTProgramID, "u_Camera._FOV"), cam.GetFOV());
-      }
-
-      if ( _SceneLightsModified )
-      {
-        int nbLights = 0;
-
-        for ( int i = 0; i < _Scene -> GetNbLights(); ++i )
-        {
-          Light * curLight = _Scene -> GetLight(i);
-          if ( !curLight )
-            continue;
-
-          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Pos"     ).c_str()), curLight -> _Pos.x, curLight -> _Pos.y, curLight -> _Pos.z);
-          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Emission").c_str()), curLight -> _Emission.r, curLight -> _Emission.g, curLight -> _Emission.b);
-          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_DirU"    ).c_str()), curLight -> _DirU.x, curLight -> _DirU.y, curLight -> _DirU.z);
-          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_DirV"    ).c_str()), curLight -> _DirV.x, curLight -> _DirV.y, curLight -> _DirV.z);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Radius"  ).c_str()), curLight -> _Radius);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Area"    ).c_str()), curLight -> _Area);
-          glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Type"    ).c_str()), curLight -> _Type);
-
-          nbLights++;
-          if ( nbLights >= 32 )
-            break;
-        }
-
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbLights"), nbLights);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_ShowLights"), (int)_Settings._ShowLights);
-      }
-
-      if ( _SceneMaterialsModified )
-      {
-        const std::vector<Material> & Materials =  _Scene -> GetMaterials();
-
-        glBindTexture(GL_TEXTURE_2D, _MaterialsTextureID);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, (sizeof(Material) / sizeof(Vec4)) * _Scene -> GetMaterials().size(), 1, 0, GL_RGBA, GL_FLOAT, &_Scene -> GetMaterials()[0]);
-        glBindTexture(GL_TEXTURE_2D, 0);
-      }
-
-      if ( _SceneInstancesModified )
-      {
-        //const std::vector<Mesh*>          & Meshes          = _Scene -> GetMeshes();
-        const std::vector<Primitive*>        & Primitives         = _Scene -> GetPrimitives();
-        //const std::vector<MeshInstance>   & MeshInstances   = _Scene -> GetMeshInstances();
-        const std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene -> GetPrimitiveInstances();
-
-        int nbSpheres = 0;
-        int nbPlanes = 0;
-        int nbBoxes = 0;
-        for ( auto & prim : PrimitiveInstances )
-        {
-          if ( ( prim._PrimID < 0 ) || ( prim._PrimID >= Primitives.size() ) )
-            continue;
-
-          Primitive * curPrimitive = Primitives[prim._PrimID];
-          if ( !curPrimitive )
-            continue;
-
-          if ( curPrimitive -> _Type == PrimitiveType::Sphere )
-          {
-            Sphere * curSphere = (Sphere *) curPrimitive;
-            Vec4 CenterRad = prim._Transform * Vec4(0.f, 0.f, 0.f, 1.f);
-            CenterRad.w = curSphere -> _Radius;
-
-            glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Spheres",nbSpheres,"_MaterialID").c_str()), prim._MaterialID);
-            glUniform4f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Spheres",nbSpheres,"_CenterRad").c_str()), CenterRad.x, CenterRad.y, CenterRad.z, CenterRad.w);
-            nbSpheres++;
-          }
-          else if ( curPrimitive -> _Type == PrimitiveType::Plane )
-          {
-            Plane * curPlane = (Plane *) curPrimitive;
-            Vec4 orig = prim._Transform * Vec4(curPlane -> _Origin.x, curPlane -> _Origin.y, curPlane -> _Origin.z, 1.f);
-            Vec4 normal = glm::transpose(glm::inverse(prim._Transform)) * Vec4(curPlane -> _Normal.x, curPlane -> _Normal.y, curPlane -> _Normal.z, 1.f);
-
-            glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Planes",nbPlanes,"_MaterialID").c_str()), prim._MaterialID);
-            glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Planes",nbPlanes,"_Orig").c_str()), orig.x, orig.y, orig.z);
-            glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Planes",nbPlanes,"_Normal").c_str()), normal.x, normal.y, normal.z);
-            nbPlanes++;
-          }
-          else if ( curPrimitive -> _Type == PrimitiveType::Box )
-          {
-            Box * curBox = (Box *) curPrimitive;
-
-            glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_MaterialID").c_str()), prim._MaterialID);
-            glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_Low").c_str()), curBox -> _Low.x, curBox -> _Low.y, curBox -> _Low.z);
-            glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_High").c_str()), curBox -> _High.x, curBox -> _High.y, curBox -> _High.z);
-            glUniformMatrix4fv(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_Transfom").c_str()), 1, GL_FALSE, glm::value_ptr(prim._Transform));
-            nbBoxes++;
-          }
-        }
-
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxTexture"),                    (int)TexType::Vertices);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxNormTexture"),                (int)TexType::Normals);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxUVTexture"),                  (int)TexType::UVs);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxIndTexture"),                 (int)TexType::VertInd);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexIndTexture"),                 (int)TexType::TexInd);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexArrayTexture"),               (int)TexType::TexArray);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshBBoxTexture"),               (int)TexType::MeshBBox);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshIDRangeTexture"),            (int)TexType::MeshIdRange);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_MaterialsTexture"),              (int)TexType::Materials);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASNodesTexture"),              (int)TexType::TLASNodes);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASTransformsTexture"),         (int)TexType::TLASTransformsID);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASMeshMatIDTexture"),          (int)TexType::TLASMeshMatID);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASNodesTexture"),              (int)TexType::BLASNodes);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASNodesRangeTexture"),         (int)TexType::BLASNodesRange);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedIndicesTexture"),      (int)TexType::BLASPackedIndices);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedIndicesRangeTexture"), (int)TexType::BLASPackedIndicesRange);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedVtxTexture"),          (int)TexType::BLASPackedVertices);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedNormTexture"),         (int)TexType::BLASPackedNormals);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedUVTexture"),           (int)TexType::BLASPackedUVs);
-
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbSpheres"), nbSpheres);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbPlanes"), nbPlanes);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbBoxes"), nbBoxes);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbTriangles"), _NbTriangles);
-        glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbMeshInstances"), _NbMeshInstances);
-      }
+      Camera & cam = _Scene.GetCamera();
+      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Up"), cam.GetUp().x, cam.GetUp().y, cam.GetUp().z);
+      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Right"), cam.GetRight().x, cam.GetRight().y, cam.GetRight().z);
+      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Forward"), cam.GetForward().x, cam.GetForward().y, cam.GetForward().z);
+      glUniform3f(glGetUniformLocation(RTTProgramID, "u_Camera._Pos"), cam.GetPos().x, cam.GetPos().y, cam.GetPos().z);
+      glUniform1f(glGetUniformLocation(RTTProgramID, "u_Camera._FOV"), cam.GetFOV());
     }
+
+    if ( _SceneLightsModified )
+    {
+      int nbLights = 0;
+
+      for ( int i = 0; i < _Scene.GetNbLights(); ++i )
+      {
+        Light * curLight = _Scene.GetLight(i);
+        if ( !curLight )
+          continue;
+
+        glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Pos"     ).c_str()), curLight -> _Pos.x, curLight -> _Pos.y, curLight -> _Pos.z);
+        glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Emission").c_str()), curLight -> _Emission.r, curLight -> _Emission.g, curLight -> _Emission.b);
+        glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_DirU"    ).c_str()), curLight -> _DirU.x, curLight -> _DirU.y, curLight -> _DirU.z);
+        glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_DirV"    ).c_str()), curLight -> _DirV.x, curLight -> _DirV.y, curLight -> _DirV.z);
+        glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Radius"  ).c_str()), curLight -> _Radius);
+        glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Area"    ).c_str()), curLight -> _Area);
+        glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Type"    ).c_str()), curLight -> _Type);
+
+        nbLights++;
+        if ( nbLights >= 32 )
+          break;
+      }
+
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbLights"), nbLights);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_ShowLights"), (int)_Settings._ShowLights);
+    }
+
+    if ( _SceneMaterialsModified )
+    {
+      const std::vector<Material> & Materials =  _Scene.GetMaterials();
+
+      glBindTexture(GL_TEXTURE_2D, _MaterialsTextureID);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, (sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size(), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetMaterials()[0]);
+      glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    if ( _SceneInstancesModified )
+    {
+      //const std::vector<Mesh*>          & Meshes          = _Scene.GetMeshes();
+      const std::vector<Primitive*>        & Primitives         = _Scene.GetPrimitives();
+      //const std::vector<MeshInstance>   & MeshInstances   = _Scene.GetMeshInstances();
+      const std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene.GetPrimitiveInstances();
+
+      int nbSpheres = 0;
+      int nbPlanes = 0;
+      int nbBoxes = 0;
+      for ( auto & prim : PrimitiveInstances )
+      {
+        if ( ( prim._PrimID < 0 ) || ( prim._PrimID >= Primitives.size() ) )
+          continue;
+
+        Primitive * curPrimitive = Primitives[prim._PrimID];
+        if ( !curPrimitive )
+          continue;
+
+        if ( curPrimitive -> _Type == PrimitiveType::Sphere )
+        {
+          Sphere * curSphere = (Sphere *) curPrimitive;
+          Vec4 CenterRad = prim._Transform * Vec4(0.f, 0.f, 0.f, 1.f);
+          CenterRad.w = curSphere -> _Radius;
+
+          glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Spheres",nbSpheres,"_MaterialID").c_str()), prim._MaterialID);
+          glUniform4f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Spheres",nbSpheres,"_CenterRad").c_str()), CenterRad.x, CenterRad.y, CenterRad.z, CenterRad.w);
+          nbSpheres++;
+        }
+        else if ( curPrimitive -> _Type == PrimitiveType::Plane )
+        {
+          Plane * curPlane = (Plane *) curPrimitive;
+          Vec4 orig = prim._Transform * Vec4(curPlane -> _Origin.x, curPlane -> _Origin.y, curPlane -> _Origin.z, 1.f);
+          Vec4 normal = glm::transpose(glm::inverse(prim._Transform)) * Vec4(curPlane -> _Normal.x, curPlane -> _Normal.y, curPlane -> _Normal.z, 1.f);
+
+          glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Planes",nbPlanes,"_MaterialID").c_str()), prim._MaterialID);
+          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Planes",nbPlanes,"_Orig").c_str()), orig.x, orig.y, orig.z);
+          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Planes",nbPlanes,"_Normal").c_str()), normal.x, normal.y, normal.z);
+          nbPlanes++;
+        }
+        else if ( curPrimitive -> _Type == PrimitiveType::Box )
+        {
+          Box * curBox = (Box *) curPrimitive;
+
+          glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_MaterialID").c_str()), prim._MaterialID);
+          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_Low").c_str()), curBox -> _Low.x, curBox -> _Low.y, curBox -> _Low.z);
+          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_High").c_str()), curBox -> _High.x, curBox -> _High.y, curBox -> _High.z);
+          glUniformMatrix4fv(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_Transfom").c_str()), 1, GL_FALSE, glm::value_ptr(prim._Transform));
+          nbBoxes++;
+        }
+      }
+
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxTexture"),                    (int)TexType::Vertices);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxNormTexture"),                (int)TexType::Normals);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxUVTexture"),                  (int)TexType::UVs);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxIndTexture"),                 (int)TexType::VertInd);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexIndTexture"),                 (int)TexType::TexInd);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexArrayTexture"),               (int)TexType::TexArray);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshBBoxTexture"),               (int)TexType::MeshBBox);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshIDRangeTexture"),            (int)TexType::MeshIdRange);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_MaterialsTexture"),              (int)TexType::Materials);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASNodesTexture"),              (int)TexType::TLASNodes);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASTransformsTexture"),         (int)TexType::TLASTransformsID);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_TLASMeshMatIDTexture"),          (int)TexType::TLASMeshMatID);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASNodesTexture"),              (int)TexType::BLASNodes);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASNodesRangeTexture"),         (int)TexType::BLASNodesRange);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedIndicesTexture"),      (int)TexType::BLASPackedIndices);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedIndicesRangeTexture"), (int)TexType::BLASPackedIndicesRange);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedVtxTexture"),          (int)TexType::BLASPackedVertices);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedNormTexture"),         (int)TexType::BLASPackedNormals);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_BLASPackedUVTexture"),           (int)TexType::BLASPackedUVs);
+
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbSpheres"), nbSpheres);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbPlanes"), nbPlanes);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbBoxes"), nbBoxes);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbTriangles"), _NbTriangles);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbMeshInstances"), _NbMeshInstances);
+    }
+
     _RayTraceShader -> StopUsing();
   }
   else
@@ -923,7 +918,7 @@ int Test3::DrawUI()
 
     if ( ImGui::CollapsingHeader("Camera") )
     {
-      Camera & cam = _Scene -> GetCamera();
+      Camera & cam = _Scene.GetCamera();
 
       ImGui::Text("Position : %.2f, %.2f, %.2f", cam.GetPos().x, cam.GetPos().y, cam.GetPos().z);
 
@@ -941,7 +936,7 @@ int Test3::DrawUI()
     {
       if ( ImGui::ListBoxHeader("##Lights") )
       {
-        for (int i = 0; i < _Scene -> GetNbLights(); i++)
+        for (int i = 0; i < _Scene.GetNbLights(); i++)
         {
           std::string lightName("Light#");
           lightName += std::to_string(i);
@@ -958,13 +953,13 @@ int Test3::DrawUI()
       if (ImGui::Button("Add light"))
       {
         Light newLight;
-        _Scene -> AddLight(newLight);
-        _SelectedLight = _Scene -> GetNbLights() - 1;
+        _Scene.AddLight(newLight);
+        _SelectedLight = _Scene.GetNbLights() - 1;
       }
 
       if ( _SelectedLight >= 0 )
       {
-        Light * curLight = _Scene -> GetLight(_SelectedLight);
+        Light * curLight = _Scene.GetLight(_SelectedLight);
         if ( curLight )
         {
           const char * LightTypes[3] = { "Quad", "Sphere", "Distant" };
@@ -1036,8 +1031,8 @@ int Test3::DrawUI()
 
     if ( ImGui::CollapsingHeader("Materials") )
     {
-      std::vector<Material> & Materials =  _Scene -> GetMaterials();
-      std::vector<Texture*> & Textures = _Scene -> GetTextures();
+      std::vector<Material> & Materials =  _Scene.GetMaterials();
+      std::vector<Texture*> & Textures = _Scene.GetTextures();
 
       bool newMaterial = false;
       if ( ImGui::ListBoxHeader("##MaterialNames") )
@@ -1188,8 +1183,8 @@ int Test3::DrawUI()
 
     if ( _PrimitiveNames.size() && ImGui::CollapsingHeader("Primitives") )
     {
-      std::vector<Primitive*>        & Primitives         = _Scene -> GetPrimitives();
-      std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene -> GetPrimitiveInstances();
+      std::vector<Primitive*>        & Primitives         = _Scene.GetPrimitives();
+      std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene.GetPrimitiveInstances();
 
       bool lookAtPrimitive = false;
       if ( ImGui::ListBoxHeader("##PrimitivesNames") )
@@ -1218,7 +1213,7 @@ int Test3::DrawUI()
           Vec3 translation;
           MathUtil::Decompose(primInstance._Transform, translation, rotation, scale);
 
-          Camera & cam = _Scene -> GetCamera();
+          Camera & cam = _Scene.GetCamera();
           cam.LookAt(translation);
           _SceneCameraModified = true;
         }
@@ -1397,10 +1392,9 @@ void Test3::AdjustRenderScale()
 // ----------------------------------------------------------------------------
 int Test3::InitializeScene()
 {
-  if ( _Scene )
-    ClearSceneData();
+  ClearSceneData();
 
-  if ( !Loader::LoadScene(_SceneFiles[_CurSceneId], _Scene, _Settings) || !_Scene )
+  if ( !Loader::LoadScene(_SceneFiles[_CurSceneId], _Scene, _Settings) )
   {
     std::cout << "Failed to load scene : " << _SceneFiles[_CurSceneId] << std::endl;
     return 1;
@@ -1411,41 +1405,41 @@ int Test3::InitializeScene()
     _TiledRendering = true;
 
   // Scene should contain at least one light
-  Light * firstLight = _Scene -> GetLight(0);
+  Light * firstLight = _Scene.GetLight(0);
   if ( !firstLight )
   {
     Light newLight;
-    _Scene -> AddLight(newLight);
+    _Scene.AddLight(newLight);
   }
 
   // Test - Load first mesh
-  _Scene -> CompileMeshData( _Settings._TextureSize );
+  _Scene.CompileMeshData( _Settings._TextureSize );
 
-  _NbTriangles = _Scene -> GetNbFaces();
-  _NbMeshInstances = _Scene -> GetNbMeshInstances();
+  _NbTriangles = _Scene.GetNbFaces();
+  _NbMeshInstances = _Scene.GetNbMeshInstances();
   if ( _NbTriangles )
   {
     glPixelStorei(GL_PACK_ALIGNMENT, 1); // ???
 
     glGenBuffers(1, &_VtxBufferID);
     glBindBuffer(GL_TEXTURE_BUFFER, _VtxBufferID);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene -> GetVertices().size(), &_Scene -> GetVertices()[0], GL_STATIC_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene.GetVertices().size(), &_Scene.GetVertices()[0], GL_STATIC_DRAW);
     glGenTextures(1, &_VtxTextureID);
     glBindTexture(GL_TEXTURE_BUFFER, _VtxTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _VtxBufferID);
 
     glGenBuffers(1, &_VtxNormBufferID);
     glBindBuffer(GL_TEXTURE_BUFFER, _VtxNormBufferID);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene -> GetNormals().size(), &_Scene -> GetNormals()[0], GL_STATIC_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene.GetNormals().size(), &_Scene.GetNormals()[0], GL_STATIC_DRAW);
     glGenTextures(1, &_VtxNormTextureID);
     glBindTexture(GL_TEXTURE_BUFFER, _VtxNormTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _VtxNormBufferID);
 
-    if ( _Scene -> GetUVMatID().size() )
+    if ( _Scene.GetUVMatID().size() )
     {
       glGenBuffers(1, &_VtxUVBufferID);
       glBindBuffer(GL_TEXTURE_BUFFER, _VtxUVBufferID);
-      glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene -> GetUVMatID().size(), &_Scene -> GetUVMatID()[0], GL_STATIC_DRAW);
+      glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene.GetUVMatID().size(), &_Scene.GetUVMatID()[0], GL_STATIC_DRAW);
       glGenTextures(1, &_VtxUVTextureID);
       glBindTexture(GL_TEXTURE_BUFFER, _VtxUVTextureID);
       glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _VtxUVBufferID);
@@ -1453,23 +1447,23 @@ int Test3::InitializeScene()
 
     glGenBuffers(1, &_VtxIndBufferID);
     glBindBuffer(GL_TEXTURE_BUFFER, _VtxIndBufferID);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3i) * _Scene -> GetIndices().size(), &_Scene -> GetIndices()[0], GL_STATIC_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3i) * _Scene.GetIndices().size(), &_Scene.GetIndices()[0], GL_STATIC_DRAW);
     glGenTextures(1, &_VtxIndTextureID);
     glBindTexture(GL_TEXTURE_BUFFER, _VtxIndTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32I, _VtxIndBufferID);
 
-    if ( _Scene -> GetTextureArrayIDs().size() )
+    if ( _Scene.GetTextureArrayIDs().size() )
     {
       glGenBuffers(1, &_TexIndBufferID);
       glBindBuffer(GL_TEXTURE_BUFFER, _TexIndBufferID);
-      glBufferData(GL_TEXTURE_BUFFER, sizeof(int) * _Scene -> GetTextureArrayIDs().size(), &_Scene -> GetTextureArrayIDs()[0], GL_STATIC_DRAW);
+      glBufferData(GL_TEXTURE_BUFFER, sizeof(int) * _Scene.GetTextureArrayIDs().size(), &_Scene.GetTextureArrayIDs()[0], GL_STATIC_DRAW);
       glGenTextures(1, &_TexIndTextureID);
       glBindTexture(GL_TEXTURE_BUFFER, _TexIndTextureID);
       glTexBuffer(GL_TEXTURE_BUFFER, GL_R32I, _TexIndBufferID);
 
       glGenTextures(1, &_TexArrayTextureID);
       glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTextureID);
-      glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, _Settings._TextureSize.x, _Settings._TextureSize.y, _Scene -> GetNbCompiledTex(), 0, GL_RGBA, GL_UNSIGNED_BYTE, &_Scene -> GetTextureArray()[0]);
+      glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, _Settings._TextureSize.x, _Settings._TextureSize.y, _Scene.GetNbCompiledTex(), 0, GL_RGBA, GL_UNSIGNED_BYTE, &_Scene.GetTextureArray()[0]);
       glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
       glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
       glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
@@ -1477,21 +1471,21 @@ int Test3::InitializeScene()
 
     glGenBuffers(1, &_MeshBBoxBufferID);
     glBindBuffer(GL_TEXTURE_BUFFER, _MeshBBoxBufferID);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene -> GetMeshBBoxes().size(), &_Scene -> GetMeshBBoxes()[0], GL_STATIC_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene.GetMeshBBoxes().size(), &_Scene.GetMeshBBoxes()[0], GL_STATIC_DRAW);
     glGenTextures(1, &_MeshBBoxTextureID);
     glBindTexture(GL_TEXTURE_BUFFER, _MeshBBoxTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _MeshBBoxBufferID);
 
     glGenBuffers(1, &_MeshIdRangeBufferID);
     glBindBuffer(GL_TEXTURE_BUFFER, _MeshIdRangeBufferID);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(int) * _Scene -> GetMeshIdxRange().size(), &_Scene -> GetMeshIdxRange()[0], GL_STATIC_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(int) * _Scene.GetMeshIdxRange().size(), &_Scene.GetMeshIdxRange()[0], GL_STATIC_DRAW);
     glGenTextures(1, &_MeshIdRangeTextureID);
     glBindTexture(GL_TEXTURE_BUFFER, _MeshIdRangeTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_R32I, _MeshIdRangeBufferID);
 
     glGenTextures(1, &_MaterialsTextureID);
     glBindTexture(GL_TEXTURE_2D, _MaterialsTextureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, (sizeof(Material) / sizeof(Vec4)) * _Scene -> GetMaterials().size(), 1, 0, GL_RGBA, GL_FLOAT, &_Scene -> GetMaterials()[0]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, (sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size(), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetMaterials()[0]);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -1499,99 +1493,99 @@ int Test3::InitializeScene()
     // BVH
     glGenBuffers(1, &_TLASNodesBufferID);
     glBindBuffer(GL_TEXTURE_BUFFER, _TLASNodesBufferID);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(GpuBvh::Node) * _Scene -> GetTLASNode().size(), &_Scene -> GetTLASNode()[0], GL_STATIC_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(GpuBvh::Node) * _Scene.GetTLASNode().size(), &_Scene.GetTLASNode()[0], GL_STATIC_DRAW);
     glGenTextures(1, &_TLASNodesTextureID);
     glBindTexture(GL_TEXTURE_BUFFER, _TLASNodesTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _TLASNodesBufferID);
 
     glGenTextures(1, &_TLASTransformsIDTextureID);
     glBindTexture(GL_TEXTURE_2D, _TLASTransformsIDTextureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, (sizeof(Mat4x4) / sizeof(Vec4)) * _Scene -> GetTLASPackedTransforms().size(), 1, 0, GL_RGBA, GL_FLOAT, &_Scene -> GetTLASPackedTransforms()[0]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, (sizeof(Mat4x4) / sizeof(Vec4)) * _Scene.GetTLASPackedTransforms().size(), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetTLASPackedTransforms()[0]);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     glGenBuffers(1, &_TLASMeshMatIDBufferID);
     glBindBuffer(GL_TEXTURE_BUFFER, _TLASMeshMatIDBufferID);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec2i) * _Scene -> GetTLASPackedMeshMatID().size(), &_Scene -> GetTLASPackedMeshMatID()[0], GL_STATIC_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec2i) * _Scene.GetTLASPackedMeshMatID().size(), &_Scene.GetTLASPackedMeshMatID()[0], GL_STATIC_DRAW);
     glGenTextures(1, &_TLASMeshMatIDTextureID);
     glBindTexture(GL_TEXTURE_BUFFER, _TLASMeshMatIDTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32I, _TLASMeshMatIDBufferID);
 
     glGenBuffers(1, &_BLASNodesBufferID);
     glBindBuffer(GL_TEXTURE_BUFFER, _BLASNodesBufferID);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(GpuBvh::Node) * _Scene -> GetBLASNode().size(), &_Scene -> GetBLASNode()[0], GL_STATIC_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(GpuBvh::Node) * _Scene.GetBLASNode().size(), &_Scene.GetBLASNode()[0], GL_STATIC_DRAW);
     glGenTextures(1, &_BLASNodesTextureID);
     glBindTexture(GL_TEXTURE_BUFFER, _BLASNodesTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _BLASNodesBufferID);
 
     glGenBuffers(1, &_BLASNodesRangeBufferID);
     glBindBuffer(GL_TEXTURE_BUFFER, _BLASNodesRangeBufferID);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec2i) * _Scene -> GetBLASNodeRange().size(), &_Scene -> GetBLASNodeRange()[0], GL_STATIC_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec2i) * _Scene.GetBLASNodeRange().size(), &_Scene.GetBLASNodeRange()[0], GL_STATIC_DRAW);
     glGenTextures(1, &_BLASNodesRangeTextureID);
     glBindTexture(GL_TEXTURE_BUFFER, _BLASNodesRangeTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32I, _BLASNodesRangeBufferID);
 
     glGenBuffers(1, &_BLASPackedIndicesBufferID);
     glBindBuffer(GL_TEXTURE_BUFFER, _BLASPackedIndicesBufferID);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3i) * _Scene -> GetBLASPackedIndices().size(), &_Scene -> GetBLASPackedIndices()[0], GL_STATIC_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3i) * _Scene.GetBLASPackedIndices().size(), &_Scene.GetBLASPackedIndices()[0], GL_STATIC_DRAW);
     glGenTextures(1, &_BLASPackedIndicesTextureID);
     glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedIndicesTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32I, _BLASPackedIndicesBufferID);
 
     glGenBuffers(1, &_BLASPackedIndicesRangeBufferID);
     glBindBuffer(GL_TEXTURE_BUFFER, _BLASPackedIndicesRangeBufferID);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec2i) * _Scene -> GetBLASPackedIndicesRange().size(), &_Scene -> GetBLASPackedIndicesRange()[0], GL_STATIC_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec2i) * _Scene.GetBLASPackedIndicesRange().size(), &_Scene.GetBLASPackedIndicesRange()[0], GL_STATIC_DRAW);
     glGenTextures(1, &_BLASPackedIndicesRangeTextureID);
     glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedIndicesRangeTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32I, _BLASPackedIndicesRangeBufferID);
 
     glGenBuffers(1, &_BLASPackedVerticesBufferID);
     glBindBuffer(GL_TEXTURE_BUFFER, _BLASPackedVerticesBufferID);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene -> GetBLASPackedVertices().size(), &_Scene -> GetBLASPackedVertices()[0], GL_STATIC_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene.GetBLASPackedVertices().size(), &_Scene.GetBLASPackedVertices()[0], GL_STATIC_DRAW);
     glGenTextures(1, &_BLASPackedVerticesTextureID);
     glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedVerticesTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _BLASPackedVerticesBufferID);
 
     glGenBuffers(1, &_BLASPackedNormalsBufferID);
     glBindBuffer(GL_TEXTURE_BUFFER, _BLASPackedNormalsBufferID);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene -> GetBLASPackedNormals().size(), &_Scene -> GetBLASPackedNormals()[0], GL_STATIC_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec3) * _Scene.GetBLASPackedNormals().size(), &_Scene.GetBLASPackedNormals()[0], GL_STATIC_DRAW);
     glGenTextures(1, &_BLASPackedNormalsTextureID);
     glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedNormalsTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, _BLASPackedNormalsBufferID);
 
     glGenBuffers(1, &_BLASPackedUVsBufferID);
     glBindBuffer(GL_TEXTURE_BUFFER, _BLASPackedUVsBufferID);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec2) * _Scene -> GetBLASPackedUVs().size(), &_Scene -> GetBLASPackedUVs()[0], GL_STATIC_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec2) * _Scene.GetBLASPackedUVs().size(), &_Scene.GetBLASPackedUVs()[0], GL_STATIC_DRAW);
     glGenTextures(1, &_BLASPackedUVsTextureID);
     glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedUVsTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32F, _BLASPackedUVsBufferID);
 
   }
 
-  const std::vector<Material> & Materials =  _Scene -> GetMaterials();
+  const std::vector<Material> & Materials =  _Scene.GetMaterials();
   for ( auto & mat : Materials )
-    _MaterialNames.push_back(_Scene -> FindMaterialName(mat._ID));
+    _MaterialNames.push_back(_Scene.FindMaterialName(mat._ID));
 
-  const std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene -> GetPrimitiveInstances();
+  const std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene.GetPrimitiveInstances();
   for ( int i = 0; i < PrimitiveInstances.size(); ++i )
-    _PrimitiveNames.push_back(_Scene -> FindPrimitiveName(i));
+    _PrimitiveNames.push_back(_Scene.FindPrimitiveName(i));
 
-  if ( !_Scene -> GetEnvMap().IsInitialized() )
+  if ( !_Scene.GetEnvMap().IsInitialized() )
   {
     if ( _CurBackgroundId > 0 )
     {
-      _Scene->LoadEnvMap( _BackgroundFiles[_CurBackgroundId] );
+      _Scene.LoadEnvMap( _BackgroundFiles[_CurBackgroundId] );
       _Settings._EnableSkybox = false;
     }
   }
 
-  if ( _Scene -> GetEnvMap().IsInitialized() )
+  if ( _Scene.GetEnvMap().IsInitialized() )
   {
     glGenTextures(1, &_SkyboxTextureID);
     glActiveTexture(TEX_UNIT(TexType::Skybox));
     glBindTexture(GL_TEXTURE_2D, _SkyboxTextureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, _Scene -> GetEnvMap().GetWidth(), _Scene -> GetEnvMap().GetHeight(), 0, GL_RGB, GL_FLOAT, _Scene -> GetEnvMap().GetRawData());
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, _Scene.GetEnvMap().GetWidth(), _Scene.GetEnvMap().GetHeight(), 0, GL_RGB, GL_FLOAT, _Scene.GetEnvMap().GetRawData());
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -1626,22 +1620,20 @@ int Test3::UpdateScene()
     UpdateRenderResolution();
     ResizeTextures();
   }
-  if ( !_Scene )
-    return 1;
 
   if ( _ReloadBackground )
   {
     if ( _CurBackgroundId > 0 )
     {
-      _Scene -> LoadEnvMap( _BackgroundFiles[_CurBackgroundId] );
+      _Scene.LoadEnvMap( _BackgroundFiles[_CurBackgroundId] );
 
-      if ( _Scene -> GetEnvMap().IsInitialized() )
+      if ( _Scene.GetEnvMap().IsInitialized() )
       {
         if ( 0 == _SkyboxTextureID )
           glGenTextures( 1, &_SkyboxTextureID );
         glActiveTexture( TEX_UNIT(TexType::Skybox) );
         glBindTexture( GL_TEXTURE_2D, _SkyboxTextureID );
-        glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB32F, _Scene -> GetEnvMap().GetWidth(), _Scene -> GetEnvMap().GetHeight(), 0, GL_RGB, GL_FLOAT, _Scene -> GetEnvMap().GetRawData() );
+        glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB32F, _Scene.GetEnvMap().GetWidth(), _Scene.GetEnvMap().GetHeight(), 0, GL_RGB, GL_FLOAT, _Scene.GetEnvMap().GetRawData() );
         glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
         glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
         glBindTexture( GL_TEXTURE_2D, 0 );
@@ -1662,23 +1654,23 @@ int Test3::UpdateScene()
 
     if ( _LeftClick )
     {
-      _Scene -> GetCamera().OffsetOrientations(MouseSensitivity[0] * deltaX, MouseSensitivity[1] * -deltaY);
+      _Scene.GetCamera().OffsetOrientations(MouseSensitivity[0] * deltaX, MouseSensitivity[1] * -deltaY);
       _SceneCameraModified = true;
     }
     if ( _RightClick )
     {
-      _Scene -> GetCamera().Strafe(MouseSensitivity[2] * deltaX, MouseSensitivity[3] * deltaY);
+      _Scene.GetCamera().Strafe(MouseSensitivity[2] * deltaX, MouseSensitivity[3] * deltaY);
       _SceneCameraModified = true;
     }
     if ( _MiddleClick )
     {
       if ( std::abs(deltaX) > std::abs(deltaY) )
-        _Scene -> GetCamera().Strafe(MouseSensitivity[2] * deltaX, 0.f);
+        _Scene.GetCamera().Strafe(MouseSensitivity[2] * deltaX, 0.f);
       else
       {
-        float newRadius = _Scene -> GetCamera().GetRadius() + MouseSensitivity[4] * deltaY;
+        float newRadius = _Scene.GetCamera().GetRadius() + MouseSensitivity[4] * deltaY;
         if ( newRadius > 0.f )
-          _Scene -> GetCamera().SetRadius(newRadius);
+          _Scene.GetCamera().SetRadius(newRadius);
       }
       _SceneCameraModified = true;
     }
@@ -1693,30 +1685,30 @@ int Test3::UpdateScene()
 
     if ( _KeyUp )
     {
-      float newRadius = _Scene -> GetCamera().GetRadius() - _TimeDelta;
+      float newRadius = _Scene.GetCamera().GetRadius() - _TimeDelta;
       if ( newRadius > 0.f )
       {
-        _Scene -> GetCamera().SetRadius(newRadius);
+        _Scene.GetCamera().SetRadius(newRadius);
         _SceneCameraModified = true;
       }
     }
     if ( _KeyDown )
     {
-      float newRadius = _Scene -> GetCamera().GetRadius() + _TimeDelta;
+      float newRadius = _Scene.GetCamera().GetRadius() + _TimeDelta;
       if ( newRadius > 0.f )
       {
-        _Scene -> GetCamera().SetRadius(newRadius);
+        _Scene.GetCamera().SetRadius(newRadius);
         _SceneCameraModified = true;
       }
     }
     if ( _KeyLeft )
     {
-      _Scene -> GetCamera().OffsetOrientations(_TimeDelta * velocity, 0.f);
+      _Scene.GetCamera().OffsetOrientations(_TimeDelta * velocity, 0.f);
       _SceneCameraModified = true;
     }
     if ( _KeyRight )
     {
-      _Scene -> GetCamera().OffsetOrientations(-_TimeDelta * velocity, 0.f);
+      _Scene.GetCamera().OffsetOrientations(-_TimeDelta * velocity, 0.f);
       _SceneCameraModified = true;
     }
 

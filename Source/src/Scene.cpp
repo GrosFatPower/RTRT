@@ -17,6 +17,11 @@ Scene::Scene()
 
 Scene::~Scene()
 {
+  Clear();
+}
+
+void Scene::Clear()
+{
   for (auto & texture : _Textures)
     delete texture;
   _Textures.clear();
@@ -28,6 +33,38 @@ Scene::~Scene()
   for (auto & Primitive : _Primitives)
     delete Primitive;
   _Primitives.clear();
+
+  _Camera = Camera();
+  _EnvMap.Reset();
+
+  _Lights.clear();
+  _Materials.clear();
+  _MaterialIDs.clear();
+  _MeshInstances.clear();
+  _PrimitiveNames.clear();
+  _PrimitiveInstances.clear();
+
+  _NbFaces = 0;
+  _Vertices.clear();
+  _Normals.clear();
+  _UVMatID.clear();
+  _Indices.clear();
+  _NbCompiledTex = 0;
+  _TextureArrayIDs.clear();
+  _TextureArray.clear();
+  _MeshBBoxes.clear();
+  _MeshIdxRange.clear();
+
+  _TLAS = GpuTLAS();
+  _TLASPackedTransforms.clear();
+  _TLASPackedMeshMatID.clear();
+  _BLASNodes.clear();
+  _BLASNodesRange.clear();
+  _BLASPackedIndices.clear();
+  _BLASPackedIndicesRange.clear();
+  _BLASPackedVertices.clear();
+  _BLASPackedNormals.clear();
+  _BLASPackedUVs.clear();
 }
 
 int Scene::AddTexture( const std::string & iFilename, int iNbComponents, TexFormat iFormat )

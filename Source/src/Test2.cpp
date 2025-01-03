@@ -75,11 +75,9 @@ static void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 
 static int LoadScene( const std::string & iFilename, Scene *& ioScene, RenderSettings & oSettings )
 {
-  if ( ioScene )
-    delete ioScene;
-  ioScene = nullptr;
+  ioScene = new Scene;
 
-  if ( !Loader::LoadScene(g_AssetsDir + iFilename, ioScene, oSettings) || !ioScene )
+  if ( !Loader::LoadScene(g_AssetsDir + iFilename, *ioScene, oSettings) || !ioScene )
     return 1;
 
   return 0;
