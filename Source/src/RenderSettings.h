@@ -21,6 +21,7 @@ struct RenderSettings
   bool  _AutoScale          = false;
   bool  _ToneMapping        = true;
   bool  _FXAA               = false;
+  bool  _TiledRendering     = false;
   int   _Bounces            = 1;
   int   _RenderScale        = 100;
   float _LowResRatio        = 0.1f;

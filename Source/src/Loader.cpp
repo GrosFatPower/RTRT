@@ -1584,6 +1584,8 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath
         tileResolution.y = tileResolution.x;
       else if ( tileResolution.x <= 0 )
         tileResolution.x = tileResolution.y;
+
+      oSettings._TiledRendering = true;
       oSettings._TileResolution = tileResolution;
     }
 

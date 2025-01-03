@@ -273,8 +273,6 @@ void Test3::ClearSceneData()
   _NbTriangles       = 0;
   _NbMeshInstances   = 0;
 
-  _TiledRendering    = false;
-
   _Scene.Clear();
 }
 
@@ -485,7 +483,7 @@ int Test3::UpdateUniforms()
     _RayTraceShader -> Use();
     GLuint RTTProgramID = _RayTraceShader -> GetShaderProgramID();
     glUniform2f(glGetUniformLocation(RTTProgramID, "u_Resolution"), RenderWidth(), RenderHeight());
-    glUniform1i(glGetUniformLocation(RTTProgramID, "u_TiledRendering"), ( _TiledRendering && !Dirty() ) ? ( 1 ) : ( 0 ));
+    glUniform1i(glGetUniformLocation(RTTProgramID, "u_TiledRendering"), ( TiledRendering() && !Dirty() ) ? ( 1 ) : ( 0 ));
     glUniform2f(glGetUniformLocation(RTTProgramID, "u_TileOffset"), TileOffset().x, TileOffset().y);
     glUniform2f(glGetUniformLocation(RTTProgramID, "u_InvNbTiles"), InvNbTiles().x, InvNbTiles().y);
     glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbCompleteFrames"), (int)_NbCompleteFrames);
@@ -668,7 +666,7 @@ int Test3::UpdateUniforms()
     _RenderToScreenShader -> Use();
     GLuint RTSProgramID = _RenderToScreenShader -> GetShaderProgramID();
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), (int)TexType::RenderTarget);
-    glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedFrames"), (_TiledRendering) ? (0) :(_AccumulatedFrames));
+    glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedFrames"), (TiledRendering()) ? (0) :(_AccumulatedFrames));
     glUniform2f(glGetUniformLocation(RTSProgramID, "u_RenderRes" ), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
     glUniform1f(glGetUniformLocation(RTSProgramID, "u_Gamma"), _Settings._Gamma);
     glUniform1f(glGetUniformLocation(RTSProgramID, "u_Exposure"), _Settings._Exposure);
@@ -748,7 +746,7 @@ int Test3::DrawUI()
 
     ImGui::Text( "Window width %d: height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y );
 
-    ImGui::Text( "Accumulated frames : %d", (_TiledRendering) ? (_NbCompleteFrames) : (_AccumulatedFrames) );
+    ImGui::Text( "Accumulated frames : %d", (TiledRendering()) ? (_NbCompleteFrames) : (_AccumulatedFrames) );
 
     ImGui::Text("Render time %.3f ms/frame (%.1f FPS)", _AverageDelta * 1000.f, _FrameRate);
 
@@ -837,16 +835,16 @@ int Test3::DrawUI()
       if ( ImGui::Checkbox( "Accumulate", &_AccumulateFrames ) )
         _RenderSettingsModified = true;
 
-      if ( ImGui::Checkbox( "Tiled rendering", &_TiledRendering ) )
+      if ( ImGui::Checkbox( "Tiled rendering", &_Settings._TiledRendering ) )
       {
-        if ( _TiledRendering && ( ( _Settings._TileResolution.x <= 0 ) || ( _Settings._TileResolution.y <= 0 ) ) )
+        if ( _Settings._TiledRendering && ( ( _Settings._TileResolution.x <= 0 ) || ( _Settings._TileResolution.y <= 0 ) ) )
           _Settings._TileResolution.x = _Settings._TileResolution.y = 256;
 
         ResizeTextures();
         _RenderSettingsModified = true;
       }
 
-      if ( _TiledRendering )
+      if ( TiledRendering() )
       {
         int tileSize = _Settings._TileResolution.x;
         if ( ImGui::SliderInt("Tile size", &tileSize, 64, 1024) )
@@ -1400,10 +1398,6 @@ int Test3::InitializeScene()
     return 1;
   }
 
-  // Tiles
-  if ( ( _Settings._TileResolution.x > 0 ) && ( _Settings._TileResolution.y > 0 ) )
-    _TiledRendering = true;
-
   // Scene should contain at least one light
   Light * firstLight = _Scene.GetLight(0);
   if ( !firstLight )
@@ -1791,7 +1785,7 @@ void Test3::RenderToTexture()
 
     _Quad -> Render(*_RenderToTextureShader);
   }
-  else if ( _TiledRendering )
+  else if ( TiledRendering() )
   {
     glBindFramebuffer(GL_FRAMEBUFFER, _TileFrameBufferID);
     glViewport(0, 0, _Settings._TileResolution.x, _Settings._TileResolution.y);

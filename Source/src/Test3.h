@@ -91,6 +91,7 @@ private:
   int LowResRenderHeight()  const { return int( _Settings._RenderResolution.y * LowResRenderScale() ); }
 
   bool LowResPass()         const { return ( Dirty() && !_Settings._AutoScale ); }
+  bool TiledRendering()     const { return _Settings._TiledRendering; }
 
   Vec2i NbTiles()           const { return Vec2i(std::ceil(((float)RenderWidth())/_Settings._TileResolution.x), std::ceil(((float)RenderHeight())/_Settings._TileResolution.y)); }
   Vec2  TileOffset()        const { return Vec2(_CurTile.x * InvNbTiles().x, _CurTile.y * InvNbTiles().y); }
@@ -191,7 +192,6 @@ private:
   bool                       _RenderSettingsModified          = true;
 
   RenderSettings             _Settings;
-  bool                       _TiledRendering                  = false;
   bool                       _AccumulateFrames                = true;
 
   Vec2i                      _CurTile;
