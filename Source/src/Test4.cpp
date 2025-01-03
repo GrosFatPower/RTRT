@@ -1221,6 +1221,16 @@ void Test4::ProcessFragments( int iStartY, int iEndY )
     {
       RasterTriangle & tri = _RasterTrianglesBuf[i][j];
 
+      // Backface culling
+      if ( 0 )
+      {
+        Vec3 AB(tri._V[1] - tri._V[0]);
+        Vec3 AC(tri._V[2] - tri._V[0]);
+        Vec3 crossProd = glm::cross(AB,AC);
+        if ( crossProd.z < 0 )
+          continue;
+      }
+
       int xMin = std::max(0,       std::min((int)std::floorf(tri._BBox._Low.x),  width - 1));
       int yMin = std::max(iStartY, std::min((int)std::floorf(tri._BBox._Low.y),  iEndY - 1 ));
       int xMax = std::max(0,       std::min((int)std::floorf(tri._BBox._High.x), width - 1));
