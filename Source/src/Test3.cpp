@@ -147,7 +147,7 @@ void Test3::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
   this_ -> ResizeTextures();
 }
 
-std::string UniformArrayElementName( const char * iUniformArrayName, int iIndex, const char * iAttributeName )
+static std::string UniformArrayElementName( const char * iUniformArrayName, int iIndex, const char * iAttributeName )
 {
   return std::string(iUniformArrayName).append("[").append(std::to_string(iIndex)).append("].").append(iAttributeName);
 }

@@ -47,7 +47,8 @@ public:
     BLASPackedIndicesRange,
     BLASPackedVertices,
     BLASPackedNormals,
-    BLASPackedUVs
+    BLASPackedUVs,
+    EnvMap
   };
 
   struct GLTexture
@@ -68,6 +69,10 @@ public:
     GLTexture _Tex;
   };
 
+  void DeleteTEX( GLTexture & ioTEX );
+  void DeleteFBO( GLFrameBuffer & ioFBO );
+  void DeleteTBO( GLTextureBuffer & ioTBO );
+
 protected:
 
   int UpdateRenderResolution();
@@ -76,6 +81,7 @@ protected:
   int InitializeFrameBuffers();
   int RecompileShaders();
 
+  int UnloadScene();
   int ReloadScene();
 
   int UpdatePathTraceUniforms();
@@ -91,6 +97,7 @@ protected:
   int RenderWidth()         const { return _Settings._RenderResolution.x; }
   int RenderHeight()        const { return _Settings._RenderResolution.y; }
 
+  bool Dirty()              const { return ( false ); } // ToDo
   bool LowResPass()         const { return ( false ); } // ToDo
   int LowResRenderWidth()   const { return int( _Settings._RenderResolution.x * LowResRenderScale() ); }
   int LowResRenderHeight()  const { return int( _Settings._RenderResolution.y * LowResRenderScale() ); }
@@ -132,6 +139,12 @@ protected:
   GLTextureBuffer _BLASPackedNormalsTBO       = { 0, { 0, TextureSlot::BLASPackedNormals      } };
   GLTextureBuffer _BLASPackedUVsTBO           = { 0, { 0, TextureSlot::BLASPackedUVs          } };
 
+  // Textures
+  GLTexture _TexArrayTEX         = { 0, TextureSlot::TexArray         };
+  GLTexture _MaterialsTEX        = { 0, TextureSlot::Materials        };
+  GLTexture _TLASTransformsIDTEX = { 0, TextureSlot::TLASTransformsID };
+  GLTexture _EnvMapTEX           = { 0, TextureSlot::EnvMap };
+
   // Shaders
   std::unique_ptr<ShaderProgram> _PathTraceShader;
   std::unique_ptr<ShaderProgram> _AccumulateShader;
@@ -142,9 +155,15 @@ protected:
   Vec2i        _NbTiles;
   unsigned int _NbCompleteFrames = 0;
 
+  // Accumulate
+  unsigned int _AccumulatedFrames = 0;
+
   // Scene data
   int _NbTriangles     = 0;
   int _NbMeshInstances = 0;
+
+  // DEBUG
+  int _DebugMode = 0;
 };
 
 }
