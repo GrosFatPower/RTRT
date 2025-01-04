@@ -10,14 +10,6 @@
 namespace RTRT
 {
 
-enum class TextureSlot
-{
-  RenderTarget = 0,
-  RenderTargetLowRes,
-  RenderTargetTile,
-  Accumulate
-};
-
 class Scene;
 
 class PathTracer : public Renderer
@@ -28,6 +20,53 @@ public:
 
   virtual int RenderToTexture();
   virtual int RenderToScreen();
+
+public:
+
+  enum class TextureSlot
+  {
+    RenderTarget = 0,
+    RenderTargetLowRes,
+    RenderTargetTile,
+    Accumulate,
+    Vertices,
+    Normals,
+    UVs,
+    VertInd,
+    TexInd,
+    TexArray,
+    MeshBBox,
+    MeshIdRange,
+    Materials,
+    TLASNodes,
+    TLASTransformsID,
+    TLASMeshMatID,
+    BLASNodes,
+    BLASNodesRange,
+    BLASPackedIndices,
+    BLASPackedIndicesRange,
+    BLASPackedVertices,
+    BLASPackedNormals,
+    BLASPackedUVs
+  };
+
+  struct GLTexture
+  {
+    GLuint            _ID;
+    const TextureSlot _Slot;
+  };
+
+  struct GLFrameBuffer
+  {
+    GLuint    _ID;
+    GLTexture _Tex;
+  };
+
+  struct GLTextureBuffer
+  {
+    GLuint    _ID;
+    GLTexture _Tex;
+  };
 
 protected:
 
@@ -70,16 +109,28 @@ protected:
   QuadMesh _Quad;
 
   // Frame buffers
-  GLuint   _ID_RenderTargetFBO       = 0;
-  GLuint   _ID_RenderTargetLowResFBO = 0;
-  GLuint   _ID_RenderTargetTileFBO   = 0;
-  GLuint   _ID_AccumulateFBO         = 0;
+  GLFrameBuffer _RenderTargetFBO       = { 0, { 0, TextureSlot::RenderTarget } };
+  GLFrameBuffer _RenderTargetLowResFBO = { 0, { 0, TextureSlot::RenderTargetLowRes } };
+  GLFrameBuffer _RenderTargetTileFBO   = { 0, { 0, TextureSlot::RenderTargetTile } };
+  GLFrameBuffer _AccumulateFBO         = { 0, { 0, TextureSlot::Accumulate } };
 
-  // Textures
-  GLuint   _ID_RenderTargetTex       = 0;
-  GLuint   _ID_RenderTargetLowResTex = 0;
-  GLuint   _ID_RenderTargetTileTex   = 0;
-  GLuint   _ID_AccumulateTex         = 0;
+  // Texture buffers
+  GLTextureBuffer _VtxTBO                     = { 0, { 0, TextureSlot::Vertices               } };
+  GLTextureBuffer _VtxNormTBO                 = { 0, { 0, TextureSlot::Normals                } };
+  GLTextureBuffer _VtxUVTBO                   = { 0, { 0, TextureSlot::UVs                    } };
+  GLTextureBuffer _VtxIndTBO                  = { 0, { 0, TextureSlot::VertInd                } };
+  GLTextureBuffer _TexIndTBO                  = { 0, { 0, TextureSlot::TexInd                 } };
+  GLTextureBuffer _MeshBBoxTBO                = { 0, { 0, TextureSlot::MeshBBox               } };
+  GLTextureBuffer _MeshIdRangeTBO             = { 0, { 0, TextureSlot::MeshIdRange            } };
+  GLTextureBuffer _TLASNodesTBO               = { 0, { 0, TextureSlot::TLASNodes              } };
+  GLTextureBuffer _TLASMeshMatIDTBO           = { 0, { 0, TextureSlot::TLASMeshMatID          } };
+  GLTextureBuffer _BLASNodesTBO               = { 0, { 0, TextureSlot::BLASNodes              } };
+  GLTextureBuffer _BLASNodesRangeTBO          = { 0, { 0, TextureSlot::BLASNodesRange         } };
+  GLTextureBuffer _BLASPackedIndicesTBO       = { 0, { 0, TextureSlot::BLASPackedIndices      } };
+  GLTextureBuffer _BLASPackedIndicesRangeTBO  = { 0, { 0, TextureSlot::BLASPackedIndicesRange } };
+  GLTextureBuffer _BLASPackedVerticesTBO      = { 0, { 0, TextureSlot::BLASPackedVertices     } };
+  GLTextureBuffer _BLASPackedNormalsTBO       = { 0, { 0, TextureSlot::BLASPackedNormals      } };
+  GLTextureBuffer _BLASPackedUVsTBO           = { 0, { 0, TextureSlot::BLASPackedUVs          } };
 
   // Shaders
   std::unique_ptr<ShaderProgram> _PathTraceShader;
