@@ -224,6 +224,27 @@ int PathTracer::RecompileShaders()
 }
 
 // ----------------------------------------------------------------------------
+// ReloadScene
+// ----------------------------------------------------------------------------
+int PathTracer::ReloadScene()
+{
+  if ( ( _Settings._TextureSize.x > 0 ) && ( _Settings._TextureSize.y > 0 ) )
+    _Scene.CompileMeshData( _Settings._TextureSize, true, true );
+  else
+    return 1;
+
+  _NbTriangles = _Scene.GetNbFaces();
+  _NbMeshInstances = _Scene.GetNbMeshInstances();
+
+  if ( _NbTriangles )
+  {
+
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // UpdatePathTraceUniforms
 // ----------------------------------------------------------------------------
 int PathTracer::UpdatePathTraceUniforms()

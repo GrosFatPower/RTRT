@@ -1,5 +1,8 @@
 #include "Test5.h"
 
+#include "Loader.h"
+#include "PathTracer.h"
+
 #include <string>
 #include <iostream>
 
@@ -35,6 +38,8 @@ void Test5::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
 
     switch ( key )
     {
+    case GLFW_KEY_ESCAPE:
+      this_ -> _KeyEsc = true; break;
     default :
       break;
     }
@@ -46,6 +51,8 @@ void Test5::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
 
     switch ( key )
     {
+    case GLFW_KEY_ESCAPE:
+      this_ -> _KeyEsc = false; break;
     default :
       break;
     }
@@ -81,6 +88,13 @@ void Test5::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 
   if ( !width || !height )
     return;
+
+  this_ -> _Settings._WindowResolution.x = width;
+  this_ -> _Settings._WindowResolution.y = height;
+  this_ -> _Settings._RenderResolution.x = width;
+  this_ -> _Settings._RenderResolution.y = height;
+
+  glViewport(0, 0, this_ -> _Settings._WindowResolution.x, this_ -> _Settings._WindowResolution.y);
 }
 
 // ----------------------------------------------------------------------------
@@ -89,6 +103,10 @@ void Test5::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 Test5::Test5( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iScreenHeight )
 : BaseTest(iMainWindow, iScreenWidth, iScreenHeight)
 {
+  _Settings._WindowResolution.x = iScreenWidth;
+  _Settings._WindowResolution.y = iScreenHeight;
+  _Settings._RenderResolution.x = iScreenWidth;
+  _Settings._RenderResolution.y = iScreenHeight;
 }
 
 // ----------------------------------------------------------------------------
@@ -99,11 +117,205 @@ Test5::~Test5()
 }
 
 // ----------------------------------------------------------------------------
+// InitializeUI
+// ----------------------------------------------------------------------------
+int Test5::InitializeUI()
+{
+  // Setup Dear ImGui context
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  ImGuiIO & io = ImGui::GetIO(); (void)io;
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+  // Setup Dear ImGui style
+  ImGui::StyleColorsDark();
+
+  // Load Fonts
+  io.Fonts -> AddFontDefault();
+
+  // Setup Platform/Renderer backends
+  const char* glsl_version = "#version 130";
+  ImGui_ImplGlfw_InitForOpenGL(_MainWindow.get(), true);
+  ImGui_ImplOpenGL3_Init(glsl_version);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawUI
+// ----------------------------------------------------------------------------
+int Test5::DrawUI()
+{
+  // Start the Dear ImGui frame
+  ImGui_ImplOpenGL3_NewFrame();
+  ImGui_ImplGlfw_NewFrame();
+  ImGui::NewFrame();
+
+  {
+    ImGui::Begin("Test 5");
+
+    ImGui::End();
+  }
+
+  // Rendering
+  ImGui::Render();
+
+  const ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+  glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+  glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
+  glClear(GL_COLOR_BUFFER_BIT);
+
+  ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ProcessInput
+// ----------------------------------------------------------------------------
+int Test5::ProcessInput()
+{
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeScene
+// ----------------------------------------------------------------------------
+int Test5::InitializeScene()
+{
+  std::string sceneName = g_AssetsDir + "TexturedBox.scene";
+
+  Scene * newScene = new Scene;
+  if ( !newScene || !Loader::LoadScene(sceneName, *newScene, _Settings) )
+  {
+    std::cout << "Failed to load scene : " << sceneName << std::endl;
+    return 1;
+  }
+  _Scene.reset(newScene);
+
+  // Scene should contain at least one light
+  Light * firstLight = _Scene -> GetLight(0);
+  if ( !firstLight )
+  {
+    Light newLight;
+    _Scene -> AddLight(newLight);
+    firstLight = _Scene -> GetLight(0);
+  }
+
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeRenderer
+// ----------------------------------------------------------------------------
+int Test5::InitializeRenderer()
+{
+  Renderer * newRenderer = nullptr;
+  
+  if ( RendererType::PathTracerRenderer == _RendererType )
+    newRenderer = new PathTracer(*_Scene, _Settings);
+
+  if ( !newRenderer )
+  {
+    std::cout << "Failed to initialize the renderer" << std::endl;
+    return 1;
+  }
+  _Renderer.reset(newRenderer);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // Run
 // ----------------------------------------------------------------------------
 int Test5::Run()
 {
   int ret = 0;
+
+  do
+  {
+    if ( !_MainWindow )
+    {
+      ret = 1;
+      break;
+    }
+
+    glfwSetWindowTitle( _MainWindow.get(), GetTestHeader() );
+    glfwSetWindowUserPointer( _MainWindow.get(), this );
+
+    glfwSetFramebufferSizeCallback( _MainWindow.get(), Test5::FramebufferSizeCallback );
+    glfwSetMouseButtonCallback( _MainWindow.get(), Test5::MousebuttonCallback );
+    glfwSetKeyCallback( _MainWindow.get(), Test5::KeyCallback );
+
+    glfwMakeContextCurrent( _MainWindow.get() );
+    glfwSwapInterval( 1 ); // Enable vsync
+
+    // Setup Dear ImGui context
+    if ( 0 != InitializeUI() )
+    {
+      std::cout << "Failed to initialize ImGui!" << std::endl;
+      ret = 1;
+      break;
+    }
+
+    // Init openGL scene
+    glewExperimental = GL_TRUE;
+    if ( glewInit() != GLEW_OK )
+    {
+      std::cout << "Failed to initialize GLEW!" << std::endl;
+      ret = 1;
+      break;
+    }
+
+    // Initialize the scene
+    if ( 0 != InitializeScene() )
+    {
+      std::cout << "ERROR: Scene initialization failed!" << std::endl;
+      ret = 1;
+      break;
+    }
+
+    // Initialize the Background
+    //if ( ( 0 != InitializeBackgroundFiles() ) || ( 0 != InitializeBackground() ) )
+    //{
+    //  std::cout << "ERROR: Background initialization failed!" << std::endl;
+    //  ret = 1;
+    //  break;
+    //}
+
+    // Initialize the renderer
+    if ( 0 != InitializeRenderer() )
+    {
+      std::cout << "ERROR: Renderer initialization failed!" << std::endl;
+      ret = 1;
+      break;
+    }
+
+    // Main loop
+    glfwSetWindowSize( _MainWindow.get(), _Settings._WindowResolution.x, _Settings._WindowResolution.y );
+    glViewport( 0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y );
+    glDisable( GL_DEPTH_TEST );
+
+    while ( !glfwWindowShouldClose( _MainWindow.get() ) && !_KeyEsc )
+    {
+      glfwPollEvents();
+
+      ProcessInput();
+
+      DrawUI();
+
+      glfwSwapBuffers( _MainWindow.get() );
+    }
+
+  } while ( 0 );
+
+  // Cleanup
+  ImGui_ImplOpenGL3_Shutdown();
+  ImGui_ImplGlfw_Shutdown();
+  ImGui::DestroyContext();
 
   return ret;
 }

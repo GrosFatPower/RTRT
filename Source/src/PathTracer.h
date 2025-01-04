@@ -37,6 +37,8 @@ protected:
   int InitializeFrameBuffers();
   int RecompileShaders();
 
+  int ReloadScene();
+
   int UpdatePathTraceUniforms();
   int UpdateAccumulateUniforms();
   int UpdateRenderToScreenUniforms();
@@ -88,6 +90,10 @@ protected:
   Vec2i        _CurTile;
   Vec2i        _NbTiles;
   unsigned int _NbCompleteFrames = 0;
+
+  // Scene data
+  int _NbTriangles     = 0;
+  int _NbMeshInstances = 0;
 };
 
 }
