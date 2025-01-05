@@ -161,10 +161,10 @@ int Test5::DrawUI()
   // Rendering
   ImGui::Render();
 
-  const ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-  glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
-  glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
-  glClear(GL_COLOR_BUFFER_BIT);
+  //const ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+  //glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+  //glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
+  //glClear(GL_COLOR_BUFFER_BIT);
 
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -225,6 +225,8 @@ int Test5::InitializeRenderer()
   }
   _Renderer.reset(newRenderer);
 
+  _Renderer -> Initialize();
+
   return 0;
 }
 
@@ -278,16 +280,8 @@ int Test5::Run()
       break;
     }
 
-    // Initialize the Background
-    //if ( ( 0 != InitializeBackgroundFiles() ) || ( 0 != InitializeBackground() ) )
-    //{
-    //  std::cout << "ERROR: Background initialization failed!" << std::endl;
-    //  ret = 1;
-    //  break;
-    //}
-
     // Initialize the renderer
-    if ( 0 != InitializeRenderer() )
+    if ( 0 != InitializeRenderer() || !_Renderer )
     {
       std::cout << "ERROR: Renderer initialization failed!" << std::endl;
       ret = 1;
@@ -304,6 +298,12 @@ int Test5::Run()
       glfwPollEvents();
 
       ProcessInput();
+
+      _Renderer -> Update();
+
+      _Renderer -> RenderToTexture();
+
+      _Renderer -> RenderToScreen();
 
       DrawUI();
 

@@ -18,6 +18,9 @@ public:
   PathTracer( Scene & iScene, RenderSettings & iSettings );
   virtual ~PathTracer();
 
+  virtual int Initialize();
+  virtual int Update();
+
   virtual int RenderToTexture();
   virtual int RenderToScreen();
 
@@ -156,6 +159,7 @@ protected:
   unsigned int _NbCompleteFrames = 0;
 
   // Accumulate
+  unsigned int _FrameNum          = 1;
   unsigned int _AccumulatedFrames = 0;
 
   // Scene data

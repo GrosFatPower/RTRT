@@ -10,6 +10,7 @@
 #include "Texture.h"
 #include "MathUtil.h"
 #include "Loader.h"
+#include "GLUtil.h"
 
 #include "tinydir.h"
 
@@ -145,11 +146,6 @@ void Test3::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 
   this_ -> UpdateRenderResolution();
   this_ -> ResizeTextures();
-}
-
-static std::string UniformArrayElementName( const char * iUniformArrayName, int iIndex, const char * iAttributeName )
-{
-  return std::string(iUniformArrayName).append("[").append(std::to_string(iIndex)).append("].").append(iAttributeName);
 }
 
 // https://github.com/ocornut/imgui/issues/911
@@ -538,13 +534,13 @@ int Test3::UpdateUniforms()
         if ( !curLight )
           continue;
 
-        glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Pos"     ).c_str()), curLight -> _Pos.x, curLight -> _Pos.y, curLight -> _Pos.z);
-        glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Emission").c_str()), curLight -> _Emission.r, curLight -> _Emission.g, curLight -> _Emission.b);
-        glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_DirU"    ).c_str()), curLight -> _DirU.x, curLight -> _DirU.y, curLight -> _DirU.z);
-        glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_DirV"    ).c_str()), curLight -> _DirV.x, curLight -> _DirV.y, curLight -> _DirV.z);
-        glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Radius"  ).c_str()), curLight -> _Radius);
-        glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Area"    ).c_str()), curLight -> _Area);
-        glUniform1f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Lights",i,"_Type"    ).c_str()), curLight -> _Type);
+        glUniform3f(glGetUniformLocation(RTTProgramID, GLUtil::UniformArrayElementName("u_Lights",i,"_Pos"     ).c_str()), curLight -> _Pos.x, curLight -> _Pos.y, curLight -> _Pos.z);
+        glUniform3f(glGetUniformLocation(RTTProgramID, GLUtil::UniformArrayElementName("u_Lights",i,"_Emission").c_str()), curLight -> _Emission.r, curLight -> _Emission.g, curLight -> _Emission.b);
+        glUniform3f(glGetUniformLocation(RTTProgramID, GLUtil::UniformArrayElementName("u_Lights",i,"_DirU"    ).c_str()), curLight -> _DirU.x, curLight -> _DirU.y, curLight -> _DirU.z);
+        glUniform3f(glGetUniformLocation(RTTProgramID, GLUtil::UniformArrayElementName("u_Lights",i,"_DirV"    ).c_str()), curLight -> _DirV.x, curLight -> _DirV.y, curLight -> _DirV.z);
+        glUniform1f(glGetUniformLocation(RTTProgramID, GLUtil::UniformArrayElementName("u_Lights",i,"_Radius"  ).c_str()), curLight -> _Radius);
+        glUniform1f(glGetUniformLocation(RTTProgramID, GLUtil::UniformArrayElementName("u_Lights",i,"_Area"    ).c_str()), curLight -> _Area);
+        glUniform1f(glGetUniformLocation(RTTProgramID, GLUtil::UniformArrayElementName("u_Lights",i,"_Type"    ).c_str()), curLight -> _Type);
 
         nbLights++;
         if ( nbLights >= 32 )
@@ -589,8 +585,8 @@ int Test3::UpdateUniforms()
           Vec4 CenterRad = prim._Transform * Vec4(0.f, 0.f, 0.f, 1.f);
           CenterRad.w = curSphere -> _Radius;
 
-          glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Spheres",nbSpheres,"_MaterialID").c_str()), prim._MaterialID);
-          glUniform4f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Spheres",nbSpheres,"_CenterRad").c_str()), CenterRad.x, CenterRad.y, CenterRad.z, CenterRad.w);
+          glUniform1i(glGetUniformLocation(RTTProgramID, GLUtil::UniformArrayElementName("u_Spheres",nbSpheres,"_MaterialID").c_str()), prim._MaterialID);
+          glUniform4f(glGetUniformLocation(RTTProgramID, GLUtil::UniformArrayElementName("u_Spheres",nbSpheres,"_CenterRad").c_str()), CenterRad.x, CenterRad.y, CenterRad.z, CenterRad.w);
           nbSpheres++;
         }
         else if ( curPrimitive -> _Type == PrimitiveType::Plane )
@@ -599,19 +595,19 @@ int Test3::UpdateUniforms()
           Vec4 orig = prim._Transform * Vec4(curPlane -> _Origin.x, curPlane -> _Origin.y, curPlane -> _Origin.z, 1.f);
           Vec4 normal = glm::transpose(glm::inverse(prim._Transform)) * Vec4(curPlane -> _Normal.x, curPlane -> _Normal.y, curPlane -> _Normal.z, 1.f);
 
-          glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Planes",nbPlanes,"_MaterialID").c_str()), prim._MaterialID);
-          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Planes",nbPlanes,"_Orig").c_str()), orig.x, orig.y, orig.z);
-          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Planes",nbPlanes,"_Normal").c_str()), normal.x, normal.y, normal.z);
+          glUniform1i(glGetUniformLocation(RTTProgramID, GLUtil::UniformArrayElementName("u_Planes",nbPlanes,"_MaterialID").c_str()), prim._MaterialID);
+          glUniform3f(glGetUniformLocation(RTTProgramID, GLUtil::UniformArrayElementName("u_Planes",nbPlanes,"_Orig").c_str()), orig.x, orig.y, orig.z);
+          glUniform3f(glGetUniformLocation(RTTProgramID, GLUtil::UniformArrayElementName("u_Planes",nbPlanes,"_Normal").c_str()), normal.x, normal.y, normal.z);
           nbPlanes++;
         }
         else if ( curPrimitive -> _Type == PrimitiveType::Box )
         {
           Box * curBox = (Box *) curPrimitive;
 
-          glUniform1i(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_MaterialID").c_str()), prim._MaterialID);
-          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_Low").c_str()), curBox -> _Low.x, curBox -> _Low.y, curBox -> _Low.z);
-          glUniform3f(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_High").c_str()), curBox -> _High.x, curBox -> _High.y, curBox -> _High.z);
-          glUniformMatrix4fv(glGetUniformLocation(RTTProgramID, UniformArrayElementName("u_Boxes",nbBoxes,"_Transfom").c_str()), 1, GL_FALSE, glm::value_ptr(prim._Transform));
+          glUniform1i(glGetUniformLocation(RTTProgramID, GLUtil::UniformArrayElementName("u_Boxes",nbBoxes,"_MaterialID").c_str()), prim._MaterialID);
+          glUniform3f(glGetUniformLocation(RTTProgramID, GLUtil::UniformArrayElementName("u_Boxes",nbBoxes,"_Low").c_str()), curBox -> _Low.x, curBox -> _Low.y, curBox -> _Low.z);
+          glUniform3f(glGetUniformLocation(RTTProgramID, GLUtil::UniformArrayElementName("u_Boxes",nbBoxes,"_High").c_str()), curBox -> _High.x, curBox -> _High.y, curBox -> _High.z);
+          glUniformMatrix4fv(glGetUniformLocation(RTTProgramID, GLUtil::UniformArrayElementName("u_Boxes",nbBoxes,"_Transfom").c_str()), 1, GL_FALSE, glm::value_ptr(prim._Transform));
           nbBoxes++;
         }
       }

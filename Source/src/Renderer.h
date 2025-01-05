@@ -13,6 +13,9 @@ public:
   Renderer( Scene & iScene, RenderSettings & iSettings );
   virtual ~Renderer();
 
+  virtual int Initialize() = 0;
+  virtual int Update() = 0;
+
   virtual int RenderToTexture() = 0;
   virtual int RenderToScreen() = 0;
 
