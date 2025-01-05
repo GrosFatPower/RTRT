@@ -95,6 +95,9 @@ void Test5::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
   this_ -> _Settings._RenderResolution.y = height;
 
   glViewport(0, 0, this_ -> _Settings._WindowResolution.x, this_ -> _Settings._WindowResolution.y);
+
+  if ( this_ -> _Renderer )
+    this_ -> _Renderer -> HasModifiedRenderSettings();
 }
 
 // ----------------------------------------------------------------------------
@@ -204,7 +207,6 @@ int Test5::InitializeScene()
     firstLight = _Scene -> GetLight(0);
   }
 
-
   return 0;
 }
 
@@ -304,6 +306,8 @@ int Test5::Run()
       _Renderer -> RenderToTexture();
 
       _Renderer -> RenderToScreen();
+
+      _Renderer -> Done();
 
       DrawUI();
 

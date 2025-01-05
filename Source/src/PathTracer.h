@@ -20,6 +20,7 @@ public:
 
   virtual int Initialize();
   virtual int Update();
+  virtual int Done();
 
   virtual int RenderToTexture();
   virtual int RenderToScreen();
@@ -100,7 +101,6 @@ protected:
   int RenderWidth()         const { return _Settings._RenderResolution.x; }
   int RenderHeight()        const { return _Settings._RenderResolution.y; }
 
-  bool Dirty()              const { return ( false ); } // ToDo
   bool LowResPass()         const { return ( false ); } // ToDo
   int LowResRenderWidth()   const { return int( _Settings._RenderResolution.x * LowResRenderScale() ); }
   int LowResRenderHeight()  const { return int( _Settings._RenderResolution.y * LowResRenderScale() ); }

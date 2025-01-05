@@ -1,6 +1,7 @@
 renderer
 {
 	resolution 800 600
+	envMap HDR/alps_field_2k.hdr
 }
 
 camera

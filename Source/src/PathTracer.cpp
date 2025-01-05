@@ -139,15 +139,27 @@ int PathTracer::Update()
   //  return 1;
   //}
 
-  // TMP
-  static int once = 0;
-  if ( !once )
-  {
-    this -> UpdatePathTraceUniforms();
-    this -> UpdateAccumulateUniforms();
-    this -> UpdateRenderToScreenUniforms();
-    once++;
-  }
+  if ( Dirty() )
+    this -> ResetTiles();
+  else if ( TiledRendering() )
+    this -> NextTile();
+
+  if ( _DirtyState._RenderSettings )
+    this -> ResizeRenderTarget();
+
+  this -> UpdatePathTraceUniforms();
+  this -> UpdateAccumulateUniforms();
+  this -> UpdateRenderToScreenUniforms();
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// Done
+// ----------------------------------------------------------------------------
+int PathTracer::Done()
+{
+  CleanStates();
 
   return 0;
 }
@@ -181,7 +193,7 @@ int PathTracer::UpdatePathTraceUniforms()
     _AccumulatedFrames = 1;
   }
 
-  //if ( _RenderSettingsModified ) // ToDo
+  if ( _DirtyState._RenderSettings )
   {
     glUniform1i(glGetUniformLocation(PTProgramID, "u_Bounces"), _Settings._Bounces);
     glUniform3f(glGetUniformLocation(PTProgramID, "u_BackgroundColor"), _Settings._BackgroundColor.r, _Settings._BackgroundColor.g, _Settings._BackgroundColor.b);
@@ -194,10 +206,9 @@ int PathTracer::UpdatePathTraceUniforms()
     glUniform1f(glGetUniformLocation(PTProgramID, "u_Exposure"), _Settings._Exposure);
     glUniform1i(glGetUniformLocation(PTProgramID, "u_ToneMapping"), ( _Settings._ToneMapping ? 1 : 0 ));
     glUniform1i(glGetUniformLocation(PTProgramID, "u_DebugMode" ), _DebugMode );
-    //_RenderSettingsModified = false;
   }
 
-  //if ( _SceneCameraModified ) // ToDo
+  if ( _DirtyState._SceneCamera )
   {
     Camera & cam = _Scene.GetCamera();
     glUniform3f(glGetUniformLocation(PTProgramID, "u_Camera._Up"), cam.GetUp().x, cam.GetUp().y, cam.GetUp().z);
@@ -207,7 +218,7 @@ int PathTracer::UpdatePathTraceUniforms()
     glUniform1f(glGetUniformLocation(PTProgramID, "u_Camera._FOV"), cam.GetFOV());
   }
 
-  //if ( _SceneLightsModified ) // ToDo
+  if ( _DirtyState._SceneLights )
   {
     int nbLights = 0;
 
@@ -234,7 +245,7 @@ int PathTracer::UpdatePathTraceUniforms()
     glUniform1i(glGetUniformLocation(PTProgramID, "u_ShowLights"), (int)_Settings._ShowLights);
   }
 
-  //if ( _SceneMaterialsModified ) // ToDo
+  if ( _DirtyState._SceneMaterials )
   {
     const std::vector<Material> & Materials =  _Scene.GetMaterials();
 
@@ -243,7 +254,7 @@ int PathTracer::UpdatePathTraceUniforms()
     glBindTexture(GL_TEXTURE_2D, 0);
   }
 
-  //if ( _SceneInstancesModified ) // ToDo
+  if ( _DirtyState._SceneInstances )
   {
     //const std::vector<Mesh*>          & Meshes          = _Scene.GetMeshes();
     const std::vector<Primitive*>        & Primitives         = _Scene.GetPrimitives();
@@ -538,7 +549,7 @@ int PathTracer::ResizeRenderTarget()
   ResizeFBO(_RenderTargetFBO, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT);
   ResizeFBO(_RenderTargetTileFBO, GL_RGBA32F, TileWidth(), TileHeight(), GL_RGBA, GL_FLOAT);
   ResizeFBO(_RenderTargetLowResFBO, GL_RGBA32F, LowResRenderWidth(), LowResRenderHeight(), GL_RGBA, GL_FLOAT);
-  ResizeFBO(_AccumulateFBO, GL_RGBA32F, RenderWidth(), RenderWidth(), GL_RGBA, GL_FLOAT);
+  ResizeFBO(_AccumulateFBO, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT);
 
   return 0;
 }
