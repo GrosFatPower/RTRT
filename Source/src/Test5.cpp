@@ -32,31 +32,7 @@ void Test5::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
   if ( !this_ )
     return;
 
-  if ( action == GLFW_PRESS )
-  {
-    std::cout << "EVENT : KEY PRESS" << std::endl;
-
-    switch ( key )
-    {
-    case GLFW_KEY_ESCAPE:
-      this_ -> _KeyEsc = true; break;
-    default :
-      break;
-    }
-  }
-
-  else if ( action == GLFW_RELEASE )
-  {
-    std::cout << "EVENT : KEY RELEASE" << std::endl;
-
-    switch ( key )
-    {
-    case GLFW_KEY_ESCAPE:
-      this_ -> _KeyEsc = false; break;
-    default :
-      break;
-    }
-  }
+  this_ -> _KeyInput.AddEvent(key, action);
 }
 
 // ----------------------------------------------------------------------------
@@ -70,8 +46,10 @@ void Test5::MousebuttonCallback(GLFWwindow* window, int button, int action, int 
     if ( !this_ )
       return;
 
-    double mouseX = 0.f, mouseY = 0.f;
-    glfwGetCursorPos(window, &mouseX, &mouseY);
+    //double mouseX = 0.f, mouseY = 0.f;
+    //glfwGetCursorPos(window, &mouseX, &mouseY);
+
+    this_ -> _MouseInput.AddEvent(button, action);
   }
 }
 
@@ -179,6 +157,10 @@ int Test5::DrawUI()
 // ----------------------------------------------------------------------------
 int Test5::ProcessInput()
 {
+  _KeyInput.ClearEvents();
+  _MouseInput.ClearEvents();
+
+  glfwPollEvents();
 
   return 0;
 }
@@ -295,10 +277,8 @@ int Test5::Run()
     glViewport( 0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y );
     glDisable( GL_DEPTH_TEST );
 
-    while ( !glfwWindowShouldClose( _MainWindow.get() ) && !_KeyEsc )
+    while ( !glfwWindowShouldClose( _MainWindow.get() ) && !_KeyInput.IsKeyReleased(GLFW_KEY_ESCAPE) && !_MouseInput.IsButtonReleased(GLFW_MOUSE_BUTTON_2) )
     {
-      glfwPollEvents();
-
       ProcessInput();
 
       _Renderer -> Update();
@@ -320,6 +300,10 @@ int Test5::Run()
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplGlfw_Shutdown();
   ImGui::DestroyContext();
+
+  glfwSetFramebufferSizeCallback( _MainWindow.get(), nullptr );
+  glfwSetMouseButtonCallback( _MainWindow.get(), nullptr );
+  glfwSetKeyCallback( _MainWindow.get(), nullptr );
 
   return ret;
 }

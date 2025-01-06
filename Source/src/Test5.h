@@ -5,6 +5,8 @@
 #include "Scene.h"
 #include "RenderSettings.h"
 #include "Renderer.h"
+#include "KeyInput.h"
+#include "MouseInput.h"
 #include "GL/glew.h"
 
 #include <memory>
@@ -58,8 +60,8 @@ protected:
   RendererType              _RendererType = RendererType::PathTracerRenderer;
   std::unique_ptr<Renderer> _Renderer;
 
-  bool _KeyEsc = false; // TMP
-
+  KeyInput   _KeyInput;
+  MouseInput _MouseInput;
 };
 
 }
