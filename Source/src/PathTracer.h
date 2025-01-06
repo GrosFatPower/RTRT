@@ -101,7 +101,7 @@ protected:
   int RenderWidth()         const { return _Settings._RenderResolution.x; }
   int RenderHeight()        const { return _Settings._RenderResolution.y; }
 
-  bool LowResPass()         const { return ( false ); } // ToDo
+  bool LowResPass()         const { return ( Dirty() && !_Settings._AutoScale ); }
   int LowResRenderWidth()   const { return int( _Settings._RenderResolution.x * LowResRenderScale() ); }
   int LowResRenderHeight()  const { return int( _Settings._RenderResolution.y * LowResRenderScale() ); }
 
