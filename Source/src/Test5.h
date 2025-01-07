@@ -52,6 +52,8 @@ protected:
   int InitializeScene();
   int InitializeRenderer();
 
+  int UpdateCPUTime();
+
 protected:
 
   std::unique_ptr<Scene>    _Scene;
@@ -60,8 +62,12 @@ protected:
   RendererType              _RendererType = RendererType::PathTracerRenderer;
   std::unique_ptr<Renderer> _Renderer;
 
-  KeyInput   _KeyInput;
-  MouseInput _MouseInput;
+  KeyInput                  _KeyInput;
+  MouseInput                _MouseInput;
+
+  // Frame rate
+  double                     _CPULoopTime = 0.;
+  double                     _TimeDelta   = 0.;
 };
 
 }

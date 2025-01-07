@@ -144,7 +144,7 @@ int PathTracer::Update()
   else if ( TiledRendering() )
     this -> NextTile();
 
-  if ( _DirtyState._RenderSettings )
+  if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
     this -> ResizeRenderTarget();
 
   this -> UpdatePathTraceUniforms();
@@ -193,7 +193,7 @@ int PathTracer::UpdatePathTraceUniforms()
     _AccumulatedFrames = 1;
   }
 
-  if ( _DirtyState._RenderSettings )
+  if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
   {
     glUniform1i(glGetUniformLocation(PTProgramID, "u_Bounces"), _Settings._Bounces);
     glUniform3f(glGetUniformLocation(PTProgramID, "u_BackgroundColor"), _Settings._BackgroundColor.r, _Settings._BackgroundColor.g, _Settings._BackgroundColor.b);
@@ -208,7 +208,7 @@ int PathTracer::UpdatePathTraceUniforms()
     glUniform1i(glGetUniformLocation(PTProgramID, "u_DebugMode" ), _DebugMode );
   }
 
-  if ( _DirtyState._SceneCamera )
+  if ( _DirtyStates & (unsigned long)DirtyState::SceneCamera )
   {
     Camera & cam = _Scene.GetCamera();
     glUniform3f(glGetUniformLocation(PTProgramID, "u_Camera._Up"), cam.GetUp().x, cam.GetUp().y, cam.GetUp().z);
@@ -218,7 +218,7 @@ int PathTracer::UpdatePathTraceUniforms()
     glUniform1f(glGetUniformLocation(PTProgramID, "u_Camera._FOV"), cam.GetFOV());
   }
 
-  if ( _DirtyState._SceneLights )
+  if ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
   {
     int nbLights = 0;
 
@@ -245,7 +245,7 @@ int PathTracer::UpdatePathTraceUniforms()
     glUniform1i(glGetUniformLocation(PTProgramID, "u_ShowLights"), (int)_Settings._ShowLights);
   }
 
-  if ( _DirtyState._SceneMaterials )
+  if ( _DirtyStates & (unsigned long)DirtyState::SceneMaterials )
   {
     const std::vector<Material> & Materials =  _Scene.GetMaterials();
 
@@ -254,7 +254,7 @@ int PathTracer::UpdatePathTraceUniforms()
     glBindTexture(GL_TEXTURE_2D, 0);
   }
 
-  if ( _DirtyState._SceneInstances )
+  if ( _DirtyStates & (unsigned long)DirtyState::SceneInstances )
   {
     //const std::vector<Mesh*>          & Meshes          = _Scene.GetMeshes();
     const std::vector<Primitive*>        & Primitives         = _Scene.GetPrimitives();

@@ -13,9 +13,9 @@ KeyInput::~KeyInput()
 {
 }
 
-void KeyInput::AddEvent(int iKey, int iAction)
+void KeyInput::AddEvent(int iKey, int iAction, int iMods)
 {
-  _KeyEvents[iKey].push(iAction);
+  _KeyEvents[iKey].push({iAction, iMods});
 }
 
 bool KeyInput::IsKeyDown( int iKey ) const
@@ -23,8 +23,8 @@ bool KeyInput::IsKeyDown( int iKey ) const
   auto it = _KeyEvents.find(iKey);
   if ( it != _KeyEvents.end() )
   {
-    const std::queue<int> & events = it -> second;
-    if ( events.size() && ( events.back() == GLFW_PRESS ) )
+    const std::queue<KeyEvent> & events = it -> second;
+    if ( events.size() && ( events.back()._Action == GLFW_PRESS ) )
       return true;
   }
 
@@ -36,8 +36,8 @@ bool KeyInput::IsKeyReleased( int iKey ) const
   auto it = _KeyEvents.find(iKey);
   if ( it != _KeyEvents.end() )
   {
-    const std::queue<int> & events = it -> second;
-    if ( events.size() && ( events.back() == GLFW_RELEASE ) )
+    const std::queue<KeyEvent> & events = it -> second;
+    if ( events.size() && ( events.back()._Action == GLFW_RELEASE ) )
       return true;
   }
 
@@ -50,13 +50,11 @@ void KeyInput::ClearEvents()
   {
     if ( events.size() )
     {
-      if ( events.back() == GLFW_PRESS )
-      {
-        events = {};
-        events.push(GLFW_PRESS);
-      }
-      else
-        events = {};
+      KeyEvent lastEvent = events.back();
+      events = {};
+
+      if ( lastEvent._Action == GLFW_PRESS )
+        events.push(lastEvent);
     }
   }
 }

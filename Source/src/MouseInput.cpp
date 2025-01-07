@@ -13,9 +13,9 @@ MouseInput::~MouseInput()
 {
 }
 
-void MouseInput::AddEvent(int iButton, int iAction)
+void MouseInput::AddEvent(int iButton, int iAction, double iMouseX, double iMouseY)
 {
-  _ButtonEvents[iButton].push(iAction);
+  _ButtonEvents[iButton].push({iAction, iMouseX, iMouseY});
 }
 
 bool MouseInput::IsButtonPressed( int iButton ) const
@@ -23,8 +23,8 @@ bool MouseInput::IsButtonPressed( int iButton ) const
   auto it = _ButtonEvents.find(iButton);
   if ( it != _ButtonEvents.end() )
   {
-    const std::queue<int> & events = it -> second;
-    if ( events.size() && ( events.back() == GLFW_PRESS ) )
+    const std::queue<MouseEvent> & events = it -> second;
+    if ( events.size() && ( events.back()._Action == GLFW_PRESS ) )
       return true;
   }
 
@@ -36,8 +36,8 @@ bool MouseInput::IsButtonReleased( int iButton ) const
   auto it = _ButtonEvents.find(iButton);
   if ( it != _ButtonEvents.end() )
   {
-    const std::queue<int> & events = it -> second;
-    if ( events.size() && ( events.back() == GLFW_RELEASE ) )
+    const std::queue<MouseEvent> & events = it -> second;
+    if ( events.size() && ( events.back()._Action == GLFW_RELEASE ) )
       return true;
   }
 
@@ -50,13 +50,11 @@ void MouseInput::ClearEvents()
   {
     if ( events.size() )
     {
-      if ( events.back() == GLFW_PRESS )
-      {
-        events = {};
-        events.push(GLFW_PRESS);
-      }
-      else
-        events = {};
+      MouseEvent lastEvent = events.back();
+      events = {};
+
+      if ( lastEvent._Action == GLFW_PRESS )
+        events.push(lastEvent);
     }
   }
 }

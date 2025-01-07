@@ -7,6 +7,12 @@
 namespace RTRT
 {
 
+struct KeyEvent
+{
+  int _Action = 0;
+  int _Mods   = 0;
+};
+
 class KeyInput
 {
 public:
@@ -16,12 +22,12 @@ virtual ~KeyInput();
 bool IsKeyDown(int iKey) const;
 bool IsKeyReleased(int iKey) const;
 
-void AddEvent(int iKey, int iAction);
+void AddEvent(int iKey, int iAction, int iMods);
 void ClearEvents();
 
 protected:
 
-std::map<int, std::queue<int>> _KeyEvents;
+std::map<int, std::queue<KeyEvent>> _KeyEvents;
 };
 
 }

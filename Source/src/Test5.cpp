@@ -32,7 +32,8 @@ void Test5::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
   if ( !this_ )
     return;
 
-  this_ -> _KeyInput.AddEvent(key, action);
+  if ( ( action == GLFW_PRESS ) ||  ( action == GLFW_RELEASE ) )
+    this_ -> _KeyInput.AddEvent(key, action, mods);
 }
 
 // ----------------------------------------------------------------------------
@@ -46,10 +47,11 @@ void Test5::MousebuttonCallback(GLFWwindow* window, int button, int action, int 
     if ( !this_ )
       return;
 
-    //double mouseX = 0.f, mouseY = 0.f;
-    //glfwGetCursorPos(window, &mouseX, &mouseY);
+    double mouseX = 0.f, mouseY = 0.f;
+    glfwGetCursorPos(window, &mouseX, &mouseY);
 
-    this_ -> _MouseInput.AddEvent(button, action);
+    if ( ( action == GLFW_PRESS ) ||  ( action == GLFW_RELEASE ) )
+      this_ -> _MouseInput.AddEvent(button, action, mouseX, mouseY);
   }
 }
 
@@ -75,7 +77,7 @@ void Test5::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
   glViewport(0, 0, this_ -> _Settings._WindowResolution.x, this_ -> _Settings._WindowResolution.y);
 
   if ( this_ -> _Renderer )
-    this_ -> _Renderer -> HasModifiedRenderSettings();
+    this_ -> _Renderer -> Notify(DirtyState::RenderSettings);
 }
 
 // ----------------------------------------------------------------------------
@@ -162,6 +164,40 @@ int Test5::ProcessInput()
 
   glfwPollEvents();
 
+  // Keyboard input
+  {
+    const float velocity = 100.f;
+
+    if ( _KeyInput.IsKeyDown(GLFW_KEY_W) )
+    {
+      float newRadius = _Scene -> GetCamera().GetRadius() - _TimeDelta;
+      if ( newRadius > 0.f )
+      {
+        _Scene -> GetCamera().SetRadius(newRadius);
+        _Renderer -> Notify(DirtyState::SceneCamera);
+      }
+    }
+    if ( _KeyInput.IsKeyDown(GLFW_KEY_S) )
+    {
+      float newRadius = _Scene -> GetCamera().GetRadius() + _TimeDelta;
+      if ( newRadius > 0.f )
+      {
+        _Scene -> GetCamera().SetRadius(newRadius);
+        _Renderer -> Notify(DirtyState::SceneCamera);
+      }
+    }
+    if ( _KeyInput.IsKeyDown(GLFW_KEY_A) )
+    {
+      _Scene -> GetCamera().OffsetOrientations(_TimeDelta * velocity, 0.f);
+      _Renderer -> Notify(DirtyState::SceneCamera);
+    }
+    if ( _KeyInput.IsKeyDown(GLFW_KEY_D) )
+    {
+      _Scene -> GetCamera().OffsetOrientations(-_TimeDelta * velocity, 0.f);
+      _Renderer -> Notify(DirtyState::SceneCamera);
+    }
+  }
+
   return 0;
 }
 
@@ -210,6 +246,19 @@ int Test5::InitializeRenderer()
   _Renderer.reset(newRenderer);
 
   _Renderer -> Initialize();
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateCPUTime
+// ----------------------------------------------------------------------------
+int Test5::UpdateCPUTime()
+{
+  double oldCpuTime = _CPULoopTime;
+  _CPULoopTime = glfwGetTime();
+
+  _TimeDelta = _CPULoopTime - oldCpuTime;
 
   return 0;
 }
@@ -277,8 +326,10 @@ int Test5::Run()
     glViewport( 0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y );
     glDisable( GL_DEPTH_TEST );
 
-    while ( !glfwWindowShouldClose( _MainWindow.get() ) && !_KeyInput.IsKeyReleased(GLFW_KEY_ESCAPE) && !_MouseInput.IsButtonReleased(GLFW_MOUSE_BUTTON_2) )
+    while ( !glfwWindowShouldClose( _MainWindow.get() ) && !_KeyInput.IsKeyReleased(GLFW_KEY_ESCAPE) )
     {
+      UpdateCPUTime();
+
       ProcessInput();
 
       _Renderer -> Update();
