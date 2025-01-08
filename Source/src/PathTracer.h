@@ -7,6 +7,8 @@
 
 #include "GL/glew.h"
 
+#include <memory>
+
 namespace RTRT
 {
 
