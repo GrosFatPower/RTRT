@@ -38,9 +38,10 @@ public:
 protected:
 
   // Callbacks
-  static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
-  static void MousebuttonCallback(GLFWwindow * window, int button, int action, int mods);
-  static void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
+  static void KeyCallback(GLFWwindow* window, const int key, const int scancode, const int action, const int mods);
+  static void MouseButtonCallback(GLFWwindow * window, const int button, const int action, const int mods);
+  static void MouseScrollCallback(GLFWwindow * window, const double xoffset, const double yoffset);
+  static void FramebufferSizeCallback(GLFWwindow* window, const int width, const int height);
 
 protected:
 

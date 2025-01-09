@@ -13,7 +13,7 @@ KeyInput::~KeyInput()
 {
 }
 
-void KeyInput::AddEvent(int iKey, int iAction, int iMods)
+void KeyInput::AddEvent( const int iKey, const int iAction, const int iMods )
 {
   _KeyEvents[iKey].push({iAction, iMods});
 }
@@ -31,7 +31,7 @@ bool KeyInput::IsKeyDown( int iKey ) const
   return false;
 }
 
-bool KeyInput::IsKeyReleased( int iKey ) const
+bool KeyInput::IsKeyReleased( const int iKey ) const
 {
   auto it = _KeyEvents.find(iKey);
   if ( it != _KeyEvents.end() )
@@ -44,7 +44,7 @@ bool KeyInput::IsKeyReleased( int iKey ) const
   return false;
 }
 
-void KeyInput::ClearEvents()
+void KeyInput::ClearLastEvents()
 {
   for ( auto & [key, events] : _KeyEvents )
   {

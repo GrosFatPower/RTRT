@@ -19,11 +19,11 @@ public:
 KeyInput();
 virtual ~KeyInput();
 
-bool IsKeyDown(int iKey) const;
-bool IsKeyReleased(int iKey) const;
+bool IsKeyDown(const int iKey) const;
+bool IsKeyReleased(const int iKey) const;
 
-void AddEvent(int iKey, int iAction, int iMods);
-void ClearEvents();
+void AddEvent(const int iKey, const int iAction, const int iMods);
+void ClearLastEvents();
 
 protected:
 

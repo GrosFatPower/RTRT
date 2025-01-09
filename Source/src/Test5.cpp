@@ -26,7 +26,7 @@ static std::string g_AssetsDir = "..\\..\\Assets\\";
 // ----------------------------------------------------------------------------
 // KeyCallback
 // ----------------------------------------------------------------------------
-void Test5::KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
+void Test5::KeyCallback(GLFWwindow* window, const int key, const int scancode, const int action, const int mods)
 {
   auto * const this_ = static_cast<Test5*>(glfwGetWindowUserPointer(window));
   if ( !this_ )
@@ -37,9 +37,9 @@ void Test5::KeyCallback(GLFWwindow* window, int key, int scancode, int action, i
 }
 
 // ----------------------------------------------------------------------------
-// MousebuttonCallback
+// MouseButtonCallback
 // ----------------------------------------------------------------------------
-void Test5::MousebuttonCallback(GLFWwindow* window, int button, int action, int mods)
+void Test5::MouseButtonCallback(GLFWwindow* window, const int button, const int action, const int mods)
 {
   if ( !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) )
   {
@@ -47,18 +47,33 @@ void Test5::MousebuttonCallback(GLFWwindow* window, int button, int action, int 
     if ( !this_ )
       return;
 
-    double mouseX = 0.f, mouseY = 0.f;
+    double mouseX = 0., mouseY = 0.;
     glfwGetCursorPos(window, &mouseX, &mouseY);
 
     if ( ( action == GLFW_PRESS ) ||  ( action == GLFW_RELEASE ) )
-      this_ -> _MouseInput.AddEvent(button, action, mouseX, mouseY);
+      this_ -> _MouseInput.AddButtonEvent(button, action, mouseX, mouseY);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// MouseScrollCallback
+// ----------------------------------------------------------------------------
+void Test5::MouseScrollCallback(GLFWwindow * window, const double xoffset, const double yoffset)
+{
+  if ( !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) )
+  {
+    auto * const this_ = static_cast<Test5*>(glfwGetWindowUserPointer(window));
+    if ( !this_ )
+      return;
+
+    this_ -> _MouseInput.AddScrollEvent(xoffset, yoffset);
   }
 }
 
 // ----------------------------------------------------------------------------
 // FramebufferSizeCallback
 // ----------------------------------------------------------------------------
-void Test5::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
+void Test5::FramebufferSizeCallback(GLFWwindow* window, const int width, const int height)
 {
   auto * const this_ = static_cast<Test5*>(glfwGetWindowUserPointer(window));
   if ( !this_ )
@@ -159,9 +174,6 @@ int Test5::DrawUI()
 // ----------------------------------------------------------------------------
 int Test5::ProcessInput()
 {
-  _KeyInput.ClearEvents();
-  _MouseInput.ClearEvents();
-
   glfwPollEvents();
 
   // Keyboard input
@@ -197,6 +209,43 @@ int Test5::ProcessInput()
       _Renderer -> Notify(DirtyState::SceneCamera);
     }
   }
+
+  // Mouse input
+  double curMouseX = 0., curMouseY = 0.;
+  glfwGetCursorPos(_MainWindow.get(), &curMouseX, &curMouseY);
+  {
+    const float MouseSensitivity[5] = { 1.f, 0.5f, 0.01f, 0.01f, .5f }; // Yaw, Pitch, StafeRight, StrafeUp, ZoomInOut
+
+    double deltaX = 0., deltaY = 0.;
+    double mouseX = 0.f, mouseY = 0.f;
+    if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1, mouseX, mouseY) ) // Right click
+    {
+      deltaX = curMouseX - mouseX;
+      deltaY = curMouseY - mouseY;
+      _Scene -> GetCamera().OffsetOrientations(MouseSensitivity[0] * deltaX, MouseSensitivity[1] * -deltaY);
+      _Renderer -> Notify(DirtyState::SceneCamera);
+    }
+    if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_3, mouseX, mouseY) ) // Middle click
+    {
+      deltaX = curMouseX - mouseX;
+      deltaY = curMouseY - mouseY;
+      _Scene -> GetCamera().Strafe(MouseSensitivity[2] * deltaX, MouseSensitivity[2] * deltaY);
+      _Renderer -> Notify(DirtyState::SceneCamera);
+    }
+
+    if ( _MouseInput.IsScrolled(mouseX, mouseY) )
+    {
+      float newRadius = _Scene -> GetCamera().GetRadius() + MouseSensitivity[4] * mouseY;
+      if ( newRadius > 0.f )
+      {
+        _Scene -> GetCamera().SetRadius(newRadius);
+        _Renderer -> Notify(DirtyState::SceneCamera);
+      }
+    }
+  }
+
+  _KeyInput.ClearLastEvents();
+  _MouseInput.ClearLastEvents(curMouseX, curMouseY);
 
   return 0;
 }
@@ -282,7 +331,8 @@ int Test5::Run()
     glfwSetWindowUserPointer( _MainWindow.get(), this );
 
     glfwSetFramebufferSizeCallback( _MainWindow.get(), Test5::FramebufferSizeCallback );
-    glfwSetMouseButtonCallback( _MainWindow.get(), Test5::MousebuttonCallback );
+    glfwSetMouseButtonCallback( _MainWindow.get(), Test5::MouseButtonCallback );
+    glfwSetScrollCallback( _MainWindow.get(), Test5::MouseScrollCallback );
     glfwSetKeyCallback( _MainWindow.get(), Test5::KeyCallback );
 
     glfwMakeContextCurrent( _MainWindow.get() );
