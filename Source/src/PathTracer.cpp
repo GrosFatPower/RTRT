@@ -470,7 +470,10 @@ int PathTracer::RenderToTexture()
 
   // Accumulate
   glBindFramebuffer(GL_FRAMEBUFFER, _AccumulateFBO._ID);
-  glViewport(0, 0, RenderWidth(), RenderHeight());
+  if ( TiledRendering() && !LowResPass() )
+    glViewport(_Settings._TileResolution.x * _CurTile.x, _Settings._TileResolution.y * _CurTile.y, _Settings._TileResolution.x, _Settings._TileResolution.y);
+  else
+    glViewport(0, 0, RenderWidth(), RenderHeight());
 
   this -> BindAccumulateTextures();
 
@@ -679,6 +682,8 @@ int PathTracer::UnloadScene()
   DeleteTEX(_MaterialsTEX);
   DeleteTEX(_TLASTransformsIDTEX);
   DeleteTEX(_EnvMapTEX);
+
+  _FrameNum = 0;
 
   return 0;
 }

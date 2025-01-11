@@ -796,8 +796,14 @@ int Test3::DrawUI()
 
     if ( ImGui::CollapsingHeader( "Render settings" ) )
     {
-      if ( ImGui::SliderInt( "Bounces", &_Settings._Bounces, 1, 10 ) )
-        _RenderSettingsModified = true;
+      static bool vSync = true;
+      if ( ImGui::Checkbox( "VSync", &vSync ) )
+      {
+        if ( vSync )
+          glfwSwapInterval( 1 );
+        else
+          glfwSwapInterval( 0 );
+      }
 
       if ( ImGui::SliderInt( "Render scale", &_Settings._RenderScale, 25, 200 ) )
       {
@@ -904,6 +910,9 @@ int Test3::DrawUI()
           }
         }
       }
+
+      if ( ImGui::SliderInt( "Bounces", &_Settings._Bounces, 1, 10 ) )
+        _RenderSettingsModified = true;
 
       static const char * DEBUG_MODES[] = { "Off", "Albedo", "Metalness", "Roughness", "Normals", "UV", "Tiles"};
       if ( ImGui::Combo( "Debug view", &_DebugMode, DEBUG_MODES, 7 ) )

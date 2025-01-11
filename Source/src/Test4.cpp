@@ -751,6 +751,15 @@ void Test4::DrawUI()
         _UpdateFrameBuffers = true;
       }
 
+      static bool vSync = true;
+      if ( ImGui::Checkbox( "VSync", &vSync ) )
+      {
+        if ( vSync )
+          glfwSwapInterval( 1 );
+        else
+          glfwSwapInterval( 0 );
+      }
+
       float fov = _Scene -> GetCamera().GetFOVInDegrees();
       if ( ImGui::SliderFloat("FOV", &fov, 5.f, 150.f) )
         _Scene -> GetCamera().SetFOVInDegrees(fov);
