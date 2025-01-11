@@ -22,4 +22,14 @@ Renderer::~Renderer()
 {
 }
 
+// ----------------------------------------------------------------------------
+// SetDebugMode
+// ----------------------------------------------------------------------------
+void Renderer::SetDebugMode( const int iDebugMode )
+{
+  _DebugMode = iDebugMode;
+
+  _DirtyStates |= (unsigned long)DirtyState::RenderSettings;
+}
+
 }

@@ -104,8 +104,8 @@ protected:
   int RenderHeight()        const { return _Settings._RenderResolution.y; }
 
   bool LowResPass()         const { return ( Dirty() && !_Settings._AutoScale ); }
-  int LowResRenderWidth()   const { return int( _Settings._RenderResolution.x * LowResRenderScale() ); }
-  int LowResRenderHeight()  const { return int( _Settings._RenderResolution.y * LowResRenderScale() ); }
+  int LowResRenderWidth()   const { return std::max(int( _Settings._RenderResolution.x * LowResRenderScale() ), 32); }
+  int LowResRenderHeight()  const { return std::max(int( _Settings._RenderResolution.y * LowResRenderScale() ), 32); }
 
   bool TiledRendering()     const { return _Settings._TiledRendering; }
   int TileWidth()           const { return ( _Settings._TileResolution.x > 0 ) ? ( _Settings._TileResolution.x ) : ( 64 ); }
@@ -167,9 +167,6 @@ protected:
   // Scene data
   int _NbTriangles     = 0;
   int _NbMeshInstances = 0;
-
-  // DEBUG
-  int _DebugMode = 0;
 };
 
 }

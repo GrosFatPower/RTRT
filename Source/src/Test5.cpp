@@ -151,7 +151,121 @@ int Test5::DrawUI()
   ImGui::NewFrame();
 
   {
-    ImGui::Begin("Test 5");
+    ImGui::Begin("Test 5 : Viewer");
+
+    if (ImGui::CollapsingHeader("Rendering"))
+    {
+      ImGui::Text("Window width %d: height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+      ImGui::Text("Render width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
+
+      ImGui::Text("Render time %.3f ms/frame", _FrameTime * 1000.);
+      {
+        static std::vector<float> s_FrameRateHistory;
+        static int                s_LastFrameIndex = -1;
+        static double             s_AccumTime = 0.f;
+        static float              s_Max = 300.;
+
+        if ( -1 == s_LastFrameIndex )
+        {
+          s_FrameRateHistory.assign( 120, 0.f );
+          s_LastFrameIndex = 0;
+          s_FrameRateHistory[s_LastFrameIndex] = (float)_FrameRate;
+        }
+
+        s_AccumTime += _DeltaTime;
+        while ( s_AccumTime > ( 1.f / 60 ) )
+        {
+          s_AccumTime -= 0.1;
+          s_Max = *std::max_element( s_FrameRateHistory.begin(), s_FrameRateHistory.end() );
+
+          s_LastFrameIndex++;
+          if ( s_LastFrameIndex >= 120 )
+            s_LastFrameIndex = 0;
+          s_FrameRateHistory[s_LastFrameIndex] = (float)_FrameRate;
+        }
+
+        int offset = ( s_LastFrameIndex >= 119 ) ? ( 0 ) : ( s_LastFrameIndex + 1 );
+
+        char overlay[32];
+        sprintf( overlay, "%.1f FPS", _FrameRate );
+        ImGui::PlotLines( "Frame rate", &s_FrameRateHistory[0], s_FrameRateHistory.size(), offset, overlay, -0.1f, s_Max, ImVec2( 0, 80.0f ) );
+      }
+    }
+
+    if (ImGui::CollapsingHeader("Settings"))
+    {
+      static bool vSync = true;
+      if ( ImGui::Checkbox( "VSync", &vSync ) )
+      {
+        if ( vSync )
+          glfwSwapInterval( 1 );
+        else
+          glfwSwapInterval( 0 );
+      }
+
+      int scale = _Settings._RenderScale;
+      if ( ImGui::SliderInt("Render scale", &scale, 5, 200) )
+      {
+        _Settings._RenderScale = scale;
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      }
+
+      if ( ImGui::Checkbox( "Accumulate", &_Settings._Accumulate ) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
+      if ( ImGui::Checkbox( "Tiled rendering", &_Settings._TiledRendering ) )
+      {
+        if ( _Settings._TiledRendering && ( ( _Settings._TileResolution.x <= 0 ) || ( _Settings._TileResolution.y <= 0 ) ) )
+          _Settings._TileResolution.x = _Settings._TileResolution.y = 256;
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      }
+
+      if ( _Settings._TiledRendering )
+      {
+        int tileSize = _Settings._TileResolution.x;
+        if ( ImGui::SliderInt("Tile size", &tileSize, 64, 1024) )
+        {
+          _Settings._TileResolution = Vec2i(tileSize);
+          _Renderer -> Notify(DirtyState::RenderSettings);
+        }
+      }
+
+      if ( ImGui::Checkbox( "FXAA", &_Settings._FXAA ) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
+      if ( ImGui::Checkbox( "Tone mapping", &_Settings._ToneMapping ) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
+      if ( _Settings._ToneMapping )
+      {
+        if ( ImGui::SliderFloat( "Gamma", &_Settings._Gamma, .5f, 3.f ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "Exposure", &_Settings._Exposure, .1f, 5.f ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+      }
+
+      if ( ImGui::Checkbox( "Show background", &_Settings._EnableBackGround ) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
+      if ( ImGui::Checkbox("Environment mapping", &_Settings._EnableSkybox) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
+      if ( _Settings._EnableSkybox )
+      {
+        if ( ImGui::SliderFloat("Env map rotation", &_Settings._SkyBoxRotation, 0.f, 360.f) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+      }
+
+      static const char * PATH_TRACE_DEBUG_MODES[] = { "Off", "Albedo", "Metalness", "Roughness", "Normals", "UV", "Tiles"};
+      static int debugMode = 0;
+      if ( ImGui::Combo( "Debug view", &debugMode, PATH_TRACE_DEBUG_MODES, 7 ) )
+        _Renderer -> SetDebugMode(debugMode);
+    }
+
+    if ( ImGui::CollapsingHeader("Scene") )
+    {
+    }
 
     ImGui::End();
   }
@@ -174,15 +288,13 @@ int Test5::DrawUI()
 // ----------------------------------------------------------------------------
 int Test5::ProcessInput()
 {
-  glfwPollEvents();
-
   // Keyboard input
   {
     const float velocity = 100.f;
 
     if ( _KeyInput.IsKeyDown(GLFW_KEY_W) )
     {
-      float newRadius = _Scene -> GetCamera().GetRadius() - _TimeDelta;
+      float newRadius = _Scene -> GetCamera().GetRadius() - _DeltaTime;
       if ( newRadius > 0.f )
       {
         _Scene -> GetCamera().SetRadius(newRadius);
@@ -191,7 +303,7 @@ int Test5::ProcessInput()
     }
     if ( _KeyInput.IsKeyDown(GLFW_KEY_S) )
     {
-      float newRadius = _Scene -> GetCamera().GetRadius() + _TimeDelta;
+      float newRadius = _Scene -> GetCamera().GetRadius() + _DeltaTime;
       if ( newRadius > 0.f )
       {
         _Scene -> GetCamera().SetRadius(newRadius);
@@ -200,12 +312,12 @@ int Test5::ProcessInput()
     }
     if ( _KeyInput.IsKeyDown(GLFW_KEY_A) )
     {
-      _Scene -> GetCamera().OffsetOrientations(_TimeDelta * velocity, 0.f);
+      _Scene -> GetCamera().OffsetOrientations(_DeltaTime * velocity, 0.f);
       _Renderer -> Notify(DirtyState::SceneCamera);
     }
     if ( _KeyInput.IsKeyDown(GLFW_KEY_D) )
     {
-      _Scene -> GetCamera().OffsetOrientations(-_TimeDelta * velocity, 0.f);
+      _Scene -> GetCamera().OffsetOrientations(-_DeltaTime * velocity, 0.f);
       _Renderer -> Notify(DirtyState::SceneCamera);
     }
   }
@@ -214,22 +326,32 @@ int Test5::ProcessInput()
   double curMouseX = 0., curMouseY = 0.;
   glfwGetCursorPos(_MainWindow.get(), &curMouseX, &curMouseY);
   {
-    const float MouseSensitivity[5] = { 1.f, 0.5f, 0.01f, 0.01f, .5f }; // Yaw, Pitch, StafeRight, StrafeUp, ZoomInOut
+    const float MouseSensitivity[6] = { 1.f, 0.5f, 0.01f, 0.01f, .5f, 0.01f }; // Yaw, Pitch, StafeRight, StrafeUp, ScrollInOut, ZoomInOut
 
     double deltaX = 0., deltaY = 0.;
     double mouseX = 0.f, mouseY = 0.f;
-    if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1, mouseX, mouseY) ) // Right click
+    if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_3, mouseX, mouseY) ) // Middle click
+    {
+      if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1, mouseX, mouseY) ) // Left click
+      {
+        deltaY = curMouseY - mouseY;
+        float newRadius = _Scene -> GetCamera().GetRadius() + MouseSensitivity[5] * deltaY;
+        if ( newRadius > 0.f )
+          _Scene -> GetCamera().SetRadius(newRadius);
+      }
+      else
+      {
+        deltaX = curMouseX - mouseX;
+        deltaY = curMouseY - mouseY;
+        _Scene -> GetCamera().Strafe(MouseSensitivity[2] * deltaX, MouseSensitivity[2] * deltaY);
+      }
+      _Renderer -> Notify(DirtyState::SceneCamera);
+    }
+    else if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1, mouseX, mouseY) ) // Right click
     {
       deltaX = curMouseX - mouseX;
       deltaY = curMouseY - mouseY;
       _Scene -> GetCamera().OffsetOrientations(MouseSensitivity[0] * deltaX, MouseSensitivity[1] * -deltaY);
-      _Renderer -> Notify(DirtyState::SceneCamera);
-    }
-    if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_3, mouseX, mouseY) ) // Middle click
-    {
-      deltaX = curMouseX - mouseX;
-      deltaY = curMouseY - mouseY;
-      _Scene -> GetCamera().Strafe(MouseSensitivity[2] * deltaX, MouseSensitivity[2] * deltaY);
       _Renderer -> Notify(DirtyState::SceneCamera);
     }
 
@@ -304,10 +426,31 @@ int Test5::InitializeRenderer()
 // ----------------------------------------------------------------------------
 int Test5::UpdateCPUTime()
 {
-  double oldCpuTime = _CPULoopTime;
-  _CPULoopTime = glfwGetTime();
+  double oldCpuTime = _CPUTime;
+  _CPUTime = glfwGetTime();
 
-  _TimeDelta = _CPULoopTime - oldCpuTime;
+  _DeltaTime = _CPUTime - oldCpuTime;
+
+  static int nbFrames = 0;
+  nbFrames++;
+
+  static double accu = 0.;
+  accu += _DeltaTime;
+
+  double nbSeconds = 0.;
+  while ( accu >= 1. )
+  {
+    accu -= 1.;
+    nbSeconds++;
+  }
+
+  if ( nbSeconds >= 1. )
+  {
+    nbSeconds += accu;
+    _FrameRate = (double)nbFrames / nbSeconds;
+    _FrameTime = ( _FrameRate ) ? ( 1. / _FrameRate ) : ( 0. );
+    nbFrames = 0;
+  }
 
   return 0;
 }
@@ -393,6 +536,8 @@ int Test5::Run()
       DrawUI();
 
       glfwSwapBuffers( _MainWindow.get() );
+
+      glfwPollEvents();
     }
 
   } while ( 0 );

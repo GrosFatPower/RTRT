@@ -32,6 +32,8 @@ public:
 
   void Notify( DirtyState iState ) { _DirtyStates |= (unsigned long)iState; };
 
+  void SetDebugMode( const int iDebugMode );
+
 protected:
 
   bool Dirty() const { return ( _DirtyStates != (unsigned long)DirtyState::Clean ); }
@@ -41,6 +43,8 @@ protected:
   RenderSettings & _Settings;
 
   unsigned long    _DirtyStates = 0xFF;
+
+  int              _DebugMode = 0;
 };
 
 }

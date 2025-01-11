@@ -67,8 +67,10 @@ protected:
   MouseInput                _MouseInput;
 
   // Frame rate
-  double                     _CPULoopTime = 0.;
-  double                     _TimeDelta   = 0.;
+  double                     _CPUTime   = 0.;
+  double                     _DeltaTime = 0.;
+  double                     _FrameRate = 0.;
+  double                     _FrameTime = 0.;
 };
 
 }
