@@ -52,6 +52,10 @@ protected:
 
   int InitializeScene();
   int InitializeRenderer();
+  int UpdateScene();
+
+  int InitializeSceneFiles();
+  int InitializeBackgroundFiles();
 
   int UpdateCPUTime();
 
@@ -71,6 +75,16 @@ protected:
   double                     _DeltaTime = 0.;
   double                     _FrameRate = 0.;
   double                     _FrameTime = 0.;
+
+  // Scene selection
+  std::vector<std::string>   _SceneFiles;
+  std::vector<const char*>   _SceneNames;
+  std::vector<std::string>   _BackgroundFiles;
+  std::vector<const char*>   _BackgroundNames;
+  unsigned int               _CurSceneId       = 0;
+  unsigned int               _CurBackgroundId  = 0;
+  bool                       _ReloadScene      = false;
+  bool                       _ReloadBackground = false;
 };
 
 }

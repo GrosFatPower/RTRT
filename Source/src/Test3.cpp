@@ -10,6 +10,7 @@
 #include "Texture.h"
 #include "MathUtil.h"
 #include "Loader.h"
+#include "Util.h"
 #include "GLUtil.h"
 
 #include "tinydir.h"
@@ -214,6 +215,8 @@ Test3::~Test3()
 
   for ( auto fileName : _SceneNames )
     delete[] fileName;
+  for ( auto fileName : _BackgroundNames )
+    delete[] fileName;
 }
 
 // ----------------------------------------------------------------------------
@@ -277,30 +280,18 @@ void Test3::ClearSceneData()
 // ----------------------------------------------------------------------------
 int Test3::InitializeSceneFiles()
 {
-  tinydir_dir dir;
-  tinydir_open_sorted(&dir, g_AssetsDir.c_str());
-  
-  for ( int i = 0; i < dir.n_files; ++i )
-  {
-    tinydir_file file;
-    tinydir_readfile_n(&dir, &file, i);
-  
-    std::string extension(file.extension);
-    if ( ( "scene" == extension ) || ( "gltf" == extension ) || ( "glb" == extension ) )
-    {
-      char * filename = new char[256];
-      snprintf(filename, 256, "%s", file.name);
-      _SceneNames.push_back(filename);
-      _SceneFiles.push_back(g_AssetsDir + std::string(file.name));
+  std::vector<std::string> sceneNames;
+  Util::RetrieveSceneFiles(g_AssetsDir, _SceneFiles, &sceneNames);
 
-      std::size_t found = _SceneFiles[_SceneFiles.size()-1].find("Sphere.scene");
-      //std::size_t found = _SceneFiles[_SceneFiles.size() - 1].find( "jinx.scene" );
-      if ( std::string::npos != found )
-        _CurSceneId = _SceneFiles.size()-1;
-    }
+  for ( int i = 0; i < sceneNames.size(); ++i )
+  {
+    char * filename = new char[256];
+    snprintf(filename, 256, "%s", sceneNames[i].c_str());
+    _SceneNames.push_back(filename);
+
+    if ( "Sphere.scene" == sceneNames[i] )
+      _CurSceneId = i;
   }
-  
-  tinydir_close(&dir);
 
   return 0;
 }
@@ -310,31 +301,18 @@ int Test3::InitializeSceneFiles()
 // ----------------------------------------------------------------------------
 int Test3::InitializeBackgroundFiles()
 {
-  std::string bgdPath = g_AssetsDir + "HDR\\";
+  std::vector<std::string> backgroundNames;
+  Util::RetrieveBackgroundFiles(g_AssetsDir + "HDR\\", _BackgroundFiles, &backgroundNames);
 
-  tinydir_dir dir;
-  tinydir_open_sorted( &dir, bgdPath.c_str() );
-
-  for ( int i = 0; i < dir.n_files; ++i )
+  for ( int i = 0; i < backgroundNames.size(); ++i )
   {
-    tinydir_file file;
-    tinydir_readfile_n( &dir, &file, i );
+    char * filename = new char[256];
+    snprintf(filename, 256, "%s", backgroundNames[i].c_str());
+    _BackgroundNames.push_back(filename);
 
-    std::string extension( file.extension );
-    if ( ( "hdr" == extension ) || ( "HDR" == extension ) )
-    {
-      char * filename = new char[256];
-      snprintf( filename, 256, "%s", file.name );
-      _BackgroundNames.push_back( filename );
-      _BackgroundFiles.push_back( bgdPath + std::string( file.name ) );
-
-      std::size_t found = _BackgroundFiles[_BackgroundFiles.size() - 1].find( "artist_workshop_1k.hdr" );
-      if ( std::string::npos != found )
-        _CurBackgroundId = _BackgroundFiles.size() - 1;
-    }
+    if ( "artist_workshop_1k.hdr" == backgroundNames[i] )
+      _CurBackgroundId = i;
   }
-
-  tinydir_close( &dir );
 
   return 0;
 }

@@ -2,6 +2,7 @@
 
 #include "Loader.h"
 #include "PathTracer.h"
+#include "Util.h"
 
 #include <string>
 #include <iostream>
@@ -112,6 +113,52 @@ Test5::Test5( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iSc
 // ----------------------------------------------------------------------------
 Test5::~Test5()
 {
+  for ( auto fileName : _SceneNames )
+    delete[] fileName;
+  for ( auto fileName : _BackgroundNames )
+    delete[] fileName;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeSceneFiles
+// ----------------------------------------------------------------------------
+int Test5::InitializeSceneFiles()
+{
+  std::vector<std::string> sceneNames;
+  Util::RetrieveSceneFiles(g_AssetsDir, _SceneFiles, &sceneNames);
+
+  for ( int i = 0; i < sceneNames.size(); ++i )
+  {
+    char * filename = new char[256];
+    snprintf(filename, 256, "%s", sceneNames[i].c_str());
+    _SceneNames.push_back(filename);
+
+    if ( "TexturedBox.scene" == sceneNames[i] )
+      _CurSceneId = i;
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeBackgroundFiles
+// ----------------------------------------------------------------------------
+int Test5::InitializeBackgroundFiles()
+{
+  std::vector<std::string> backgroundNames;
+  Util::RetrieveBackgroundFiles(g_AssetsDir + "HDR\\", _BackgroundFiles, &backgroundNames);
+
+  for ( int i = 0; i < backgroundNames.size(); ++i )
+  {
+    char * filename = new char[256];
+    snprintf(filename, 256, "%s", backgroundNames[i].c_str());
+    _BackgroundNames.push_back(filename);
+
+    if ( "alps_field_2k.hdr" == backgroundNames[i] )
+      _CurBackgroundId = i;
+  }
+
+  return 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -265,6 +312,15 @@ int Test5::DrawUI()
 
     if ( ImGui::CollapsingHeader("Scene") )
     {
+      int selectedSceneId = _CurSceneId;
+      if ( ImGui::Combo("Scene selection", &selectedSceneId, &_SceneNames[0], _SceneNames.size()) )
+      {
+        if ( selectedSceneId != _CurSceneId )
+        {
+          _CurSceneId = selectedSceneId;
+          _ReloadScene = true;
+        }
+      }
     }
 
     ImGui::End();
@@ -291,6 +347,9 @@ int Test5::ProcessInput()
   // Keyboard input
   {
     const float velocity = 100.f;
+
+    if ( _KeyInput.IsKeyReleased(GLFW_KEY_ESCAPE) )
+      return 1; // Exit
 
     if ( _KeyInput.IsKeyDown(GLFW_KEY_W) )
     {
@@ -328,11 +387,18 @@ int Test5::ProcessInput()
   {
     const float MouseSensitivity[6] = { 1.f, 0.5f, 0.01f, 0.01f, .5f, 0.01f }; // Yaw, Pitch, StafeRight, StrafeUp, ScrollInOut, ZoomInOut
 
+    static bool toggleZoom = false;
     double deltaX = 0., deltaY = 0.;
     double mouseX = 0.f, mouseY = 0.f;
     if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_3, mouseX, mouseY) ) // Middle click
     {
-      if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1, mouseX, mouseY) ) // Left click
+      if ( _MouseInput.IsButtonReleased(GLFW_MOUSE_BUTTON_1, mouseX, mouseY) )
+      {
+        toggleZoom = !toggleZoom;
+        std::cout << "hello\n";
+      }
+
+      if ( toggleZoom ) // Left click
       {
         deltaY = curMouseY - mouseY;
         float newRadius = _Scene -> GetCamera().GetRadius() + MouseSensitivity[5] * deltaY;
@@ -343,7 +409,7 @@ int Test5::ProcessInput()
       {
         deltaX = curMouseX - mouseX;
         deltaY = curMouseY - mouseY;
-        _Scene -> GetCamera().Strafe(MouseSensitivity[2] * deltaX, MouseSensitivity[2] * deltaY);
+        _Scene -> GetCamera().OffsetOrientations(MouseSensitivity[0] * deltaX, MouseSensitivity[1] * -deltaY);
       }
       _Renderer -> Notify(DirtyState::SceneCamera);
     }
@@ -351,9 +417,12 @@ int Test5::ProcessInput()
     {
       deltaX = curMouseX - mouseX;
       deltaY = curMouseY - mouseY;
-      _Scene -> GetCamera().OffsetOrientations(MouseSensitivity[0] * deltaX, MouseSensitivity[1] * -deltaY);
+      _Scene -> GetCamera().Strafe(MouseSensitivity[2] * deltaX, MouseSensitivity[2] * deltaY);
       _Renderer -> Notify(DirtyState::SceneCamera);
     }
+
+    if ( _MouseInput.IsButtonReleased(GLFW_MOUSE_BUTTON_3, mouseX, mouseY) )
+      toggleZoom = false;
 
     if ( _MouseInput.IsScrolled(mouseX, mouseY) )
     {
@@ -369,6 +438,8 @@ int Test5::ProcessInput()
   _KeyInput.ClearLastEvents();
   _MouseInput.ClearLastEvents(curMouseX, curMouseY);
 
+  glfwPollEvents();
+
   return 0;
 }
 
@@ -377,12 +448,10 @@ int Test5::ProcessInput()
 // ----------------------------------------------------------------------------
 int Test5::InitializeScene()
 {
-  std::string sceneName = g_AssetsDir + "TexturedBox.scene";
-
   Scene * newScene = new Scene;
-  if ( !newScene || !Loader::LoadScene(sceneName, *newScene, _Settings) )
+  if ( !newScene || !Loader::LoadScene(_SceneFiles[_CurSceneId], *newScene, _Settings) )
   {
-    std::cout << "Failed to load scene : " << sceneName << std::endl;
+    std::cout << "Failed to load scene : " << _SceneFiles[_CurSceneId] << std::endl;
     return 1;
   }
   _Scene.reset(newScene);
@@ -417,6 +486,35 @@ int Test5::InitializeRenderer()
   _Renderer.reset(newRenderer);
 
   _Renderer -> Initialize();
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateScene
+// ----------------------------------------------------------------------------
+int Test5::UpdateScene()
+{
+  if ( _ReloadScene )
+  {
+    _ReloadScene = false;
+
+    if ( 0 != InitializeScene() )
+    {
+      std::cout << "ERROR: Scene initialization failed!" << std::endl;
+      return 1;
+    }
+
+    // Initialize the renderer
+    if ( 0 != InitializeRenderer() || !_Renderer )
+    {
+      std::cout << "ERROR: Renderer initialization failed!" << std::endl;
+      return 1;
+    }
+
+    glfwSetWindowSize(_MainWindow.get(), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+    glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+  }
 
   return 0;
 }
@@ -499,7 +597,7 @@ int Test5::Run()
     }
 
     // Initialize the scene
-    if ( 0 != InitializeScene() )
+    if ( ( 0 != InitializeSceneFiles() ) || ( 0 != InitializeBackgroundFiles() ) || ( 0 != InitializeScene() ) )
     {
       std::cout << "ERROR: Scene initialization failed!" << std::endl;
       ret = 1;
@@ -519,11 +617,15 @@ int Test5::Run()
     glViewport( 0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y );
     glDisable( GL_DEPTH_TEST );
 
-    while ( !glfwWindowShouldClose( _MainWindow.get() ) && !_KeyInput.IsKeyReleased(GLFW_KEY_ESCAPE) )
+    while ( !glfwWindowShouldClose( _MainWindow.get() ) )
     {
       UpdateCPUTime();
 
-      ProcessInput();
+      if ( 0 != UpdateScene() )
+        break;
+
+      if ( 0 != ProcessInput() )
+        break;
 
       _Renderer -> Update();
 
@@ -536,8 +638,6 @@ int Test5::Run()
       DrawUI();
 
       glfwSwapBuffers( _MainWindow.get() );
-
-      glfwPollEvents();
     }
 
   } while ( 0 );

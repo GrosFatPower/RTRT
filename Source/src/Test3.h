@@ -183,7 +183,6 @@ private:
   unsigned int               _CurBackgroundId = 0;
   bool                       _ReloadScene                     = true;
   bool                       _ReloadBackground                = true;
-  int                        _SkyboxID    = -1;
                            
   bool                       _SceneCameraModified             = true;
   bool                       _SceneLightsModified             = true;
