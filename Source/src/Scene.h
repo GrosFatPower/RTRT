@@ -65,7 +65,7 @@ public:
   int GetNbMeshInstances()      const { return _MeshInstances.size();      }
   int GetNbPrimitiveInstances() const { return _PrimitiveInstances.size(); }
 
-  const EnvMap & GetEnvMap() const { return _EnvMap; }
+  EnvMap & GetEnvMap() { return _EnvMap; }
 
   std::vector<MeshInstance>      & GetMeshInstances()      { return _MeshInstances;      }
   std::vector<PrimitiveInstance> & GetPrimitiveInstances() { return _PrimitiveInstances; }

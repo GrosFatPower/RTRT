@@ -1,6 +1,7 @@
 #include "PathTracer.h"
 
 #include "Scene.h"
+#include "EnvMap.h"
 #include "ShaderProgram.h"
 #include "GLUtil.h"
 
@@ -78,7 +79,8 @@ PathTracer::~PathTracer()
 // ----------------------------------------------------------------------------
 void PathTracer::DeleteTEX( GLTexture & ioTEX )
 {
-  glDeleteTextures(1, &ioTEX._ID);
+  if ( ioTEX._ID )
+    glDeleteTextures(1, &ioTEX._ID);
   ioTEX._ID = 0;
 }
 
@@ -87,7 +89,8 @@ void PathTracer::DeleteTEX( GLTexture & ioTEX )
 // ----------------------------------------------------------------------------
 void PathTracer::DeleteFBO( GLFrameBuffer & ioFBO )
 {
-  glDeleteFramebuffers(1, &ioFBO._ID);
+  if ( ioFBO._ID )
+    glDeleteFramebuffers(1, &ioFBO._ID);
   DeleteTEX(ioFBO._Tex);
   ioFBO._ID;
 }
@@ -97,7 +100,8 @@ void PathTracer::DeleteFBO( GLFrameBuffer & ioFBO )
 // ----------------------------------------------------------------------------
 void PathTracer::DeleteTBO( GLTextureBuffer & ioTBO )
 {
-  glDeleteBuffers(1, &ioTBO._ID);
+  if ( ioTBO._ID )
+    glDeleteBuffers(1, &ioTBO._ID);
   DeleteTEX(ioTBO._Tex);
   ioTBO._ID = 0;
 }
@@ -133,12 +137,6 @@ int PathTracer::Initialize()
 // ----------------------------------------------------------------------------
 int PathTracer::Update()
 {
-  //if ( 0 != ReloadScene() )
-  //{
-  //  std::cout << "PathTracer : Failed to reload scene!" << std::endl;
-  //  return 1;
-  //}
-
   if ( Dirty() )
     this -> ResetTiles();
   else if ( TiledRendering() )
@@ -146,6 +144,9 @@ int PathTracer::Update()
 
   if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
     this -> ResizeRenderTarget();
+
+  if ( _DirtyStates & (unsigned long)DirtyState::SceneEnvMap )
+    this -> ReloadEnvMap();
 
   this -> UpdatePathTraceUniforms();
   this -> UpdateAccumulateUniforms();
@@ -758,6 +759,18 @@ int PathTracer::ReloadScene()
     InitializeTBO(_BLASPackedUVsTBO, sizeof(Vec2) * _Scene.GetBLASPackedUVs().size(), &_Scene.GetBLASPackedUVs()[0], GL_RG32F);
   }
 
+  //this -> ReloadEnvMap();
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ReloadEnvMap
+// ----------------------------------------------------------------------------
+int PathTracer::ReloadEnvMap()
+{
+  DeleteTEX(_EnvMapTEX);
+
   if ( _Scene.GetEnvMap().IsInitialized() )
   {
     glGenTextures(1, &_EnvMapTEX._ID);
@@ -766,6 +779,8 @@ int PathTracer::ReloadScene()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glBindTexture(GL_TEXTURE_2D, 0);
+
+    _Scene.GetEnvMap().SetTexID(_EnvMapTEX._ID);
   }
   else
     _Settings._EnableSkybox = false;

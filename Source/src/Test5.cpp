@@ -24,6 +24,8 @@ const char * Test5::GetTestHeader() { return "Test 5 : Renderers"; }
 // ----------------------------------------------------------------------------
 static std::string g_AssetsDir = "..\\..\\Assets\\";
 
+static int g_DebugMode = 0;
+
 // ----------------------------------------------------------------------------
 // KeyCallback
 // ----------------------------------------------------------------------------
@@ -137,6 +139,14 @@ int Test5::InitializeSceneFiles()
       _CurSceneId = i;
   }
 
+  if ( _CurSceneId < 0 )
+  {
+    if ( sceneNames.size() )
+      _CurSceneId = 0;
+    else
+      return 1;
+  }
+
   return 0;
 }
 
@@ -200,43 +210,59 @@ int Test5::DrawUI()
   {
     ImGui::Begin("Test 5 : Viewer");
 
-    if (ImGui::CollapsingHeader("Rendering"))
+    // FPS graph
+    {
+      static std::vector<float> s_FrameRateHistory;
+      static int                s_LastFrameIndex = -1;
+      static double             s_AccumTime = 0.f;
+      static float              s_Max = 300.;
+
+      if ( -1 == s_LastFrameIndex )
+      {
+        s_FrameRateHistory.assign( 120, 0.f );
+        s_LastFrameIndex = 0;
+        s_FrameRateHistory[s_LastFrameIndex] = (float)_FrameRate;
+      }
+
+      s_AccumTime += _DeltaTime;
+      while ( s_AccumTime > ( 1.f / 60 ) )
+      {
+        s_AccumTime -= 0.1;
+        s_Max = *std::max_element( s_FrameRateHistory.begin(), s_FrameRateHistory.end() );
+
+        s_LastFrameIndex++;
+        if ( s_LastFrameIndex >= 120 )
+          s_LastFrameIndex = 0;
+        s_FrameRateHistory[s_LastFrameIndex] = (float)_FrameRate;
+      }
+
+      int offset = ( s_LastFrameIndex >= 119 ) ? ( 0 ) : ( s_LastFrameIndex + 1 );
+
+      char overlay[32];
+      sprintf( overlay, "%.1f FPS", _FrameRate );
+      ImGui::PlotLines( "Frame rate", &s_FrameRateHistory[0], s_FrameRateHistory.size(), offset, overlay, -0.1f, s_Max, ImVec2( 0, 80.0f ) );
+    }
+
+    // Scene selection
+    {
+      int selectedSceneId = _CurSceneId;
+      if ( ImGui::Combo("Scene selection", &selectedSceneId, &_SceneNames[0], _SceneNames.size()) )
+      {
+        if ( selectedSceneId != _CurSceneId )
+        {
+          _CurSceneId = selectedSceneId;
+          _ReloadScene = true;
+        }
+      }
+    }
+
+    if (ImGui::CollapsingHeader("Rendering stats"))
     {
       ImGui::Text("Window width %d: height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
       ImGui::Text("Render width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
 
       ImGui::Text("Render time %.3f ms/frame", _FrameTime * 1000.);
-      {
-        static std::vector<float> s_FrameRateHistory;
-        static int                s_LastFrameIndex = -1;
-        static double             s_AccumTime = 0.f;
-        static float              s_Max = 300.;
 
-        if ( -1 == s_LastFrameIndex )
-        {
-          s_FrameRateHistory.assign( 120, 0.f );
-          s_LastFrameIndex = 0;
-          s_FrameRateHistory[s_LastFrameIndex] = (float)_FrameRate;
-        }
-
-        s_AccumTime += _DeltaTime;
-        while ( s_AccumTime > ( 1.f / 60 ) )
-        {
-          s_AccumTime -= 0.1;
-          s_Max = *std::max_element( s_FrameRateHistory.begin(), s_FrameRateHistory.end() );
-
-          s_LastFrameIndex++;
-          if ( s_LastFrameIndex >= 120 )
-            s_LastFrameIndex = 0;
-          s_FrameRateHistory[s_LastFrameIndex] = (float)_FrameRate;
-        }
-
-        int offset = ( s_LastFrameIndex >= 119 ) ? ( 0 ) : ( s_LastFrameIndex + 1 );
-
-        char overlay[32];
-        sprintf( overlay, "%.1f FPS", _FrameRate );
-        ImGui::PlotLines( "Frame rate", &s_FrameRateHistory[0], s_FrameRateHistory.size(), offset, overlay, -0.1f, s_Max, ImVec2( 0, 80.0f ) );
-      }
     }
 
     if (ImGui::CollapsingHeader("Settings"))
@@ -292,11 +318,32 @@ int Test5::DrawUI()
           _Renderer -> Notify(DirtyState::RenderSettings);
       }
 
+      static const char * PATH_TRACE_DEBUG_MODES[] = { "Off", "Albedo", "Metalness", "Roughness", "Normals", "UV", "Tiles"};
+      if ( ImGui::Combo( "Debug view", &g_DebugMode, PATH_TRACE_DEBUG_MODES, 7 ) )
+        _Renderer -> SetDebugMode(g_DebugMode);
+    }
+
+    if ( ImGui::CollapsingHeader("Background") )
+    {
       if ( ImGui::Checkbox( "Show background", &_Settings._EnableBackGround ) )
         _Renderer -> Notify(DirtyState::RenderSettings);
 
-      if ( ImGui::Checkbox("Environment mapping", &_Settings._EnableSkybox) )
+      float rgb[3] = { _Settings._BackgroundColor.r, _Settings._BackgroundColor.g, _Settings._BackgroundColor.b };
+      if ( ImGui::ColorEdit3("Background", rgb) )
+      {
+        _Settings._BackgroundColor = { rgb[0], rgb[1], rgb[2] };
         _Renderer -> Notify(DirtyState::RenderSettings);
+      }
+
+      if ( ImGui::Checkbox("Environment mapping", &_Settings._EnableSkybox) )
+      {
+        if ( ( _CurBackgroundId < 0 ) && _BackgroundNames.size() )
+        {
+          _CurBackgroundId = 0;
+          _ReloadBackground = true;
+        }
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      }
 
       if ( _Settings._EnableSkybox )
       {
@@ -304,21 +351,23 @@ int Test5::DrawUI()
           _Renderer -> Notify(DirtyState::RenderSettings);
       }
 
-      static const char * PATH_TRACE_DEBUG_MODES[] = { "Off", "Albedo", "Metalness", "Roughness", "Normals", "UV", "Tiles"};
-      static int debugMode = 0;
-      if ( ImGui::Combo( "Debug view", &debugMode, PATH_TRACE_DEBUG_MODES, 7 ) )
-        _Renderer -> SetDebugMode(debugMode);
-    }
-
-    if ( ImGui::CollapsingHeader("Scene") )
-    {
-      int selectedSceneId = _CurSceneId;
-      if ( ImGui::Combo("Scene selection", &selectedSceneId, &_SceneNames[0], _SceneNames.size()) )
+      if ( _Settings._EnableSkybox && _BackgroundNames.size() && ( _CurBackgroundId >= 0 ) )
       {
-        if ( selectedSceneId != _CurSceneId )
+        int selectedBgdId = _CurBackgroundId;
+        if ( ImGui::Combo( "Background selection", &selectedBgdId, _BackgroundNames.data(), _BackgroundNames.size() ) )
         {
-          _CurSceneId = selectedSceneId;
-          _ReloadScene = true;
+          if ( selectedBgdId != _CurBackgroundId )
+          {
+            _CurBackgroundId = selectedBgdId;
+            _ReloadBackground = true;
+          }
+          _Renderer -> Notify(DirtyState::RenderSettings);
+        }
+
+        if ( _Scene -> GetEnvMap().IsInitialized() && _Scene -> GetEnvMap().GetTexID() )
+        {
+          ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_Scene -> GetEnvMap().GetTexID());
+          ImGui::Image(texture, ImVec2(128, 128));
         }
       }
     }
@@ -393,17 +442,22 @@ int Test5::ProcessInput()
     if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_3, mouseX, mouseY) ) // Middle click
     {
       if ( _MouseInput.IsButtonReleased(GLFW_MOUSE_BUTTON_1, mouseX, mouseY) )
-      {
         toggleZoom = !toggleZoom;
-        std::cout << "hello\n";
-      }
 
       if ( toggleZoom ) // Left click
       {
+        deltaX = curMouseX - mouseX;
         deltaY = curMouseY - mouseY;
-        float newRadius = _Scene -> GetCamera().GetRadius() + MouseSensitivity[5] * deltaY;
-        if ( newRadius > 0.f )
-          _Scene -> GetCamera().SetRadius(newRadius);
+        if ( std::abs(deltaX) > std::abs(deltaY) )
+        {
+          _Scene -> GetCamera().OffsetOrientations(MouseSensitivity[0] * deltaX, 0.);
+        }
+        else
+        {
+          float newRadius = _Scene -> GetCamera().GetRadius() + MouseSensitivity[5] * deltaY;
+          if ( newRadius > 0.f )
+            _Scene -> GetCamera().SetRadius(newRadius);
+        }
       }
       else
       {
@@ -449,7 +503,7 @@ int Test5::ProcessInput()
 int Test5::InitializeScene()
 {
   Scene * newScene = new Scene;
-  if ( !newScene || !Loader::LoadScene(_SceneFiles[_CurSceneId], *newScene, _Settings) )
+  if ( !newScene || ( _CurSceneId < 0 ) || !Loader::LoadScene(_SceneFiles[_CurSceneId], *newScene, _Settings) )
   {
     std::cout << "Failed to load scene : " << _SceneFiles[_CurSceneId] << std::endl;
     return 1;
@@ -464,6 +518,22 @@ int Test5::InitializeScene()
     _Scene -> AddLight(newLight);
     firstLight = _Scene -> GetLight(0);
   }
+
+  if ( _Scene -> GetEnvMap().IsInitialized() )
+  {
+    const std::string & filename = Util::FileName(_Scene -> GetEnvMap().Filename());
+
+    for ( int i = 0; i < _BackgroundNames.size(); ++i )
+    {
+      if ( 0 == strcmp(_BackgroundNames[i], filename.c_str()) )
+      {
+        _CurBackgroundId = i;
+        break;
+      }
+    }
+  }
+  else
+    _CurBackgroundId = -1;
 
   return 0;
 }
@@ -486,6 +556,8 @@ int Test5::InitializeRenderer()
   _Renderer.reset(newRenderer);
 
   _Renderer -> Initialize();
+
+  _Renderer -> SetDebugMode(g_DebugMode);
 
   return 0;
 }
@@ -514,6 +586,16 @@ int Test5::UpdateScene()
 
     glfwSetWindowSize(_MainWindow.get(), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
     glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+  }
+
+  if ( _ReloadBackground )
+  {
+    if ( _CurBackgroundId >= 0 )
+      _Scene -> LoadEnvMap( _BackgroundFiles[_CurBackgroundId] );
+
+    _Renderer -> Notify(DirtyState::SceneEnvMap);
+
+    _ReloadBackground = false;
   }
 
   return 0;

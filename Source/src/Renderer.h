@@ -14,7 +14,8 @@ enum class DirtyState
   SceneLights    = 0x02,
   SceneMaterials = 0x04,
   SceneInstances = 0x08,
-  RenderSettings = 0x10
+  SceneEnvMap    = 0x10,
+  RenderSettings = 0x20
 };
 
 class Renderer

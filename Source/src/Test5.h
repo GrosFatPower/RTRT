@@ -81,8 +81,8 @@ protected:
   std::vector<const char*>   _SceneNames;
   std::vector<std::string>   _BackgroundFiles;
   std::vector<const char*>   _BackgroundNames;
-  unsigned int               _CurSceneId       = 0;
-  unsigned int               _CurBackgroundId  = 0;
+  int                        _CurSceneId       = -1;
+  int                        _CurBackgroundId  = -1;
   bool                       _ReloadScene      = false;
   bool                       _ReloadBackground = false;
 };

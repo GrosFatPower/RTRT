@@ -89,6 +89,7 @@ protected:
 
   int UnloadScene();
   int ReloadScene();
+  int ReloadEnvMap();
 
   int UpdatePathTraceUniforms();
   int UpdateAccumulateUniforms();

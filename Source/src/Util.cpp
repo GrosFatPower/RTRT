@@ -12,9 +12,19 @@ namespace RTRT
 {
 
 // ----------------------------------------------------------------------------
+// FileName
+// ----------------------------------------------------------------------------
+std::string Util::FileName( const std::string iFilePath )
+{
+  fs::path path(iFilePath);
+
+  return path.filename().string();
+}
+
+// ----------------------------------------------------------------------------
 // RetrieveFiles
 // ----------------------------------------------------------------------------
-int Util::RetrieveFiles( const std::string iDir, const std::vector<std::string> & iExtensions, std::vector<std::string> & oFilePaths, std::vector<std::string> * oFileNames )
+int Util::RetrieveFiles( const std::string & iDir, const std::vector<std::string> & iExtensions, std::vector<std::string> & oFilePaths, std::vector<std::string> * oFileNames )
 {
   tinydir_dir dir;
   if ( 0 == tinydir_open_sorted(&dir, iDir.c_str()) )
@@ -46,7 +56,7 @@ int Util::RetrieveFiles( const std::string iDir, const std::vector<std::string> 
 // ----------------------------------------------------------------------------
 // RetrieveSceneFiles
 // ----------------------------------------------------------------------------
-int Util::RetrieveSceneFiles( const std::string iAssetsDir, std::vector<std::string> & oSceneFiles, std::vector<std::string> * oSceneNames )
+int Util::RetrieveSceneFiles( const std::string & iAssetsDir, std::vector<std::string> & oSceneFiles, std::vector<std::string> * oSceneNames )
 {
   std::vector<std::string> extensions;
   extensions.push_back("scene");
@@ -59,7 +69,7 @@ int Util::RetrieveSceneFiles( const std::string iAssetsDir, std::vector<std::str
 // ----------------------------------------------------------------------------
 // RetrieveBackgroundFiles
 // ----------------------------------------------------------------------------
-int Util::RetrieveBackgroundFiles( const std::string iAssetsDir, std::vector<std::string> & oBackgroundFiles, std::vector<std::string> * oBackgroundNames )
+int Util::RetrieveBackgroundFiles( const std::string & iAssetsDir, std::vector<std::string> & oBackgroundFiles, std::vector<std::string> * oBackgroundNames )
 {
   std::vector<std::string> extensions;
   extensions.push_back("hdr");
