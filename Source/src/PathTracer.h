@@ -26,6 +26,7 @@ public:
 
   virtual int RenderToTexture();
   virtual int RenderToScreen();
+  virtual int RenderToFile( const std::filesystem::path & iFilePath );
 
 public:
 
@@ -54,7 +55,8 @@ public:
     BLASPackedVertices,
     BLASPackedNormals,
     BLASPackedUVs,
-    EnvMap
+    EnvMap,
+    Temporary
   };
 
   struct GLTexture

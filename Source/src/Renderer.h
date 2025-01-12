@@ -1,6 +1,8 @@
 #ifndef _Renderer_
 #define _Renderer_
 
+#include <filesystem> // C++17
+
 namespace RTRT
 {
 
@@ -30,6 +32,7 @@ public:
 
   virtual int RenderToTexture() = 0;
   virtual int RenderToScreen() = 0;
+  virtual int RenderToFile( const std::filesystem::path & iFilePath ) = 0;
 
   void Notify( DirtyState iState ) { _DirtyStates |= (unsigned long)iState; };
 

@@ -11,7 +11,11 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
 
+#include "stb_image_write.h"
+
 #define TEX_UNIT(x) ( GL_TEXTURE0 + (int)x._Slot )
+
+namespace fs = std::filesystem;
 
 namespace RTRT
 {
@@ -158,6 +162,8 @@ int PathTracer::Update()
 // ----------------------------------------------------------------------------
 int PathTracer::Done()
 {
+  _FrameNum++;
+
   CleanStates();
 
   return 0;
@@ -169,8 +175,6 @@ int PathTracer::Done()
 int PathTracer::UpdatePathTraceUniforms()
 {
   _PathTraceShader -> Use();
-
-  GLuint PTProgramID = _PathTraceShader -> GetShaderProgramID();
 
   _PathTraceShader -> SetUniform("u_Resolution", (float)RenderWidth(), (float)RenderHeight());
   _PathTraceShader -> SetUniform("u_TiledRendering", ( TiledRendering() && !Dirty() ) ? ( 1 ) : ( 0 ));
@@ -255,9 +259,7 @@ int PathTracer::UpdatePathTraceUniforms()
 
   if ( _DirtyStates & (unsigned long)DirtyState::SceneInstances )
   {
-    //const std::vector<Mesh*>          & Meshes          = _Scene.GetMeshes();
     const std::vector<Primitive*>        & Primitives         = _Scene.GetPrimitives();
-    //const std::vector<MeshInstance>   & MeshInstances   = _Scene.GetMeshInstances();
     const std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene.GetPrimitiveInstances();
 
     int nbSpheres = 0;
@@ -428,7 +430,6 @@ int PathTracer::UpdateAccumulateUniforms()
 {
   _AccumulateShader -> Use();
 
-  GLuint AccumProgramID = _AccumulateShader -> GetShaderProgramID();
   if ( LowResPass() )
     _AccumulateShader -> SetUniform("u_Texture", (int)TextureSlot::RenderTargetLowRes);
   else if ( TiledRendering() )
@@ -488,7 +489,6 @@ int PathTracer::UpdateRenderToScreenUniforms()
 {
   _RenderToScreenShader -> Use();
 
-  GLuint RTSProgramID = _RenderToScreenShader -> GetShaderProgramID();
   _RenderToScreenShader -> SetUniform("u_ScreenTexture", (int)TextureSlot::Accumulate);
   _RenderToScreenShader -> SetUniform("u_AccumulatedFrames", (TiledRendering()) ? ((int)0) :((int)_AccumulatedFrames));
   _RenderToScreenShader -> SetUniform("u_RenderRes", (float)_Settings._WindowResolution.x, (float)_Settings._WindowResolution.y);
@@ -525,7 +525,69 @@ int PathTracer::RenderToScreen()
 
   _Quad.Render(*_RenderToScreenShader);
 
-  _FrameNum++;
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// RenderToFile
+// ----------------------------------------------------------------------------
+int PathTracer::RenderToFile( const fs::path & iFilePath )
+{
+  GLFrameBuffer temporaryFBO = { 0, { 0, TextureSlot::Temporary } };
+
+  // Temporary frame buffer
+  glGenTextures(1, &temporaryFBO._Tex._ID);
+  glActiveTexture(TEX_UNIT(temporaryFBO._Tex));
+  glBindTexture(GL_TEXTURE_2D, temporaryFBO._Tex._ID);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._WindowResolution.x, _Settings._WindowResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glBindTexture(GL_TEXTURE_2D, 0);
+
+  glGenFramebuffers(1, &temporaryFBO._ID);
+  glBindFramebuffer(GL_FRAMEBUFFER, temporaryFBO._ID);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, temporaryFBO._Tex._ID, 0);
+  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+  {
+    DeleteTEX(temporaryFBO._Tex);
+    return 1;
+  }
+
+  // Render to texture
+  {
+    glBindFramebuffer(GL_FRAMEBUFFER, temporaryFBO._ID);
+    glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+
+    glActiveTexture(TEX_UNIT(temporaryFBO._Tex));
+    glBindTexture(GL_TEXTURE_2D, temporaryFBO._Tex._ID);
+    this -> BindRenderToScreenTextures();
+
+    _Quad.Render(*_RenderToScreenShader);
+  }
+
+  // Retrieve image et save to file
+  int saved = 0;
+  {
+    int w = _Settings._WindowResolution.x;
+    int h = _Settings._WindowResolution.y;
+    unsigned char * frameData = new unsigned char[w * h * 4];
+
+    glActiveTexture(TEX_UNIT(temporaryFBO._Tex));
+    glBindTexture(GL_TEXTURE_2D, temporaryFBO._Tex._ID);
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, frameData);
+    stbi_flip_vertically_on_write( true );
+    saved = stbi_write_png(iFilePath.string().c_str(), w, h, 4, frameData, w * 4);
+
+    DeleteTab(frameData);
+  }
+
+  if ( saved && fs::exists(iFilePath) )
+    std::cout << "Frame saved in " << fs::absolute(iFilePath) << std::endl;
+  else
+    std::cout << "ERROR : Failed to save screen capture in " << fs::absolute(iFilePath) << std::endl;
+
+  // Clean
+  DeleteFBO(temporaryFBO);
 
   return 0;
 }

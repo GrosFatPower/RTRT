@@ -10,6 +10,7 @@
 #include "GL/glew.h"
 
 #include <memory>
+#include <filesystem> // C++17
 
 struct GLFWwindow;
 
@@ -75,6 +76,7 @@ protected:
   double                     _DeltaTime = 0.;
   double                     _FrameRate = 0.;
   double                     _FrameTime = 0.;
+  unsigned int               _NbRenderedFrames = 0;
 
   // Scene selection
   std::vector<std::string>   _SceneFiles;
@@ -85,6 +87,9 @@ protected:
   int                        _CurBackgroundId  = -1;
   bool                       _ReloadScene      = false;
   bool                       _ReloadBackground = false;
+
+  bool                       _RenderToFile = false;
+  std::filesystem::path      _CaptureOutputPath;
 };
 
 }

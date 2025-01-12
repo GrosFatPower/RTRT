@@ -256,6 +256,12 @@ int Test5::DrawUI()
       }
     }
 
+    if ( ImGui::Button( "Capture image" ) )
+    {
+      _CaptureOutputPath = "./" + std::string( _SceneNames[_CurSceneId] ) + "_" + std::to_string( _NbRenderedFrames ) + "frames.png";
+      _RenderToFile = true;
+    }
+
     if (ImGui::CollapsingHeader("Rendering stats"))
     {
       ImGui::Text("Window width %d: height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
@@ -715,11 +721,19 @@ int Test5::Run()
 
       _Renderer -> RenderToScreen();
 
+      if ( _RenderToFile )
+      {
+        _Renderer -> RenderToFile(_CaptureOutputPath);
+        _RenderToFile = false;
+      }
+
       _Renderer -> Done();
 
       DrawUI();
 
       glfwSwapBuffers( _MainWindow.get() );
+
+      _NbRenderedFrames++;
     }
 
   } while ( 0 );
