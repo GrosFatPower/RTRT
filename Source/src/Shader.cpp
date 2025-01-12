@@ -14,7 +14,10 @@ namespace fs = std::filesystem;
 
 static bool S_DEBUG_SHADERS = true;
 
+// ----------------------------------------------------------------------------
+// GetFilePath
 // Remove the file name and store the path to this folder
+// ----------------------------------------------------------------------------
 void GetFilePath(const std::string & iFullPath, std::string& oPathWithoutFileName)
 {
   size_t found = iFullPath.find_last_of("/\\");
@@ -24,6 +27,9 @@ void GetFilePath(const std::string & iFullPath, std::string& oPathWithoutFileNam
 namespace RTRT
 {
 
+// ----------------------------------------------------------------------------
+// CTOR
+// ----------------------------------------------------------------------------
 Shader::Shader(const ShaderSource & iShaderSource, GLuint iShaderType)
 : _ShaderType(iShaderType)
 , _ShaderID(0)
@@ -75,12 +81,18 @@ Shader::Shader(const ShaderSource & iShaderSource, GLuint iShaderType)
   }
 }
 
+// ----------------------------------------------------------------------------
+// DTOR
+// ----------------------------------------------------------------------------
 Shader::~Shader()
 {
   //glDeleteShader(_ShaderID);
   _ShaderID = 0;
 }
 
+// ----------------------------------------------------------------------------
+// LoadShader
+// ----------------------------------------------------------------------------
 ShaderSource Shader::LoadShader(std::string iShaderPath, std::string iIncludeIndentifier)
 {
   iIncludeIndentifier += ' ';

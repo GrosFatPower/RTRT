@@ -11,8 +11,6 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
 
-#include "glm/gtc/type_ptr.hpp"
-
 #define TEX_UNIT(x) ( GL_TEXTURE0 + (int)x._Slot )
 
 namespace RTRT
@@ -174,49 +172,49 @@ int PathTracer::UpdatePathTraceUniforms()
 
   GLuint PTProgramID = _PathTraceShader -> GetShaderProgramID();
 
-  glUniform2f(glGetUniformLocation(PTProgramID, "u_Resolution"), RenderWidth(), RenderHeight());
-  glUniform1i(glGetUniformLocation(PTProgramID, "u_TiledRendering"), ( TiledRendering() && !Dirty() ) ? ( 1 ) : ( 0 ));
-  glUniform2f(glGetUniformLocation(PTProgramID, "u_TileOffset"), TileOffset().x, TileOffset().y);
-  glUniform2f(glGetUniformLocation(PTProgramID, "u_InvNbTiles"), InvNbTiles().x, InvNbTiles().y);
-  glUniform1i(glGetUniformLocation(PTProgramID, "u_NbCompleteFrames"), (int)_NbCompleteFrames);
-  glUniform1f(glGetUniformLocation(PTProgramID, "u_Time"), glfwGetTime());
-  glUniform1i(glGetUniformLocation(PTProgramID, "u_FrameNum"), _FrameNum);
+  _PathTraceShader -> SetUniform("u_Resolution", (float)RenderWidth(), (float)RenderHeight());
+  _PathTraceShader -> SetUniform("u_TiledRendering", ( TiledRendering() && !Dirty() ) ? ( 1 ) : ( 0 ));
+  _PathTraceShader -> SetUniform("u_TileOffset", TileOffset());
+  _PathTraceShader -> SetUniform("u_InvNbTiles", InvNbTiles());
+  _PathTraceShader -> SetUniform("u_NbCompleteFrames", (int)_NbCompleteFrames);
+  _PathTraceShader -> SetUniform("u_Time", (float)glfwGetTime());
+  _PathTraceShader -> SetUniform("u_FrameNum", (int)_FrameNum);
 
   if ( !Dirty() && _Settings._Accumulate )
   {
     if ( _AccumulatedFrames >= 1 )
-      glUniform1i(glGetUniformLocation(PTProgramID, "u_Accumulate"), 1);
+      _PathTraceShader -> SetUniform("u_Accumulate", 1);
     _AccumulatedFrames++;
   }
   else
   {
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_Accumulate"), 0);
+    _PathTraceShader -> SetUniform("u_Accumulate", 0);
     _AccumulatedFrames = 1;
   }
 
   if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
   {
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_Bounces"), _Settings._Bounces);
-    glUniform3f(glGetUniformLocation(PTProgramID, "u_BackgroundColor"), _Settings._BackgroundColor.r, _Settings._BackgroundColor.g, _Settings._BackgroundColor.b);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_EnableSkybox"), (int)_Settings._EnableSkybox);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_EnableBackground" ), (int)_Settings._EnableBackGround);
-    glUniform1f(glGetUniformLocation(PTProgramID, "u_SkyboxRotation"), _Settings._SkyBoxRotation / 360.f);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_ScreenTexture"), (int)TextureSlot::Accumulate);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_SkyboxTexture"), (int)TextureSlot::EnvMap);
-    glUniform1f(glGetUniformLocation(PTProgramID, "u_Gamma"), _Settings._Gamma);
-    glUniform1f(glGetUniformLocation(PTProgramID, "u_Exposure"), _Settings._Exposure);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_ToneMapping"), ( _Settings._ToneMapping ? 1 : 0 ));
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_DebugMode" ), _DebugMode );
+    _PathTraceShader -> SetUniform("u_Bounces", _Settings._Bounces);
+    _PathTraceShader -> SetUniform("u_BackgroundColor", _Settings._BackgroundColor);
+    _PathTraceShader -> SetUniform("u_EnableSkybox", (int)_Settings._EnableSkybox);
+    _PathTraceShader -> SetUniform("u_EnableBackground" , (int)_Settings._EnableBackGround);
+    _PathTraceShader -> SetUniform("u_SkyboxRotation", _Settings._SkyBoxRotation / 360.f);
+    _PathTraceShader -> SetUniform("u_ScreenTexture", (int)TextureSlot::Accumulate);
+    _PathTraceShader -> SetUniform("u_SkyboxTexture", (int)TextureSlot::EnvMap);
+    _PathTraceShader -> SetUniform("u_Gamma", _Settings._Gamma);
+    _PathTraceShader -> SetUniform("u_Exposure", _Settings._Exposure);
+    _PathTraceShader -> SetUniform("u_ToneMapping", ( _Settings._ToneMapping ? 1 : 0 ));
+    _PathTraceShader -> SetUniform("u_DebugMode" , _DebugMode );
   }
 
   if ( _DirtyStates & (unsigned long)DirtyState::SceneCamera )
   {
     Camera & cam = _Scene.GetCamera();
-    glUniform3f(glGetUniformLocation(PTProgramID, "u_Camera._Up"), cam.GetUp().x, cam.GetUp().y, cam.GetUp().z);
-    glUniform3f(glGetUniformLocation(PTProgramID, "u_Camera._Right"), cam.GetRight().x, cam.GetRight().y, cam.GetRight().z);
-    glUniform3f(glGetUniformLocation(PTProgramID, "u_Camera._Forward"), cam.GetForward().x, cam.GetForward().y, cam.GetForward().z);
-    glUniform3f(glGetUniformLocation(PTProgramID, "u_Camera._Pos"), cam.GetPos().x, cam.GetPos().y, cam.GetPos().z);
-    glUniform1f(glGetUniformLocation(PTProgramID, "u_Camera._FOV"), cam.GetFOV());
+    _PathTraceShader -> SetUniform("u_Camera._Up", cam.GetUp());
+    _PathTraceShader -> SetUniform("u_Camera._Right", cam.GetRight());
+    _PathTraceShader -> SetUniform("u_Camera._Forward", cam.GetForward());
+    _PathTraceShader -> SetUniform("u_Camera._Pos", cam.GetPos());
+    _PathTraceShader -> SetUniform("u_Camera._FOV", cam.GetFOV());
   }
 
   if ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
@@ -229,21 +227,21 @@ int PathTracer::UpdatePathTraceUniforms()
       if ( !curLight )
         continue;
 
-      glUniform3f(glGetUniformLocation(PTProgramID, GLUtil::UniformArrayElementName("u_Lights",i,"_Pos"     ).c_str()), curLight -> _Pos.x, curLight -> _Pos.y, curLight -> _Pos.z);
-      glUniform3f(glGetUniformLocation(PTProgramID, GLUtil::UniformArrayElementName("u_Lights",i,"_Emission").c_str()), curLight -> _Emission.r, curLight -> _Emission.g, curLight -> _Emission.b);
-      glUniform3f(glGetUniformLocation(PTProgramID, GLUtil::UniformArrayElementName("u_Lights",i,"_DirU"    ).c_str()), curLight -> _DirU.x, curLight -> _DirU.y, curLight -> _DirU.z);
-      glUniform3f(glGetUniformLocation(PTProgramID, GLUtil::UniformArrayElementName("u_Lights",i,"_DirV"    ).c_str()), curLight -> _DirV.x, curLight -> _DirV.y, curLight -> _DirV.z);
-      glUniform1f(glGetUniformLocation(PTProgramID, GLUtil::UniformArrayElementName("u_Lights",i,"_Radius"  ).c_str()), curLight -> _Radius);
-      glUniform1f(glGetUniformLocation(PTProgramID, GLUtil::UniformArrayElementName("u_Lights",i,"_Area"    ).c_str()), curLight -> _Area);
-      glUniform1f(glGetUniformLocation(PTProgramID, GLUtil::UniformArrayElementName("u_Lights",i,"_Type"    ).c_str()), curLight -> _Type);
+      _PathTraceShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Pos"     ), curLight -> _Pos);
+      _PathTraceShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Emission"), curLight -> _Emission);
+      _PathTraceShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_DirU"    ), curLight -> _DirU);
+      _PathTraceShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_DirV"    ), curLight -> _DirV);
+      _PathTraceShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Radius"  ), curLight -> _Radius);
+      _PathTraceShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Area"    ), curLight -> _Area);
+      _PathTraceShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Type"    ), curLight -> _Type);
 
       nbLights++;
       if ( nbLights >= 32 )
         break;
     }
 
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_NbLights"), nbLights);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_ShowLights"), (int)_Settings._ShowLights);
+    _PathTraceShader -> SetUniform("u_NbLights", nbLights);
+    _PathTraceShader -> SetUniform("u_ShowLights", (int)_Settings._ShowLights);
   }
 
   if ( _DirtyStates & (unsigned long)DirtyState::SceneMaterials )
@@ -280,8 +278,8 @@ int PathTracer::UpdatePathTraceUniforms()
         Vec4 CenterRad = prim._Transform * Vec4(0.f, 0.f, 0.f, 1.f);
         CenterRad.w = curSphere -> _Radius;
 
-        glUniform1i(glGetUniformLocation(PTProgramID, GLUtil::UniformArrayElementName("u_Spheres",nbSpheres,"_MaterialID").c_str()), prim._MaterialID);
-        glUniform4f(glGetUniformLocation(PTProgramID, GLUtil::UniformArrayElementName("u_Spheres",nbSpheres,"_CenterRad").c_str()), CenterRad.x, CenterRad.y, CenterRad.z, CenterRad.w);
+        _PathTraceShader -> SetUniform(GLUtil::UniformArrayElementName("u_Spheres",nbSpheres,"_MaterialID"), prim._MaterialID);
+        _PathTraceShader -> SetUniform(GLUtil::UniformArrayElementName("u_Spheres",nbSpheres,"_CenterRad"), CenterRad);
         nbSpheres++;
       }
       else if ( curPrimitive -> _Type == PrimitiveType::Plane )
@@ -290,48 +288,48 @@ int PathTracer::UpdatePathTraceUniforms()
         Vec4 orig = prim._Transform * Vec4(curPlane -> _Origin.x, curPlane -> _Origin.y, curPlane -> _Origin.z, 1.f);
         Vec4 normal = glm::transpose(glm::inverse(prim._Transform)) * Vec4(curPlane -> _Normal.x, curPlane -> _Normal.y, curPlane -> _Normal.z, 1.f);
 
-        glUniform1i(glGetUniformLocation(PTProgramID, GLUtil::UniformArrayElementName("u_Planes",nbPlanes,"_MaterialID").c_str()), prim._MaterialID);
-        glUniform3f(glGetUniformLocation(PTProgramID, GLUtil::UniformArrayElementName("u_Planes",nbPlanes,"_Orig").c_str()), orig.x, orig.y, orig.z);
-        glUniform3f(glGetUniformLocation(PTProgramID, GLUtil::UniformArrayElementName("u_Planes",nbPlanes,"_Normal").c_str()), normal.x, normal.y, normal.z);
+       _PathTraceShader -> SetUniform(GLUtil::UniformArrayElementName("u_Planes",nbPlanes,"_MaterialID"), prim._MaterialID);
+       _PathTraceShader -> SetUniform(GLUtil::UniformArrayElementName("u_Planes",nbPlanes,"_Orig"), orig.x, orig.y, orig.z);
+       _PathTraceShader -> SetUniform(GLUtil::UniformArrayElementName("u_Planes",nbPlanes,"_Normal"), normal.x, normal.y, normal.z);
         nbPlanes++;
       }
       else if ( curPrimitive -> _Type == PrimitiveType::Box )
       {
         Box * curBox = (Box *) curPrimitive;
 
-        glUniform1i(glGetUniformLocation(PTProgramID, GLUtil::UniformArrayElementName("u_Boxes",nbBoxes,"_MaterialID").c_str()), prim._MaterialID);
-        glUniform3f(glGetUniformLocation(PTProgramID, GLUtil::UniformArrayElementName("u_Boxes",nbBoxes,"_Low").c_str()), curBox -> _Low.x, curBox -> _Low.y, curBox -> _Low.z);
-        glUniform3f(glGetUniformLocation(PTProgramID, GLUtil::UniformArrayElementName("u_Boxes",nbBoxes,"_High").c_str()), curBox -> _High.x, curBox -> _High.y, curBox -> _High.z);
-        glUniformMatrix4fv(glGetUniformLocation(PTProgramID, GLUtil::UniformArrayElementName("u_Boxes",nbBoxes,"_Transfom").c_str()), 1, GL_FALSE, glm::value_ptr(prim._Transform));
+        _PathTraceShader -> SetUniform(GLUtil::UniformArrayElementName("u_Boxes",nbBoxes,"_MaterialID"), prim._MaterialID);
+        _PathTraceShader -> SetUniform(GLUtil::UniformArrayElementName("u_Boxes",nbBoxes,"_Low"), curBox -> _Low);
+        _PathTraceShader -> SetUniform(GLUtil::UniformArrayElementName("u_Boxes",nbBoxes,"_High"), curBox -> _High);
+        _PathTraceShader -> SetUniform(GLUtil::UniformArrayElementName("u_Boxes",nbBoxes,"_Transfom"), prim._Transform);
         nbBoxes++;
       }
     }
 
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_VtxTexture"),                    (int)TextureSlot::Vertices);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_VtxNormTexture"),                (int)TextureSlot::Normals);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_VtxUVTexture"),                  (int)TextureSlot::UVs);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_VtxIndTexture"),                 (int)TextureSlot::VertInd);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_TexIndTexture"),                 (int)TextureSlot::TexInd);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_TexArrayTexture"),               (int)TextureSlot::TexArray);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_MeshBBoxTexture"),               (int)TextureSlot::MeshBBox);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_MeshIDRangeTexture"),            (int)TextureSlot::MeshIdRange);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_MaterialsTexture"),              (int)TextureSlot::Materials);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_TLASNodesTexture"),              (int)TextureSlot::TLASNodes);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_TLASTransformsTexture"),         (int)TextureSlot::TLASTransformsID);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_TLASMeshMatIDTexture"),          (int)TextureSlot::TLASMeshMatID);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_BLASNodesTexture"),              (int)TextureSlot::BLASNodes);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_BLASNodesRangeTexture"),         (int)TextureSlot::BLASNodesRange);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_BLASPackedIndicesTexture"),      (int)TextureSlot::BLASPackedIndices);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_BLASPackedIndicesRangeTexture"), (int)TextureSlot::BLASPackedIndicesRange);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_BLASPackedVtxTexture"),          (int)TextureSlot::BLASPackedVertices);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_BLASPackedNormTexture"),         (int)TextureSlot::BLASPackedNormals);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_BLASPackedUVTexture"),           (int)TextureSlot::BLASPackedUVs);
+    _PathTraceShader -> SetUniform("u_VtxTexture",                    (int)TextureSlot::Vertices);
+    _PathTraceShader -> SetUniform("u_VtxNormTexture",                (int)TextureSlot::Normals);
+    _PathTraceShader -> SetUniform("u_VtxUVTexture",                  (int)TextureSlot::UVs);
+    _PathTraceShader -> SetUniform("u_VtxIndTexture",                 (int)TextureSlot::VertInd);
+    _PathTraceShader -> SetUniform("u_TexIndTexture",                 (int)TextureSlot::TexInd);
+    _PathTraceShader -> SetUniform("u_TexArrayTexture",               (int)TextureSlot::TexArray);
+    _PathTraceShader -> SetUniform("u_MeshBBoxTexture",               (int)TextureSlot::MeshBBox);
+    _PathTraceShader -> SetUniform("u_MeshIDRangeTexture",            (int)TextureSlot::MeshIdRange);
+    _PathTraceShader -> SetUniform("u_MaterialsTexture",              (int)TextureSlot::Materials);
+    _PathTraceShader -> SetUniform("u_TLASNodesTexture",              (int)TextureSlot::TLASNodes);
+    _PathTraceShader -> SetUniform("u_TLASTransformsTexture",         (int)TextureSlot::TLASTransformsID);
+    _PathTraceShader -> SetUniform("u_TLASMeshMatIDTexture",          (int)TextureSlot::TLASMeshMatID);
+    _PathTraceShader -> SetUniform("u_BLASNodesTexture",              (int)TextureSlot::BLASNodes);
+    _PathTraceShader -> SetUniform("u_BLASNodesRangeTexture",         (int)TextureSlot::BLASNodesRange);
+    _PathTraceShader -> SetUniform("u_BLASPackedIndicesTexture",      (int)TextureSlot::BLASPackedIndices);
+    _PathTraceShader -> SetUniform("u_BLASPackedIndicesRangeTexture", (int)TextureSlot::BLASPackedIndicesRange);
+    _PathTraceShader -> SetUniform("u_BLASPackedVtxTexture",          (int)TextureSlot::BLASPackedVertices);
+    _PathTraceShader -> SetUniform("u_BLASPackedNormTexture",         (int)TextureSlot::BLASPackedNormals);
+    _PathTraceShader -> SetUniform("u_BLASPackedUVTexture",           (int)TextureSlot::BLASPackedUVs);
 
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_NbSpheres"), nbSpheres);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_NbPlanes"), nbPlanes);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_NbBoxes"), nbBoxes);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_NbTriangles"), _NbTriangles);
-    glUniform1i(glGetUniformLocation(PTProgramID, "u_NbMeshInstances"), _NbMeshInstances);
+    _PathTraceShader -> SetUniform("u_NbSpheres", nbSpheres);
+    _PathTraceShader -> SetUniform("u_NbPlanes", nbPlanes);
+    _PathTraceShader -> SetUniform("u_NbBoxes", nbBoxes);
+    _PathTraceShader -> SetUniform("u_NbTriangles", _NbTriangles);
+    _PathTraceShader -> SetUniform("u_NbMeshInstances", _NbMeshInstances);
   }
 
   _PathTraceShader -> StopUsing();
@@ -432,11 +430,11 @@ int PathTracer::UpdateAccumulateUniforms()
 
   GLuint AccumProgramID = _AccumulateShader -> GetShaderProgramID();
   if ( LowResPass() )
-    glUniform1i(glGetUniformLocation(AccumProgramID, "u_Texture"), (int)TextureSlot::RenderTargetLowRes);
+    _AccumulateShader -> SetUniform("u_Texture", (int)TextureSlot::RenderTargetLowRes);
   else if ( TiledRendering() )
-    glUniform1i(glGetUniformLocation(AccumProgramID, "u_Texture"), (int)TextureSlot::RenderTargetTile);
+    _AccumulateShader -> SetUniform("u_Texture", (int)TextureSlot::RenderTargetTile);
   else
-    glUniform1i(glGetUniformLocation(AccumProgramID, "u_Texture"), (int)TextureSlot::RenderTarget);
+    _AccumulateShader -> SetUniform("u_Texture", (int)TextureSlot::RenderTarget);
 
   _AccumulateShader -> StopUsing();
 
@@ -491,13 +489,13 @@ int PathTracer::UpdateRenderToScreenUniforms()
   _RenderToScreenShader -> Use();
 
   GLuint RTSProgramID = _RenderToScreenShader -> GetShaderProgramID();
-  glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), (int)TextureSlot::Accumulate);
-  glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedFrames"), (TiledRendering()) ? (0) :(_AccumulatedFrames));
-  glUniform2f(glGetUniformLocation(RTSProgramID, "u_RenderRes" ), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
-  glUniform1f(glGetUniformLocation(RTSProgramID, "u_Gamma"), _Settings._Gamma);
-  glUniform1f(glGetUniformLocation(RTSProgramID, "u_Exposure"), _Settings._Exposure);
-  glUniform1i(glGetUniformLocation(RTSProgramID, "u_ToneMapping"), 0);
-  glUniform1i(glGetUniformLocation(RTSProgramID, "u_FXAA"), (_Settings._FXAA ?  1 : 0 ));
+  _RenderToScreenShader -> SetUniform("u_ScreenTexture", (int)TextureSlot::Accumulate);
+  _RenderToScreenShader -> SetUniform("u_AccumulatedFrames", (TiledRendering()) ? ((int)0) :((int)_AccumulatedFrames));
+  _RenderToScreenShader -> SetUniform("u_RenderRes", (float)_Settings._WindowResolution.x, (float)_Settings._WindowResolution.y);
+  _RenderToScreenShader -> SetUniform("u_Gamma", _Settings._Gamma);
+  _RenderToScreenShader -> SetUniform("u_Exposure", _Settings._Exposure);
+  _RenderToScreenShader -> SetUniform("u_ToneMapping", 0);
+  _RenderToScreenShader -> SetUniform("u_FXAA", (_Settings._FXAA ?  1 : 0 ));
 
   _RenderToScreenShader -> StopUsing();
 
