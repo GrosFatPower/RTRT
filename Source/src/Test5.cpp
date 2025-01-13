@@ -289,6 +289,11 @@ int Test5::DrawUI()
         _Renderer -> Notify(DirtyState::RenderSettings);
       }
 
+      if ( ImGui::SliderFloat( "Interactive res Ratio", &_Settings._LowResRatio, 0.05f, 1.f ) )
+      {
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      }
+
       if ( ImGui::Checkbox( "Accumulate", &_Settings._Accumulate ) )
         _Renderer -> Notify(DirtyState::RenderSettings);
 
