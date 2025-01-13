@@ -447,37 +447,27 @@ int Test5::ProcessInput()
     double mouseX = 0.f, mouseY = 0.f;
     if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_3, mouseX, mouseY) ) // Middle click
     {
-      if ( _MouseInput.IsButtonReleased(GLFW_MOUSE_BUTTON_1, mouseX, mouseY) )
-        toggleZoom = !toggleZoom;
-
-      if ( toggleZoom ) // Left click
-      {
-        deltaX = curMouseX - mouseX;
-        deltaY = curMouseY - mouseY;
-        if ( std::abs(deltaX) > std::abs(deltaY) )
-        {
-          _Scene -> GetCamera().OffsetOrientations(MouseSensitivity[0] * deltaX, 0.);
-        }
-        else
-        {
-          float newRadius = _Scene -> GetCamera().GetRadius() + MouseSensitivity[5] * deltaY;
-          if ( newRadius > 0.f )
-            _Scene -> GetCamera().SetRadius(newRadius);
-        }
-      }
-      else
+      if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1, mouseX, mouseY) ) // Left Pressed
       {
         deltaX = curMouseX - mouseX;
         deltaY = curMouseY - mouseY;
         _Scene -> GetCamera().OffsetOrientations(MouseSensitivity[0] * deltaX, MouseSensitivity[1] * -deltaY);
       }
-      _Renderer -> Notify(DirtyState::SceneCamera);
-    }
-    else if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1, mouseX, mouseY) ) // Right click
-    {
-      deltaX = curMouseX - mouseX;
-      deltaY = curMouseY - mouseY;
-      _Scene -> GetCamera().Strafe(MouseSensitivity[2] * deltaX, MouseSensitivity[2] * deltaY);
+      else if ( _MouseInput.IsButtonReleased(GLFW_MOUSE_BUTTON_1, mouseX, mouseY) || toggleZoom ) // Left released
+      {
+        toggleZoom = true;
+        deltaY = curMouseY - mouseY;
+        float newRadius = _Scene -> GetCamera().GetRadius() + MouseSensitivity[5] * deltaY;
+        if ( newRadius > 0.f )
+          _Scene -> GetCamera().SetRadius(newRadius);
+      }
+      else
+      {
+        deltaX = curMouseX - mouseX;
+        deltaY = curMouseY - mouseY;
+        _Scene -> GetCamera().Strafe(MouseSensitivity[2] * deltaX, MouseSensitivity[2] * deltaY);
+        _Renderer -> Notify(DirtyState::SceneCamera);
+      }
       _Renderer -> Notify(DirtyState::SceneCamera);
     }
 
