@@ -140,7 +140,10 @@ int PathTracer::Initialize()
 int PathTracer::Update()
 {
   if ( Dirty() )
+  {
     this -> ResetTiles();
+    _NbCompleteFrames = 0;
+  }
   else if ( TiledRendering() )
     this -> NextTile();
 
@@ -164,6 +167,9 @@ int PathTracer::Done()
 {
   _FrameNum++;
 
+  if ( !Dirty() && !TiledRendering() )
+    _NbCompleteFrames++;
+
   CleanStates();
 
   return 0;
@@ -180,21 +186,9 @@ int PathTracer::UpdatePathTraceUniforms()
   _PathTraceShader -> SetUniform("u_TiledRendering", ( TiledRendering() && !Dirty() ) ? ( 1 ) : ( 0 ));
   _PathTraceShader -> SetUniform("u_TileOffset", TileOffset());
   _PathTraceShader -> SetUniform("u_InvNbTiles", InvNbTiles());
-  _PathTraceShader -> SetUniform("u_NbCompleteFrames", (int)_NbCompleteFrames);
   _PathTraceShader -> SetUniform("u_Time", (float)glfwGetTime());
   _PathTraceShader -> SetUniform("u_FrameNum", (int)_FrameNum);
-
-  if ( !Dirty() && _Settings._Accumulate )
-  {
-    if ( _AccumulatedFrames >= 1 )
-      _PathTraceShader -> SetUniform("u_Accumulate", 1);
-    _AccumulatedFrames++;
-  }
-  else
-  {
-    _PathTraceShader -> SetUniform("u_Accumulate", 0);
-    _AccumulatedFrames = 1;
-  }
+  _PathTraceShader -> SetUniform("u_NbCompleteFrames", (int)_NbCompleteFrames);
 
   if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
   {
@@ -203,7 +197,6 @@ int PathTracer::UpdatePathTraceUniforms()
     _PathTraceShader -> SetUniform("u_EnableSkybox", (int)_Settings._EnableSkybox);
     _PathTraceShader -> SetUniform("u_EnableBackground" , (int)_Settings._EnableBackGround);
     _PathTraceShader -> SetUniform("u_SkyboxRotation", _Settings._SkyBoxRotation / 360.f);
-    _PathTraceShader -> SetUniform("u_ScreenTexture", (int)TextureSlot::Accumulate);
     _PathTraceShader -> SetUniform("u_SkyboxTexture", (int)TextureSlot::EnvMap);
     _PathTraceShader -> SetUniform("u_Gamma", _Settings._Gamma);
     _PathTraceShader -> SetUniform("u_Exposure", _Settings._Exposure);
@@ -430,12 +423,27 @@ int PathTracer::UpdateAccumulateUniforms()
 {
   _AccumulateShader -> Use();
 
+  _AccumulateShader -> SetUniform("u_PreviousFrame", (int)TextureSlot::Accumulate);
+
   if ( LowResPass() )
-    _AccumulateShader -> SetUniform("u_Texture", (int)TextureSlot::RenderTargetLowRes);
+    _AccumulateShader -> SetUniform("u_NewFrame", (int)TextureSlot::RenderTargetLowRes);
   else if ( TiledRendering() )
-    _AccumulateShader -> SetUniform("u_Texture", (int)TextureSlot::RenderTargetTile);
+    _AccumulateShader -> SetUniform("u_NewFrame", (int)TextureSlot::RenderTargetTile);
   else
-    _AccumulateShader -> SetUniform("u_Texture", (int)TextureSlot::RenderTarget);
+    _AccumulateShader -> SetUniform("u_NewFrame", (int)TextureSlot::RenderTarget);
+
+  if ( !Dirty() && _Settings._Accumulate && ( _NbCompleteFrames > 0 ) )
+    _AccumulateShader -> SetUniform("u_Accumulate", 1);
+  else
+    _AccumulateShader -> SetUniform("u_Accumulate", 0);
+
+  _AccumulateShader -> SetUniform("u_NbCompleteFrames", (int)_NbCompleteFrames);
+
+  _AccumulateShader -> SetUniform("u_TiledRendering", ( TiledRendering() && !Dirty() ) ? ( 1 ) : ( 0 ));
+  _AccumulateShader -> SetUniform("u_TileOffset", TileOffset());
+  _AccumulateShader -> SetUniform("u_InvNbTiles", InvNbTiles());
+
+  _AccumulateShader -> SetUniform("u_DebugMode" , _DebugMode );
 
   _AccumulateShader -> StopUsing();
 
@@ -490,7 +498,6 @@ int PathTracer::UpdateRenderToScreenUniforms()
   _RenderToScreenShader -> Use();
 
   _RenderToScreenShader -> SetUniform("u_ScreenTexture", (int)TextureSlot::Accumulate);
-  _RenderToScreenShader -> SetUniform("u_AccumulatedFrames", (TiledRendering()) ? ((int)0) :((int)_AccumulatedFrames));
   _RenderToScreenShader -> SetUniform("u_RenderRes", (float)_Settings._WindowResolution.x, (float)_Settings._WindowResolution.y);
   _RenderToScreenShader -> SetUniform("u_Gamma", _Settings._Gamma);
   _RenderToScreenShader -> SetUniform("u_Exposure", _Settings._Exposure);
@@ -692,20 +699,20 @@ int PathTracer::InitializeFrameBuffers()
 int PathTracer::RecompileShaders()
 {
   ShaderSource vertexShaderSrc = Shader::LoadShader("..\\..\\shaders\\vertex_Default.glsl");
-  ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_RTRenderer.glsl");
+  ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_PathTracer.glsl");
 
   ShaderProgram * newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !newShader )
     return 1;
   _PathTraceShader.reset(newShader);
 
-  fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Output.glsl");
+  fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Accumulate.glsl");
   newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !newShader )
     return 1;
   _AccumulateShader.reset(newShader);
 
-  fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Postpro.glsl");
+  fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Postprocess.glsl");
   newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !newShader )
     return 1;
