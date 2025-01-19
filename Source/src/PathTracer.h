@@ -101,34 +101,34 @@ protected:
   QuadMesh _Quad;
 
   // Frame buffers
-  GLFrameBuffer _RenderTargetFBO       = { 0, { 0, PathTracerTexSlot::_RenderTarget } };
-  GLFrameBuffer _RenderTargetLowResFBO = { 0, { 0, PathTracerTexSlot::_RenderTargetLowRes } };
-  GLFrameBuffer _RenderTargetTileFBO   = { 0, { 0, PathTracerTexSlot::_RenderTargetTile } };
-  GLFrameBuffer _AccumulateFBO         = { 0, { 0, PathTracerTexSlot::_Accumulate } };
+  GLFrameBuffer _RenderTargetFBO       = { 0, { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTarget } };
+  GLFrameBuffer _RenderTargetLowResFBO = { 0, { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetLowRes } };
+  GLFrameBuffer _RenderTargetTileFBO   = { 0, { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetTile } };
+  GLFrameBuffer _AccumulateFBO         = { 0, { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Accumulate } };
 
   // Texture buffers
-  GLTextureBuffer _VtxTBO                     = { 0, { 0, PathTracerTexSlot::_Vertices               } };
-  GLTextureBuffer _VtxNormTBO                 = { 0, { 0, PathTracerTexSlot::_Normals                } };
-  GLTextureBuffer _VtxUVTBO                   = { 0, { 0, PathTracerTexSlot::_UVs                    } };
-  GLTextureBuffer _VtxIndTBO                  = { 0, { 0, PathTracerTexSlot::_VertInd                } };
-  GLTextureBuffer _TexIndTBO                  = { 0, { 0, PathTracerTexSlot::_TexInd                 } };
-  GLTextureBuffer _MeshBBoxTBO                = { 0, { 0, PathTracerTexSlot::_MeshBBox               } };
-  GLTextureBuffer _MeshIdRangeTBO             = { 0, { 0, PathTracerTexSlot::_MeshIdRange            } };
-  GLTextureBuffer _TLASNodesTBO               = { 0, { 0, PathTracerTexSlot::_TLASNodes              } };
-  GLTextureBuffer _TLASMeshMatIDTBO           = { 0, { 0, PathTracerTexSlot::_TLASMeshMatID          } };
-  GLTextureBuffer _BLASNodesTBO               = { 0, { 0, PathTracerTexSlot::_BLASNodes              } };
-  GLTextureBuffer _BLASNodesRangeTBO          = { 0, { 0, PathTracerTexSlot::_BLASNodesRange         } };
-  GLTextureBuffer _BLASPackedIndicesTBO       = { 0, { 0, PathTracerTexSlot::_BLASPackedIndices      } };
-  GLTextureBuffer _BLASPackedIndicesRangeTBO  = { 0, { 0, PathTracerTexSlot::_BLASPackedIndicesRange } };
-  GLTextureBuffer _BLASPackedVerticesTBO      = { 0, { 0, PathTracerTexSlot::_BLASPackedVertices     } };
-  GLTextureBuffer _BLASPackedNormalsTBO       = { 0, { 0, PathTracerTexSlot::_BLASPackedNormals      } };
-  GLTextureBuffer _BLASPackedUVsTBO           = { 0, { 0, PathTracerTexSlot::_BLASPackedUVs          } };
+  GLTextureBuffer _VtxTBO                     = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_Vertices               } };
+  GLTextureBuffer _VtxNormTBO                 = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_Normals                } };
+  GLTextureBuffer _VtxUVTBO                   = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_UVs                    } };
+  GLTextureBuffer _VtxIndTBO                  = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_VertInd                } };
+  GLTextureBuffer _TexIndTBO                  = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_TexInd                 } };
+  GLTextureBuffer _MeshBBoxTBO                = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_MeshBBox               } };
+  GLTextureBuffer _MeshIdRangeTBO             = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_MeshIdRange            } };
+  GLTextureBuffer _TLASNodesTBO               = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_TLASNodes              } };
+  GLTextureBuffer _TLASMeshMatIDTBO           = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_TLASMeshMatID          } };
+  GLTextureBuffer _BLASNodesTBO               = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_BLASNodes              } };
+  GLTextureBuffer _BLASNodesRangeTBO          = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_BLASNodesRange         } };
+  GLTextureBuffer _BLASPackedIndicesTBO       = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_BLASPackedIndices      } };
+  GLTextureBuffer _BLASPackedIndicesRangeTBO  = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_BLASPackedIndicesRange } };
+  GLTextureBuffer _BLASPackedVerticesTBO      = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_BLASPackedVertices     } };
+  GLTextureBuffer _BLASPackedNormalsTBO       = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_BLASPackedNormals      } };
+  GLTextureBuffer _BLASPackedUVsTBO           = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_BLASPackedUVs          } };
 
   // Textures
-  GLTexture _TexArrayTEX         = { 0, PathTracerTexSlot::_TexArray         };
-  GLTexture _MaterialsTEX        = { 0, PathTracerTexSlot::_Materials        };
-  GLTexture _TLASTransformsIDTEX = { 0, PathTracerTexSlot::_TLASTransformsID };
-  GLTexture _EnvMapTEX           = { 0, PathTracerTexSlot::_EnvMap };
+  GLTexture _TexArrayTEX         = { 0, GL_TEXTURE_2D_ARRAY, PathTracerTexSlot::_TexArray         };
+  GLTexture _MaterialsTEX        = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Materials        };
+  GLTexture _TLASTransformsIDTEX = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_TLASTransformsID };
+  GLTexture _EnvMapTEX           = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_EnvMap };
 
   // Shaders
   std::unique_ptr<ShaderProgram> _PathTraceShader;

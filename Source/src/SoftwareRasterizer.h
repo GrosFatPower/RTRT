@@ -69,7 +69,7 @@ protected:
   QuadMesh _Quad;
 
   // Frame buffers
-  GLFrameBuffer _RenderTargetFBO = { 0, { 0, RasterTexSlot::_RenderTarget } };
+  GLFrameBuffer _RenderTargetFBO = { 0, { 0, GL_TEXTURE_2D, RasterTexSlot::_RenderTarget } };
 
   // Textures
   GLTexture _EnvMapTEX = { 0, RasterTexSlot::_EnvMap };
