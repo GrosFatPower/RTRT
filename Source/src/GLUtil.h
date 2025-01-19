@@ -4,7 +4,6 @@
 #include <string>
 
 #include <GL/glew.h>
-#include <GLFW/glfw3.h> // Will drag system OpenGL headers
 
 
 #define GL_TEX_UNIT(x) ( GL_TEXTURE0 + (unsigned int)x._Slot )
