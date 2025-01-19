@@ -84,6 +84,13 @@ static void ResizeFBO( GLFrameBuffer & ioFBO, GLint iInternalFormat, GLsizei iWi
   glClear(GL_COLOR_BUFFER_BIT);
 }
 
+// ActivateTexture
+static void ActivateTexture( GLenum iTarget, GLTexture & iTex )
+{
+  glActiveTexture(TEX_UNIT(iTex));
+  glBindTexture(iTarget, iTex._ID);
+}
+
 // UniformArrayElementName
 static std::string UniformArrayElementName( const char * iUniformArrayName, int iIndex, const char * iAttributeName )
 {
