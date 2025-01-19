@@ -274,54 +274,31 @@ int PathTracer::UpdatePathTraceUniforms()
 // ----------------------------------------------------------------------------
 int PathTracer::BindPathTraceTextures()
 {
-  glActiveTexture(TEX_UNIT(_VtxTBO._Tex));
-  glBindTexture(GL_TEXTURE_BUFFER, _VtxTBO._ID);
-  glActiveTexture(TEX_UNIT(_VtxNormTBO._Tex));
-  glBindTexture(GL_TEXTURE_BUFFER, _VtxNormTBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_VtxUVTBO._Tex));
-  glBindTexture(GL_TEXTURE_BUFFER, _VtxUVTBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_VtxIndTBO._Tex));
-  glBindTexture(GL_TEXTURE_BUFFER, _VtxIndTBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_TexIndTBO._Tex));
-  glBindTexture(GL_TEXTURE_BUFFER, _TexIndTBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_MeshBBoxTBO._Tex));
-  glBindTexture(GL_TEXTURE_BUFFER, _MeshBBoxTBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_MeshIdRangeTBO._Tex));
-  glBindTexture(GL_TEXTURE_BUFFER, _MeshIdRangeTBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_TLASNodesTBO._Tex));
-  glBindTexture(GL_TEXTURE_BUFFER, _TLASNodesTBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_TLASMeshMatIDTBO._Tex));
-  glBindTexture(GL_TEXTURE_BUFFER, _TLASMeshMatIDTBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_BLASNodesTBO._Tex));
-  glBindTexture(GL_TEXTURE_BUFFER, _BLASNodesTBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_BLASNodesRangeTBO._Tex));
-  glBindTexture(GL_TEXTURE_BUFFER, _BLASNodesRangeTBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_BLASPackedIndicesTBO._Tex));
-  glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedIndicesTBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_BLASPackedIndicesRangeTBO._Tex));
-  glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedIndicesRangeTBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_BLASPackedVerticesTBO._Tex));
-  glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedVerticesTBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_BLASPackedNormalsTBO._Tex));
-  glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedNormalsTBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_BLASPackedUVsTBO._Tex));
-  glBindTexture(GL_TEXTURE_BUFFER, _BLASPackedUVsTBO._Tex._ID);
+  GLUtil::ActivateTexture(GL_TEXTURE_BUFFER, _VtxTBO._Tex);
+  GLUtil::ActivateTexture(GL_TEXTURE_BUFFER, _VtxNormTBO._Tex);
+  GLUtil::ActivateTexture(GL_TEXTURE_BUFFER, _VtxUVTBO._Tex);
+  GLUtil::ActivateTexture(GL_TEXTURE_BUFFER, _VtxIndTBO._Tex);
+  GLUtil::ActivateTexture(GL_TEXTURE_BUFFER, _TexIndTBO._Tex);
+  GLUtil::ActivateTexture(GL_TEXTURE_BUFFER, _MeshBBoxTBO._Tex);
+  GLUtil::ActivateTexture(GL_TEXTURE_BUFFER, _MeshIdRangeTBO._Tex);
+  GLUtil::ActivateTexture(GL_TEXTURE_BUFFER, _TLASNodesTBO._Tex);
+  GLUtil::ActivateTexture(GL_TEXTURE_BUFFER, _TLASMeshMatIDTBO._Tex);
+  GLUtil::ActivateTexture(GL_TEXTURE_BUFFER, _BLASNodesTBO._Tex);
+  GLUtil::ActivateTexture(GL_TEXTURE_BUFFER, _BLASNodesRangeTBO._Tex);
+  GLUtil::ActivateTexture(GL_TEXTURE_BUFFER, _BLASPackedIndicesTBO._Tex);
+  GLUtil::ActivateTexture(GL_TEXTURE_BUFFER, _BLASPackedIndicesRangeTBO._Tex);
+  GLUtil::ActivateTexture(GL_TEXTURE_BUFFER, _BLASPackedVerticesTBO._Tex);
+  GLUtil::ActivateTexture(GL_TEXTURE_BUFFER, _BLASPackedNormalsTBO._Tex);
+  GLUtil::ActivateTexture(GL_TEXTURE_BUFFER, _BLASPackedUVsTBO._Tex);
 
-  glActiveTexture(TEX_UNIT(_TexArrayTEX));
-  glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTEX._ID);
-  glActiveTexture(TEX_UNIT(_MaterialsTEX));
-  glBindTexture(GL_TEXTURE_2D, _MaterialsTEX._ID);
-  glActiveTexture(TEX_UNIT(_TLASTransformsIDTEX));
-  glBindTexture(GL_TEXTURE_2D, _TLASTransformsIDTEX._ID);
-  glActiveTexture(TEX_UNIT(_EnvMapTEX));
-  glBindTexture(GL_TEXTURE_2D, _EnvMapTEX._ID);
+  GLUtil::ActivateTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTEX);
 
-  glActiveTexture(TEX_UNIT(_RenderTargetLowResFBO._Tex));
-  glBindTexture(GL_TEXTURE_2D, _RenderTargetLowResFBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_RenderTargetTileFBO._Tex));
-  glBindTexture(GL_TEXTURE_2D, _RenderTargetTileFBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_RenderTargetFBO._Tex));
-  glBindTexture(GL_TEXTURE_2D, _RenderTargetFBO._Tex._ID);
+  GLUtil::ActivateTexture(GL_TEXTURE_2D, _MaterialsTEX);
+  GLUtil::ActivateTexture(GL_TEXTURE_2D, _TLASTransformsIDTEX);
+  GLUtil::ActivateTexture(GL_TEXTURE_2D, _EnvMapTEX);
+  GLUtil::ActivateTexture(GL_TEXTURE_2D, _RenderTargetLowResFBO._Tex);
+  GLUtil::ActivateTexture(GL_TEXTURE_2D, _RenderTargetTileFBO._Tex);
+  GLUtil::ActivateTexture(GL_TEXTURE_2D, _RenderTargetFBO._Tex);
 
   return 0;
 }
@@ -333,22 +310,18 @@ int PathTracer::BindAccumulateTextures()
 {
   if ( LowResPass() )
   {
-    glActiveTexture(TEX_UNIT(_RenderTargetLowResFBO._Tex));
-    glBindTexture(GL_TEXTURE_2D, _RenderTargetLowResFBO._Tex._ID);
+    GLUtil::ActivateTexture(GL_TEXTURE_2D, _RenderTargetLowResFBO._Tex);
   }
   else if ( TiledRendering() )
   {
-    glActiveTexture(TEX_UNIT(_RenderTargetTileFBO._Tex));
-    glBindTexture(GL_TEXTURE_2D, _RenderTargetTileFBO._Tex._ID);
+    GLUtil::ActivateTexture(GL_TEXTURE_2D, _RenderTargetTileFBO._Tex);
   }
   else
   {
-    glActiveTexture(TEX_UNIT(_RenderTargetFBO._Tex));
-    glBindTexture(GL_TEXTURE_2D, _RenderTargetFBO._Tex._ID);
+    GLUtil::ActivateTexture(GL_TEXTURE_2D, _RenderTargetFBO._Tex);
   }
 
-  glActiveTexture(TEX_UNIT(_AccumulateFBO._Tex));
-  glBindTexture(GL_TEXTURE_2D, _AccumulateFBO._Tex._ID);
+  GLUtil::ActivateTexture(GL_TEXTURE_2D, _AccumulateFBO._Tex);
 
   return 0;
 }
@@ -451,8 +424,7 @@ int PathTracer::UpdateRenderToScreenUniforms()
 // ----------------------------------------------------------------------------
 int PathTracer::BindRenderToScreenTextures()
 {
-  glActiveTexture(TEX_UNIT(_AccumulateFBO._Tex));
-  glBindTexture(GL_TEXTURE_2D, _AccumulateFBO._Tex._ID);
+  GLUtil::ActivateTexture(GL_TEXTURE_2D, _AccumulateFBO._Tex);
 
   return 0;
 }
@@ -502,8 +474,7 @@ int PathTracer::RenderToFile( const fs::path & iFilePath )
     glBindFramebuffer(GL_FRAMEBUFFER, temporaryFBO._ID);
     glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
 
-    glActiveTexture(TEX_UNIT(temporaryFBO._Tex));
-    glBindTexture(GL_TEXTURE_2D, temporaryFBO._Tex._ID);
+    GLUtil::ActivateTexture(GL_TEXTURE_2D, temporaryFBO._Tex);
     this -> BindRenderToScreenTextures();
 
     _Quad.Render(*_RenderToScreenShader);
@@ -516,8 +487,7 @@ int PathTracer::RenderToFile( const fs::path & iFilePath )
     int h = _Settings._WindowResolution.y;
     unsigned char * frameData = new unsigned char[w * h * 4];
 
-    glActiveTexture(TEX_UNIT(temporaryFBO._Tex));
-    glBindTexture(GL_TEXTURE_2D, temporaryFBO._Tex._ID);
+    GLUtil::ActivateTexture(GL_TEXTURE_2D, temporaryFBO._Tex);
     glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, frameData);
     stbi_flip_vertically_on_write( true );
     saved = stbi_write_png(iFilePath.string().c_str(), w, h, 4, frameData, w * 4);
