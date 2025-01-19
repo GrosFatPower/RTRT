@@ -17,6 +17,8 @@ public:
   GpuBvh() {};
   virtual ~GpuBvh() = 0;
 
+  virtual void Clear();
+
   struct Node
   {
     Vec3 _BBoxMin;
@@ -34,6 +36,8 @@ public:
   GpuTLAS() {}
   virtual ~GpuTLAS();
 
+  virtual void Clear();
+
   int Build( std::vector<Mesh*> & iMeshes , std::vector<MeshInstance> & iMeshInstances );
 
   const std::vector<MeshInstance> & GetPackedMeshInstances() const { return _PackedMeshInstances; }
@@ -48,6 +52,8 @@ class GpuBLAS : public GpuBvh
 public:
   GpuBLAS() {}
   virtual ~GpuBLAS();
+
+  virtual void Clear();
 
   int Build( Mesh & iMesh );
 

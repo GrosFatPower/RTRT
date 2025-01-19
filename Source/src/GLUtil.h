@@ -7,7 +7,7 @@
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
 
 
-#define TEX_UNIT(x) ( GL_TEXTURE0 + (unsigned int)x._Slot )
+#define GL_TEX_UNIT(x) ( GL_TEXTURE0 + (unsigned int)x._Slot )
 
 namespace RTRT
 {
@@ -87,7 +87,7 @@ static void ResizeFBO( GLFrameBuffer & ioFBO, GLint iInternalFormat, GLsizei iWi
 // ActivateTexture
 static void ActivateTexture( GLenum iTarget, GLTexture & iTex )
 {
-  glActiveTexture(TEX_UNIT(iTex));
+  glActiveTexture(GL_TEX_UNIT(iTex));
   glBindTexture(iTarget, iTex._ID);
 }
 

@@ -168,7 +168,7 @@ int SoftwareRasterizer::RenderToFile( const fs::path & iFilePath )
 
   // Temporary frame buffer
   glGenTextures(1, &temporaryFBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(temporaryFBO._Tex));
+  glActiveTexture(GL_TEX_UNIT(temporaryFBO._Tex));
   glBindTexture(GL_TEXTURE_2D, temporaryFBO._Tex._ID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._WindowResolution.x, _Settings._WindowResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -189,7 +189,7 @@ int SoftwareRasterizer::RenderToFile( const fs::path & iFilePath )
     glBindFramebuffer(GL_FRAMEBUFFER, temporaryFBO._ID);
     glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
 
-    glActiveTexture(TEX_UNIT(temporaryFBO._Tex));
+    glActiveTexture(GL_TEX_UNIT(temporaryFBO._Tex));
     glBindTexture(GL_TEXTURE_2D, temporaryFBO._Tex._ID);
     this -> BindRenderToScreenTextures();
 
@@ -203,7 +203,7 @@ int SoftwareRasterizer::RenderToFile( const fs::path & iFilePath )
     int h = _Settings._WindowResolution.y;
     unsigned char * frameData = new unsigned char[w * h * 4];
 
-    glActiveTexture(TEX_UNIT(temporaryFBO._Tex));
+    glActiveTexture(GL_TEX_UNIT(temporaryFBO._Tex));
     glBindTexture(GL_TEXTURE_2D, temporaryFBO._Tex._ID);
     glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, frameData);
     stbi_flip_vertically_on_write( true );
@@ -255,7 +255,7 @@ int SoftwareRasterizer::InitializeFrameBuffers()
 
   // Render target textures
   glGenTextures(1, &_RenderTargetFBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_RenderTargetFBO._Tex));
+  glActiveTexture(GL_TEX_UNIT(_RenderTargetFBO._Tex));
   glBindTexture(GL_TEXTURE_2D, _RenderTargetFBO._Tex._ID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);

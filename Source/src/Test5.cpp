@@ -243,6 +243,18 @@ int Test5::DrawUI()
       ImGui::PlotLines( "Frame rate", &s_FrameRateHistory[0], s_FrameRateHistory.size(), offset, overlay, -0.1f, s_Max, ImVec2( 0, 80.0f ) );
     }
 
+    // Renderer selection
+    {
+      static const char * Renderers[] = {"PathTracer", "SoftwareRasterizer (not available)"};
+      //_RendererType
+      int selectedRenderer = (int)_RendererType;
+      if ( ImGui::Combo( "Renderer", &selectedRenderer, Renderers, 2 ) )
+      {
+        //_RendererType = (RendererType) selectedRenderer; // ToDo
+        _ReloadRenderer = true;
+      }
+    }
+
     // Scene selection
     {
       int selectedSceneId = _CurSceneId;
@@ -577,6 +589,13 @@ int Test5::UpdateScene()
       std::cout << "ERROR: Scene initialization failed!" << std::endl;
       return 1;
     }
+
+    _ReloadRenderer = true;
+  }
+
+  if ( _ReloadRenderer )
+  {
+    _ReloadRenderer = false;
 
     // Initialize the renderer
     if ( 0 != InitializeRenderer() || !_Renderer )

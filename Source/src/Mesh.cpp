@@ -168,6 +168,7 @@ bool Mesh::LoadOBJ( const std::string & iFilename )
 
 int Mesh::BuildBvh()
 {
+  _Bvh -> Clear();
   return _Bvh -> Build(*this);
 }
 

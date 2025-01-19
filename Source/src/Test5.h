@@ -32,7 +32,7 @@ public:
 
   enum class RendererType
   {
-    PathTracerRenderer,
+    PathTracerRenderer = 0,
     RasterizerRenderer
   };
 
@@ -67,6 +67,7 @@ protected:
 
   RendererType              _RendererType = RendererType::PathTracerRenderer;
   std::unique_ptr<Renderer> _Renderer;
+  bool                      _ReloadRenderer = false;
 
   KeyInput                  _KeyInput;
   MouseInput                _MouseInput;

@@ -517,6 +517,7 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
   // BVH
   if ( iBuildBVH )
   {
+    _TLAS.Clear();
     _TLAS.Build(_Meshes, _MeshInstances);
 
     for ( auto meshInst : _TLAS.GetPackedMeshInstances() )

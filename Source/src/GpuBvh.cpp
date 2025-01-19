@@ -23,8 +23,18 @@ using BLASNode = tinybvh::BVH::BVHNode;
 using BLASNode = RadeonRays::Bvh::Node;
 #endif
 
+// ----------------------------------------------------------------------------
+// DTOR
+// ----------------------------------------------------------------------------
 GpuBvh::~GpuBvh()
 {
+  Clear();
+}
+
+void GpuBvh::Clear()
+{
+  _CurNode = 0;
+  _Nodes.clear();
 }
 
 // ----------------------------------------------------------------------------
@@ -32,6 +42,14 @@ GpuBvh::~GpuBvh()
 // ----------------------------------------------------------------------------
 GpuTLAS::~GpuTLAS()
 {
+  Clear();
+}
+
+void GpuTLAS::Clear()
+{
+  GpuBvh::Clear();
+
+  _PackedMeshInstances.clear();
 }
 
 int ProcessNodes( TLASNode * iNode, GpuTLAS * ioGpuTLAS )
@@ -135,6 +153,14 @@ int GpuTLAS::Build( std::vector<Mesh*> & iMeshes, std::vector<MeshInstance> & iM
 // ----------------------------------------------------------------------------
 GpuBLAS::~GpuBLAS()
 {
+  Clear();
+}
+
+void GpuBLAS::Clear()
+{
+  GpuBvh::Clear();
+
+  _PackedTriangleIdx.clear();
 }
 
 #ifdef USE_TINYBVH

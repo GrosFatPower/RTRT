@@ -453,7 +453,7 @@ int PathTracer::RenderToFile( const fs::path & iFilePath )
 
   // Temporary frame buffer
   glGenTextures(1, &temporaryFBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(temporaryFBO._Tex));
+  glActiveTexture(GL_TEX_UNIT(temporaryFBO._Tex));
   glBindTexture(GL_TEXTURE_2D, temporaryFBO._Tex._ID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._WindowResolution.x, _Settings._WindowResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -541,7 +541,7 @@ int PathTracer::InitializeFrameBuffers()
 
   // Render target textures
   glGenTextures(1, &_RenderTargetFBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_RenderTargetFBO._Tex));
+  glActiveTexture(GL_TEX_UNIT(_RenderTargetFBO._Tex));
   glBindTexture(GL_TEXTURE_2D, _RenderTargetFBO._Tex._ID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -549,7 +549,7 @@ int PathTracer::InitializeFrameBuffers()
   glBindTexture(GL_TEXTURE_2D, 0);
 
   glGenTextures(1, &_RenderTargetTileFBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_RenderTargetTileFBO._Tex));
+  glActiveTexture(GL_TEX_UNIT(_RenderTargetTileFBO._Tex));
   glBindTexture(GL_TEXTURE_2D, _RenderTargetTileFBO._Tex._ID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, TileWidth(), TileHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -557,7 +557,7 @@ int PathTracer::InitializeFrameBuffers()
   glBindTexture(GL_TEXTURE_2D, 0);
 
   glGenTextures(1, &_RenderTargetLowResFBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_RenderTargetLowResFBO._Tex));
+  glActiveTexture(GL_TEX_UNIT(_RenderTargetLowResFBO._Tex));
   glBindTexture(GL_TEXTURE_2D, _RenderTargetLowResFBO._Tex._ID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, LowResRenderWidth(), LowResRenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -565,7 +565,7 @@ int PathTracer::InitializeFrameBuffers()
   glBindTexture(GL_TEXTURE_2D, 0);
 
   glGenTextures(1, &_AccumulateFBO._Tex._ID);
-  glActiveTexture(TEX_UNIT(_AccumulateFBO._Tex));
+  glActiveTexture(GL_TEX_UNIT(_AccumulateFBO._Tex));
   glBindTexture(GL_TEXTURE_2D, _AccumulateFBO._Tex._ID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
