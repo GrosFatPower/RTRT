@@ -13,42 +13,11 @@
 
 #include "stb_image_write.h"
 
-#define TEX_UNIT(x) ( GL_TEXTURE0 + (int)x._Slot )
 
 namespace fs = std::filesystem;
 
 namespace RTRT
 {
-
-// ----------------------------------------------------------------------------
-// HELPER FUNCTIONS
-// ----------------------------------------------------------------------------
-
-// ----------------------------------------------------------------------------
-// InitializeTBO
-// ----------------------------------------------------------------------------
-static void InitializeTBO( PathTracer::GLTextureBuffer & ioTBO, GLsizeiptr iSize, const void * iData, GLenum iInternalformat )
-{
-  glGenBuffers(1, &ioTBO._ID);
-  glBindBuffer(GL_TEXTURE_BUFFER, ioTBO._ID);
-  glBufferData(GL_TEXTURE_BUFFER, iSize, iData, GL_STATIC_DRAW);
-  glGenTextures(1, &ioTBO._Tex._ID);
-  glBindTexture(GL_TEXTURE_BUFFER, ioTBO._Tex._ID);
-  glTexBuffer(GL_TEXTURE_BUFFER, iInternalformat, ioTBO._ID);
-}
-
-// ----------------------------------------------------------------------------
-// ResizeFBO
-// ----------------------------------------------------------------------------
-static void ResizeFBO( PathTracer::GLFrameBuffer & ioFBO, GLint iInternalFormat, GLsizei iWidth, GLsizei iHeight, GLenum iFormat, GLenum iType )
-{
-  glBindTexture(GL_TEXTURE_2D, ioFBO._Tex._ID);
-  glTexImage2D(GL_TEXTURE_2D, 0, iInternalFormat, iWidth, iHeight, 0, iFormat, iType, NULL);
-  glBindTexture(GL_TEXTURE_2D, 0);
-
-  glBindFramebuffer(GL_FRAMEBUFFER, ioFBO._ID);
-  glClear(GL_COLOR_BUFFER_BIT);
-}
 
 // ----------------------------------------------------------------------------
 // METHODS
@@ -68,44 +37,12 @@ PathTracer::PathTracer( Scene & iScene, RenderSettings & iSettings )
 // ----------------------------------------------------------------------------
 PathTracer::~PathTracer()
 {
-  DeleteFBO(_RenderTargetFBO);
-  DeleteFBO(_RenderTargetLowResFBO);
-  DeleteFBO(_RenderTargetTileFBO);
-  DeleteFBO(_AccumulateFBO);
+  GLUtil::DeleteFBO(_RenderTargetFBO);
+  GLUtil::DeleteFBO(_RenderTargetLowResFBO);
+  GLUtil::DeleteFBO(_RenderTargetTileFBO);
+  GLUtil::DeleteFBO(_AccumulateFBO);
 
   UnloadScene();
-}
-
-// ----------------------------------------------------------------------------
-// DeleteTEX
-// ----------------------------------------------------------------------------
-void PathTracer::DeleteTEX( GLTexture & ioTEX )
-{
-  if ( ioTEX._ID )
-    glDeleteTextures(1, &ioTEX._ID);
-  ioTEX._ID = 0;
-}
-
-// ----------------------------------------------------------------------------
-// DeleteFBO
-// ----------------------------------------------------------------------------
-void PathTracer::DeleteFBO( GLFrameBuffer & ioFBO )
-{
-  if ( ioFBO._ID )
-    glDeleteFramebuffers(1, &ioFBO._ID);
-  DeleteTEX(ioFBO._Tex);
-  ioFBO._ID;
-}
-
-// ----------------------------------------------------------------------------
-// DeleteTBO
-// ----------------------------------------------------------------------------
-void PathTracer::DeleteTBO( GLTextureBuffer & ioTBO )
-{
-  if ( ioTBO._ID )
-    glDeleteBuffers(1, &ioTBO._ID);
-  DeleteTEX(ioTBO._Tex);
-  ioTBO._ID = 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -197,7 +134,7 @@ int PathTracer::UpdatePathTraceUniforms()
     _PathTraceShader -> SetUniform("u_EnableSkybox", (int)_Settings._EnableSkybox);
     _PathTraceShader -> SetUniform("u_EnableBackground" , (int)_Settings._EnableBackGround);
     _PathTraceShader -> SetUniform("u_SkyboxRotation", _Settings._SkyBoxRotation / 360.f);
-    _PathTraceShader -> SetUniform("u_SkyboxTexture", (int)TextureSlot::EnvMap);
+    _PathTraceShader -> SetUniform("u_SkyboxTexture", (int)PathTracerTexSlot::_EnvMap);
     _PathTraceShader -> SetUniform("u_Gamma", _Settings._Gamma);
     _PathTraceShader -> SetUniform("u_Exposure", _Settings._Exposure);
     _PathTraceShader -> SetUniform("u_ToneMapping", ( _Settings._ToneMapping ? 1 : 0 ));
@@ -300,25 +237,25 @@ int PathTracer::UpdatePathTraceUniforms()
       }
     }
 
-    _PathTraceShader -> SetUniform("u_VtxTexture",                    (int)TextureSlot::Vertices);
-    _PathTraceShader -> SetUniform("u_VtxNormTexture",                (int)TextureSlot::Normals);
-    _PathTraceShader -> SetUniform("u_VtxUVTexture",                  (int)TextureSlot::UVs);
-    _PathTraceShader -> SetUniform("u_VtxIndTexture",                 (int)TextureSlot::VertInd);
-    _PathTraceShader -> SetUniform("u_TexIndTexture",                 (int)TextureSlot::TexInd);
-    _PathTraceShader -> SetUniform("u_TexArrayTexture",               (int)TextureSlot::TexArray);
-    _PathTraceShader -> SetUniform("u_MeshBBoxTexture",               (int)TextureSlot::MeshBBox);
-    _PathTraceShader -> SetUniform("u_MeshIDRangeTexture",            (int)TextureSlot::MeshIdRange);
-    _PathTraceShader -> SetUniform("u_MaterialsTexture",              (int)TextureSlot::Materials);
-    _PathTraceShader -> SetUniform("u_TLASNodesTexture",              (int)TextureSlot::TLASNodes);
-    _PathTraceShader -> SetUniform("u_TLASTransformsTexture",         (int)TextureSlot::TLASTransformsID);
-    _PathTraceShader -> SetUniform("u_TLASMeshMatIDTexture",          (int)TextureSlot::TLASMeshMatID);
-    _PathTraceShader -> SetUniform("u_BLASNodesTexture",              (int)TextureSlot::BLASNodes);
-    _PathTraceShader -> SetUniform("u_BLASNodesRangeTexture",         (int)TextureSlot::BLASNodesRange);
-    _PathTraceShader -> SetUniform("u_BLASPackedIndicesTexture",      (int)TextureSlot::BLASPackedIndices);
-    _PathTraceShader -> SetUniform("u_BLASPackedIndicesRangeTexture", (int)TextureSlot::BLASPackedIndicesRange);
-    _PathTraceShader -> SetUniform("u_BLASPackedVtxTexture",          (int)TextureSlot::BLASPackedVertices);
-    _PathTraceShader -> SetUniform("u_BLASPackedNormTexture",         (int)TextureSlot::BLASPackedNormals);
-    _PathTraceShader -> SetUniform("u_BLASPackedUVTexture",           (int)TextureSlot::BLASPackedUVs);
+    _PathTraceShader -> SetUniform("u_VtxTexture",                    (int)PathTracerTexSlot::_Vertices);
+    _PathTraceShader -> SetUniform("u_VtxNormTexture",                (int)PathTracerTexSlot::_Normals);
+    _PathTraceShader -> SetUniform("u_VtxUVTexture",                  (int)PathTracerTexSlot::_UVs);
+    _PathTraceShader -> SetUniform("u_VtxIndTexture",                 (int)PathTracerTexSlot::_VertInd);
+    _PathTraceShader -> SetUniform("u_TexIndTexture",                 (int)PathTracerTexSlot::_TexInd);
+    _PathTraceShader -> SetUniform("u_TexArrayTexture",               (int)PathTracerTexSlot::_TexArray);
+    _PathTraceShader -> SetUniform("u_MeshBBoxTexture",               (int)PathTracerTexSlot::_MeshBBox);
+    _PathTraceShader -> SetUniform("u_MeshIDRangeTexture",            (int)PathTracerTexSlot::_MeshIdRange);
+    _PathTraceShader -> SetUniform("u_MaterialsTexture",              (int)PathTracerTexSlot::_Materials);
+    _PathTraceShader -> SetUniform("u_TLASNodesTexture",              (int)PathTracerTexSlot::_TLASNodes);
+    _PathTraceShader -> SetUniform("u_TLASTransformsTexture",         (int)PathTracerTexSlot::_TLASTransformsID);
+    _PathTraceShader -> SetUniform("u_TLASMeshMatIDTexture",          (int)PathTracerTexSlot::_TLASMeshMatID);
+    _PathTraceShader -> SetUniform("u_BLASNodesTexture",              (int)PathTracerTexSlot::_BLASNodes);
+    _PathTraceShader -> SetUniform("u_BLASNodesRangeTexture",         (int)PathTracerTexSlot::_BLASNodesRange);
+    _PathTraceShader -> SetUniform("u_BLASPackedIndicesTexture",      (int)PathTracerTexSlot::_BLASPackedIndices);
+    _PathTraceShader -> SetUniform("u_BLASPackedIndicesRangeTexture", (int)PathTracerTexSlot::_BLASPackedIndicesRange);
+    _PathTraceShader -> SetUniform("u_BLASPackedVtxTexture",          (int)PathTracerTexSlot::_BLASPackedVertices);
+    _PathTraceShader -> SetUniform("u_BLASPackedNormTexture",         (int)PathTracerTexSlot::_BLASPackedNormals);
+    _PathTraceShader -> SetUniform("u_BLASPackedUVTexture",           (int)PathTracerTexSlot::_BLASPackedUVs);
 
     _PathTraceShader -> SetUniform("u_NbSpheres", nbSpheres);
     _PathTraceShader -> SetUniform("u_NbPlanes", nbPlanes);
@@ -423,14 +360,14 @@ int PathTracer::UpdateAccumulateUniforms()
 {
   _AccumulateShader -> Use();
 
-  _AccumulateShader -> SetUniform("u_PreviousFrame", (int)TextureSlot::Accumulate);
+  _AccumulateShader -> SetUniform("u_PreviousFrame", (int)PathTracerTexSlot::_Accumulate);
 
   if ( LowResPass() )
-    _AccumulateShader -> SetUniform("u_NewFrame", (int)TextureSlot::RenderTargetLowRes);
+    _AccumulateShader -> SetUniform("u_NewFrame", (int)PathTracerTexSlot::_RenderTargetLowRes);
   else if ( TiledRendering() )
-    _AccumulateShader -> SetUniform("u_NewFrame", (int)TextureSlot::RenderTargetTile);
+    _AccumulateShader -> SetUniform("u_NewFrame", (int)PathTracerTexSlot::_RenderTargetTile);
   else
-    _AccumulateShader -> SetUniform("u_NewFrame", (int)TextureSlot::RenderTarget);
+    _AccumulateShader -> SetUniform("u_NewFrame", (int)PathTracerTexSlot::_RenderTarget);
 
   if ( !Dirty() && _Settings._Accumulate && ( _NbCompleteFrames > 0 ) )
     _AccumulateShader -> SetUniform("u_Accumulate", 1);
@@ -497,7 +434,7 @@ int PathTracer::UpdateRenderToScreenUniforms()
 {
   _RenderToScreenShader -> Use();
 
-  _RenderToScreenShader -> SetUniform("u_ScreenTexture", (int)TextureSlot::Accumulate);
+  _RenderToScreenShader -> SetUniform("u_ScreenTexture", (int)PathTracerTexSlot::_Accumulate);
   _RenderToScreenShader -> SetUniform("u_RenderRes", (float)_Settings._WindowResolution.x, (float)_Settings._WindowResolution.y);
   _RenderToScreenShader -> SetUniform("u_Gamma", _Settings._Gamma);
   _RenderToScreenShader -> SetUniform("u_Exposure", _Settings._Exposure);
@@ -540,7 +477,7 @@ int PathTracer::RenderToScreen()
 // ----------------------------------------------------------------------------
 int PathTracer::RenderToFile( const fs::path & iFilePath )
 {
-  GLFrameBuffer temporaryFBO = { 0, { 0, TextureSlot::Temporary } };
+  GLFrameBuffer temporaryFBO = { 0, { 0, PathTracerTexSlot::_Temporary } };
 
   // Temporary frame buffer
   glGenTextures(1, &temporaryFBO._Tex._ID);
@@ -556,7 +493,7 @@ int PathTracer::RenderToFile( const fs::path & iFilePath )
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, temporaryFBO._Tex._ID, 0);
   if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
   {
-    DeleteTEX(temporaryFBO._Tex);
+    GLUtil::DeleteTEX(temporaryFBO._Tex);
     return 1;
   }
 
@@ -594,7 +531,7 @@ int PathTracer::RenderToFile( const fs::path & iFilePath )
     std::cout << "ERROR : Failed to save screen capture in " << fs::absolute(iFilePath) << std::endl;
 
   // Clean
-  DeleteFBO(temporaryFBO);
+  GLUtil::DeleteFBO(temporaryFBO);
 
   return 0;
 }
@@ -617,10 +554,10 @@ int PathTracer::ResizeRenderTarget()
 {
   UpdateRenderResolution();
 
-  ResizeFBO(_RenderTargetFBO, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT);
-  ResizeFBO(_RenderTargetTileFBO, GL_RGBA32F, TileWidth(), TileHeight(), GL_RGBA, GL_FLOAT);
-  ResizeFBO(_RenderTargetLowResFBO, GL_RGBA32F, LowResRenderWidth(), LowResRenderHeight(), GL_RGBA, GL_FLOAT);
-  ResizeFBO(_AccumulateFBO, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT);
+  GLUtil::ResizeFBO(_RenderTargetFBO, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT);
+  GLUtil::ResizeFBO(_RenderTargetTileFBO, GL_RGBA32F, TileWidth(), TileHeight(), GL_RGBA, GL_FLOAT);
+  GLUtil::ResizeFBO(_RenderTargetLowResFBO, GL_RGBA32F, LowResRenderWidth(), LowResRenderHeight(), GL_RGBA, GL_FLOAT);
+  GLUtil::ResizeFBO(_AccumulateFBO, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT);
 
   return 0;
 }
@@ -729,27 +666,27 @@ int PathTracer::UnloadScene()
   _NbTriangles = 0;
   _NbMeshInstances = 0;
 
-  DeleteTBO(_VtxTBO);
-  DeleteTBO(_VtxNormTBO);
-  DeleteTBO(_VtxUVTBO);
-  DeleteTBO(_VtxIndTBO);
-  DeleteTBO(_TexIndTBO);
-  DeleteTBO(_MeshBBoxTBO);
-  DeleteTBO(_MeshIdRangeTBO);
-  DeleteTBO(_TLASNodesTBO);
-  DeleteTBO(_TLASMeshMatIDTBO);
-  DeleteTBO(_BLASNodesTBO);
-  DeleteTBO(_BLASNodesRangeTBO);
-  DeleteTBO(_BLASPackedIndicesTBO);
-  DeleteTBO(_BLASPackedIndicesRangeTBO);
-  DeleteTBO(_BLASPackedVerticesTBO);
-  DeleteTBO(_BLASPackedNormalsTBO);
-  DeleteTBO(_BLASPackedUVsTBO);
+  GLUtil::DeleteTBO(_VtxTBO);
+  GLUtil::DeleteTBO(_VtxNormTBO);
+  GLUtil::DeleteTBO(_VtxUVTBO);
+  GLUtil::DeleteTBO(_VtxIndTBO);
+  GLUtil::DeleteTBO(_TexIndTBO);
+  GLUtil::DeleteTBO(_MeshBBoxTBO);
+  GLUtil::DeleteTBO(_MeshIdRangeTBO);
+  GLUtil::DeleteTBO(_TLASNodesTBO);
+  GLUtil::DeleteTBO(_TLASMeshMatIDTBO);
+  GLUtil::DeleteTBO(_BLASNodesTBO);
+  GLUtil::DeleteTBO(_BLASNodesRangeTBO);
+  GLUtil::DeleteTBO(_BLASPackedIndicesTBO);
+  GLUtil::DeleteTBO(_BLASPackedIndicesRangeTBO);
+  GLUtil::DeleteTBO(_BLASPackedVerticesTBO);
+  GLUtil::DeleteTBO(_BLASPackedNormalsTBO);
+  GLUtil::DeleteTBO(_BLASPackedUVsTBO);
 
-  DeleteTEX(_TexArrayTEX);
-  DeleteTEX(_MaterialsTEX);
-  DeleteTEX(_TLASTransformsIDTEX);
-  DeleteTEX(_EnvMapTEX);
+  GLUtil::DeleteTEX(_TexArrayTEX);
+  GLUtil::DeleteTEX(_MaterialsTEX);
+  GLUtil::DeleteTEX(_TLASTransformsIDTEX);
+  GLUtil::DeleteTEX(_EnvMapTEX);
 
   _FrameNum = 0;
 
@@ -775,17 +712,17 @@ int PathTracer::ReloadScene()
   {
     glPixelStorei(GL_PACK_ALIGNMENT, 1); // ??? Necessary
 
-    InitializeTBO(_VtxTBO, sizeof(Vec3) * _Scene.GetVertices().size(), &_Scene.GetVertices()[0], GL_RGB32F);
-    InitializeTBO(_VtxNormTBO, sizeof(Vec3) * _Scene.GetNormals().size(), &_Scene.GetNormals()[0], GL_RGB32F);
+    GLUtil::InitializeTBO(_VtxTBO, sizeof(Vec3) * _Scene.GetVertices().size(), &_Scene.GetVertices()[0], GL_RGB32F);
+    GLUtil::InitializeTBO(_VtxNormTBO, sizeof(Vec3) * _Scene.GetNormals().size(), &_Scene.GetNormals()[0], GL_RGB32F);
     
     if ( _Scene.GetUVMatID().size() )
-      InitializeTBO(_VtxUVTBO, sizeof(Vec3) * _Scene.GetUVMatID().size(), &_Scene.GetUVMatID()[0], GL_RGB32F);
+      GLUtil::InitializeTBO(_VtxUVTBO, sizeof(Vec3) * _Scene.GetUVMatID().size(), &_Scene.GetUVMatID()[0], GL_RGB32F);
     
-    InitializeTBO(_VtxIndTBO, sizeof(Vec3i) * _Scene.GetIndices().size(), &_Scene.GetIndices()[0], GL_RGB32I);
+    GLUtil::InitializeTBO(_VtxIndTBO, sizeof(Vec3i) * _Scene.GetIndices().size(), &_Scene.GetIndices()[0], GL_RGB32I);
     
     if ( _Scene.GetTextureArrayIDs().size() )
     {
-      InitializeTBO(_TexIndTBO, sizeof(int) * _Scene.GetTextureArrayIDs().size(), &_Scene.GetTextureArrayIDs()[0], GL_R32I);
+      GLUtil::InitializeTBO(_TexIndTBO, sizeof(int) * _Scene.GetTextureArrayIDs().size(), &_Scene.GetTextureArrayIDs()[0], GL_R32I);
 
       glGenTextures(1, &_TexArrayTEX._ID);
       glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTEX._ID);
@@ -795,9 +732,9 @@ int PathTracer::ReloadScene()
       glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     }
 
-    InitializeTBO(_MeshBBoxTBO, sizeof(Vec3) * _Scene.GetMeshBBoxes().size(), &_Scene.GetMeshBBoxes()[0], GL_RGB32F);
-    InitializeTBO(_MeshIdRangeTBO, sizeof(int) * _Scene.GetMeshIdxRange().size(), &_Scene.GetMeshIdxRange()[0], GL_R32I);
-    InitializeTBO(_MeshIdRangeTBO, sizeof(int) * _Scene.GetMeshIdxRange().size(), &_Scene.GetMeshIdxRange()[0], GL_R32I);
+    GLUtil::InitializeTBO(_MeshBBoxTBO, sizeof(Vec3) * _Scene.GetMeshBBoxes().size(), &_Scene.GetMeshBBoxes()[0], GL_RGB32F);
+    GLUtil::InitializeTBO(_MeshIdRangeTBO, sizeof(int) * _Scene.GetMeshIdxRange().size(), &_Scene.GetMeshIdxRange()[0], GL_R32I);
+    GLUtil::InitializeTBO(_MeshIdRangeTBO, sizeof(int) * _Scene.GetMeshIdxRange().size(), &_Scene.GetMeshIdxRange()[0], GL_R32I);
 
     glGenTextures(1, &_MaterialsTEX._ID);
     glBindTexture(GL_TEXTURE_2D, _MaterialsTEX._ID);
@@ -807,7 +744,7 @@ int PathTracer::ReloadScene()
     glBindTexture(GL_TEXTURE_2D, 0);
 
     // BVH
-    InitializeTBO(_TLASNodesTBO, sizeof(GpuBvh::Node) * _Scene.GetTLASNode().size(), &_Scene.GetTLASNode()[0], GL_RGB32F);
+    GLUtil::InitializeTBO(_TLASNodesTBO, sizeof(GpuBvh::Node) * _Scene.GetTLASNode().size(), &_Scene.GetTLASNode()[0], GL_RGB32F);
 
     glGenTextures(1, &_TLASTransformsIDTEX._ID);
     glBindTexture(GL_TEXTURE_2D, _TLASTransformsIDTEX._ID);
@@ -816,14 +753,14 @@ int PathTracer::ReloadScene()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    InitializeTBO(_TLASMeshMatIDTBO, sizeof(Vec2i) * _Scene.GetTLASPackedMeshMatID().size(), &_Scene.GetTLASPackedMeshMatID()[0], GL_RG32I);
-    InitializeTBO(_BLASNodesTBO, sizeof(GpuBvh::Node) * _Scene.GetBLASNode().size(), &_Scene.GetBLASNode()[0], GL_RGB32F);
-    InitializeTBO(_BLASNodesRangeTBO, sizeof(Vec2i) * _Scene.GetBLASNodeRange().size(), &_Scene.GetBLASNodeRange()[0], GL_RG32I);
-    InitializeTBO(_BLASPackedIndicesTBO, sizeof(Vec3i) * _Scene.GetBLASPackedIndices().size(), &_Scene.GetBLASPackedIndices()[0], GL_RGB32I);
-    InitializeTBO(_BLASPackedIndicesRangeTBO, sizeof(Vec2i) * _Scene.GetBLASPackedIndicesRange().size(), &_Scene.GetBLASPackedIndicesRange()[0], GL_RG32I);
-    InitializeTBO(_BLASPackedVerticesTBO, sizeof(Vec3) * _Scene.GetBLASPackedVertices().size(), &_Scene.GetBLASPackedVertices()[0], GL_RGB32F);
-    InitializeTBO(_BLASPackedNormalsTBO, sizeof(Vec3) * _Scene.GetBLASPackedNormals().size(), &_Scene.GetBLASPackedNormals()[0], GL_RGB32F);
-    InitializeTBO(_BLASPackedUVsTBO, sizeof(Vec2) * _Scene.GetBLASPackedUVs().size(), &_Scene.GetBLASPackedUVs()[0], GL_RG32F);
+    GLUtil::InitializeTBO(_TLASMeshMatIDTBO, sizeof(Vec2i) * _Scene.GetTLASPackedMeshMatID().size(), &_Scene.GetTLASPackedMeshMatID()[0], GL_RG32I);
+    GLUtil::InitializeTBO(_BLASNodesTBO, sizeof(GpuBvh::Node) * _Scene.GetBLASNode().size(), &_Scene.GetBLASNode()[0], GL_RGB32F);
+    GLUtil::InitializeTBO(_BLASNodesRangeTBO, sizeof(Vec2i) * _Scene.GetBLASNodeRange().size(), &_Scene.GetBLASNodeRange()[0], GL_RG32I);
+    GLUtil::InitializeTBO(_BLASPackedIndicesTBO, sizeof(Vec3i) * _Scene.GetBLASPackedIndices().size(), &_Scene.GetBLASPackedIndices()[0], GL_RGB32I);
+    GLUtil::InitializeTBO(_BLASPackedIndicesRangeTBO, sizeof(Vec2i) * _Scene.GetBLASPackedIndicesRange().size(), &_Scene.GetBLASPackedIndicesRange()[0], GL_RG32I);
+    GLUtil::InitializeTBO(_BLASPackedVerticesTBO, sizeof(Vec3) * _Scene.GetBLASPackedVertices().size(), &_Scene.GetBLASPackedVertices()[0], GL_RGB32F);
+    GLUtil::InitializeTBO(_BLASPackedNormalsTBO, sizeof(Vec3) * _Scene.GetBLASPackedNormals().size(), &_Scene.GetBLASPackedNormals()[0], GL_RGB32F);
+    GLUtil::InitializeTBO(_BLASPackedUVsTBO, sizeof(Vec2) * _Scene.GetBLASPackedUVs().size(), &_Scene.GetBLASPackedUVs()[0], GL_RG32F);
   }
 
   //this -> ReloadEnvMap();
@@ -836,7 +773,7 @@ int PathTracer::ReloadScene()
 // ----------------------------------------------------------------------------
 int PathTracer::ReloadEnvMap()
 {
-  DeleteTEX(_EnvMapTEX);
+  GLUtil::DeleteTEX(_EnvMapTEX);
 
   if ( _Scene.GetEnvMap().IsInitialized() )
   {

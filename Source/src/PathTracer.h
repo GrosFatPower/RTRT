@@ -4,6 +4,7 @@
 #include "Renderer.h"
 #include "RenderSettings.h"
 #include "QuadMesh.h"
+#include "GLUtil.h"
 
 #include "GL/glew.h"
 
@@ -13,6 +14,35 @@ namespace RTRT
 {
 
 class Scene;
+
+struct PathTracerTexSlot
+{
+  static const TextureSlot _RenderTarget           = 0;
+  static const TextureSlot _RenderTargetLowRes     = 1;
+  static const TextureSlot _RenderTargetTile       = 2;
+  static const TextureSlot _Accumulate             = 3;
+  static const TextureSlot _Vertices               = 4;
+  static const TextureSlot _Normals                = 5;
+  static const TextureSlot _UVs                    = 6;
+  static const TextureSlot _VertInd                = 7;
+  static const TextureSlot _TexInd                 = 8;
+  static const TextureSlot _TexArray               = 9;
+  static const TextureSlot _MeshBBox               = 10;
+  static const TextureSlot _MeshIdRange            = 11;
+  static const TextureSlot _Materials              = 12;
+  static const TextureSlot _TLASNodes              = 13;
+  static const TextureSlot _TLASTransformsID       = 14;
+  static const TextureSlot _TLASMeshMatID          = 15;
+  static const TextureSlot _BLASNodes              = 16;
+  static const TextureSlot _BLASNodesRange         = 17;
+  static const TextureSlot _BLASPackedIndices      = 18;
+  static const TextureSlot _BLASPackedIndicesRange = 19;
+  static const TextureSlot _BLASPackedVertices     = 20;
+  static const TextureSlot _BLASPackedNormals      = 21;
+  static const TextureSlot _BLASPackedUVs          = 22;
+  static const TextureSlot _EnvMap                 = 23;
+  static const TextureSlot _Temporary              = 24;
+};
 
 class PathTracer : public Renderer
 {
@@ -27,59 +57,6 @@ public:
   virtual int RenderToTexture();
   virtual int RenderToScreen();
   virtual int RenderToFile( const std::filesystem::path & iFilePath );
-
-public:
-
-  enum class TextureSlot
-  {
-    RenderTarget = 0,
-    RenderTargetLowRes,
-    RenderTargetTile,
-    Accumulate,
-    Vertices,
-    Normals,
-    UVs,
-    VertInd,
-    TexInd,
-    TexArray,
-    MeshBBox,
-    MeshIdRange,
-    Materials,
-    TLASNodes,
-    TLASTransformsID,
-    TLASMeshMatID,
-    BLASNodes,
-    BLASNodesRange,
-    BLASPackedIndices,
-    BLASPackedIndicesRange,
-    BLASPackedVertices,
-    BLASPackedNormals,
-    BLASPackedUVs,
-    EnvMap,
-    Temporary
-  };
-
-  struct GLTexture
-  {
-    GLuint            _ID;
-    const TextureSlot _Slot;
-  };
-
-  struct GLFrameBuffer
-  {
-    GLuint    _ID;
-    GLTexture _Tex;
-  };
-
-  struct GLTextureBuffer
-  {
-    GLuint    _ID;
-    GLTexture _Tex;
-  };
-
-  void DeleteTEX( GLTexture & ioTEX );
-  void DeleteFBO( GLFrameBuffer & ioFBO );
-  void DeleteTBO( GLTextureBuffer & ioTBO );
 
 protected:
 
@@ -124,34 +101,34 @@ protected:
   QuadMesh _Quad;
 
   // Frame buffers
-  GLFrameBuffer _RenderTargetFBO       = { 0, { 0, TextureSlot::RenderTarget } };
-  GLFrameBuffer _RenderTargetLowResFBO = { 0, { 0, TextureSlot::RenderTargetLowRes } };
-  GLFrameBuffer _RenderTargetTileFBO   = { 0, { 0, TextureSlot::RenderTargetTile } };
-  GLFrameBuffer _AccumulateFBO         = { 0, { 0, TextureSlot::Accumulate } };
+  GLFrameBuffer _RenderTargetFBO       = { 0, { 0, PathTracerTexSlot::_RenderTarget } };
+  GLFrameBuffer _RenderTargetLowResFBO = { 0, { 0, PathTracerTexSlot::_RenderTargetLowRes } };
+  GLFrameBuffer _RenderTargetTileFBO   = { 0, { 0, PathTracerTexSlot::_RenderTargetTile } };
+  GLFrameBuffer _AccumulateFBO         = { 0, { 0, PathTracerTexSlot::_Accumulate } };
 
   // Texture buffers
-  GLTextureBuffer _VtxTBO                     = { 0, { 0, TextureSlot::Vertices               } };
-  GLTextureBuffer _VtxNormTBO                 = { 0, { 0, TextureSlot::Normals                } };
-  GLTextureBuffer _VtxUVTBO                   = { 0, { 0, TextureSlot::UVs                    } };
-  GLTextureBuffer _VtxIndTBO                  = { 0, { 0, TextureSlot::VertInd                } };
-  GLTextureBuffer _TexIndTBO                  = { 0, { 0, TextureSlot::TexInd                 } };
-  GLTextureBuffer _MeshBBoxTBO                = { 0, { 0, TextureSlot::MeshBBox               } };
-  GLTextureBuffer _MeshIdRangeTBO             = { 0, { 0, TextureSlot::MeshIdRange            } };
-  GLTextureBuffer _TLASNodesTBO               = { 0, { 0, TextureSlot::TLASNodes              } };
-  GLTextureBuffer _TLASMeshMatIDTBO           = { 0, { 0, TextureSlot::TLASMeshMatID          } };
-  GLTextureBuffer _BLASNodesTBO               = { 0, { 0, TextureSlot::BLASNodes              } };
-  GLTextureBuffer _BLASNodesRangeTBO          = { 0, { 0, TextureSlot::BLASNodesRange         } };
-  GLTextureBuffer _BLASPackedIndicesTBO       = { 0, { 0, TextureSlot::BLASPackedIndices      } };
-  GLTextureBuffer _BLASPackedIndicesRangeTBO  = { 0, { 0, TextureSlot::BLASPackedIndicesRange } };
-  GLTextureBuffer _BLASPackedVerticesTBO      = { 0, { 0, TextureSlot::BLASPackedVertices     } };
-  GLTextureBuffer _BLASPackedNormalsTBO       = { 0, { 0, TextureSlot::BLASPackedNormals      } };
-  GLTextureBuffer _BLASPackedUVsTBO           = { 0, { 0, TextureSlot::BLASPackedUVs          } };
+  GLTextureBuffer _VtxTBO                     = { 0, { 0, PathTracerTexSlot::_Vertices               } };
+  GLTextureBuffer _VtxNormTBO                 = { 0, { 0, PathTracerTexSlot::_Normals                } };
+  GLTextureBuffer _VtxUVTBO                   = { 0, { 0, PathTracerTexSlot::_UVs                    } };
+  GLTextureBuffer _VtxIndTBO                  = { 0, { 0, PathTracerTexSlot::_VertInd                } };
+  GLTextureBuffer _TexIndTBO                  = { 0, { 0, PathTracerTexSlot::_TexInd                 } };
+  GLTextureBuffer _MeshBBoxTBO                = { 0, { 0, PathTracerTexSlot::_MeshBBox               } };
+  GLTextureBuffer _MeshIdRangeTBO             = { 0, { 0, PathTracerTexSlot::_MeshIdRange            } };
+  GLTextureBuffer _TLASNodesTBO               = { 0, { 0, PathTracerTexSlot::_TLASNodes              } };
+  GLTextureBuffer _TLASMeshMatIDTBO           = { 0, { 0, PathTracerTexSlot::_TLASMeshMatID          } };
+  GLTextureBuffer _BLASNodesTBO               = { 0, { 0, PathTracerTexSlot::_BLASNodes              } };
+  GLTextureBuffer _BLASNodesRangeTBO          = { 0, { 0, PathTracerTexSlot::_BLASNodesRange         } };
+  GLTextureBuffer _BLASPackedIndicesTBO       = { 0, { 0, PathTracerTexSlot::_BLASPackedIndices      } };
+  GLTextureBuffer _BLASPackedIndicesRangeTBO  = { 0, { 0, PathTracerTexSlot::_BLASPackedIndicesRange } };
+  GLTextureBuffer _BLASPackedVerticesTBO      = { 0, { 0, PathTracerTexSlot::_BLASPackedVertices     } };
+  GLTextureBuffer _BLASPackedNormalsTBO       = { 0, { 0, PathTracerTexSlot::_BLASPackedNormals      } };
+  GLTextureBuffer _BLASPackedUVsTBO           = { 0, { 0, PathTracerTexSlot::_BLASPackedUVs          } };
 
   // Textures
-  GLTexture _TexArrayTEX         = { 0, TextureSlot::TexArray         };
-  GLTexture _MaterialsTEX        = { 0, TextureSlot::Materials        };
-  GLTexture _TLASTransformsIDTEX = { 0, TextureSlot::TLASTransformsID };
-  GLTexture _EnvMapTEX           = { 0, TextureSlot::EnvMap };
+  GLTexture _TexArrayTEX         = { 0, PathTracerTexSlot::_TexArray         };
+  GLTexture _MaterialsTEX        = { 0, PathTracerTexSlot::_Materials        };
+  GLTexture _TLASTransformsIDTEX = { 0, PathTracerTexSlot::_TLASTransformsID };
+  GLTexture _EnvMapTEX           = { 0, PathTracerTexSlot::_EnvMap };
 
   // Shaders
   std::unique_ptr<ShaderProgram> _PathTraceShader;
