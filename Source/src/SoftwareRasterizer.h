@@ -16,8 +16,8 @@ namespace RTRT
 struct RasterTexSlot
 {
   static const TextureSlot _RenderTarget       = 0;
-  static const TextureSlot _RenderTargetLowRes = 1;
-  static const TextureSlot _RenderTargetTile   = 2;
+  //static const TextureSlot _RenderTargetLowRes = 1;
+  //static const TextureSlot _RenderTargetTile   = 2;
   static const TextureSlot _EnvMap             = 3;
   static const TextureSlot _Temporary          = 4;
 };

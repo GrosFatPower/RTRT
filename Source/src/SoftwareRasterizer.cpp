@@ -122,7 +122,7 @@ int SoftwareRasterizer::UpdateRenderToScreenUniforms()
 {
   _RenderToScreenShader -> Use();
 
-  //_RenderToScreenShader -> SetUniform("u_ScreenTexture", (int)TextureSlot::Accumulate); // ToDo
+  _RenderToScreenShader -> SetUniform("u_ScreenTexture", (int)RasterTexSlot::_RenderTarget);
   _RenderToScreenShader -> SetUniform("u_RenderRes", (float)_Settings._WindowResolution.x, (float)_Settings._WindowResolution.y);
   _RenderToScreenShader -> SetUniform("u_Gamma", _Settings._Gamma);
   _RenderToScreenShader -> SetUniform("u_Exposure", _Settings._Exposure);
@@ -139,7 +139,7 @@ int SoftwareRasterizer::UpdateRenderToScreenUniforms()
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::BindRenderToScreenTextures()
 {
-  // ToDo
+  GLUtil::ActivateTexture(_RenderTargetFBO._Tex);
 
   return 0;
 }
