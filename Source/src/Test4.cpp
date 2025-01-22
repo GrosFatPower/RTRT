@@ -456,7 +456,6 @@ int Test4::UpdateUniforms()
     GLuint RTTProgramID = _RTTShader -> GetShaderProgramID();
 
     glUniform1i(glGetUniformLocation(RTTProgramID, "u_ImageTexture"), 1);
-    glUniform3f(glGetUniformLocation(RTTProgramID, "u_Resolution"), _Settings._RenderResolution.x, _Settings._RenderResolution.y, 0.f);
 
     _RTTShader -> StopUsing();
   }

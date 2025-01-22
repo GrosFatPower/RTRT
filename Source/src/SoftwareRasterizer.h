@@ -16,7 +16,7 @@ namespace RTRT
 struct RasterTexSlot
 {
   static const TextureSlot _RenderTarget       = 0;
-  //static const TextureSlot _RenderTargetLowRes = 1;
+  static const TextureSlot _ColorBuffer        = 1;
   //static const TextureSlot _RenderTargetTile   = 2;
   static const TextureSlot _EnvMap             = 3;
   static const TextureSlot _Temporary          = 4;
@@ -38,6 +38,14 @@ public:
   virtual int RenderToScreen();
   virtual int RenderToFile( const std::filesystem::path & iFilePath );
 
+public:
+
+  struct FrameBuffer
+  {
+    std::vector<Vec4>  _ColorBuffer;
+    std::vector<float> _DepthBuffer;
+  };
+
 protected:
 
   int UpdateRenderResolution();
@@ -50,7 +58,11 @@ protected:
   int ReloadScene();
   int ReloadEnvMap();
 
+  int UpdateTextures();
+
+  int UpdateRenderToTextureUniforms();
   int UpdateRenderToScreenUniforms();
+  int BindRenderToTextureTextures();
   int BindRenderToScreenTextures();
 
   float RenderScale()       const { return ( _Settings._RenderScale * 0.01f ); }
@@ -72,9 +84,11 @@ protected:
   GLFrameBuffer _RenderTargetFBO = { 0, { 0, GL_TEXTURE_2D, RasterTexSlot::_RenderTarget } };
 
   // Textures
-  GLTexture _EnvMapTEX = { 0, RasterTexSlot::_EnvMap };
+  GLTexture _ColorBufferTEX = { 0, GL_TEXTURE_2D, RasterTexSlot::_ColorBuffer };
+  GLTexture _EnvMapTEX      = { 0, GL_TEXTURE_2D, RasterTexSlot::_EnvMap      };
 
   // Shaders
+  std::unique_ptr<ShaderProgram> _RenderToTextureShader;
   std::unique_ptr<ShaderProgram> _RenderToScreenShader;
 
   // Tiled rendering
@@ -83,6 +97,9 @@ protected:
   unsigned int _NbCompleteFrames = 0;
 
   unsigned int _FrameNum = 1;
+
+  // Frame data
+  FrameBuffer _ImageBuffer;
 
   // Scene data
   int _NbTriangles     = 0;

@@ -6,11 +6,15 @@
 
 #include <string>
 #include <iostream>
+#include <execution>
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
 
 #include "stb_image_write.h"
+
+
+constexpr std::execution::parallel_policy policy = std::execution::par;
 
 namespace fs = std::filesystem;
 
@@ -37,6 +41,8 @@ SoftwareRasterizer::~SoftwareRasterizer()
 {
   GLUtil::DeleteFBO(_RenderTargetFBO);
 
+  GLUtil::DeleteTEX(_ColorBufferTEX);
+
   UnloadScene();
 }
 
@@ -51,7 +57,7 @@ int SoftwareRasterizer::Initialize()
     return 1;
   }
 
-  if ( ( 0 != RecompileShaders() ) || !_RenderToScreenShader )
+  if ( ( 0 != RecompileShaders() ) || !_RenderToTextureShader || !_RenderToScreenShader )
   {
     std::cout << "SoftwareRasterizer : Shader compilation failed !" << std::endl;
     return 1;
@@ -71,13 +77,13 @@ int SoftwareRasterizer::Initialize()
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::Update()
 {
-  if ( Dirty() )
-  {
-    this -> ResetTiles();
-    _NbCompleteFrames = 0;
-  }
-  else if ( TiledRendering() )
-    this -> NextTile();
+  //if ( Dirty() )
+  //{
+  //  this -> ResetTiles();
+  //  _NbCompleteFrames = 0;
+  //}
+  //else if ( TiledRendering() )
+  //  this -> NextTile();
 
   if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
     this -> ResizeRenderTarget();
@@ -85,6 +91,9 @@ int SoftwareRasterizer::Update()
   if ( _DirtyStates & (unsigned long)DirtyState::SceneEnvMap )
     this -> ReloadEnvMap();
 
+  this -> UpdateTextures();
+
+  this -> UpdateRenderToTextureUniforms();
   this -> UpdateRenderToScreenUniforms();
 
   return 0;
@@ -97,10 +106,49 @@ int SoftwareRasterizer::Done()
 {
   _FrameNum++;
 
-  if ( !Dirty() && !TiledRendering() )
+  //if ( !Dirty() && !TiledRendering() )
     _NbCompleteFrames++;
 
   CleanStates();
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateTextures
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::UpdateTextures()
+{
+  glBindTexture(GL_TEXTURE_2D, _ColorBufferTEX._ID);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, &_ImageBuffer._ColorBuffer[0]);
+  glBindTexture(GL_TEXTURE_2D, 0);
+
+  return 0;
+}
+
+
+// ----------------------------------------------------------------------------
+// UpdateRenderToTextureUniforms
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::UpdateRenderToTextureUniforms()
+{
+  _RenderToTextureShader -> Use();
+
+  _RenderToTextureShader -> SetUniform("u_ImageTexture", (int)RasterTexSlot::_ColorBuffer);
+
+  _RenderToTextureShader -> StopUsing();
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// BindRenderToTextureTextures
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::BindRenderToTextureTextures()
+{
+  GLUtil::ActivateTexture(_ColorBufferTEX);
+
+  GLUtil::ActivateTexture(_RenderTargetFBO._Tex);
 
   return 0;
 }
@@ -110,7 +158,12 @@ int SoftwareRasterizer::Done()
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::RenderToTexture()
 {
-  // ToDo
+  glBindFramebuffer(GL_FRAMEBUFFER, _RenderTargetFBO._ID);
+  glViewport(0, 0, RenderWidth(), RenderHeight());
+
+  this -> BindRenderToTextureTextures();
+
+  _Quad.Render(*_RenderToTextureShader);
 
   return 0;
 }
@@ -243,6 +296,14 @@ int SoftwareRasterizer::ResizeRenderTarget()
 
   GLUtil::ResizeFBO(_RenderTargetFBO, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT);
 
+  _ImageBuffer._ColorBuffer.resize(RenderWidth() * RenderHeight());
+  _ImageBuffer._DepthBuffer.resize(RenderWidth() * RenderHeight());
+
+  // TMP
+  const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
+  std::fill(policy, _ImageBuffer._ColorBuffer.begin(), _ImageBuffer._ColorBuffer.end(), backgroundColor);
+  std::fill(policy, _ImageBuffer._DepthBuffer.begin(), _ImageBuffer._DepthBuffer.end(), 1.f);
+
   return 0;
 }
 
@@ -269,6 +330,20 @@ int SoftwareRasterizer::InitializeFrameBuffers()
   if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
     return 1;
 
+  // Color buffer Texture
+  glGenTextures(1, &_ColorBufferTEX._ID);
+  glActiveTexture(GL_TEX_UNIT(_ColorBufferTEX));
+  glBindTexture(GL_TEXTURE_2D, _ColorBufferTEX._ID);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, _ImageBuffer._ColorBuffer.data());
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glBindTexture(GL_TEXTURE_2D, 0);
+
+  // TMP
+  const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
+  std::fill(policy, _ImageBuffer._ColorBuffer.begin(), _ImageBuffer._ColorBuffer.end(), backgroundColor);
+  std::fill(policy, _ImageBuffer._DepthBuffer.begin(), _ImageBuffer._DepthBuffer.end(), 1.f);
+
   return 0;
 }
 
@@ -278,9 +353,15 @@ int SoftwareRasterizer::InitializeFrameBuffers()
 int SoftwareRasterizer::RecompileShaders()
 {
   ShaderSource vertexShaderSrc = Shader::LoadShader("..\\..\\shaders\\vertex_Default.glsl");
-  ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Postprocess.glsl");
+  ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_drawTexture.glsl");
 
   ShaderProgram * newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
+  newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
+  if ( !newShader )
+    return 1;
+  _RenderToTextureShader.reset(newShader);
+
+  fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Postprocess.glsl");
   newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !newShader )
     return 1;

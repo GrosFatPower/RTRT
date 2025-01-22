@@ -2,6 +2,7 @@
 
 #include "Loader.h"
 #include "PathTracer.h"
+#include "SoftwareRasterizer.h"
 #include "Util.h"
 
 #include <string>
@@ -250,7 +251,7 @@ int Test5::DrawUI()
       int selectedRenderer = (int)_RendererType;
       if ( ImGui::Combo( "Renderer", &selectedRenderer, Renderers, 2 ) )
       {
-        //_RendererType = (RendererType) selectedRenderer; // ToDo
+        _RendererType = (RendererType) selectedRenderer;
         _ReloadRenderer = true;
       }
     }
@@ -558,8 +559,10 @@ int Test5::InitializeRenderer()
 {
   Renderer * newRenderer = nullptr;
   
-  if ( RendererType::PathTracerRenderer == _RendererType )
+  if ( RendererType::PathTracer == _RendererType )
     newRenderer = new PathTracer(*_Scene, _Settings);
+  else if ( RendererType::SoftwareRasterizer== _RendererType )
+    newRenderer = new SoftwareRasterizer(*_Scene, _Settings);
 
   if ( !newRenderer )
   {

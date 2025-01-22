@@ -32,8 +32,8 @@ public:
 
   enum class RendererType
   {
-    PathTracerRenderer = 0,
-    RasterizerRenderer
+    PathTracer = 0,
+    SoftwareRasterizer
   };
 
 protected:
@@ -65,7 +65,7 @@ protected:
   std::unique_ptr<Scene>    _Scene;
   RenderSettings            _Settings;
 
-  RendererType              _RendererType = RendererType::PathTracerRenderer;
+  RendererType              _RendererType = RendererType::PathTracer;
   std::unique_ptr<Renderer> _Renderer;
   bool                      _ReloadRenderer = false;
 
