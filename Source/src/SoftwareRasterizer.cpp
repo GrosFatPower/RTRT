@@ -120,7 +120,7 @@ int SoftwareRasterizer::Done()
 int SoftwareRasterizer::UpdateTextures()
 {
   glBindTexture(GL_TEXTURE_2D, _ColorBufferTEX._ID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, &_ImageBuffer._ColorBuffer[0]);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, &_ImageBuffer._ColorBuffer[0]);
   glBindTexture(GL_TEXTURE_2D, 0);
 
   return 0;
@@ -334,7 +334,7 @@ int SoftwareRasterizer::InitializeFrameBuffers()
   glGenTextures(1, &_ColorBufferTEX._ID);
   glActiveTexture(GL_TEX_UNIT(_ColorBufferTEX));
   glBindTexture(GL_TEXTURE_2D, _ColorBufferTEX._ID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, &_ImageBuffer._ColorBuffer[0]);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, &_ImageBuffer._ColorBuffer[0]);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glBindTexture(GL_TEXTURE_2D, 0);
