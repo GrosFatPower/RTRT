@@ -417,44 +417,10 @@ int Test5::DrawUI()
 // ----------------------------------------------------------------------------
 int Test5::ProcessInput()
 {
-  // Keyboard input
-  {
-    const float velocity = 100.f;
-
-    if ( _KeyInput.IsKeyReleased(GLFW_KEY_ESCAPE) )
-      return 1; // Exit
-
-    if ( _KeyInput.IsKeyDown(GLFW_KEY_W) )
-    {
-      float newRadius = _Scene -> GetCamera().GetRadius() - _DeltaTime;
-      if ( newRadius > 0.f )
-      {
-        _Scene -> GetCamera().SetRadius(newRadius);
-        _Renderer -> Notify(DirtyState::SceneCamera);
-      }
-    }
-    if ( _KeyInput.IsKeyDown(GLFW_KEY_S) )
-    {
-      float newRadius = _Scene -> GetCamera().GetRadius() + _DeltaTime;
-      if ( newRadius > 0.f )
-      {
-        _Scene -> GetCamera().SetRadius(newRadius);
-        _Renderer -> Notify(DirtyState::SceneCamera);
-      }
-    }
-    if ( _KeyInput.IsKeyDown(GLFW_KEY_A) )
-    {
-      _Scene -> GetCamera().OffsetOrientations(_DeltaTime * velocity, 0.f);
-      _Renderer -> Notify(DirtyState::SceneCamera);
-    }
-    if ( _KeyInput.IsKeyDown(GLFW_KEY_D) )
-    {
-      _Scene -> GetCamera().OffsetOrientations(-_DeltaTime * velocity, 0.f);
-      _Renderer -> Notify(DirtyState::SceneCamera);
-    }
-  }
-
   // Mouse input
+  bool midPressed   = false;
+  bool rightPressed = false;
+
   double curMouseX = 0., curMouseY = 0.;
   glfwGetCursorPos(_MainWindow.get(), &curMouseX, &curMouseY);
   {
@@ -463,8 +429,14 @@ int Test5::ProcessInput()
     static bool toggleZoom = false;
     double deltaX = 0., deltaY = 0.;
     double mouseX = 0.f, mouseY = 0.f;
-    if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_3, mouseX, mouseY) ) // Middle click
+    if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_2, mouseX, mouseY) ) // Right click
     {
+      rightPressed = true;
+    }
+    else if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_3, mouseX, mouseY) ) // Middle click
+    {
+      midPressed = true;
+
       if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1, mouseX, mouseY) ) // Left Pressed
       {
         deltaX = curMouseX - mouseX;
@@ -498,6 +470,71 @@ int Test5::ProcessInput()
       if ( newRadius > 0.f )
       {
         _Scene -> GetCamera().SetRadius(newRadius);
+        _Renderer -> Notify(DirtyState::SceneCamera);
+      }
+    }
+  }
+
+  // Keyboard input
+  {
+    const float velocity = 100.f;
+
+    if ( _KeyInput.IsKeyReleased(GLFW_KEY_ESCAPE) )
+      return 1; // Exit
+
+    if ( _KeyInput.IsKeyDown(GLFW_KEY_W) )
+    {
+      if ( rightPressed )
+      {
+        // ToDo
+      }
+      else
+      {
+        float newRadius = _Scene -> GetCamera().GetRadius() - _DeltaTime;
+        if ( newRadius > 0.f )
+        {
+          _Scene -> GetCamera().SetRadius(newRadius);
+          _Renderer -> Notify(DirtyState::SceneCamera);
+        }
+      }
+    }
+    if ( _KeyInput.IsKeyDown(GLFW_KEY_S) )
+    {
+      if ( rightPressed )
+      {
+        // ToDo
+      }
+      else
+      {
+        float newRadius = _Scene -> GetCamera().GetRadius() + _DeltaTime;
+        if ( newRadius > 0.f )
+        {
+          _Scene -> GetCamera().SetRadius(newRadius);
+          _Renderer -> Notify(DirtyState::SceneCamera);
+        }
+      }
+    }
+    if ( _KeyInput.IsKeyDown(GLFW_KEY_A) )
+    {
+      if ( rightPressed )
+      {
+        // ToDo
+      }
+      else
+      {
+        _Scene -> GetCamera().OffsetOrientations(_DeltaTime * velocity, 0.f);
+        _Renderer -> Notify(DirtyState::SceneCamera);
+      }
+    }
+    if ( _KeyInput.IsKeyDown(GLFW_KEY_D) )
+    {
+      if ( rightPressed )
+      {
+        // ToDo
+      }
+      else
+      {
+        _Scene -> GetCamera().OffsetOrientations(-_DeltaTime * velocity, 0.f);
         _Renderer -> Notify(DirtyState::SceneCamera);
       }
     }

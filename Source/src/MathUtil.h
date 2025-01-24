@@ -26,6 +26,7 @@ typedef glm::ivec4  Vec4i;
 typedef glm::uvec2  Vec2ui;
 typedef glm::uvec3  Vec3ui;
 typedef glm::uvec4  Vec4ui;
+typedef glm::vec<4, uint8_t, glm::defaultp> Vec4b;
 typedef glm::mat4x4 Mat4x4;
 
 namespace RTRT

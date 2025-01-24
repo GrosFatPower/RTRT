@@ -120,7 +120,7 @@ int SoftwareRasterizer::Done()
 int SoftwareRasterizer::UpdateTextures()
 {
   glBindTexture(GL_TEXTURE_2D, _ColorBufferTEX._ID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, &_ImageBuffer._ColorBuffer[0]);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, &_ImageBuffer._ColorBuffer[0]);
   glBindTexture(GL_TEXTURE_2D, 0);
 
   return 0;
@@ -284,6 +284,14 @@ int SoftwareRasterizer::UpdateRenderResolution()
   _Settings._RenderResolution.x = int(_Settings._WindowResolution.x * RenderScale());
   _Settings._RenderResolution.y = int(_Settings._WindowResolution.y * RenderScale());
 
+  _ImageBuffer._ColorBuffer.resize(RenderWidth() * RenderHeight());
+  _ImageBuffer._DepthBuffer.resize(RenderWidth() * RenderHeight());
+
+  // TMP
+  const Vec4b fillColor(uint8_t(_Settings._BackgroundColor.x * 255), uint8_t(_Settings._BackgroundColor.y * 255), uint8_t(_Settings._BackgroundColor.z * 255), 255);
+  std::fill(policy, _ImageBuffer._ColorBuffer.begin(), _ImageBuffer._ColorBuffer.end(), fillColor);
+  std::fill(policy, _ImageBuffer._DepthBuffer.begin(), _ImageBuffer._DepthBuffer.end(), 1.f);
+
   return 0;
 }
 
@@ -295,14 +303,6 @@ int SoftwareRasterizer::ResizeRenderTarget()
   UpdateRenderResolution();
 
   GLUtil::ResizeFBO(_RenderTargetFBO, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT);
-
-  _ImageBuffer._ColorBuffer.resize(RenderWidth() * RenderHeight());
-  _ImageBuffer._DepthBuffer.resize(RenderWidth() * RenderHeight());
-
-  // TMP
-  const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
-  std::fill(policy, _ImageBuffer._ColorBuffer.begin(), _ImageBuffer._ColorBuffer.end(), backgroundColor);
-  std::fill(policy, _ImageBuffer._DepthBuffer.begin(), _ImageBuffer._DepthBuffer.end(), 1.f);
 
   return 0;
 }
@@ -334,15 +334,10 @@ int SoftwareRasterizer::InitializeFrameBuffers()
   glGenTextures(1, &_ColorBufferTEX._ID);
   glActiveTexture(GL_TEX_UNIT(_ColorBufferTEX));
   glBindTexture(GL_TEXTURE_2D, _ColorBufferTEX._ID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, _ImageBuffer._ColorBuffer.data());
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, &_ImageBuffer._ColorBuffer[0]);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glBindTexture(GL_TEXTURE_2D, 0);
-
-  // TMP
-  const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
-  std::fill(policy, _ImageBuffer._ColorBuffer.begin(), _ImageBuffer._ColorBuffer.end(), backgroundColor);
-  std::fill(policy, _ImageBuffer._DepthBuffer.begin(), _ImageBuffer._DepthBuffer.end(), 1.f);
 
   return 0;
 }

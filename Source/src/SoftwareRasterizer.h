@@ -42,7 +42,7 @@ public:
 
   struct FrameBuffer
   {
-    std::vector<Vec4>  _ColorBuffer;
+    std::vector<Vec4b> _ColorBuffer;
     std::vector<float> _DepthBuffer;
   };
 
