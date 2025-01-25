@@ -55,10 +55,17 @@ void Camera::Update()
   _Forward.z = sin(MathUtil::ToRadians(_Yaw)) * cos(MathUtil::ToRadians(_Pitch));
   _Forward = glm::normalize(_Forward);
 
-  _Pos = _Pivot - _Forward * _Radius;
-
   _Right = glm::normalize(glm::cross(_Forward, _WorldUp));
   _Up = glm::normalize(glm::cross(_Right, _Forward));
+
+  if ( CameraMode::FreeLook == _Mode )
+  {
+    _Pivot = _Pos + _Forward * _Radius;
+  }
+  else if ( CameraMode::Orbit == _Mode )
+  {
+    _Pos = _Pivot - _Forward * _Radius;
+  }
 }
 
 void Camera::SetFOV( float iFOV )
@@ -115,7 +122,32 @@ void Camera::OffsetOrientations(float iYaw, float iPitch)
 void Camera::Strafe(float iDx, float iDy)
 {
   Vec3 translation = _Right * -iDx + _Up * iDy;
-  _Pivot += translation;
+
+  if ( CameraMode::FreeLook == _Mode )
+  {
+    _Pos += translation;
+  }
+  else if ( CameraMode::Orbit == _Mode )
+  {
+    _Pivot += translation;
+  }
+
+  Update();
+}
+
+void Camera::Walk(float iDz)
+{
+  Vec3 translation = _Forward * iDz;
+
+  if ( CameraMode::FreeLook == _Mode )
+  {
+    _Pos += translation;
+  }
+  else if ( CameraMode::Orbit == _Mode )
+  {
+    _Pivot += translation;
+  }
+
   Update();
 }
 

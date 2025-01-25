@@ -421,17 +421,24 @@ int Test5::ProcessInput()
   bool midPressed   = false;
   bool rightPressed = false;
 
+  static bool toggleZoom = false;
   double curMouseX = 0., curMouseY = 0.;
   glfwGetCursorPos(_MainWindow.get(), &curMouseX, &curMouseY);
   {
     const float MouseSensitivity[6] = { 1.f, 0.5f, 0.01f, 0.01f, .5f, 0.01f }; // Yaw, Pitch, StafeRight, StrafeUp, ScrollInOut, ZoomInOut
 
-    static bool toggleZoom = false;
     double deltaX = 0., deltaY = 0.;
     double mouseX = 0.f, mouseY = 0.f;
     if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_2, mouseX, mouseY) ) // Right click
     {
       rightPressed = true;
+      _Scene -> GetCamera().SetCameraMode(CameraMode::FreeLook);
+
+      deltaX = curMouseX - mouseX;
+      deltaY = curMouseY - mouseY;
+      _Scene -> GetCamera().OffsetOrientations(MouseSensitivity[0] * deltaX, MouseSensitivity[1] * -deltaY);
+
+      _Renderer -> Notify(DirtyState::SceneCamera);
     }
     else if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_3, mouseX, mouseY) ) // Middle click
     {
@@ -461,9 +468,6 @@ int Test5::ProcessInput()
       _Renderer -> Notify(DirtyState::SceneCamera);
     }
 
-    if ( _MouseInput.IsButtonReleased(GLFW_MOUSE_BUTTON_3, mouseX, mouseY) )
-      toggleZoom = false;
-
     if ( _MouseInput.IsScrolled(mouseX, mouseY) )
     {
       float newRadius = _Scene -> GetCamera().GetRadius() + MouseSensitivity[4] * mouseY;
@@ -475,9 +479,14 @@ int Test5::ProcessInput()
     }
   }
 
+  if ( _MouseInput.IsButtonReleased(GLFW_MOUSE_BUTTON_2) )
+    _Scene -> GetCamera().SetCameraMode(CameraMode::Orbit);
+  if ( _MouseInput.IsButtonReleased(GLFW_MOUSE_BUTTON_3) )
+    toggleZoom = false;
+
   // Keyboard input
   {
-    const float velocity = 100.f;
+    const float Velocity[2] = { 10.f, 100.f }; // Movements, Rotation
 
     if ( _KeyInput.IsKeyReleased(GLFW_KEY_ESCAPE) )
       return 1; // Exit
@@ -485,58 +494,45 @@ int Test5::ProcessInput()
     if ( _KeyInput.IsKeyDown(GLFW_KEY_W) )
     {
       if ( rightPressed )
-      {
-        // ToDo
-      }
+        _Scene -> GetCamera().Walk(_DeltaTime * Velocity[0]);
       else
       {
         float newRadius = _Scene -> GetCamera().GetRadius() - _DeltaTime;
         if ( newRadius > 0.f )
-        {
           _Scene -> GetCamera().SetRadius(newRadius);
-          _Renderer -> Notify(DirtyState::SceneCamera);
-        }
       }
+      _Renderer -> Notify(DirtyState::SceneCamera);
     }
+
     if ( _KeyInput.IsKeyDown(GLFW_KEY_S) )
     {
       if ( rightPressed )
-      {
-        // ToDo
-      }
+        _Scene -> GetCamera().Walk(-_DeltaTime * Velocity[0]);
       else
       {
         float newRadius = _Scene -> GetCamera().GetRadius() + _DeltaTime;
         if ( newRadius > 0.f )
-        {
           _Scene -> GetCamera().SetRadius(newRadius);
-          _Renderer -> Notify(DirtyState::SceneCamera);
-        }
       }
+      _Renderer -> Notify(DirtyState::SceneCamera);
     }
+
     if ( _KeyInput.IsKeyDown(GLFW_KEY_A) )
     {
       if ( rightPressed )
-      {
-        // ToDo
-      }
+        _Scene -> GetCamera().Strafe(_DeltaTime * Velocity[0], 0.f);
       else
-      {
-        _Scene -> GetCamera().OffsetOrientations(_DeltaTime * velocity, 0.f);
-        _Renderer -> Notify(DirtyState::SceneCamera);
-      }
+        _Scene -> GetCamera().OffsetOrientations(_DeltaTime * Velocity[1], 0.f);
+      _Renderer -> Notify(DirtyState::SceneCamera);
     }
+
     if ( _KeyInput.IsKeyDown(GLFW_KEY_D) )
     {
       if ( rightPressed )
-      {
-        // ToDo
-      }
+        _Scene -> GetCamera().Strafe(-_DeltaTime * Velocity[0], 0.f);
       else
-      {
-        _Scene -> GetCamera().OffsetOrientations(-_DeltaTime * velocity, 0.f);
-        _Renderer -> Notify(DirtyState::SceneCamera);
-      }
+        _Scene -> GetCamera().OffsetOrientations(-_DeltaTime * Velocity[1], 0.f);
+      _Renderer -> Notify(DirtyState::SceneCamera);
     }
   }
 

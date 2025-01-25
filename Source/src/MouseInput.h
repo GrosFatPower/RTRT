@@ -20,6 +20,8 @@ public:
 MouseInput();
 virtual ~MouseInput();
 
+bool IsButtonPressed(const int iButton) const;
+bool IsButtonReleased(const int iButton) const;
 bool IsButtonPressed(const int iButton, double & oMouseX, double & oMouseY) const;
 bool IsButtonReleased(const int iButton, double & oMouseX, double & oMouseY) const;
 bool IsScrolled(double & oOffsetX, double & oOffsetY) const;

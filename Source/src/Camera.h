@@ -6,6 +6,12 @@
 namespace RTRT
 {
 
+enum class CameraMode
+{
+  Orbit,
+  FreeLook
+};
+
 class Camera
 {
 public:
@@ -45,6 +51,7 @@ public:
   void Pitch(float iDy);
   void OffsetOrientations(float iYaw, float iPitch);
   void Strafe(float iDx, float iDy);
+  void Walk(float iDz);
 
   void LookAt( Vec3 iPivot );
 
@@ -59,6 +66,9 @@ public:
 
   // Rasterization matrix, column-major
   void ComputeRasterMatrix( int iWidth, int iHeight, Mat4x4 & oM );
+
+  void SetCameraMode ( CameraMode iMode ) { _Mode = iMode; }
+  const CameraMode GetCameraMode() const { return _Mode; }
 
 private:
 
@@ -83,6 +93,8 @@ private:
 
   float _ZNear = 1.f;
   float _ZFar  = 1000.f;
+
+  CameraMode _Mode = CameraMode::Orbit;
 };
 
 inline void Camera::SetZNearFar( float iZNear, float iZFar) {

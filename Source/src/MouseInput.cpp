@@ -23,6 +23,12 @@ void MouseInput::AddScrollEvent(const double iOffsetX, const double iOffsetY)
   _ScrollEvents.push({0, iOffsetX, iOffsetY});
 }
 
+bool MouseInput::IsButtonPressed( const int iButton ) const
+{
+  double mouseX, mouseY;
+  return IsButtonPressed(iButton, mouseX, mouseY);
+}
+
 bool MouseInput::IsButtonPressed( const int iButton, double & oMouseX, double & oMouseY ) const
 {
   auto it = _ButtonEvents.find(iButton);
@@ -38,6 +44,12 @@ bool MouseInput::IsButtonPressed( const int iButton, double & oMouseX, double & 
   }
 
   return false;
+}
+
+bool MouseInput::IsButtonReleased( const int iButton ) const
+{
+  double mouseX, mouseY;
+  return IsButtonReleased(iButton, mouseX, mouseY);
 }
 
 bool MouseInput::IsButtonReleased( const int iButton, double & oMouseX, double & oMouseY ) const
