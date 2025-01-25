@@ -88,6 +88,17 @@ void GetTextureName( const tinygltf::Model & iGltfModel, const tinygltf::Texture
 }
 
 // ----------------------------------------------------------------------------
+// GLTF loader : GetMaterialName
+// ----------------------------------------------------------------------------
+void GetMaterialName( const tinygltf::Model & iGltfModel, const tinygltf::Material & iGltfMat, int iIndMat, std::string & oMatName )
+{
+  oMatName = iGltfMat.name;
+
+  if ( iGltfMat.name.empty() )
+    oMatName = "Material_" + std::to_string( iIndMat );
+}
+
+// ----------------------------------------------------------------------------
 // GLTF loader : GetMeshName
 // ----------------------------------------------------------------------------
 void GetMeshName( const tinygltf::Mesh & iGltfMesh, int iIndMesh, int iIndPrim, std::string& oMeshName )
@@ -183,8 +194,10 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
 {
   bool ret = true;
 
-  for ( const tinygltf::Material gltfMaterial : iGltfModel.materials )
+  for ( size_t indMat = 0; indMat < iGltfModel.materials.size(); ++indMat )
   {
+    const tinygltf::Material & gltfMaterial = iGltfModel.materials[indMat];
+
     const tinygltf::PbrMetallicRoughness & pbr = gltfMaterial.pbrMetallicRoughness;
 
     // Convert glTF material
@@ -278,7 +291,10 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
         material._SpecTrans = (float)(ext.Get("transmissionFactor").Get<double>());
     }
 
-    ioScene.AddMaterial(material, gltfMaterial.name);
+    std::string matName;
+    GetMaterialName(iGltfModel, gltfMaterial, indMat, matName);
+
+    ioScene.AddMaterial(material, matName);
   }
 
   // Default material
@@ -499,7 +515,10 @@ void TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx,
         if ( prim.material >= 0 )
         {
           const tinygltf::Material & gltfMaterial = iGltfModel.materials[prim.material];
-          matID = ioScene.FindMaterialID( gltfMaterial.name );
+
+          std::string matName;
+          GetMaterialName(iGltfModel, gltfMaterial, prim.material, matName);
+          matID = ioScene.FindMaterialID( matName );
         }
         else
           matID = ioScene.FindMaterialID( "Default Material" );
