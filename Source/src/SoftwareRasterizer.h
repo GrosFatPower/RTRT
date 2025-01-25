@@ -5,6 +5,7 @@
 #include "RenderSettings.h"
 #include "QuadMesh.h"
 #include "GLUtil.h"
+#include "RGBA8.h"
 
 #include "GL/glew.h"
 
@@ -42,7 +43,7 @@ public:
 
   struct FrameBuffer
   {
-    std::vector<Vec4b> _ColorBuffer;
+    std::vector<RGBA8> _ColorBuffer;
     std::vector<float> _DepthBuffer;
   };
 
@@ -59,6 +60,7 @@ protected:
   int ReloadEnvMap();
 
   int UpdateTextures();
+  int UpdateImageBuffer();
 
   int UpdateRenderToTextureUniforms();
   int UpdateRenderToScreenUniforms();

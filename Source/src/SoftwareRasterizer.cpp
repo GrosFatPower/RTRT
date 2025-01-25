@@ -14,7 +14,12 @@
 #include "stb_image_write.h"
 
 
+#define PARALLEL
+#ifdef PARALLEL
 constexpr std::execution::parallel_policy policy = std::execution::par;
+#else
+constexpr std::execution::sequenced_policy policy = std::execution::seq;
+#endif
 
 namespace fs = std::filesystem;
 
@@ -91,6 +96,8 @@ int SoftwareRasterizer::Update()
   if ( _DirtyStates & (unsigned long)DirtyState::SceneEnvMap )
     this -> ReloadEnvMap();
 
+  this -> UpdateImageBuffer();
+
   this -> UpdateTextures();
 
   this -> UpdateRenderToTextureUniforms();
@@ -126,6 +133,18 @@ int SoftwareRasterizer::UpdateTextures()
   return 0;
 }
 
+// ----------------------------------------------------------------------------
+// UpdateImageBuffer
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::UpdateImageBuffer()
+{
+  // TMP
+  const RGBA8 fillColor(_Settings._BackgroundColor, 1.f);
+  std::fill(policy, _ImageBuffer._ColorBuffer.begin(), _ImageBuffer._ColorBuffer.end(), fillColor);
+  std::fill(policy, _ImageBuffer._DepthBuffer.begin(), _ImageBuffer._DepthBuffer.end(), 1.f);
+
+  return 0;
+}
 
 // ----------------------------------------------------------------------------
 // UpdateRenderToTextureUniforms
@@ -286,11 +305,6 @@ int SoftwareRasterizer::UpdateRenderResolution()
 
   _ImageBuffer._ColorBuffer.resize(RenderWidth() * RenderHeight());
   _ImageBuffer._DepthBuffer.resize(RenderWidth() * RenderHeight());
-
-  // TMP
-  const Vec4b fillColor(uint8_t(_Settings._BackgroundColor.x * 255), uint8_t(_Settings._BackgroundColor.y * 255), uint8_t(_Settings._BackgroundColor.z * 255), 255);
-  std::fill(policy, _ImageBuffer._ColorBuffer.begin(), _ImageBuffer._ColorBuffer.end(), fillColor);
-  std::fill(policy, _ImageBuffer._DepthBuffer.begin(), _ImageBuffer._DepthBuffer.end(), 1.f);
 
   return 0;
 }
