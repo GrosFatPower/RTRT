@@ -368,7 +368,7 @@ int Test5::DrawUI()
       }
 
       float aperture = _Scene -> GetCamera().GetAperture();
-      if ( ImGui::SliderFloat( "Aperture", &aperture, 0.0f, 10.f ) )
+      if ( ImGui::SliderFloat( "Aperture", &aperture, 0.0f, 1.f ) )
       {
         _Scene -> GetCamera().SetAperture(aperture);
         _Renderer -> Notify(DirtyState::SceneCamera);
