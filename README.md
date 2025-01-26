@@ -36,6 +36,8 @@ Basic phong reflecton model.
 
 ![spaceship_Rast](./Captures/Rasterizer_spaceship.scene.png)
 
+![Sponza_Rast](./Captures/Rasterizer_Sponza.png)
+
 
 References/Credits
 --------
