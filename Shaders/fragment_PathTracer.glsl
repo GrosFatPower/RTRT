@@ -126,7 +126,7 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
   }
 
   //vec3 normal = iClosestHit._Normal;
-  vec3 normal = normalize(iClosestHit._Normal + mat._Roughness * RandomVector());
+  vec3 normal = normalize(iClosestHit._Normal + mat._Roughness * RandomVec3());
 
   if ( ( refractionRatio * sinTheta ) >= 1.f )
   {
@@ -210,10 +210,18 @@ void main()
   ray._Orig = u_Camera._Pos;
   ray._Dir = normalize(u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward);
 
+  // FocalDist/Aperture
+  vec2 randDisk = u_Camera._LensRadius * RandomInUnitDisk();
+  vec3 randOffset = u_Camera._Right * randDisk.x + u_Camera._Up * randDisk.y;
+
+  vec3 focalPoint = u_Camera._Pos + ray._Dir * u_Camera._FocalDist;
+  ray._Orig += randOffset;
+  ray._Dir = normalize(focalPoint - ray._Orig);
+
+  // Ray cast
   vec3 pixelColor = vec3(0.f, 0.f, 0.f);
   vec3 multiplier = vec3(1.f);
 
-  // Ray cast
   for ( int i = 0; i < u_Bounces; ++i )
   {
     HitPoint closestHit;

@@ -21,6 +21,7 @@ public:
   void Initialize(Vec3 iPos, Vec3 iLookAt, float iFOV);
 
   const Vec3 & GetPos()     const { return _Pos; }
+  const Vec3 & GetPivot()   const { return _Pivot; }
   const Vec3 & GetUp()      const { return _Up; }
   const Vec3 & GetRight()   const { return _Right; }
   const Vec3 & GetForward() const { return _Forward; }

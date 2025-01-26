@@ -127,7 +127,7 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
   }
 
   //vec3 normal = iClosestHit._Normal;
-  vec3 normal = normalize(iClosestHit._Normal + mat._Roughness * RandomVector());
+  vec3 normal = normalize(iClosestHit._Normal + mat._Roughness * RandomVec3());
 
   if ( ( refractionRatio * sinTheta ) >= 1.f )
   {

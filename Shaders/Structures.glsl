@@ -68,6 +68,8 @@ struct Camera
   vec3  _Forward;
   vec3  _Pos;
   float _FOV;
+  float _FocalDist;
+  float _LensRadius;
 };
 
 void InitializeHitPoint( inout HitPoint ioHitPoint )

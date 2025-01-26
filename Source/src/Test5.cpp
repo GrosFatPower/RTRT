@@ -347,6 +347,40 @@ int Test5::DrawUI()
         _Renderer -> SetDebugMode(g_DebugMode);
     }
 
+    if ( ImGui::CollapsingHeader("Camera") )
+    {
+      ImGui::Text("Position : %f, %f, %f", _Scene -> GetCamera().GetPos().x, _Scene -> GetCamera().GetPos().y, _Scene -> GetCamera().GetPos().z);
+      ImGui::Text("Pivot    : %f, %f, %f", _Scene -> GetCamera().GetPivot().x, _Scene -> GetCamera().GetPivot().y, _Scene -> GetCamera().GetPivot().z);
+      ImGui::Text("Radius   : %f", _Scene -> GetCamera().GetRadius());
+
+      float fov = _Scene -> GetCamera().GetFOVInDegrees();
+      if ( ImGui::SliderFloat( "FOV", &fov, 5.f, 150.f ) )
+      {
+        _Scene -> GetCamera().SetFOVInDegrees(fov);
+        _Renderer -> Notify(DirtyState::SceneCamera);
+      }
+
+      float focalDist = _Scene -> GetCamera().GetFocalDist();
+      if ( ImGui::SliderFloat( "Focal distance", &focalDist, 0.1f, 10.f ) )
+      {
+        _Scene -> GetCamera().SetFocalDist(focalDist);
+        _Renderer -> Notify(DirtyState::SceneCamera);
+      }
+
+      float aperture = _Scene -> GetCamera().GetAperture();
+      if ( ImGui::SliderFloat( "Aperture", &aperture, 0.0f, 10.f ) )
+      {
+        _Scene -> GetCamera().SetAperture(aperture);
+        _Renderer -> Notify(DirtyState::SceneCamera);
+      }
+
+      if ( ImGui::Button( "Reset" ) )
+      {
+        _Scene -> SetCamera(_DefaultCam);
+        _Renderer -> Notify(DirtyState::SceneCamera);
+      }
+    }
+
     if ( ImGui::CollapsingHeader("Background") )
     {
       if ( ImGui::Checkbox( "Show background", &_Settings._EnableBackGround ) )
@@ -417,10 +451,7 @@ int Test5::DrawUI()
 // ----------------------------------------------------------------------------
 int Test5::ProcessInput()
 {
-  // Mouse input
-  bool midPressed   = false;
-  bool rightPressed = false;
-
+  // MOUSE INPUT
   static bool toggleZoom = false;
   double curMouseX = 0., curMouseY = 0.;
   glfwGetCursorPos(_MainWindow.get(), &curMouseX, &curMouseY);
@@ -429,9 +460,9 @@ int Test5::ProcessInput()
 
     double deltaX = 0., deltaY = 0.;
     double mouseX = 0.f, mouseY = 0.f;
-    if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_2, mouseX, mouseY) ) // Right click
+     // RIGHT CLICK
+    if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_2, mouseX, mouseY) )
     {
-      rightPressed = true;
       _Scene -> GetCamera().SetCameraMode(CameraMode::FreeLook);
 
       deltaX = curMouseX - mouseX;
@@ -440,10 +471,9 @@ int Test5::ProcessInput()
 
       _Renderer -> Notify(DirtyState::SceneCamera);
     }
-    else if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_3, mouseX, mouseY) ) // Middle click
+    // MIDDLE CLICK
+    else if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_3, mouseX, mouseY) )
     {
-      midPressed = true;
-
       if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1, mouseX, mouseY) ) // Left Pressed
       {
         deltaX = curMouseX - mouseX;
@@ -484,7 +514,7 @@ int Test5::ProcessInput()
   if ( _MouseInput.IsButtonReleased(GLFW_MOUSE_BUTTON_3) )
     toggleZoom = false;
 
-  // Keyboard input
+  // KEYBOARD INPUT
   {
     const float Velocity[2] = { 10.f, 100.f }; // Movements, Rotation
 
@@ -493,7 +523,7 @@ int Test5::ProcessInput()
 
     if ( _KeyInput.IsKeyDown(GLFW_KEY_W) )
     {
-      if ( rightPressed )
+      if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_2) )
         _Scene -> GetCamera().Walk(_DeltaTime * Velocity[0]);
       else
       {
@@ -506,7 +536,7 @@ int Test5::ProcessInput()
 
     if ( _KeyInput.IsKeyDown(GLFW_KEY_S) )
     {
-      if ( rightPressed )
+      if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_2) )
         _Scene -> GetCamera().Walk(-_DeltaTime * Velocity[0]);
       else
       {
@@ -519,7 +549,7 @@ int Test5::ProcessInput()
 
     if ( _KeyInput.IsKeyDown(GLFW_KEY_A) )
     {
-      if ( rightPressed )
+      if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_2) )
         _Scene -> GetCamera().Strafe(_DeltaTime * Velocity[0], 0.f);
       else
         _Scene -> GetCamera().OffsetOrientations(_DeltaTime * Velocity[1], 0.f);
@@ -528,7 +558,7 @@ int Test5::ProcessInput()
 
     if ( _KeyInput.IsKeyDown(GLFW_KEY_D) )
     {
-      if ( rightPressed )
+      if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_2) )
         _Scene -> GetCamera().Strafe(-_DeltaTime * Velocity[0], 0.f);
       else
         _Scene -> GetCamera().OffsetOrientations(-_DeltaTime * Velocity[1], 0.f);
@@ -581,6 +611,8 @@ int Test5::InitializeScene()
   }
   else
     _CurBackgroundId = -1;
+
+  _DefaultCam = _Scene -> GetCamera();
 
   return 0;
 }

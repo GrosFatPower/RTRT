@@ -37,11 +37,36 @@ float rand()
 }
 
 // ----------------------------------------------------------------------------
-// RandomVector
+// RandomVec2
 // ----------------------------------------------------------------------------
-vec3 RandomVector()
+vec2 RandomVec2()
+{
+  return vec2(rand() * 2. - 1.,rand() * 2. - 1.);
+}
+
+// ----------------------------------------------------------------------------
+// RandomVec3
+// ----------------------------------------------------------------------------
+vec3 RandomVec3()
 {
   return vec3(rand() * 2. - 1.,rand() * 2. - 1.,rand() * 2. - 1.);
+}
+
+// ----------------------------------------------------------------------------
+// RandomInUnitDisk
+// ----------------------------------------------------------------------------
+vec2 RandomInUnitDisk()
+{
+  vec2 v;
+
+  while ( true )
+  {
+    v = RandomVec2();
+    if ( dot(v, v) < 1.f )
+      break;
+  }
+
+  return v;
 }
 
 // ----------------------------------------------------------------------------
@@ -53,7 +78,7 @@ vec3 RandomInUnitSphere()
 
   while ( true )
   {
-    v = RandomVector();
+    v = RandomVec3();
     if ( dot(v, v) < 1.f )
       break;
   }
@@ -70,7 +95,7 @@ vec3 SampleHemisphere( in vec3 iNormal )
 
   while ( true )
   {
-    v = RandomVector();
+    v = RandomVec3();
 
     float dotProd = dot(v, v);
     if ( ( dotProd < 1.f ) && ( dotProd != 0 ) )

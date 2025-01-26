@@ -3,6 +3,7 @@
 
 #include "BaseTest.h"
 #include "Scene.h"
+#include "Camera.h"
 #include "RenderSettings.h"
 #include "Renderer.h"
 #include "KeyInput.h"
@@ -64,6 +65,7 @@ protected:
 
   std::unique_ptr<Scene>    _Scene;
   RenderSettings            _Settings;
+  Camera                    _DefaultCam;
 
   RendererType              _RendererType = RendererType::PathTracer;
   std::unique_ptr<Renderer> _Renderer;
