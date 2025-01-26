@@ -89,7 +89,7 @@ private:
   float _Yaw;   // degrees
   float _Radius;
 
-  float _FocalDist = .1f;
+  float _FocalDist = 5.f;
   float _Aperture  = 0.f;
 
   float _ZNear = 1.f;

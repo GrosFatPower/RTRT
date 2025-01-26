@@ -181,12 +181,11 @@ vec3 DebugColor( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out v
 }
 
 // ----------------------------------------------------------------------------
-// main
+// GetRay
 // ----------------------------------------------------------------------------
-void main()
+Ray GetRay( in vec2 iCoordUV )
 {
-  // Initialization
-  InitRNG(gl_FragCoord.xy, u_FrameNum);
+  Ray ray;
 
   float r1 = 2.0 * rand();
   float r2 = 2.0 * rand();
@@ -196,27 +195,44 @@ void main()
   jitter.y = ( r2 < 1.0 ) ? ( sqrt(r2) - 1.0 ) : ( 1.0 - sqrt(2.0 - r2) ) ;
   jitter /= (u_Resolution * 0.5);
 
-  vec2 coordUV = fragUV;
-  if( 1 == u_TiledRendering )
-    coordUV = mix(u_TileOffset, u_TileOffset + u_InvNbTiles, fragUV);
-
-  vec2 centeredUV = ( 2. * coordUV - 1. ) + jitter;
+  vec2 centeredUV = ( 2. * iCoordUV - 1. ) + jitter;
 
   float scale = tan(u_Camera._FOV * .5);
   centeredUV.x *= scale;
   centeredUV.y *= ( u_Resolution.y / u_Resolution.x ) * scale;
 
-  Ray ray;
-  ray._Orig = u_Camera._Pos;
-  ray._Dir = normalize(u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward);
+  if ( u_Camera._LensRadius > EPSILON )
+  {
+    // FocalDist/Aperture
+    vec2 randDisk = u_Camera._LensRadius * RandomInUnitDisk();
+    vec3 randOffset = u_Camera._Right * randDisk.x + u_Camera._Up * randDisk.y;
 
-  // FocalDist/Aperture
-  vec2 randDisk = u_Camera._LensRadius * RandomInUnitDisk();
-  vec3 randOffset = u_Camera._Right * randDisk.x + u_Camera._Up * randDisk.y;
+    vec3 focalPoint = u_Camera._Pos + u_Camera._FocalDist * ( u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward );
+    ray._Orig = u_Camera._Pos + randOffset;
+    ray._Dir = normalize(focalPoint - ray._Orig);
+  }
+  else
+  {
+    ray._Orig = u_Camera._Pos;
+    ray._Dir = normalize(u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward);
+  }
 
-  vec3 focalPoint = u_Camera._Pos + ray._Dir * u_Camera._FocalDist;
-  ray._Orig += randOffset;
-  ray._Dir = normalize(focalPoint - ray._Orig);
+  return ray;
+}
+
+// ----------------------------------------------------------------------------
+// main
+// ----------------------------------------------------------------------------
+void main()
+{
+  // Initialization
+  InitRNG(gl_FragCoord.xy, u_FrameNum);
+
+  vec2 coordUV = fragUV;
+  if( 1 == u_TiledRendering )
+    coordUV = mix(u_TileOffset, u_TileOffset + u_InvNbTiles, fragUV);
+
+  Ray ray = GetRay(coordUV);
 
   // Ray cast
   vec3 pixelColor = vec3(0.f, 0.f, 0.f);

@@ -17,6 +17,9 @@ A (poorly lit) physically based path tracer written in c++ and GLSL.
 
 ![spaceship_PT](./Captures/PathTracer_spaceship.scene_50frames.png)
 
+![diningroom_PT](./Captures/PathTracer_diningroom.scene_4255frames.png)
+
+
 Test4 : CPU Rasterizer
 --------
 

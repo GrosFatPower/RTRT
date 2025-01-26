@@ -26,6 +26,7 @@ const char * Test5::GetTestHeader() { return "Test 5 : Renderers"; }
 static std::string g_AssetsDir = "..\\..\\Assets\\";
 
 static int g_DebugMode = 0;
+static int g_FStopMode = 0;
 
 // ----------------------------------------------------------------------------
 // KeyCallback
@@ -361,15 +362,18 @@ int Test5::DrawUI()
       }
 
       float focalDist = _Scene -> GetCamera().GetFocalDist();
+      float fStop = ( _Scene -> GetCamera().GetAperture() > 0.f ) ? ( focalDist / _Scene -> GetCamera().GetAperture() ) : ( 1.4f );
       if ( ImGui::SliderFloat( "Focal distance", &focalDist, 0.1f, 10.f ) )
       {
         _Scene -> GetCamera().SetFocalDist(focalDist);
         _Renderer -> Notify(DirtyState::SceneCamera);
       }
 
-      float aperture = _Scene -> GetCamera().GetAperture();
-      if ( ImGui::SliderFloat( "Aperture", &aperture, 0.0f, 1.f ) )
+      static float FStopValue[] = { 0.f, 1.f, 1.4f, 2.f, 2.8f, 4.f, 5.6f, 8.f, 11.f, 16.f, 22.f, 32.f, 45.f, 64.f };
+      static const char * FStopModes[] = { "INFINITE", "1.0", "1.4", "2.0", "2.8", "4.0", "5.6", "8.0", "11.0", "16.0", "22.0", "32.0", "45.0", "64.0" };
+      if ( ImGui::Combo( "FStop", &g_FStopMode, FStopModes, 14 ) )
       {
+        float aperture = ( g_FStopMode > 0 ) ? ( focalDist / FStopValue[g_FStopMode] ) : ( 0.f );
         _Scene -> GetCamera().SetAperture(aperture);
         _Renderer -> Notify(DirtyState::SceneCamera);
       }
