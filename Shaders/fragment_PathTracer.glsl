@@ -208,6 +208,7 @@ Ray GetRay( in vec2 iCoordUV )
     vec3 randOffset = u_Camera._Right * randDisk.x + u_Camera._Up * randDisk.y;
 
     vec3 focalPoint = u_Camera._Pos + u_Camera._FocalDist * ( u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward );
+    //vec3 focalPoint = u_Camera._Pos + u_Camera._FocalDist * normalize( u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward );
     ray._Orig = u_Camera._Pos + randOffset;
     ray._Dir = normalize(focalPoint - ray._Orig);
   }
