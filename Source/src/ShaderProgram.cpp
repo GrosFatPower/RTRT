@@ -14,21 +14,18 @@ namespace RTRT
 // ----------------------------------------------------------------------------
 // CTOR
 // ----------------------------------------------------------------------------
-ShaderProgram::ShaderProgram(const std::vector<Shader> iShaders)
+ShaderProgram::ShaderProgram(const std::vector<std::shared_ptr<Shader>> & iShaders)
 : _ShaderProgramID(0)
 {
   _ShaderProgramID = glCreateProgram();
 
   for ( unsigned int i = 0; i < iShaders.size(); ++i )
-    glAttachShader(_ShaderProgramID, iShaders[i].GetShaderID());
+    glAttachShader(_ShaderProgramID, iShaders[i] -> GetShaderID());
 
   glLinkProgram(_ShaderProgramID);
 
   for ( unsigned int i = 0; i < iShaders.size(); ++i )
-  {
-    glDetachShader(_ShaderProgramID, iShaders[i].GetShaderID());
-    glDeleteProgram(iShaders[i].GetShaderID());
-  }
+    glDetachShader(_ShaderProgramID, iShaders[i] -> GetShaderID());
 
   GLint success = 0;
   glGetProgramiv(_ShaderProgramID, GL_LINK_STATUS, &success);
@@ -78,9 +75,19 @@ void ShaderProgram::StopUsing()
 // ----------------------------------------------------------------------------
 ShaderProgram * ShaderProgram::LoadShaders(const ShaderSource & iVertexShaderSrc, const ShaderSource & iFramentShaderSrc)
 {
-  std::vector<Shader> shaders;
-  shaders.push_back(Shader(iVertexShaderSrc, GL_VERTEX_SHADER));
-  shaders.push_back(Shader(iFramentShaderSrc, GL_FRAGMENT_SHADER));
+  std::vector<std::shared_ptr<Shader>> shaders;
+  shaders.push_back(std::make_shared<Shader>(iVertexShaderSrc, GL_VERTEX_SHADER));
+  shaders.push_back(std::make_shared<Shader>(iFramentShaderSrc, GL_FRAGMENT_SHADER));
+  return new ShaderProgram(shaders);
+}
+
+// ----------------------------------------------------------------------------
+// LoadShaders
+// ----------------------------------------------------------------------------
+ShaderProgram * ShaderProgram::LoadShaders(const ShaderSource & iComputeShaderSrc)
+{
+  std::vector<std::shared_ptr<Shader>> shaders;
+  shaders.push_back(std::make_shared<Shader>(iComputeShaderSrc, GL_COMPUTE_SHADER));
   return new ShaderProgram(shaders);
 }
 

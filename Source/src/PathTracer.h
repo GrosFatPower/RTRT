@@ -21,27 +21,28 @@ struct PathTracerTexSlot
   static const TextureSlot _RenderTargetLowRes     = 1;
   static const TextureSlot _RenderTargetTile       = 2;
   static const TextureSlot _Accumulate             = 3;
-  static const TextureSlot _Vertices               = 4;
-  static const TextureSlot _Normals                = 5;
-  static const TextureSlot _UVs                    = 6;
-  static const TextureSlot _VertInd                = 7;
-  static const TextureSlot _TexInd                 = 8;
-  static const TextureSlot _TexArray               = 9;
-  static const TextureSlot _MeshBBox               = 10;
-  static const TextureSlot _MeshIdRange            = 11;
-  static const TextureSlot _Materials              = 12;
-  static const TextureSlot _TLASNodes              = 13;
-  static const TextureSlot _TLASTransformsID       = 14;
-  static const TextureSlot _TLASMeshMatID          = 15;
-  static const TextureSlot _BLASNodes              = 16;
-  static const TextureSlot _BLASNodesRange         = 17;
-  static const TextureSlot _BLASPackedIndices      = 18;
-  static const TextureSlot _BLASPackedIndicesRange = 19;
-  static const TextureSlot _BLASPackedVertices     = 20;
-  static const TextureSlot _BLASPackedNormals      = 21;
-  static const TextureSlot _BLASPackedUVs          = 22;
-  static const TextureSlot _EnvMap                 = 23;
-  static const TextureSlot _Temporary              = 24;
+  static const TextureSlot _Denoised               = 4;
+  static const TextureSlot _Vertices               = 5;
+  static const TextureSlot _Normals                = 6;
+  static const TextureSlot _UVs                    = 7;
+  static const TextureSlot _VertInd                = 8;
+  static const TextureSlot _TexInd                 = 9;
+  static const TextureSlot _TexArray               = 10;
+  static const TextureSlot _MeshBBox               = 11;
+  static const TextureSlot _MeshIdRange            = 12;
+  static const TextureSlot _Materials              = 13;
+  static const TextureSlot _TLASNodes              = 14;
+  static const TextureSlot _TLASTransformsID       = 15;
+  static const TextureSlot _TLASMeshMatID          = 16;
+  static const TextureSlot _BLASNodes              = 17;
+  static const TextureSlot _BLASNodesRange         = 18;
+  static const TextureSlot _BLASPackedIndices      = 19;
+  static const TextureSlot _BLASPackedIndicesRange = 20;
+  static const TextureSlot _BLASPackedVertices     = 21;
+  static const TextureSlot _BLASPackedNormals      = 22;
+  static const TextureSlot _BLASPackedUVs          = 23;
+  static const TextureSlot _EnvMap                 = 24;
+  static const TextureSlot _Temporary              = 25;
 };
 
 class PathTracer : public Renderer
@@ -55,6 +56,7 @@ public:
   virtual int Done();
 
   virtual int RenderToTexture();
+  virtual int Denoise();
   virtual int RenderToScreen();
   virtual int RenderToFile( const std::filesystem::path & iFilePath );
 
@@ -72,10 +74,12 @@ protected:
 
   int UpdatePathTraceUniforms();
   int UpdateAccumulateUniforms();
+  int UpdateDenoiserUniforms();
   int UpdateRenderToScreenUniforms();
 
   int BindPathTraceTextures();
   int BindAccumulateTextures();
+  int BindDenoiserTextures();
   int BindRenderToScreenTextures();
 
   float RenderScale()       const { return ( _Settings._RenderScale * 0.01f ); }
@@ -125,6 +129,7 @@ protected:
   GLTextureBuffer _BLASPackedUVsTBO           = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_BLASPackedUVs          } };
 
   // Textures
+  GLTexture _DenoisedTEX         = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Denoised         };
   GLTexture _TexArrayTEX         = { 0, GL_TEXTURE_2D_ARRAY, PathTracerTexSlot::_TexArray   };
   GLTexture _MaterialsTEX        = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Materials        };
   GLTexture _TLASTransformsIDTEX = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_TLASTransformsID };
@@ -133,6 +138,7 @@ protected:
   // Shaders
   std::unique_ptr<ShaderProgram> _PathTraceShader;
   std::unique_ptr<ShaderProgram> _AccumulateShader;
+  std::unique_ptr<ShaderProgram> _DenoiserShader;
   std::unique_ptr<ShaderProgram> _RenderToScreenShader;
 
   // Tiled rendering

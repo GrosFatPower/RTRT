@@ -45,6 +45,8 @@ Shader::Shader(const ShaderSource & iShaderSource, GLuint iShaderType)
       filename += "VertexShader_";
     else if ( GL_FRAGMENT_SHADER == iShaderType )
       filename += "FragmentShader_";
+    else if ( GL_COMPUTE_SHADER == iShaderType )
+      filename += "ComputeShader_";
 
     fs::path filepath = iShaderSource._Path;
     filename += filepath.filename().stem().string();
@@ -86,7 +88,7 @@ Shader::Shader(const ShaderSource & iShaderSource, GLuint iShaderType)
 // ----------------------------------------------------------------------------
 Shader::~Shader()
 {
-  //glDeleteShader(_ShaderID);
+  glDeleteShader(_ShaderID);
   _ShaderID = 0;
 }
 

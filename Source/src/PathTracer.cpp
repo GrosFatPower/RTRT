@@ -93,6 +93,7 @@ int PathTracer::Update()
   this -> UpdatePathTraceUniforms();
   this -> UpdateAccumulateUniforms();
   this -> UpdateRenderToScreenUniforms();
+  this -> UpdateDenoiserUniforms();
 
   return 0;
 }
@@ -400,6 +401,60 @@ int PathTracer::RenderToTexture()
 
   _Quad.Render(*_AccumulateShader);
 
+  // Denoise
+  //if ( !LowResPass() )
+  //  this -> Denoise();
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// Denoise
+// ----------------------------------------------------------------------------
+int PathTracer::Denoise()
+{
+  this -> BindDenoiserTextures();
+
+  _DenoiserShader -> Use();
+
+  // Dispatch compute shader (assuming texture size is 512x512)
+  int workGroupSizeX = 16, workGroupSizeY = 16;
+  glDispatchCompute(std::ceil(((float)RenderWidth())/workGroupSizeX), std::ceil(((float)RenderHeight())/workGroupSizeY), 1);
+
+  // Ensure GPU has completed work before continuing
+  glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+  _DenoiserShader -> StopUsing();
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateDenoiserUniforms
+// ----------------------------------------------------------------------------
+int PathTracer::UpdateDenoiserUniforms()
+{
+  _DenoiserShader -> Use();
+
+  //_DenoiserShader -> SetUniform("u_InputImage", (int)PathTracerTexSlot::_Accumulate);
+  //_DenoiserShader -> SetUniform("u_OutputImage", (int)PathTracerTexSlot::_Denoised);
+
+  _DenoiserShader -> StopUsing();
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// BindDenoiserTextures
+// ----------------------------------------------------------------------------
+int PathTracer::BindDenoiserTextures()
+{
+  //GLUtil::ActivateTexture(_AccumulateFBO._Tex);
+  //GLUtil::ActivateTexture(_DenoisedTEX);
+
+  glBindImageTexture(0, _AccumulateFBO._Tex._ID, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+  glBindImageTexture(1, _DenoisedTEX._ID, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+
   return 0;
 }
 
@@ -410,7 +465,10 @@ int PathTracer::UpdateRenderToScreenUniforms()
 {
   _RenderToScreenShader -> Use();
 
-  _RenderToScreenShader -> SetUniform("u_ScreenTexture", (int)PathTracerTexSlot::_Accumulate);
+  //if ( LowResPass() )
+    _RenderToScreenShader -> SetUniform("u_ScreenTexture", (int)PathTracerTexSlot::_Accumulate);
+  //else
+  //  _RenderToScreenShader -> SetUniform("u_ScreenTexture", (int)PathTracerTexSlot::_Denoised);
   _RenderToScreenShader -> SetUniform("u_RenderRes", (float)_Settings._WindowResolution.x, (float)_Settings._WindowResolution.y);
   _RenderToScreenShader -> SetUniform("u_Gamma", _Settings._Gamma);
   _RenderToScreenShader -> SetUniform("u_Exposure", _Settings._Exposure);
@@ -427,7 +485,10 @@ int PathTracer::UpdateRenderToScreenUniforms()
 // ----------------------------------------------------------------------------
 int PathTracer::BindRenderToScreenTextures()
 {
-  GLUtil::ActivateTexture(_AccumulateFBO._Tex);
+  //if ( LowResPass() )
+    GLUtil::ActivateTexture(_AccumulateFBO._Tex);
+  //else
+  //  GLUtil::ActivateTexture(_DenoisedTEX);
 
   return 0;
 }
@@ -532,6 +593,10 @@ int PathTracer::ResizeRenderTarget()
   GLUtil::ResizeFBO(_RenderTargetLowResFBO, GL_RGBA32F, LowResRenderWidth(), LowResRenderHeight(), GL_RGBA, GL_FLOAT);
   GLUtil::ResizeFBO(_AccumulateFBO, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT);
 
+  glBindTexture(GL_TEXTURE_2D, _DenoisedTEX._ID);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, nullptr);
+  glBindTexture(GL_TEXTURE_2D, 0);
+
   return 0;
 }
 
@@ -600,6 +665,16 @@ int PathTracer::InitializeFrameBuffers()
   if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
     return 1;
 
+  // Denoised texture
+  glGenTextures(1, &_DenoisedTEX._ID);
+  glBindTexture(GL_TEXTURE_2D, _DenoisedTEX._ID);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, nullptr);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glBindTexture(GL_TEXTURE_2D, 0);
+
   return 0;
 }
 
@@ -627,6 +702,12 @@ int PathTracer::RecompileShaders()
   if ( !newShader )
     return 1;
   _RenderToScreenShader.reset(newShader);
+
+  ShaderSource computeShaderSrc = Shader::LoadShader("..\\..\\shaders\\compute_Denoiser.glsl");
+  newShader = ShaderProgram::LoadShaders(computeShaderSrc);
+  if ( !newShader )
+    return 1;
+  _DenoiserShader.reset(newShader);
 
   return 0;
 }
@@ -656,6 +737,7 @@ int PathTracer::UnloadScene()
   GLUtil::DeleteTBO(_BLASPackedNormalsTBO);
   GLUtil::DeleteTBO(_BLASPackedUVsTBO);
 
+  GLUtil::DeleteTEX(_DenoisedTEX);
   GLUtil::DeleteTEX(_TexArrayTEX);
   GLUtil::DeleteTEX(_MaterialsTEX);
   GLUtil::DeleteTEX(_TLASTransformsIDTEX);

@@ -5,6 +5,7 @@
 #include "MathUtil.h"
 #include <vector>
 #include <string>
+#include <memory>
 #include <GL/glew.h>
 
 namespace RTRT
@@ -14,7 +15,7 @@ class ShaderProgram
 {
 public:
 
-  ShaderProgram(const std::vector<Shader> iShaders);
+  ShaderProgram(const std::vector<std::shared_ptr<Shader>> & iShaders);
   virtual ~ShaderProgram();
 
   void Use();
@@ -39,6 +40,7 @@ public:
   void SetUniform(const std::string & iName, Mat4x4 iVal);
 
   static ShaderProgram * LoadShaders(const ShaderSource & iVertexShaderSrc, const ShaderSource & iFramentShaderSrc);
+  static ShaderProgram * LoadShaders(const ShaderSource & iComputeShaderSrc);
 
 private:
 

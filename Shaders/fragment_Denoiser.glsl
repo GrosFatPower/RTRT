@@ -2,8 +2,8 @@
  * Designed with ChatGPT
  */
 
-#ifndef _DENOISER_GLSL_
-#define _DENOISER_GLSL_
+#ifndef _FRAG_DENOISER_GLSL_
+#define _FRAG_DENOISER_GLSL_
 
 // Bilateral filter parameters
 uniform float u_SigmaSpatial = 2.0;  // Controls the effect of distance between pixels

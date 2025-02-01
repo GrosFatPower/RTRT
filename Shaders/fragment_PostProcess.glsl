@@ -2,7 +2,6 @@
 
 #include ToneMapping.glsl
 #include FXAA.glsl
-#include Denoiser.glsl
 
 in vec2 fragUV;
 out vec4 fragColor;
@@ -22,14 +21,6 @@ void main()
     vec2 invRes = 1.f / u_RenderRes.xy;
     pixelValue = ApplyFXAA( u_ScreenTexture, fragCoord, invRes );
   }
-
-  // TMP : test
-  //if ( 1 == u_FXAA )
-  //{
-  //  vec2 fragCoord = fragUV * u_RenderRes;
-  //  vec2 invRes = 1.f / u_RenderRes.xy;
-  //  pixelValue = BilateralFilter( u_ScreenTexture, fragCoord, invRes );
-  //}
 
   vec3 color = pixelValue.xyz;
   float alpha = pixelValue.w;
