@@ -837,7 +837,7 @@ int PathTracer::ReloadEnvMap()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    _Scene.GetEnvMap().SetTexID(_EnvMapTEX._ID);
+    _Scene.GetEnvMap().SetGLTexID(_EnvMapTEX._ID);
   }
   else
     _Settings._EnableSkybox = false;

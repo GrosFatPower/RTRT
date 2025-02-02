@@ -4,6 +4,8 @@
 #include <string>
 #include "MathUtil.h"
 
+#include "GL/glew.h"
+
 namespace RTRT
 {
 
@@ -23,14 +25,18 @@ public:
   int GetHeight() const { return _Height; }
   float * GetRawData() const { return _RawData; }
 
-  int GetTexID() const { return _TexID; }
-  void SetTexID( int iTextID ) { _TexID = iTextID; }
+  GLuint GetGLTexID() const { return _GLTexID; }
+  void SetGLTexID( GLuint iGLTexID ) { _GLTexID = iGLTexID; }
+
+  Vec4 Sample( int iX, int iY ) const;
+  Vec4 Sample( Vec2 iUV ) const;
+  Vec4 BiLinearSample( Vec2 iUV ) const;
 
   const std::string & Filename() const { return _Filename; }
 
 private:
   bool          _IsInitialized = false;
-  int           _TexID         = -1;
+  GLuint        _GLTexID       = -1;
   int           _Width         = 0;
   int           _Height        = 0;
 

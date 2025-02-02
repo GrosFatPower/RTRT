@@ -435,9 +435,9 @@ int Test5::DrawUI()
           _Renderer -> Notify(DirtyState::RenderSettings);
         }
 
-        if ( _Scene -> GetEnvMap().IsInitialized() && _Scene -> GetEnvMap().GetTexID() )
+        if ( _Scene -> GetEnvMap().IsInitialized() && _Scene -> GetEnvMap().GetGLTexID() )
         {
-          ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_Scene -> GetEnvMap().GetTexID());
+          ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_Scene -> GetEnvMap().GetGLTexID());
           ImGui::Image(texture, ImVec2(128, 128));
         }
       }
