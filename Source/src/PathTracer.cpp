@@ -402,24 +402,26 @@ int PathTracer::RenderToTexture()
   _Quad.Render(*_AccumulateShader);
 
   // Denoise
-  //if ( !LowResPass() )
-  //  this -> Denoise();
+  if ( Denoise() )
+    this -> DenoiseOutput();
 
   return 0;
 }
 
 // ----------------------------------------------------------------------------
-// Denoise
+// DenoiseOutput
 // ----------------------------------------------------------------------------
-int PathTracer::Denoise()
+int PathTracer::DenoiseOutput()
 {
-  this -> BindDenoiserTextures();
-
   _DenoiserShader -> Use();
 
+  this -> BindDenoiserTextures();
+
   // Dispatch compute shader (assuming texture size is 512x512)
-  int workGroupSizeX = 16, workGroupSizeY = 16;
-  glDispatchCompute(std::ceil(((float)RenderWidth())/workGroupSizeX), std::ceil(((float)RenderHeight())/workGroupSizeY), 1);
+  const int workGroupSizeX = 16, workGroupSizeY = 16;
+  const int nbGroupsX = std::ceil(((float)RenderWidth())/workGroupSizeX);
+  const int nbGroupsY = std::ceil(((float)RenderHeight())/workGroupSizeY);
+  glDispatchCompute(nbGroupsX, nbGroupsY, 1);
 
   // Ensure GPU has completed work before continuing
   glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
@@ -436,8 +438,7 @@ int PathTracer::UpdateDenoiserUniforms()
 {
   _DenoiserShader -> Use();
 
-  //_DenoiserShader -> SetUniform("u_InputImage", (int)PathTracerTexSlot::_Accumulate);
-  //_DenoiserShader -> SetUniform("u_OutputImage", (int)PathTracerTexSlot::_Denoised);
+  _DenoiserShader -> SetUniform("u_Threshold", _Settings._DenoiserThreshold);
 
   _DenoiserShader -> StopUsing();
 
@@ -449,9 +450,6 @@ int PathTracer::UpdateDenoiserUniforms()
 // ----------------------------------------------------------------------------
 int PathTracer::BindDenoiserTextures()
 {
-  //GLUtil::ActivateTexture(_AccumulateFBO._Tex);
-  //GLUtil::ActivateTexture(_DenoisedTEX);
-
   glBindImageTexture(0, _AccumulateFBO._Tex._ID, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
   glBindImageTexture(1, _DenoisedTEX._ID, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
 
@@ -465,10 +463,10 @@ int PathTracer::UpdateRenderToScreenUniforms()
 {
   _RenderToScreenShader -> Use();
 
-  //if ( LowResPass() )
+  if ( Denoise() )
+    _RenderToScreenShader -> SetUniform("u_ScreenTexture", (int)PathTracerTexSlot::_Denoised);
+  else
     _RenderToScreenShader -> SetUniform("u_ScreenTexture", (int)PathTracerTexSlot::_Accumulate);
-  //else
-  //  _RenderToScreenShader -> SetUniform("u_ScreenTexture", (int)PathTracerTexSlot::_Denoised);
   _RenderToScreenShader -> SetUniform("u_RenderRes", (float)_Settings._WindowResolution.x, (float)_Settings._WindowResolution.y);
   _RenderToScreenShader -> SetUniform("u_Gamma", _Settings._Gamma);
   _RenderToScreenShader -> SetUniform("u_Exposure", _Settings._Exposure);
@@ -485,10 +483,10 @@ int PathTracer::UpdateRenderToScreenUniforms()
 // ----------------------------------------------------------------------------
 int PathTracer::BindRenderToScreenTextures()
 {
-  //if ( LowResPass() )
+  if ( Denoise() )
+    GLUtil::ActivateTexture(_DenoisedTEX);
+  else
     GLUtil::ActivateTexture(_AccumulateFBO._Tex);
-  //else
-  //  GLUtil::ActivateTexture(_DenoisedTEX);
 
   return 0;
 }

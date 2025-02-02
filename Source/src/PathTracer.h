@@ -56,7 +56,7 @@ public:
   virtual int Done();
 
   virtual int RenderToTexture();
-  virtual int Denoise();
+  virtual int DenoiseOutput();
   virtual int RenderToScreen();
   virtual int RenderToFile( const std::filesystem::path & iFilePath );
 
@@ -90,6 +90,8 @@ protected:
   bool LowResPass()         const { return ( Dirty() && !_Settings._AutoScale ); }
   int LowResRenderWidth()   const { return std::max(int( _Settings._RenderResolution.x * LowResRenderScale() ), 32); }
   int LowResRenderHeight()  const { return std::max(int( _Settings._RenderResolution.y * LowResRenderScale() ), 32); }
+
+  bool Denoise()            const { return (_Settings._Denoise && !LowResPass());}
 
   bool TiledRendering()     const { return _Settings._TiledRendering; }
   int TileWidth()           const { return ( _Settings._TileResolution.x > 0 ) ? ( _Settings._TileResolution.x ) : ( 64 ); }

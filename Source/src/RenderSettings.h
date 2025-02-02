@@ -22,6 +22,7 @@ struct RenderSettings
   bool  _ToneMapping        = true;
   bool  _FXAA               = false;
   bool  _Accumulate         = true;
+  bool  _Denoise            = false;
   bool  _TiledRendering     = false;
   int   _Bounces            = 1;
   int   _RenderScale        = 100;
@@ -30,6 +31,7 @@ struct RenderSettings
   float _Gamma              = 2.f;
   float _Exposure           = 1.5f;
   float _SkyBoxRotation     = 0.f;
+  float _DenoiserThreshold  = 0.05f;
 };
 
 }

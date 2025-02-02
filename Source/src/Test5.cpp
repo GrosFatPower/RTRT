@@ -331,6 +331,15 @@ int Test5::DrawUI()
       if ( ImGui::Checkbox( "FXAA", &_Settings._FXAA ) )
         _Renderer -> Notify(DirtyState::RenderSettings);
 
+      if ( ImGui::Checkbox( "Denoise", &_Settings._Denoise ) )
+      {}
+
+      if ( _Settings._Denoise )
+      {
+        if ( ImGui::SliderFloat( "Threshold", &_Settings._DenoiserThreshold, .01f, 1.f ) )
+        { }
+      }
+
       if ( ImGui::Checkbox( "Tone mapping", &_Settings._ToneMapping ) )
         _Renderer -> Notify(DirtyState::RenderSettings);
 
