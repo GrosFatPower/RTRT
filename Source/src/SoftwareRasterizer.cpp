@@ -66,11 +66,7 @@ SoftwareRasterizer::SoftwareRasterizer( Scene & iScene, RenderSettings & iSettin
 : Renderer(iScene, iSettings)
 {
   UpdateRenderResolution();
-
-  _NbThreadsMax = std::thread::hardware_concurrency();
-  _NbThreads = _NbThreadsMax;
-
-  JobSystem::Get().Initialize(_NbThreads);
+  UpdateNumberOfWorkers(true);
 }
 
 // ----------------------------------------------------------------------------
@@ -112,6 +108,24 @@ int SoftwareRasterizer::Initialize()
 }
 
 // ----------------------------------------------------------------------------
+// Initialize
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::UpdateNumberOfWorkers( bool iForce )
+{
+  if ( ( _NbJobs != _Settings._NbThreads ) || iForce )
+  {
+    _NbJobs = std::min(_Settings._NbThreads, std::thread::hardware_concurrency());
+
+    JobSystem::Get().Initialize(_NbJobs);
+
+    DeleteTab(_RasterTrianglesBuf);
+    DeleteTab(_NbRasterTriPerBuf);
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // Update
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::Update()
@@ -125,7 +139,10 @@ int SoftwareRasterizer::Update()
   //  this -> NextTile();
 
   if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
+  {
     this -> ResizeRenderTarget();
+    this -> UpdateNumberOfWorkers();
+  }
 
   if ( _DirtyStates & (unsigned long)DirtyState::SceneEnvMap )
     this -> ReloadEnvMap();
@@ -775,10 +792,10 @@ int SoftwareRasterizer::ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP )
   _ProjVerticesBuf.resize(nbVertices);
   _ProjVerticesBuf.reserve(nbVertices*2);
 
-  //for ( int i = 0; i < _NbThreads; ++i )
+  //for ( int i = 0; i < _NbJobs; ++i )
   //{
-  //  int startInd = ( _Vertices.size() / _NbThreads ) * i;
-  //  int endInd = ( i == _NbThreads-1 ) ? ( _Vertices.size() ) : ( startInd + ( _Vertices.size() / _NbThreads ) );
+  //  int startInd = ( _Vertices.size() / _NbJobs ) * i;
+  //  int endInd = ( i == _NbJobs-1 ) ? ( _Vertices.size() ) : ( startInd + ( _Vertices.size() / _NbJobs ) );
   //
   //  JobSystem::Get().Execute([this, MVP, startInd, endInd](){ this -> ProcessVertices(MVP, startInd, endInd); });
   //}
@@ -822,18 +839,18 @@ int SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM )
 
   if ( !_RasterTrianglesBuf )
   {
-    _RasterTrianglesBuf = new std::vector<RasterTriangle>[_NbThreads];
-    _NbRasterTriPerBuf = new int[_NbThreads];
-    memset(_NbRasterTriPerBuf, 0, sizeof(int) * _NbThreads);
+    _RasterTrianglesBuf = new std::vector<RasterTriangle>[_NbJobs];
+    _NbRasterTriPerBuf = new int[_NbJobs];
+    memset(_NbRasterTriPerBuf, 0, sizeof(int) * _NbJobs);
 
-    for ( int i = 0; i < _NbThreads; ++i )
-      _RasterTrianglesBuf[i].reserve(std::max(nbTriangles/_NbThreads, 1));
+    for ( int i = 0; i < _NbJobs; ++i )
+      _RasterTrianglesBuf[i].reserve(std::max(nbTriangles/(int)_NbJobs, 1));
   }
 
-  for ( int i = 0; i < _NbThreads; ++i )
+  for ( int i = 0; i < _NbJobs; ++i )
   {
-    int startInd = ( nbTriangles / _NbThreads ) * i;
-    int endInd = ( i == _NbThreads-1 ) ? ( nbTriangles ) : ( startInd + ( nbTriangles / _NbThreads ) );
+    int startInd = ( nbTriangles / _NbJobs ) * i;
+    int endInd = ( i == _NbJobs-1 ) ? ( nbTriangles ) : ( startInd + ( nbTriangles / _NbJobs ) );
     if ( startInd >= endInd )
       continue;
 
@@ -987,10 +1004,10 @@ int SoftwareRasterizer::ProcessFragments()
 
   int height = _Settings._RenderResolution.y;
 
-  for ( int i = 0; i < _NbThreads; ++i )
+  for ( int i = 0; i < _NbJobs; ++i )
   {
-    int startY = ( height / _NbThreads ) * i;
-    int endY = ( i == _NbThreads-1 ) ? ( height ) : ( startY + ( height / _NbThreads ) );
+    int startY = ( height / _NbJobs ) * i;
+    int endY = ( i == _NbJobs-1 ) ? ( height ) : ( startY + ( height / _NbJobs ) );
 
     JobSystem::Get().Execute([this, startY, endY](){ this -> ProcessFragments(startY, endY); });
   }
@@ -1021,7 +1038,7 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
   for ( int i = 0; i < _Scene.GetNbLights(); ++i )
     uniforms._Lights.push_back(*_Scene.GetLight(i));
 
-  for ( int i = 0; i < _NbThreads; ++i )
+  for ( int i = 0; i < _NbJobs; ++i )
   {
     for ( int j = 0; j < _NbRasterTriPerBuf[i]; ++j )
     {

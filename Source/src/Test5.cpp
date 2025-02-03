@@ -7,6 +7,7 @@
 
 #include <string>
 #include <iostream>
+#include <thread>
 
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
@@ -25,8 +26,9 @@ const char * Test5::GetTestHeader() { return "Test 5 : Renderers"; }
 // ----------------------------------------------------------------------------
 static std::string g_AssetsDir = "..\\..\\Assets\\";
 
-static int g_DebugMode = 0;
-static int g_FStopMode = 0;
+static int g_DebugMode    = 0;
+static int g_FStopMode    = 0;
+static unsigned int g_NbThreadsMax = std::thread::hardware_concurrency();
 
 // ----------------------------------------------------------------------------
 // KeyCallback
@@ -296,6 +298,16 @@ int Test5::DrawUI()
           glfwSwapInterval( 0 );
       }
 
+      if ( RendererType::SoftwareRasterizer == _RendererType )
+      {
+        int numThreads = _Settings._NbThreads;
+        if ( ImGui::SliderInt("Nb Threads", &numThreads, 1, g_NbThreadsMax) && ( numThreads > 0 ) )
+        {
+          _Settings._NbThreads = numThreads;
+          _Renderer -> Notify(DirtyState::RenderSettings);
+        }
+      }
+
       int scale = _Settings._RenderScale;
       if ( ImGui::SliderInt("Render scale", &scale, 5, 200) )
       {
@@ -352,9 +364,37 @@ int Test5::DrawUI()
           _Renderer -> Notify(DirtyState::RenderSettings);
       }
 
-      static const char * PATH_TRACE_DEBUG_MODES[] = { "Off", "Albedo", "Metalness", "Roughness", "Normals", "UV", "Tiles"};
-      if ( ImGui::Combo( "Debug view", &g_DebugMode, PATH_TRACE_DEBUG_MODES, 7 ) )
+      if ( RendererType::PathTracer == _RendererType )
+      {
+        static const char * PATH_TRACE_DEBUG_MODES[] = { "Off", "Albedo", "Metalness", "Roughness", "Normals", "UV", "Tiles"};
+        if ( ImGui::Combo( "Debug view", &g_DebugMode, PATH_TRACE_DEBUG_MODES, 7 ) )
+          _Renderer -> SetDebugMode(g_DebugMode);
+      }
+      else if ( RendererType::SoftwareRasterizer == _RendererType )
+      {
+        static const char * YESorNO[]               = { "No", "Yes" };
+        static const char * COLORorDEPTHorNORMALS[] = { "Color", "Depth", "Normals" };
+        static const char * NEARESTorBILNEAR[]      = { "Nearest", "Bilinear" };
+        static const char * PHONGorFLAT[]           = { "Flat", "Phong" };
+
+        g_DebugMode = 0;
+        static int bufferChoice = 0;
+        ImGui::Combo("Buffer", &bufferChoice, COLORorDEPTHorNORMALS, 3);
+        {
+          if ( 0 == bufferChoice )
+            g_DebugMode += (int)RasterDebugModes::ColorBuffer;
+          else if ( 1 == bufferChoice )
+            g_DebugMode += (int)RasterDebugModes::DepthBuffer;
+          else if ( 2 == bufferChoice )
+            g_DebugMode += (int)RasterDebugModes::Normals;
+        }
+
+        static int showWires = 0;
+        if ( ImGui::Combo("Show wires", &showWires, YESorNO, 2) )
+          g_DebugMode += (int)RasterDebugModes::Wires;
+
         _Renderer -> SetDebugMode(g_DebugMode);
+      }
     }
 
     if ( ImGui::CollapsingHeader("Camera") )
@@ -368,6 +408,27 @@ int Test5::DrawUI()
       {
         _Scene -> GetCamera().SetFOVInDegrees(fov);
         _Renderer -> Notify(DirtyState::SceneCamera);
+      }
+
+      if ( RendererType::SoftwareRasterizer == _RendererType )
+      {
+        float zNear = 0.f, zFar = 0.f;
+        _Scene -> GetCamera().GetZNearFar(zNear, zFar);
+        float zVal = zNear;
+        if ( ImGui::SliderFloat("zNear", &zVal, 0.01f, std::min(10.f, zFar)) )
+        {
+          zNear = zVal;
+          _Scene -> GetCamera().SetZNearFar(zNear, zFar);
+          _Renderer -> Notify(DirtyState::SceneCamera);
+        }
+
+        zVal = zFar;
+        if ( ImGui::SliderFloat("zFar", &zVal, zNear + 0.01f, 10000.f) )
+        {
+          zFar = zVal;
+          _Scene -> GetCamera().SetZNearFar(zNear, zFar);
+          _Renderer -> Notify(DirtyState::SceneCamera);
+        }
       }
 
       float focalDist = _Scene -> GetCamera().GetFocalDist();
@@ -627,6 +688,8 @@ int Test5::InitializeScene()
 
   _DefaultCam = _Scene -> GetCamera();
 
+  _Settings._NbThreads = g_NbThreadsMax;
+
   return 0;
 }
 
@@ -639,7 +702,7 @@ int Test5::InitializeRenderer()
   
   if ( RendererType::PathTracer == _RendererType )
     newRenderer = new PathTracer(*_Scene, _Settings);
-  else if ( RendererType::SoftwareRasterizer== _RendererType )
+  else if ( RendererType::SoftwareRasterizer == _RendererType )
     newRenderer = new SoftwareRasterizer(*_Scene, _Settings);
 
   if ( !newRenderer )

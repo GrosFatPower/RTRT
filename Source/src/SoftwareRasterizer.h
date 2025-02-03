@@ -24,6 +24,14 @@ struct RasterTexSlot
   static const TextureSlot _Temporary          = 4;
 };
 
+enum class RasterDebugModes
+{
+  ColorBuffer = 0x00,
+  DepthBuffer = 0x01,
+  Normals     = 0x02,
+  Wires       = 0x04
+};
+
 
 class ShaderProgram;
 class Scene;
@@ -148,6 +156,8 @@ protected:
   int InitializeFrameBuffers();
   int RecompileShaders();
 
+  int UpdateNumberOfWorkers( bool iForce = false );
+
   int UnloadScene();
   int ReloadScene();
   int ReloadEnvMap();
@@ -215,13 +225,12 @@ protected:
   // Frame data
   FrameBuffer _ImageBuffer;
 
-  int         _NbThreadsMax              = 1;
-  int         _NbThreads                 = 1;
-  int         _ColorDepthOrNormalsBuffer = 0;
-  bool        _ShowWires                 = false;
-  bool        _BilinearSampling          = true;
-  bool        _WBuffer                   = false;
-  ShadingType _ShadingType               = ShadingType::Phong;
+  unsigned int _NbJobs                    = 1;
+  int          _ColorDepthOrNormalsBuffer = 0;
+  bool         _ShowWires                 = false;
+  bool         _BilinearSampling          = true;
+  bool         _WBuffer                   = false;
+  ShadingType  _ShadingType               = ShadingType::Phong;
 
   // Scene data
   std::vector<Vertex>            _Vertices;
