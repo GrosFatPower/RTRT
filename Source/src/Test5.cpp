@@ -249,7 +249,7 @@ int Test5::DrawUI()
 
     // Renderer selection
     {
-      static const char * Renderers[] = {"PathTracer", "SoftwareRasterizer (not available)"};
+      static const char * Renderers[] = {"PathTracer", "SoftwareRasterizer"};
       //_RendererType
       int selectedRenderer = (int)_RendererType;
       if ( ImGui::Combo( "Renderer", &selectedRenderer, Renderers, 2 ) )
@@ -315,28 +315,31 @@ int Test5::DrawUI()
         _Renderer -> Notify(DirtyState::RenderSettings);
       }
 
-      if ( ImGui::SliderFloat( "Interactive res Ratio", &_Settings._LowResRatio, 0.05f, 1.f ) )
+      if ( RendererType::PathTracer == _RendererType )
       {
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      }
-
-      if ( ImGui::Checkbox( "Accumulate", &_Settings._Accumulate ) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-
-      if ( ImGui::Checkbox( "Tiled rendering", &_Settings._TiledRendering ) )
-      {
-        if ( _Settings._TiledRendering && ( ( _Settings._TileResolution.x <= 0 ) || ( _Settings._TileResolution.y <= 0 ) ) )
-          _Settings._TileResolution.x = _Settings._TileResolution.y = 256;
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      }
-
-      if ( _Settings._TiledRendering )
-      {
-        int tileSize = _Settings._TileResolution.x;
-        if ( ImGui::SliderInt("Tile size", &tileSize, 64, 1024) )
+        if ( ImGui::SliderFloat( "Interactive res Ratio", &_Settings._LowResRatio, 0.05f, 1.f ) )
         {
-          _Settings._TileResolution = Vec2i(tileSize);
           _Renderer -> Notify(DirtyState::RenderSettings);
+        }
+
+        if ( ImGui::Checkbox( "Accumulate", &_Settings._Accumulate ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::Checkbox( "Tiled rendering", &_Settings._TiledRendering ) )
+        {
+          if ( _Settings._TiledRendering && ( ( _Settings._TileResolution.x <= 0 ) || ( _Settings._TileResolution.y <= 0 ) ) )
+            _Settings._TileResolution.x = _Settings._TileResolution.y = 256;
+          _Renderer -> Notify(DirtyState::RenderSettings);
+        }
+
+        if ( _Settings._TiledRendering )
+        {
+          int tileSize = _Settings._TileResolution.x;
+          if ( ImGui::SliderInt("Tile size", &tileSize, 64, 1024) )
+          {
+            _Settings._TileResolution = Vec2i(tileSize);
+            _Renderer -> Notify(DirtyState::RenderSettings);
+          }
         }
       }
 
@@ -431,21 +434,24 @@ int Test5::DrawUI()
         }
       }
 
-      float focalDist = _Scene -> GetCamera().GetFocalDist();
-      float fStop = ( _Scene -> GetCamera().GetAperture() > 0.f ) ? ( focalDist / _Scene -> GetCamera().GetAperture() ) : ( 1.4f );
-      if ( ImGui::SliderFloat( "Focal distance", &focalDist, 0.1f, 10.f ) )
+      if ( RendererType::PathTracer == _RendererType )
       {
-        _Scene -> GetCamera().SetFocalDist(focalDist);
-        _Renderer -> Notify(DirtyState::SceneCamera);
-      }
+        float focalDist = _Scene -> GetCamera().GetFocalDist();
+        float fStop = ( _Scene -> GetCamera().GetAperture() > 0.f ) ? ( focalDist / _Scene -> GetCamera().GetAperture() ) : ( 1.4f );
+        if ( ImGui::SliderFloat( "Focal distance", &focalDist, 0.1f, 10.f ) )
+        {
+          _Scene -> GetCamera().SetFocalDist(focalDist);
+          _Renderer -> Notify(DirtyState::SceneCamera);
+        }
 
-      static float FStopValue[] = { 0.f, 1.f, 1.4f, 2.f, 2.8f, 4.f, 5.6f, 8.f, 11.f, 16.f, 22.f, 32.f, 45.f, 64.f };
-      static const char * FStopModes[] = { "INFINITE", "1.0", "1.4", "2.0", "2.8", "4.0", "5.6", "8.0", "11.0", "16.0", "22.0", "32.0", "45.0", "64.0" };
-      if ( ImGui::Combo( "FStop", &g_FStopMode, FStopModes, 14 ) )
-      {
-        float aperture = ( g_FStopMode > 0 ) ? ( focalDist / FStopValue[g_FStopMode] ) : ( 0.f );
-        _Scene -> GetCamera().SetAperture(aperture);
-        _Renderer -> Notify(DirtyState::SceneCamera);
+        static float FStopValue[] = { 0.f, 1.f, 1.4f, 2.f, 2.8f, 4.f, 5.6f, 8.f, 11.f, 16.f, 22.f, 32.f, 45.f, 64.f };
+        static const char * FStopModes[] = { "INFINITE", "1.0", "1.4", "2.0", "2.8", "4.0", "5.6", "8.0", "11.0", "16.0", "22.0", "32.0", "45.0", "64.0" };
+        if ( ImGui::Combo( "FStop", &g_FStopMode, FStopModes, 14 ) )
+        {
+          float aperture = ( g_FStopMode > 0 ) ? ( focalDist / FStopValue[g_FStopMode] ) : ( 0.f );
+          _Scene -> GetCamera().SetAperture(aperture);
+          _Renderer -> Notify(DirtyState::SceneCamera);
+        }
       }
 
       if ( ImGui::Button( "Reset" ) )
