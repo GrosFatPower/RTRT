@@ -221,12 +221,11 @@ protected:
   FrameBuffer _ImageBuffer;
 
   // Scene data
-  std::vector<Vertex>            _Vertices;
-  std::vector<Triangle>          _Triangles;
-  std::vector<ProjectedVertex>   _ProjVerticesBuf;
-  std::mutex                     _ProjVerticesMutex;
-  std::vector<RasterTriangle>  * _RasterTrianglesBuf = nullptr;
-  int                          * _NbRasterTriPerBuf  = nullptr;
+  std::vector<Vertex>                      _Vertices;
+  std::vector<Triangle>                    _Triangles;
+  std::vector<ProjectedVertex>             _ProjVerticesBuf;
+  std::mutex                               _ProjVerticesMutex;
+  std::vector<std::vector<RasterTriangle>> _RasterTrianglesBuf;
 };
 
 }

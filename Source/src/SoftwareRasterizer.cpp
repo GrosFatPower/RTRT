@@ -118,8 +118,10 @@ int SoftwareRasterizer::UpdateNumberOfWorkers( bool iForce )
 
     JobSystem::Get().Initialize(_NbJobs);
 
-    DeleteTab(_RasterTrianglesBuf);
-    DeleteTab(_NbRasterTriPerBuf);
+    _RasterTrianglesBuf.resize(_NbJobs);
+
+    for ( int i = 0; i < _NbJobs; ++i )
+      _RasterTrianglesBuf[i].reserve(std::max(_Triangles.size()/_NbJobs, (size_t)1));
   }
 
   return 0;
@@ -457,8 +459,6 @@ int SoftwareRasterizer::UnloadScene()
   _Vertices.clear();
   _Triangles.clear();
   _ProjVerticesBuf.clear();
-  DeleteTab(_RasterTrianglesBuf);
-  DeleteTab(_NbRasterTriPerBuf);
 
   return 0;
 }
@@ -837,24 +837,12 @@ int SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM )
 {
   int nbTriangles = _Triangles.size();
 
-  if ( !_RasterTrianglesBuf )
-  {
-    _RasterTrianglesBuf = new std::vector<RasterTriangle>[_NbJobs];
-    _NbRasterTriPerBuf = new int[_NbJobs];
-    memset(_NbRasterTriPerBuf, 0, sizeof(int) * _NbJobs);
-
-    for ( int i = 0; i < _NbJobs; ++i )
-      _RasterTrianglesBuf[i].reserve(std::max(nbTriangles/(int)_NbJobs, 1));
-  }
-
   for ( int i = 0; i < _NbJobs; ++i )
   {
     int startInd = ( nbTriangles / _NbJobs ) * i;
     int endInd = ( i == _NbJobs-1 ) ? ( nbTriangles ) : ( startInd + ( nbTriangles / _NbJobs ) );
     if ( startInd >= endInd )
       continue;
-
-    _RasterTrianglesBuf[i].reserve(endInd - startInd);
   
     JobSystem::Get().Execute([this, iRasterM, i, startInd, endInd](){ this -> ClipTriangles(iRasterM, i, startInd, endInd); });
   }
@@ -873,7 +861,7 @@ void SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin,
   int width  = _Settings._RenderResolution.x;
   int height = _Settings._RenderResolution.y;
 
-  _NbRasterTriPerBuf[iThreadBin] = 0;
+  _RasterTrianglesBuf[iThreadBin].clear();
   for ( int i = iStartInd; i < iEndInd; ++i )
   {
     Triangle & tri = _Triangles[i];
@@ -947,11 +935,7 @@ void SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin,
           rasterTri._MatID  = tri._MatID;
           rasterTri._Normal = tri._Normal;
 
-          if ( _NbRasterTriPerBuf[iThreadBin] < _RasterTrianglesBuf[iThreadBin].size() )
-            _RasterTrianglesBuf[iThreadBin][_NbRasterTriPerBuf[iThreadBin]] = rasterTri;
-          else
-            _RasterTrianglesBuf[iThreadBin].emplace_back(rasterTri);
-          _NbRasterTriPerBuf[iThreadBin]++;
+          _RasterTrianglesBuf[iThreadBin].push_back(rasterTri);
         }
       }
     }
@@ -985,11 +969,7 @@ void SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin,
       rasterTri._MatID  = tri._MatID;
       rasterTri._Normal = tri._Normal;
 
-      if ( _NbRasterTriPerBuf[iThreadBin] < _RasterTrianglesBuf[iThreadBin].size() )
-        _RasterTrianglesBuf[iThreadBin][_NbRasterTriPerBuf[iThreadBin]] = rasterTri;
-      else
-        _RasterTrianglesBuf[iThreadBin].emplace_back(rasterTri);
-      _NbRasterTriPerBuf[iThreadBin]++;
+      _RasterTrianglesBuf[iThreadBin].push_back(rasterTri);
     }
   }
 }
@@ -999,9 +979,6 @@ void SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin,
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::ProcessFragments()
 {
-  if ( !_RasterTrianglesBuf )
-    return 1;
-
   int height = _Settings._RenderResolution.y;
 
   for ( int i = 0; i < _NbJobs; ++i )
@@ -1040,7 +1017,7 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
 
   for ( int i = 0; i < _NbJobs; ++i )
   {
-    for ( int j = 0; j < _NbRasterTriPerBuf[i]; ++j )
+    for ( int j = 0; j < _RasterTrianglesBuf[i].size(); ++j )
     {
       RasterTriangle & tri = _RasterTrianglesBuf[i][j];
 
