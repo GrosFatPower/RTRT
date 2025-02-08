@@ -289,6 +289,8 @@ int Test5::DrawUI()
 
     if (ImGui::CollapsingHeader("Settings"))
     {
+      static const char * YESorNO[] = { "No", "Yes" };
+
       static bool vSync = true;
       if ( ImGui::Checkbox( "VSync", &vSync ) )
       {
@@ -341,19 +343,39 @@ int Test5::DrawUI()
             _Renderer -> Notify(DirtyState::RenderSettings);
           }
         }
+
+        if ( ImGui::Checkbox( "Denoise", &_Settings._Denoise ) )
+        {}
+
+        if ( _Settings._Denoise )
+        {
+          if ( ImGui::SliderFloat( "Threshold", &_Settings._DenoiserThreshold, .01f, 1.f ) )
+          { }
+        }
+      }
+      else if ( RendererType::SoftwareRasterizer == _RendererType )
+      {
+        static const char * NEARESTorBILNEAR[] = { "Nearest", "Bilinear" };
+        static const char * PHONGorFLAT[]      = { "Flat", "Phong" };
+
+        int sampling = (int)_Settings._BilinearSampling;
+        if ( ImGui::Combo("Texture sampling", &sampling, NEARESTorBILNEAR, 2) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+        _Settings._BilinearSampling = !!sampling;
+
+        int shadingType = (int)_Settings._ShadingType;
+        if ( ImGui::Combo("Shading", &shadingType, PHONGorFLAT, 2) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+        _Settings._ShadingType = (ShadingType)shadingType;
+
+        int useWBuffer = !!_Settings._WBuffer;
+        if ( ImGui::Combo("W-Buffer", &useWBuffer, YESorNO, 2) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+        _Settings._WBuffer = !!useWBuffer;
       }
 
       if ( ImGui::Checkbox( "FXAA", &_Settings._FXAA ) )
         _Renderer -> Notify(DirtyState::RenderSettings);
-
-      if ( ImGui::Checkbox( "Denoise", &_Settings._Denoise ) )
-      {}
-
-      if ( _Settings._Denoise )
-      {
-        if ( ImGui::SliderFloat( "Threshold", &_Settings._DenoiserThreshold, .01f, 1.f ) )
-        { }
-      }
 
       if ( ImGui::Checkbox( "Tone mapping", &_Settings._ToneMapping ) )
         _Renderer -> Notify(DirtyState::RenderSettings);
@@ -371,33 +393,32 @@ int Test5::DrawUI()
       {
         static const char * PATH_TRACE_DEBUG_MODES[] = { "Off", "Albedo", "Metalness", "Roughness", "Normals", "UV", "Tiles"};
         if ( ImGui::Combo( "Debug view", &g_DebugMode, PATH_TRACE_DEBUG_MODES, 7 ) )
-          _Renderer -> SetDebugMode(g_DebugMode);
+          _Renderer -> Notify(DirtyState::RenderSettings);
       }
       else if ( RendererType::SoftwareRasterizer == _RendererType )
       {
-        static const char * YESorNO[]               = { "No", "Yes" };
         static const char * COLORorDEPTHorNORMALS[] = { "Color", "Depth", "Normals" };
-        static const char * NEARESTorBILNEAR[]      = { "Nearest", "Bilinear" };
-        static const char * PHONGorFLAT[]           = { "Flat", "Phong" };
 
         g_DebugMode = 0;
         static int bufferChoice = 0;
-        ImGui::Combo("Buffer", &bufferChoice, COLORorDEPTHorNORMALS, 3);
-        {
-          if ( 0 == bufferChoice )
-            g_DebugMode += (int)RasterDebugModes::ColorBuffer;
-          else if ( 1 == bufferChoice )
-            g_DebugMode += (int)RasterDebugModes::DepthBuffer;
-          else if ( 2 == bufferChoice )
-            g_DebugMode += (int)RasterDebugModes::Normals;
-        }
+        if ( ImGui::Combo("Buffer", &bufferChoice, COLORorDEPTHorNORMALS, 3) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
 
         static int showWires = 0;
         if ( ImGui::Combo("Show wires", &showWires, YESorNO, 2) )
-          g_DebugMode += (int)RasterDebugModes::Wires;
+          _Renderer -> Notify(DirtyState::RenderSettings);
 
-        _Renderer -> SetDebugMode(g_DebugMode);
+        if ( 0 == bufferChoice )
+          g_DebugMode += (int)RasterDebugModes::ColorBuffer;
+        else if ( 1 == bufferChoice )
+          g_DebugMode += (int)RasterDebugModes::DepthBuffer;
+        else if ( 2 == bufferChoice )
+          g_DebugMode += (int)RasterDebugModes::Normals;
+
+        if ( showWires )
+          g_DebugMode += (int)RasterDebugModes::Wires;
       }
+      _Renderer -> SetDebugMode(g_DebugMode);
     }
 
     if ( ImGui::CollapsingHeader("Camera") )
@@ -720,6 +741,7 @@ int Test5::InitializeRenderer()
 
   _Renderer -> Initialize();
 
+  g_DebugMode = 0;
   _Renderer -> SetDebugMode(g_DebugMode);
 
   return 0;

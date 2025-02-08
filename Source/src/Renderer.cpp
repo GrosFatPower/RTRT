@@ -28,8 +28,6 @@ Renderer::~Renderer()
 void Renderer::SetDebugMode( const int iDebugMode )
 {
   _DebugMode = iDebugMode;
-
-  _DirtyStates |= (unsigned long)DirtyState::RenderSettings;
 }
 
 }

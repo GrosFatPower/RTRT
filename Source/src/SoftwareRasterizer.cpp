@@ -607,7 +607,7 @@ Vec4 SoftwareRasterizer::SampleEnvMap( const Vec3 & iDir )
     float phi   = std::atan2(iDir.z, iDir.x);
     Vec2 uv = Vec2(.5f + phi * M_1_PI * .5f, .5f - theta * M_1_PI) + Vec2(_Settings._SkyBoxRotation, 0.0);
 
-    if ( _BilinearSampling )
+    if ( _Settings._BilinearSampling )
       return _Scene.GetEnvMap().BiLinearSample(uv);
     else
       return _Scene.GetEnvMap().Sample(uv);
@@ -760,7 +760,7 @@ void SoftwareRasterizer::RenderBackgroundRows( int iStartY, int iEndY, Vec3 iBot
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP, const Mat4x4 & iRasterM )
 {
-  if ( _WBuffer )
+  if ( _Settings._WBuffer )
   {
     float zNear, zFar;
     _Scene.GetCamera().GetZNearFar(zNear, zFar);
@@ -1032,7 +1032,7 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
 
   Uniform uniforms;
   uniforms._CameraPos        = _Scene.GetCamera().GetPos();
-  uniforms._BilinearSampling = _BilinearSampling;
+  uniforms._BilinearSampling = _Settings._BilinearSampling;
   uniforms._Materials        = &_Scene.GetMaterials();
   uniforms._Textures         = &_Scene.GetTextures();
   for ( int i = 0; i < _Scene.GetNbLights(); ++i )
@@ -1085,7 +1085,7 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
           W *= Z;
 
           coord.z = W.x * tri._V[0].z + W.y * tri._V[1].z + W.z * tri._V[2].z;
-          if ( _WBuffer )
+          if ( _Settings._WBuffer )
           {
             if ( Z > _ImageBuffer._DepthBuffer[x + width * y] || ( Z < zNear ) )
               continue;
@@ -1106,21 +1106,21 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
           frag._MatID      = tri._MatID;
           frag._Attrib     = Attrib[0] * W.x + Attrib[1] * W.y + Attrib[2] * W.z;
 
-         if ( ShadingType::Phong == _ShadingType )
+         if ( ShadingType::Phong == _Settings._ShadingType )
             frag._Attrib._Normal = glm::normalize(frag._Attrib._Normal);
           else
             frag._Attrib._Normal = tri._Normal;
 
           Vec4 fragColor(1.f);
 
-          if ( 1 == _ColorDepthOrNormalsBuffer )
+          if ( _DebugMode & (int)RasterDebugModes::DepthBuffer )
             FragmentShader_Depth(frag, uniforms, fragColor);
-          else if ( 2 == _ColorDepthOrNormalsBuffer )
+          else if ( _DebugMode & (int)RasterDebugModes::Normals )
             FragmentShader_Normal(frag, uniforms, fragColor);
           else
             FragmentShader_Color(frag, uniforms, fragColor);
 
-          if ( _ShowWires )
+          if ( _DebugMode & (int)RasterDebugModes::Wires )
           {
             Vec4 wireColor(1.f);
             FragmentShader_Wires(frag, tri._V, uniforms, wireColor);
@@ -1130,7 +1130,7 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
           }
 
           _ImageBuffer._ColorBuffer[x + width * y] = fragColor;
-          if ( _WBuffer )
+          if ( _Settings._WBuffer )
             _ImageBuffer._DepthBuffer[x + width * y] = Z;
           else
             _ImageBuffer._DepthBuffer[x + width * y] = coord.z;

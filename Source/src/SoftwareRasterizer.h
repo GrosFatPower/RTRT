@@ -142,12 +142,6 @@ public:
     Varying _Attrib;
   };
 
-  enum class ShadingType
-  {
-    Flat = 0,
-    Phong
-  };
-
 protected:
 
   int UpdateRenderResolution();
@@ -221,16 +215,10 @@ protected:
   unsigned int _NbCompleteFrames = 0;
 
   unsigned int _FrameNum = 1;
+  unsigned int _NbJobs = 1;
 
   // Frame data
   FrameBuffer _ImageBuffer;
-
-  unsigned int _NbJobs                    = 1;
-  int          _ColorDepthOrNormalsBuffer = 0;
-  bool         _ShowWires                 = false;
-  bool         _BilinearSampling          = true;
-  bool         _WBuffer                   = false;
-  ShadingType  _ShadingType               = ShadingType::Phong;
 
   // Scene data
   std::vector<Vertex>            _Vertices;

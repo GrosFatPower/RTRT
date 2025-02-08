@@ -282,6 +282,17 @@ void main()
     pixelColor = GammaCorrection( pixelColor );
   }
 
+  if ( ( 6 == u_DebugMode ) && ( 1 == u_TiledRendering ) )
+  {
+    if ( ( fragUV.x < 0.01f )         || ( fragUV.y < 0.01f )
+      || ( fragUV.x > ( 1.- 0.01f ) ) || ( fragUV.y > ( 1.- 0.01f ) ) )
+    {
+      pixelColor.r = (u_NbCompleteFrames % 3) / 2.f;
+      pixelColor.g = (u_NbCompleteFrames % 4) / 3.f;
+      pixelColor.b = (u_NbCompleteFrames % 5) / 4.f;
+    }
+  }
+
   //pixelColor = clamp(pixelColor, 0.f, 1.f);
   fragColor = vec4(pixelColor, 1.f);
 }
