@@ -15,6 +15,7 @@ struct Material
   int   _ID;
   vec3  _Emission;
   vec3  _Albedo;         // Albedo for dialectrics, F0 for metals
+  vec3  _F0;             // Base reflectance
   float _Roughness;
   float _Metallic;       // Metallic parameter. 0.0 for dialectrics, 1.0 for metals
   float _Reflectance;    // Fresnel reflectance for dialectircs between [0.0, 1.0]
@@ -118,6 +119,10 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
     if ( texArrayID >= 0 )
       oMat._Emission = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rgb;
   }
+
+  // Base reflectance
+  oMat._F0 = vec3(0.16f * pow(oMat._Reflectance, 2.));
+  oMat._F0 = mix(oMat._F0, oMat._Albedo, oMat._Metallic);
 }
 
 #endif

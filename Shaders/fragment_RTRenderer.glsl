@@ -50,9 +50,6 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
 
   vec3 outColor = mat._Emission;
 
-  vec3 F0 = vec3(0.16f * pow(mat._Reflectance, 2.));
-  F0 = mix(F0, mat._Albedo, mat._Metallic);
-
   if ( iClosestHit._FrontFace )
   {
     vec3 V = normalize(iRay._Orig - iClosestHit._Pos);
@@ -84,7 +81,7 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
       {
         float irradiance = max(dot(L, iClosestHit._Normal), 0.f) * invDistToLight * invDistToLight;
         if ( irradiance > 0.f )
-          outColor += BRDF(iClosestHit._Normal, V, L, F0, mat) * u_Lights[i]._Emission * irradiance;
+          outColor += BRDF(iClosestHit._Normal, V, L, mat) * u_Lights[i]._Emission * irradiance;
       }
     }
 
@@ -105,7 +102,7 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
             envColor = SampleSkybox( L, u_SkyboxTexture, u_SkyboxRotation );
           else
             envColor = u_BackgroundColor;
-          outColor += BRDF( iClosestHit._Normal, V, L, F0, mat ) * envColor * irradiance;
+          outColor += BRDF( iClosestHit._Normal, V, L, mat ) * envColor * irradiance;
         }
       }
     }
@@ -134,7 +131,7 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
     // Must Reflect
     oScattered._Orig = iClosestHit._Pos + normal * RESOLUTION;
     oScattered._Dir  = reflect(iRay._Dir, normal);
-    oAttenuation = F0;
+    oAttenuation = mat._F0;
   }
   else
   {

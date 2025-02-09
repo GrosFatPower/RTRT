@@ -45,20 +45,15 @@ uniform int            u_DebugMode;
 // Computer Graphics Tutorial - PBR (Physically Based Rendering)
 // https://www.youtube.com/watch?v=RRE-F57fbXw&list=WL&index=109
 // ----------------------------------------------------------------------------
-vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuation )
+vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, inout vec3 ioThroughput )
 {
   Material mat;
   LoadMaterial(iClosestHit, mat);
 
-  vec3 outColor = mat._Emission;
-
-  vec3 F0 = vec3(0.16f * pow(mat._Reflectance, 2.));
-  F0 = mix(F0, mat._Albedo, mat._Metallic);
+  vec3 outColor = mat._Emission * ioThroughput;
 
   if ( iClosestHit._FrontFace )
   {
-    vec3 V = normalize(iRay._Orig - iClosestHit._Pos);
-
     // Direct lighting
     for ( int i = 0; i < u_NbLights; ++i )
     {
@@ -86,14 +81,14 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
       {
         float irradiance = max(dot(L, iClosestHit._Normal), 0.f) * invDistToLight * invDistToLight;
         if ( irradiance > 0.f )
-          outColor += BRDF(iClosestHit._Normal, V, L, F0, mat) * u_Lights[i]._Emission * irradiance;
+          outColor += BRDF(iClosestHit._Normal, -iRay._Dir, L, mat) * u_Lights[i]._Emission * irradiance * ioThroughput;
       }
     }
 
     // Image based lighting
     {
       vec3 L = SampleHemisphere( iClosestHit._Normal );
-
+    
       float irradiance = max( dot( L, iClosestHit._Normal ), 0.f ) * 0.1f;
       if ( irradiance > 0.f )
       {
@@ -107,7 +102,7 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
             envColor = SampleSkybox( L, u_SkyboxTexture, u_SkyboxRotation );
           else
             envColor = u_BackgroundColor;
-          outColor += BRDF( iClosestHit._Normal, V, L, F0, mat ) * envColor * irradiance;
+          outColor += BRDF( iClosestHit._Normal, -iRay._Dir, L, mat ) * envColor * irradiance * ioThroughput;
         }
       }
     }
@@ -136,14 +131,14 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
     // Must Reflect
     oScattered._Orig = iClosestHit._Pos + normal * RESOLUTION;
     oScattered._Dir  = reflect(iRay._Dir, normal);
-    oAttenuation = F0;
+    ioThroughput = BRDF( iClosestHit._Normal, -iRay._Dir, oScattered._Dir, mat );
   }
   else
   {
     // Can Refract
     oScattered._Orig = iClosestHit._Pos - normal;
     oScattered._Dir  = refract(iRay._Dir, normal, refractionRatio);
-    oAttenuation = vec3(1.f - mat._Opacity);
+    ioThroughput = BRDF( iClosestHit._Normal, -iRay._Dir, oScattered._Dir, mat );
   }
 
   return clamp(outColor, 0.f, 1.f);
@@ -263,9 +258,6 @@ void main()
     Material mat;
     LoadMaterial(closestHit, mat);
 
-    vec3 F0 = vec3(0.16f * pow(mat._Reflectance, 2.));
-    F0 = mix(F0, mat._Albedo, mat._Metallic);
-
     radiance += throughput * mat._Emission;
 
     if ( closestHit._IsEmitter )
@@ -277,13 +269,39 @@ void main()
     //if ( pathStopsHere(closestHit) )
     //  break;
 
+    // Direct lighting
+    for ( int i = 0; i < u_NbLights; ++i )
+    {
+      vec3 L;
+      if ( QUAD_LIGHT == u_Lights[i]._Type )
+        L = GetLightDirSample(closestHit._Pos, u_Lights[i]._Pos, u_Lights[i]._DirU, u_Lights[i]._DirV);
+      else if ( SPHERE_LIGHT == u_Lights[i]._Type )
+        L = GetLightDirSample(closestHit._Pos, u_Lights[i]._Pos, u_Lights[i]._Radius);
+      else
+        L = u_Lights[i]._Pos;
+
+      float distToLight = length(L);
+      float invDistToLight = 1. / max(distToLight, EPSILON);
+      L = L * invDistToLight;
+    
+      Ray occlusionTestRay;
+      occlusionTestRay._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
+      occlusionTestRay._Dir = L;
+      if ( !AnyHit(occlusionTestRay, distToLight) )
+      {
+        float irradiance = max(dot(L, closestHit._Normal), 0.f) * invDistToLight * invDistToLight;
+        if ( irradiance > 0.f )
+          radiance += BRDF(closestHit._Normal, -ray._Dir, L, mat) * u_Lights[i]._Emission * irradiance * throughput;// * TWO_PI;
+      }
+    }
+
     vec3 newDir = SampleHemisphere(closestHit._Normal);
     
-    vec3 brdf = BRDF(closestHit._Normal, -ray._Dir, -newDir, F0, mat);
+    vec3 brdf = BRDF(closestHit._Normal, -ray._Dir, -newDir, mat);
 
     float cosTheta = dot(closestHit._Normal, newDir);
     throughput *= brdf * cosTheta;
-    throughput /= (1.f / TWO_PI);
+    //throughput *= TWO_PI; // throughput / INV_TWO_PI
 
     ray._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
     ray._Dir = newDir;
@@ -294,6 +312,8 @@ void main()
     radiance = ReinhardToneMapping( radiance );
     radiance = GammaCorrection( radiance );
   }
+  else
+    radiance = clamp(radiance, 0.f, 1.f);
 
   if ( ( 6 == u_DebugMode ) && ( 1 == u_TiledRendering ) )
   {
@@ -306,7 +326,6 @@ void main()
     }
   }
 
-  //radiance = clamp(radiance, 0.f, 1.f);
   fragColor = vec4(radiance, 1.f);
 }
 
@@ -353,16 +372,14 @@ void main()
     }
 
     Ray scattered;
-    vec3 attenuation;
     if ( ( 0 == u_DebugMode ) || ( 6 == u_DebugMode ) )
     {
-      radiance += DirectIllumination( ray, closestHit, scattered, attenuation ) * throughput;
+      radiance += DirectIllumination( ray, closestHit, scattered, throughput );
       ray = scattered;
-      throughput *= attenuation;
     }
     else
     {
-      radiance += DebugColor( ray, closestHit, scattered, attenuation );
+      radiance += DebugColor( ray, closestHit, scattered, throughput );
       break;
     }
   }

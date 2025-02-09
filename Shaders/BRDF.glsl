@@ -88,10 +88,9 @@ float DiffuseLambertOrenNayar( in vec3 iN, in vec3 iV, in vec3 iL, in float iNdo
 // iN   : surface normal
 // iV   : view direction
 // iL   : light direction
-// iF0  : base reflectance
 // iMat : surface material
 // ----------------------------------------------------------------------------
-vec3 BRDF( in vec3 iN, in vec3 iV, in vec3 iL, in vec3 iF0, in Material iMat )
+vec3 BRDF( in vec3 iN, in vec3 iV, in vec3 iL, in Material iMat )
 {
   vec3 H = normalize(iV + iL);
 
@@ -101,7 +100,7 @@ vec3 BRDF( in vec3 iN, in vec3 iV, in vec3 iL, in vec3 iF0, in Material iMat )
   float NdotH = max(dot(iN, H), 0.f);
 
   float alpha = iMat._Roughness * iMat._Roughness;
-  vec3  F = FresnelSchlick(iF0, VdotH);         // Fresnel reflectance (Schlick approximation)
+  vec3  F = FresnelSchlick(iMat._F0, VdotH);         // Fresnel reflectance (Schlick approximation)
   float D = DistributionGGX(alpha, NdotH);      // Normal distribution function
   float G = GeometrySmith(alpha, NdotV, NdotL); // Geometry term
 
