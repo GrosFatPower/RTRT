@@ -120,4 +120,12 @@ vec3 BRDF( in vec3 iN, in vec3 iV, in vec3 iL, in Material iMat )
   //return diffuse + specular;
 }
 
+// ----------------------------------------------------------------------------
+// DiffuseLambertianBRDF
+// ----------------------------------------------------------------------------
+vec3 DiffuseLambertianBRDF( in vec3 iN, in vec3 iV, in vec3 iL, in Material iMat )
+{
+  return iMat._Albedo * INV_PI;
+}
+
 #endif

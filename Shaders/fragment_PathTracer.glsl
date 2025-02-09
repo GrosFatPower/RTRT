@@ -50,7 +50,7 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
   Material mat;
   LoadMaterial(iClosestHit, mat);
 
-  vec3 outColor = mat._Emission * ioThroughput;
+  vec3 outColor = mat._Emission;
 
   if ( iClosestHit._FrontFace )
   {
@@ -59,12 +59,7 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
     {
       vec3 L;
       if ( QUAD_LIGHT == u_Lights[i]._Type )
-      {
         L = GetLightDirSample(iClosestHit._Pos, u_Lights[i]._Pos, u_Lights[i]._DirU, u_Lights[i]._DirV);
-        //vec3 lightNormal = cross(u_Lights[i]._DirU, u_Lights[i]._DirV);
-        //if ( dot(L, lightNormal) > EPSILON )
-        //  continue;
-      }
       else if ( SPHERE_LIGHT == u_Lights[i]._Type )
         L = GetLightDirSample(iClosestHit._Pos, u_Lights[i]._Pos, u_Lights[i]._Radius);
       else
@@ -81,7 +76,7 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
       {
         float irradiance = max(dot(L, iClosestHit._Normal), 0.f) * invDistToLight * invDistToLight;
         if ( irradiance > 0.f )
-          outColor += BRDF(iClosestHit._Normal, -iRay._Dir, L, mat) * u_Lights[i]._Emission * irradiance * ioThroughput;
+          outColor += BRDF(iClosestHit._Normal, -iRay._Dir, L, mat) * u_Lights[i]._Emission * irradiance;
       }
     }
 
@@ -102,12 +97,14 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
             envColor = SampleSkybox( L, u_SkyboxTexture, u_SkyboxRotation );
           else
             envColor = u_BackgroundColor;
-          outColor += BRDF( iClosestHit._Normal, -iRay._Dir, L, mat ) * envColor * irradiance * ioThroughput;
+          outColor += BRDF( iClosestHit._Normal, -iRay._Dir, L, mat ) * envColor * irradiance;
         }
       }
     }
 
   }
+
+  outColor *= ioThroughput;
 
   // Reflect or refract ?
   double sinTheta = 1.f;
@@ -131,14 +128,14 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
     // Must Reflect
     oScattered._Orig = iClosestHit._Pos + normal * RESOLUTION;
     oScattered._Dir  = reflect(iRay._Dir, normal);
-    ioThroughput = BRDF( iClosestHit._Normal, -iRay._Dir, oScattered._Dir, mat );
+    ioThroughput = /*ioThroughput * */ BRDF(iClosestHit._Normal, -iRay._Dir, oScattered._Dir, mat) * max(dot(oScattered._Dir, iClosestHit._Normal), 0.f) * TWO_PI;
   }
   else
   {
     // Can Refract
     oScattered._Orig = iClosestHit._Pos - normal;
     oScattered._Dir  = refract(iRay._Dir, normal, refractionRatio);
-    ioThroughput = BRDF( iClosestHit._Normal, -iRay._Dir, oScattered._Dir, mat );
+    ioThroughput = /*ioThroughput * */ BRDF(iClosestHit._Normal, -iRay._Dir, oScattered._Dir, mat) * max(dot(oScattered._Dir, iClosestHit._Normal), 0.f) * TWO_PI;
   }
 
   return clamp(outColor, 0.f, 1.f);
@@ -222,27 +219,20 @@ Ray GetRay( in vec2 iCoordUV )
 #ifdef BRUTE_FORCE_PT
 
 // ----------------------------------------------------------------------------
-// main
+// PathSample
 // ----------------------------------------------------------------------------
-void main()
+vec3 PathSample( in Ray iStartRay )
 {
-  // Initialization
-  InitRNG(gl_FragCoord.xy, u_FrameNum);
-
-  vec2 coordUV = fragUV;
-  if( 1 == u_TiledRendering )
-    coordUV = mix(u_TileOffset, u_TileOffset + u_InvNbTiles, fragUV);
-
-  Ray ray = GetRay(coordUV);
-
   // Ray cast
   vec3 radiance = vec3(0.f, 0.f, 0.f);
   vec3 throughput = vec3(1.f);
 
+  Ray ray = iStartRay;
   for ( int i = 0; i < u_Bounces; ++i )
   {
     HitPoint closestHit;
     TraceRay(ray, closestHit);
+
     if ( closestHit._Dist < -RESOLUTION )
     {
       if ( ( 0 == i ) && ( 0 == u_EnableBackground ) )
@@ -255,57 +245,56 @@ void main()
       break;
     }
 
-    Material mat;
-    LoadMaterial(closestHit, mat);
-
-    radiance += throughput * mat._Emission;
-
     if ( closestHit._IsEmitter )
     {
       radiance += u_Lights[closestHit._LightID]._Emission * throughput;
       break;
     }
 
-    //if ( pathStopsHere(closestHit) )
-    //  break;
+    Material mat;
+    LoadMaterial(closestHit, mat);
 
-    // Direct lighting
-    for ( int i = 0; i < u_NbLights; ++i )
-    {
-      vec3 L;
-      if ( QUAD_LIGHT == u_Lights[i]._Type )
-        L = GetLightDirSample(closestHit._Pos, u_Lights[i]._Pos, u_Lights[i]._DirU, u_Lights[i]._DirV);
-      else if ( SPHERE_LIGHT == u_Lights[i]._Type )
-        L = GetLightDirSample(closestHit._Pos, u_Lights[i]._Pos, u_Lights[i]._Radius);
-      else
-        L = u_Lights[i]._Pos;
-
-      float distToLight = length(L);
-      float invDistToLight = 1. / max(distToLight, EPSILON);
-      L = L * invDistToLight;
-    
-      Ray occlusionTestRay;
-      occlusionTestRay._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
-      occlusionTestRay._Dir = L;
-      if ( !AnyHit(occlusionTestRay, distToLight) )
-      {
-        float irradiance = max(dot(L, closestHit._Normal), 0.f) * invDistToLight * invDistToLight;
-        if ( irradiance > 0.f )
-          radiance += BRDF(closestHit._Normal, -ray._Dir, L, mat) * u_Lights[i]._Emission * irradiance * throughput;// * TWO_PI;
-      }
-    }
+    radiance += throughput * mat._Emission;
 
     vec3 newDir = SampleHemisphere(closestHit._Normal);
     
-    vec3 brdf = BRDF(closestHit._Normal, -ray._Dir, -newDir, mat);
-
+    // evaluate BRDF and the cos(theta) attenuation term
+    //vec3 brdf = BRDF(closestHit._Normal, -ray._Dir, newDir, mat);
+    vec3 brdf = DiffuseLambertianBRDF(closestHit._Normal, -ray._Dir, newDir, mat);
     float cosTheta = dot(closestHit._Normal, newDir);
     throughput *= brdf * cosTheta;
-    //throughput *= TWO_PI; // throughput / INV_TWO_PI
+
+    // divide by the probability of choosing the new direction
+    throughput *= TWO_PI; // throughput / INV_TWO_PI
 
     ray._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
     ray._Dir = newDir;
   }
+
+  return radiance;
+}
+
+// ----------------------------------------------------------------------------
+// main
+// ----------------------------------------------------------------------------
+void main()
+{
+  // Initialization
+  InitRNG(gl_FragCoord.xy, u_FrameNum);
+
+  vec2 coordUV = fragUV;
+  if( 1 == u_TiledRendering )
+    coordUV = mix(u_TileOffset, u_TileOffset + u_InvNbTiles, fragUV);
+
+  int nbSamplesPerPixel = 100;
+
+  vec3 radiance = vec3(0.f);
+  for ( int i = 0; i < nbSamplesPerPixel; ++i )
+  {
+    Ray ray = GetRay(coordUV);
+    radiance += PathSample(ray);
+  }
+  radiance /= nbSamplesPerPixel;
 
   if ( 0 != u_ToneMapping )
   {
@@ -389,6 +378,8 @@ void main()
     radiance = ReinhardToneMapping( radiance );
     radiance = GammaCorrection( radiance );
   }
+  else
+    radiance = clamp(radiance, 0.f, 1.f);
 
   if ( ( 6 == u_DebugMode ) && ( 1 == u_TiledRendering ) )
   {
@@ -401,7 +392,6 @@ void main()
     }
   }
 
-  //radiance = clamp(radiance, 0.f, 1.f);
   fragColor = vec4(radiance, 1.f);
 }
 
