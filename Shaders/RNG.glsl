@@ -98,7 +98,7 @@ vec3 SampleHemisphere( in vec3 iNormal )
     v = RandomVec3();
 
     float dotProd = dot(v, v);
-    if ( ( dotProd < 1.f ) && ( dotProd != 0 ) )
+    if ( ( dotProd < 1.f ) && ( dotProd > EPSILON ) )
     {
       v /= dotProd;
       if ( dot(iNormal,v) < 0.f )

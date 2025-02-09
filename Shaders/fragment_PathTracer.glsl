@@ -15,6 +15,9 @@ out vec4 fragColor;
 #include BRDF.glsl
 #include ToneMapping.glsl
 
+
+//#define BRUTE_FORCE_PT
+
 // ============================================================================
 // Uniforms
 // ============================================================================
@@ -221,6 +224,8 @@ Ray GetRay( in vec2 iCoordUV )
   return ray;
 }
 
+#ifdef BRUTE_FORCE_PT
+
 // ----------------------------------------------------------------------------
 // main
 // ----------------------------------------------------------------------------
@@ -236,8 +241,94 @@ void main()
   Ray ray = GetRay(coordUV);
 
   // Ray cast
-  vec3 pixelColor = vec3(0.f, 0.f, 0.f);
-  vec3 multiplier = vec3(1.f);
+  vec3 radiance = vec3(0.f, 0.f, 0.f);
+  vec3 throughput = vec3(1.f);
+
+  for ( int i = 0; i < u_Bounces; ++i )
+  {
+    HitPoint closestHit;
+    TraceRay(ray, closestHit);
+    if ( closestHit._Dist < -RESOLUTION )
+    {
+      if ( ( 0 == i ) && ( 0 == u_EnableBackground ) )
+        break;
+
+      if ( 0 != u_EnableSkybox )
+        radiance += SampleSkybox(ray._Dir, u_SkyboxTexture, u_SkyboxRotation) * throughput;
+      else
+        radiance += u_BackgroundColor * throughput;
+      break;
+    }
+
+    Material mat;
+    LoadMaterial(closestHit, mat);
+
+    vec3 F0 = vec3(0.16f * pow(mat._Reflectance, 2.));
+    F0 = mix(F0, mat._Albedo, mat._Metallic);
+
+    radiance += throughput * mat._Emission;
+
+    if ( closestHit._IsEmitter )
+    {
+      radiance += u_Lights[closestHit._LightID]._Emission * throughput;
+      break;
+    }
+
+    //if ( pathStopsHere(closestHit) )
+    //  break;
+
+    vec3 newDir = SampleHemisphere(closestHit._Normal);
+    
+    vec3 brdf = BRDF(closestHit._Normal, -ray._Dir, -newDir, F0, mat);
+
+    float cosTheta = dot(closestHit._Normal, newDir);
+    throughput *= brdf * cosTheta;
+    throughput /= (1.f / TWO_PI);
+
+    ray._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
+    ray._Dir = newDir;
+  }
+
+  if ( 0 != u_ToneMapping )
+  {
+    radiance = ReinhardToneMapping( radiance );
+    radiance = GammaCorrection( radiance );
+  }
+
+  if ( ( 6 == u_DebugMode ) && ( 1 == u_TiledRendering ) )
+  {
+    if ( ( fragUV.x < 0.01f )         || ( fragUV.y < 0.01f )
+      || ( fragUV.x > ( 1.- 0.01f ) ) || ( fragUV.y > ( 1.- 0.01f ) ) )
+    {
+      radiance.r = (u_NbCompleteFrames % 3) / 2.f;
+      radiance.g = (u_NbCompleteFrames % 4) / 3.f;
+      radiance.b = (u_NbCompleteFrames % 5) / 4.f;
+    }
+  }
+
+  //radiance = clamp(radiance, 0.f, 1.f);
+  fragColor = vec4(radiance, 1.f);
+}
+
+#else
+
+// ----------------------------------------------------------------------------
+// main
+// ----------------------------------------------------------------------------
+void main()
+{
+  // Initialization
+  InitRNG(gl_FragCoord.xy, u_FrameNum);
+
+  vec2 coordUV = fragUV;
+  if( 1 == u_TiledRendering )
+    coordUV = mix(u_TileOffset, u_TileOffset + u_InvNbTiles, fragUV);
+
+  Ray ray = GetRay(coordUV);
+
+  // Ray cast
+  vec3 radiance = vec3(0.f, 0.f, 0.f);
+  vec3 throughput = vec3(1.f);
 
   for ( int i = 0; i < u_Bounces; ++i )
   {
@@ -249,15 +340,15 @@ void main()
         break;
 
       else if ( 0 != u_EnableSkybox )
-        pixelColor += SampleSkybox(ray._Dir, u_SkyboxTexture, u_SkyboxRotation) * multiplier;
+        radiance += SampleSkybox(ray._Dir, u_SkyboxTexture, u_SkyboxRotation) * throughput;
       else
-        pixelColor += u_BackgroundColor * multiplier;
+        radiance += u_BackgroundColor * throughput;
       break;
     }
 
     if ( closestHit._IsEmitter )
     {
-      pixelColor += u_Lights[closestHit._LightID]._Emission * multiplier;
+      radiance += u_Lights[closestHit._LightID]._Emission * throughput;
       break;
     }
 
@@ -265,21 +356,21 @@ void main()
     vec3 attenuation;
     if ( ( 0 == u_DebugMode ) || ( 6 == u_DebugMode ) )
     {
-      pixelColor += DirectIllumination( ray, closestHit, scattered, attenuation ) * multiplier;
+      radiance += DirectIllumination( ray, closestHit, scattered, attenuation ) * throughput;
       ray = scattered;
-      multiplier *= attenuation;
+      throughput *= attenuation;
     }
     else
     {
-      pixelColor += DebugColor( ray, closestHit, scattered, attenuation );
+      radiance += DebugColor( ray, closestHit, scattered, attenuation );
       break;
     }
   }
 
   if ( 0 != u_ToneMapping )
   {
-    pixelColor = ReinhardToneMapping( pixelColor );
-    pixelColor = GammaCorrection( pixelColor );
+    radiance = ReinhardToneMapping( radiance );
+    radiance = GammaCorrection( radiance );
   }
 
   if ( ( 6 == u_DebugMode ) && ( 1 == u_TiledRendering ) )
@@ -287,12 +378,14 @@ void main()
     if ( ( fragUV.x < 0.01f )         || ( fragUV.y < 0.01f )
       || ( fragUV.x > ( 1.- 0.01f ) ) || ( fragUV.y > ( 1.- 0.01f ) ) )
     {
-      pixelColor.r = (u_NbCompleteFrames % 3) / 2.f;
-      pixelColor.g = (u_NbCompleteFrames % 4) / 3.f;
-      pixelColor.b = (u_NbCompleteFrames % 5) / 4.f;
+      radiance.r = (u_NbCompleteFrames % 3) / 2.f;
+      radiance.g = (u_NbCompleteFrames % 4) / 3.f;
+      radiance.b = (u_NbCompleteFrames % 5) / 4.f;
     }
   }
 
-  //pixelColor = clamp(pixelColor, 0.f, 1.f);
-  fragColor = vec4(pixelColor, 1.f);
+  //radiance = clamp(radiance, 0.f, 1.f);
+  fragColor = vec4(radiance, 1.f);
 }
+
+#endif

@@ -324,6 +324,12 @@ int Test5::DrawUI()
           _Renderer -> Notify(DirtyState::RenderSettings);
         }
 
+        if ( ImGui::SliderInt( "Bounces", &_Settings._Bounces, 1, 10 ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::Checkbox("Show lights", &_Settings._ShowLights) )
+          _Renderer -> Notify(DirtyState::SceneLights);
+
         if ( ImGui::Checkbox( "Accumulate", &_Settings._Accumulate ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
