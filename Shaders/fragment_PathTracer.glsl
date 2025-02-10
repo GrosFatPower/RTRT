@@ -128,14 +128,14 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
     // Must Reflect
     oScattered._Orig = iClosestHit._Pos + normal * RESOLUTION;
     oScattered._Dir  = reflect(iRay._Dir, normal);
-    ioThroughput = /*ioThroughput * */ BRDF(iClosestHit._Normal, -iRay._Dir, oScattered._Dir, mat) * max(dot(oScattered._Dir, iClosestHit._Normal), 0.f) * TWO_PI;
+    ioThroughput = /*ioThroughput * */ BRDF(iClosestHit._Normal, -iRay._Dir, oScattered._Dir, mat);
   }
   else
   {
     // Can Refract
     oScattered._Orig = iClosestHit._Pos - normal;
     oScattered._Dir  = refract(iRay._Dir, normal, refractionRatio);
-    ioThroughput = /*ioThroughput * */ BRDF(iClosestHit._Normal, -iRay._Dir, oScattered._Dir, mat) * max(dot(oScattered._Dir, iClosestHit._Normal), 0.f) * TWO_PI;
+    ioThroughput = /*ioThroughput * */ BRDF(iClosestHit._Normal, -iRay._Dir, oScattered._Dir, mat);
   }
 
   return clamp(outColor, 0.f, 1.f);
@@ -259,7 +259,6 @@ vec3 PathSample( in Ray iStartRay )
     vec3 newDir = SampleHemisphere(closestHit._Normal);
     
     // evaluate BRDF and the cos(theta) attenuation term
-    //vec3 brdf = BRDF(closestHit._Normal, -ray._Dir, newDir, mat);
     vec3 brdf = DiffuseLambertianBRDF(closestHit._Normal, -ray._Dir, newDir, mat);
     float cosTheta = dot(closestHit._Normal, newDir);
     throughput *= brdf * cosTheta;

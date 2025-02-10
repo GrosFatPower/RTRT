@@ -1,8 +1,10 @@
 /*
- * Designed with ChatGPT
+ * Designed with ChatGPT & MistralAI
  */
 
 #version 450
+
+#include Constants.glsl
 
 layout(local_size_x = 16, local_size_y = 16) in;
 
@@ -12,8 +14,8 @@ layout(rgba32f, binding = 1) uniform image2D u_OutputImage;
 uniform float u_Threshold; // Noise threshold (similar to wavelet thresholding)
 uniform int u_WaveletScale = 2; // Number of pixels to consider (1, 2, 4, ...)
 
-// Haar wavelet transform coefficients
-const float SQRT2_INV = 0.70710678118; // 1 / sqrt(2)
+uniform float u_SigmaSpatial = 2.0;
+uniform float u_SigmaSange = 0.1;
 
 // ----------------------------------------------------------------------------
 // Soft thresholding function (similar to wavelet denoising)
@@ -36,9 +38,9 @@ vec4 SingleScaleDenoiser( in ivec2 iPixelCoord )
 
   // Haar Wavelet Transform (Decomposition)
   vec4 average          = (c00 + c10 + c01 + c11) * 0.25;
-  vec4 horizontalDetail = (c00 + c10 - c01 - c11) * SQRT2_INV * 0.5;
-  vec4 verticalDetail   = (c00 - c10 + c01 - c11) * SQRT2_INV * 0.5;
-  vec4 diagonalDetail   = (c00 - c10 - c01 + c11) * SQRT2_INV * 0.5;
+  vec4 horizontalDetail = (c00 + c10 - c01 - c11) * INV_SQRT2 * 0.5;
+  vec4 verticalDetail   = (c00 - c10 + c01 - c11) * INV_SQRT2 * 0.5;
+  vec4 diagonalDetail   = (c00 - c10 - c01 + c11) * INV_SQRT2 * 0.5;
 
   // Soft-thresholding (shrink small wavelet coefficients)
   horizontalDetail = SoftThreshold( horizontalDetail, u_Threshold );
@@ -80,9 +82,9 @@ vec4 MultiScaleDenoiser( in ivec2 iPixelCoord, in ivec2 iImageSize )
 
     // Haar Transform (Decomposition)
     vec4 LL = (c00 + c10 + c01 + c11) * 0.25;
-    vec4 LH = (c00 + c10 - c01 - c11) * SQRT2_INV * 0.5;
-    vec4 HL = (c00 - c10 + c01 - c11) * SQRT2_INV * 0.5;
-    vec4 HH = (c00 - c10 - c01 + c11) * SQRT2_INV * 0.5;
+    vec4 LH = (c00 + c10 - c01 - c11) * INV_SQRT2 * 0.5;
+    vec4 HL = (c00 - c10 + c01 - c11) * INV_SQRT2 * 0.5;
+    vec4 HH = (c00 - c10 - c01 + c11) * INV_SQRT2 * 0.5;
 
     // Apply noise thresholding to high frequencies
     LH = SoftThreshold( LH, u_Threshold );
@@ -104,6 +106,35 @@ vec4 MultiScaleDenoiser( in ivec2 iPixelCoord, in ivec2 iImageSize )
 }
 
 // ----------------------------------------------------------------------------
+// BilateralFilter
+// ----------------------------------------------------------------------------
+vec4 BilateralFilter( in ivec2 iPixelCoord )
+{
+  vec4 centerColor = imageLoad( u_InputImage, iPixelCoord );
+
+  vec4 sum = vec4( 0.0 );
+  float weightSum = 0.0;
+  for ( int y = -2; y <= 2; ++y )
+  {
+    for ( int x = -2; x <= 2; ++x )
+    {
+      ivec2 neighborCoord = iPixelCoord + ivec2( x, y );
+      vec4 neighborColor = imageLoad( u_InputImage, neighborCoord );
+
+      float spatialWeight = exp( -dot( vec2( x, y ), vec2( x, y ) ) / ( 2.0 * u_SigmaSpatial * u_SigmaSpatial ) );
+      float rangeWeight = exp( -dot( neighborColor.rgb - centerColor.rgb, neighborColor.rgb - centerColor.rgb ) / ( 2.0 * u_SigmaSange * u_SigmaSange ) );
+      float weight = spatialWeight * rangeWeight;
+
+      sum += neighborColor * weight;
+      weightSum += weight;
+    }
+  }
+
+  vec4 denoisedColor = sum / weightSum;
+  return denoisedColor;
+}
+
+// ----------------------------------------------------------------------------
 // Main
 // ----------------------------------------------------------------------------
 void main()
@@ -119,6 +150,7 @@ void main()
     finalColor = MultiScaleDenoiser(pixelCoord, size);
   else
     finalColor = SingleScaleDenoiser(pixelCoord);
+  //finalColor = BilateralFilter(pixelCoord);
 
   imageStore(u_OutputImage, pixelCoord, finalColor);
 }
