@@ -5,9 +5,15 @@
 #ifndef _STRUCTURES_GLSL_
 #define _STRUCTURES_GLSL_
 
+// LIGHT_TYPE
 #define QUAD_LIGHT    0
 #define SPHERE_LIGHT  1
 #define DISTANT_LIGHT 2
+
+// SCATTER_TYPE
+#define SCATTER_NONE     0 // No scattering, the path stops here
+#define SCATTER_EXPLICIT 1 // Explicit scatter direction
+#define SCATTER_RANDOM   2 // Random scatter direction
 
 struct Ray
 {
@@ -38,6 +44,14 @@ struct HitPoint
   int   _LightID;
   bool  _FrontFace;
   bool  _IsEmitter;
+};
+
+class ScatterRecord
+{
+  uint  _Type;
+  vec3  _Dir;
+  float _P;            // The probability of choosing the direction
+  vec3  _Attenuation;  // The attenuation for the direction: brdf * cosTheta
 };
 
 struct Sphere
@@ -75,6 +89,11 @@ struct Camera
 void InitializeHitPoint( inout HitPoint ioHitPoint )
 {
   ioHitPoint = HitPoint(-1.f, vec3(0.f), vec3(0.f), vec3(0.f), vec3(0.f), vec2(0.f), -1, 0, true, false);
+}
+
+void InitializeScatterRecord( inout ScatterRecord ioSR )
+{
+  ioSR = ScatterRecord(SCATTER_NONE, vec3(0.f), 0.f, vec3(0.f));
 }
 
 #endif

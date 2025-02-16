@@ -16,7 +16,7 @@ out vec4 fragColor;
 #include ToneMapping.glsl
 
 
-//#define BRUTE_FORCE_PT
+//#define WIP_PATHTRACER
 
 // ============================================================================
 // Uniforms
@@ -128,14 +128,14 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
     // Must Reflect
     oScattered._Orig = iClosestHit._Pos + normal * RESOLUTION;
     oScattered._Dir  = reflect(iRay._Dir, normal);
-    ioThroughput = /*ioThroughput * */ BRDF(iClosestHit._Normal, -iRay._Dir, oScattered._Dir, mat);
+    ioThroughput = ioThroughput * BRDF(iClosestHit._Normal, -iRay._Dir, oScattered._Dir, mat);
   }
   else
   {
     // Can Refract
     oScattered._Orig = iClosestHit._Pos - normal;
     oScattered._Dir  = refract(iRay._Dir, normal, refractionRatio);
-    ioThroughput = /*ioThroughput * */ BRDF(iClosestHit._Normal, -iRay._Dir, oScattered._Dir, mat);
+    ioThroughput = ioThroughput * BRDF(iClosestHit._Normal, -iRay._Dir, oScattered._Dir, mat);
   }
 
   return clamp(outColor, 0.f, 1.f);
@@ -216,7 +216,33 @@ Ray GetRay( in vec2 iCoordUV )
   return ray;
 }
 
-#ifdef BRUTE_FORCE_PT
+#ifdef WIP_PATHTRACER
+
+// ----------------------------------------------------------------------------
+// Scatter
+// ----------------------------------------------------------------------------
+bool Scatter( in Ray iRay, in HitPoint iClosestHit, in Material iMat, out ScatterRecord oScatterRecord )
+{
+  InitializeScatterRecord(oScatterRecord);
+
+  if ( ( iMat._Opacity == 1.f ) && !iClosestHit._FrontFace )
+    return false;
+
+  // TMP
+  vec3 normal = normalize(iClosestHit._Normal + iMat._Roughness * RandomVec3());
+
+  if ( iMat._Roughness < RESOLUTION )
+    oScatterRecord._Type = SCATTER_EXPLICIT;
+  else
+    oScatterRecord._Type = SCATTER_RANDOM;
+  oScatterRecord._Dir  = reflect(iRay._Dir, normal);
+
+  float cosTheta = dot(iClosestHit._Normal, oScatterRecord._Dir);
+  oScatterRecord._P = cosTheta / PI;
+  oScatterRecord._Attenuation = BRDF(iClosestHit._Normal, -iRay._Dir, oScatterRecord._Dir, iMat) * cosTheta;
+
+  return true;
+}
 
 // ----------------------------------------------------------------------------
 // PathSample
@@ -224,11 +250,13 @@ Ray GetRay( in vec2 iCoordUV )
 vec3 PathSample( in Ray iStartRay )
 {
   // Ray cast
-  vec3 radiance = vec3(0.f, 0.f, 0.f);
+  vec3 radiance = vec3(0.f);
   vec3 throughput = vec3(1.f);
 
+  const int MaxPathSegments = 128;
+
   Ray ray = iStartRay;
-  for ( int i = 0; i < u_Bounces; ++i )
+  for ( int i = 0; i < MaxPathSegments; ++i )
   {
     HitPoint closestHit;
     TraceRay(ray, closestHit);
@@ -254,20 +282,66 @@ vec3 PathSample( in Ray iStartRay )
     Material mat;
     LoadMaterial(closestHit, mat);
 
-    radiance += throughput * mat._Emission;
+    ScatterRecord sr;
+    Scatter(ray, closestHit, mat, sr);
 
-    vec3 newDir = SampleHemisphere(closestHit._Normal);
+    radiance += mat._Emission * throughput;
+
+    if ( SCATTER_NONE == sr._Type )
+      break;
+
+    vec3 nextThroughput = throughput * sr._Attenuation / ( sr._P + EPSILON );
+
+    // sample light source directly for MIS
+    if ( ( SCATTER_RANDOM == sr._Type ) && ( u_NbLights > 0 ) )
+    {
+      // TMP
+      for ( int j = 0; j < u_NbLights; ++j )
+      {
+        vec3 L;
+        if ( QUAD_LIGHT == u_Lights[j]._Type )
+          L = GetLightDirSample(closestHit._Pos, u_Lights[j]._Pos, u_Lights[j]._DirU, u_Lights[j]._DirV);
+        else if ( SPHERE_LIGHT == u_Lights[j]._Type )
+          L = GetLightDirSample(closestHit._Pos, u_Lights[j]._Pos, u_Lights[j]._Radius);
+        else
+          L = u_Lights[j]._Pos;
+
+        float distToLight = length(L);
+        float invDistToLight = 1. / max(distToLight, EPSILON);
+        L = L * invDistToLight;
     
-    // evaluate BRDF and the cos(theta) attenuation term
-    vec3 brdf = DiffuseLambertianBRDF(closestHit._Normal, -ray._Dir, newDir, mat);
-    float cosTheta = dot(closestHit._Normal, newDir);
-    throughput *= brdf * cosTheta;
+        Ray occlusionTestRay;
+        occlusionTestRay._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
+        occlusionTestRay._Dir = L;
+        if ( !AnyHit(occlusionTestRay, distToLight) )
+        {
+          float p = invDistToLight * invDistToLight;
+          if ( SPHERE_LIGHT == u_Lights[i]._Type )
+          {
+            float distToCenter = length(ray._Orig - u_Lights[i]._Pos);
+            if ( distToCenter <= u_Lights[i]._Radius )
+              p = 1.f;
+          }
+          float irradiance = max(dot(L, closestHit._Normal), 0.f) * p;
+          if ( irradiance > 0.f )
+            radiance += BRDF(closestHit._Normal, -ray._Dir, L, mat) * u_Lights[i]._Emission * throughput * irradiance;
+        }
+      }
+    }
 
-    // divide by the probability of choosing the new direction
-    throughput *= TWO_PI; // throughput / INV_TWO_PI
-
+    throughput = nextThroughput;
     ray._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
-    ray._Dir = newDir;
+    ray._Dir = sr._Dir;
+
+    // Russian Roulette
+    if ( i >= u_Bounces )
+    {
+      float q = min(max(throughput.x, max(throughput.y, throughput.z)) + 0.001, 0.95);
+      if ( rand() > q )
+        break;
+      float rrWeight = 1.0f / (1.0f - q);
+      throughput *= rrWeight;
+    }
   }
 
   return radiance;
@@ -285,15 +359,15 @@ void main()
   if( 1 == u_TiledRendering )
     coordUV = mix(u_TileOffset, u_TileOffset + u_InvNbTiles, fragUV);
 
-  int nbSamplesPerPixel = 100;
+  int nSPP = 1; // Nb samples per pixels
 
   vec3 radiance = vec3(0.f);
-  for ( int i = 0; i < nbSamplesPerPixel; ++i )
+  for ( int i = 0; i < nSPP; ++i )
   {
     Ray ray = GetRay(coordUV);
     radiance += PathSample(ray);
   }
-  radiance /= nbSamplesPerPixel;
+  radiance /= nSPP;
 
   if ( 0 != u_ToneMapping )
   {
@@ -374,7 +448,7 @@ void main()
 
   if ( 0 != u_ToneMapping )
   {
-    radiance = ReinhardToneMapping( radiance );
+    radiance = ReinhardToneMapping_Luminance( radiance );
     radiance = GammaCorrection( radiance );
   }
   else

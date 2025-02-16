@@ -8,6 +8,7 @@
 #define OPTIM_AABB
 #define BLAS_TRAVERSAL
 #define TLAS_TRAVERSAL
+//#define BACKFACE_CULLING
 
 #if defined(BLAS_TRAVERSAL) || defined(BLAS_TRAVERSAL)
 #include BVH.glsl
@@ -33,11 +34,31 @@ bool TraceRay( in Ray iRay, out HitPoint oClosestHit )
   // ------
 
 #ifdef TLAS_TRAVERSAL
+
   HitPoint closestHit;
+#ifdef BACKFACE_CULLING
+  float totalDist = 0.;
+  while ( TraceRay_ThroughTLAS( iRay, closestHit ) )
+  {
+    if ( dot( iRay._Dir, closestHit._Normal ) > 0.f ) // BackFace culling
+    {
+      iRay._Orig = closestHit._Pos + iRay._Dir * RESOLUTION;
+      totalDist += closestHit._Dist + RESOLUTION;
+    }
+    else
+    {
+      oClosestHit = closestHit;
+      break;
+    }
+  }
+  closestHit._Dist += totalDist;
+#else
   if ( TraceRay_ThroughTLAS( iRay, closestHit ) )
   {
     oClosestHit = closestHit;
   }
+#endif
+
 #elif defined(BLAS_TRAVERSAL)
   for ( int ind = 0; ind < u_NbMeshInstances; ++ind )
   {
