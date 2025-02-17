@@ -16,7 +16,7 @@ out vec4 fragColor;
 #include ToneMapping.glsl
 
 
-//#define WIP_PATHTRACER
+#define WIP_PATHTRACER
 
 // ============================================================================
 // Uniforms
@@ -336,8 +336,9 @@ vec3 PathSample( in Ray iStartRay )
     // Russian Roulette
     if ( i >= u_Bounces )
     {
-      float q = min(max(throughput.x, max(throughput.y, throughput.z)) + 0.001, 0.95);
-      if ( rand() > q )
+      float maxThroughput = min(max(throughput.x, max(throughput.y, throughput.z)) + EPSILON, 0.95);
+      float q = 1.0f - maxThroughput; // Lower throughput will lead to higher probability to cancel the path
+      if ( rand() < q )
         break;
       float rrWeight = 1.0f / (1.0f - q);
       throughput *= rrWeight;
