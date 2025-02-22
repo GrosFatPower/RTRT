@@ -231,17 +231,34 @@ bool Scatter( in Ray iRay, in HitPoint iClosestHit, in Material iMat, out Scatte
   // TMP
   vec3 normal = normalize(iClosestHit._Normal + iMat._Roughness * RandomVec3());
 
-  if ( iMat._Roughness < RESOLUTION )
+  if ( ( iMat._Roughness < EPSILON ) && ( iMat._Metallic > ( 1. - EPSILON ) ) )
     oScatterRecord._Type = SCATTER_EXPLICIT;
   else
     oScatterRecord._Type = SCATTER_RANDOM;
   oScatterRecord._Dir  = reflect(iRay._Dir, normal);
 
-  float cosTheta = dot(iClosestHit._Normal, oScatterRecord._Dir);
+  float cosTheta = max(dot(iClosestHit._Normal, oScatterRecord._Dir), 0.f);
   oScatterRecord._P = cosTheta / PI;
   oScatterRecord._Attenuation = BRDF(iClosestHit._Normal, -iRay._Dir, oScatterRecord._Dir, iMat) * cosTheta;
 
   return true;
+}
+
+// ----------------------------------------------------------------------------
+// ScatterToDirection
+// ----------------------------------------------------------------------------
+void ScatterToDirection( in Ray iRay, in HitPoint iClosestHit, in vec3 iDir, in Material iMat, out ScatterRecord oScatterRecord )
+{
+  InitializeScatterRecord(oScatterRecord);
+  oScatterRecord._Dir = iDir;
+
+  // TMP
+  float cosTheta = dot(iClosestHit._Normal, iDir);
+  if ( cosTheta <= 0.f )
+    return;
+
+  oScatterRecord._P = cosTheta / PI;
+  oScatterRecord._Attenuation = BRDF(iClosestHit._Normal, -iRay._Dir, iDir, iMat) * cosTheta;
 }
 
 // ----------------------------------------------------------------------------
@@ -292,55 +309,74 @@ vec3 PathSample( in Ray iStartRay )
 
     vec3 nextThroughput = throughput * sr._Attenuation / ( sr._P + EPSILON );
 
-    // sample light source directly for MIS
+    Ray scatteredRay;
+    scatteredRay._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
+    scatteredRay._Dir = sr._Dir;
+
+    // Sample light source directly for MIS
     if ( ( SCATTER_RANDOM == sr._Type ) && ( u_NbLights > 0 ) )
     {
-      // TMP
+      // Update the throughput for the next path segment
+      float lightsP = 0.0f;
       for ( int j = 0; j < u_NbLights; ++j )
       {
-        vec3 L;
-        if ( QUAD_LIGHT == u_Lights[j]._Type )
-          L = GetLightDirSample(closestHit._Pos, u_Lights[j]._Pos, u_Lights[j]._DirU, u_Lights[j]._DirV);
-        else if ( SPHERE_LIGHT == u_Lights[j]._Type )
-          L = GetLightDirSample(closestHit._Pos, u_Lights[j]._Pos, u_Lights[j]._Radius);
-        else
-          L = u_Lights[j]._Pos;
+        lightsP += LightPDF(u_Lights[j], scatteredRay);
+      }
+      lightsP /= u_NbLights;
+      nextThroughput *= PowerHeuristic(sr._P, lightsP);
 
-        float distToLight = length(L);
-        float invDistToLight = 1. / max(distToLight, EPSILON);
-        L = L * invDistToLight;
-    
-        Ray occlusionTestRay;
-        occlusionTestRay._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
-        occlusionTestRay._Dir = L;
-        if ( !AnyHit(occlusionTestRay, distToLight) )
+      // Choose a light source randomly
+      int lightInd = int(rand() * u_NbLights);
+
+      // Get direction to it
+      vec3 lightDir = GetLightDirSample(scatteredRay._Orig, u_Lights[lightInd]);
+
+      float distToLight = length(lightDir);
+      normalize(lightDir);
+
+      Ray lightRay;
+      lightRay._Orig = scatteredRay._Orig;
+      lightRay._Dir = lightDir;
+
+      // Get the pdf value for this direction
+      float lightDirP = 0.0f;
+      for ( int j = 0; j < u_NbLights; ++j )
+      {
+        lightDirP += LightPDF(u_Lights[j], lightRay);
+      }
+      lightDirP /= u_NbLights;
+
+      if ( lightDirP > EPSILON )
+      {
+        // Get information about a ray going from our current hit point in this direction
+        ScatterRecord lightSR;
+        ScatterToDirection(ray, closestHit, lightRay._Dir, mat, lightSR);
+
+        if ( lightSR._P > EPSILON )
         {
-          float p = invDistToLight * invDistToLight;
-          if ( SPHERE_LIGHT == u_Lights[i]._Type )
+          // Shoot a ray from our current hit point in this direction
+          // check if we hit the hot spot we chose
+          if ( !AnyHit(lightRay, distToLight) )
           {
-            float distToCenter = length(ray._Orig - u_Lights[i]._Pos);
-            if ( distToCenter <= u_Lights[i]._Radius )
-              p = 1.f;
+            // Add the contribution of the hot spot using the power heuristic weight
+            float weight = PowerHeuristic(lightDirP, lightSR._P);
+            radiance += throughput *  ( lightSR._Attenuation / lightDirP ) * weight * u_Lights[lightInd]._Emission;
           }
-          float irradiance = max(dot(L, closestHit._Normal), 0.f) * p;
-          if ( irradiance > 0.f )
-            radiance += BRDF(closestHit._Normal, -ray._Dir, L, mat) * u_Lights[i]._Emission * throughput * irradiance;
         }
       }
     }
 
     throughput = nextThroughput;
-    ray._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
-    ray._Dir = sr._Dir;
+    ray = scatteredRay;
 
     // Russian Roulette
     if ( i >= u_Bounces )
     {
-      float maxThroughput = min(max(throughput.x, max(throughput.y, throughput.z)) + EPSILON, 0.95);
-      float q = 1.0f - maxThroughput; // Lower throughput will lead to higher probability to cancel the path
-      if ( rand() < q )
+      float maxThroughput = max(throughput.x, max(throughput.y, throughput.z));
+      float q = min(maxThroughput + EPSILON, 0.95); // Lower throughput will lead to higher probability to cancel the path
+      if ( rand() > q )
         break;
-      float rrWeight = 1.0f / (1.0f - q);
+      float rrWeight = 1.0f / q;
       throughput *= rrWeight;
     }
   }
