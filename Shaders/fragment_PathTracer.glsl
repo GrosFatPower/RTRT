@@ -229,10 +229,13 @@ bool Scatter( in Ray iRay, in HitPoint iClosestHit, in Material iMat, out Scatte
     return false;
 
   // TMP
-  if ( ( iMat._Roughness < EPSILON ) && ( iMat._Metallic > ( 1. - EPSILON ) ) )
+  if ( iMat._Roughness < RESOLUTION ) // Perfect mirror
   {
     oScatterRecord._Type = SCATTER_EXPLICIT;
     oScatterRecord._Dir  = reflect(iRay._Dir, iClosestHit._Normal);
+
+    oScatterRecord._P = 1.;
+    oScatterRecord._Attenuation = iMat._Albedo;
   }
   else
   {
@@ -245,11 +248,11 @@ bool Scatter( in Ray iRay, in HitPoint iClosestHit, in Material iMat, out Scatte
     }
     else
       oScatterRecord._Dir = SampleHemisphere(iClosestHit._Normal);
-  }
 
-  float cosTheta = max(dot(iClosestHit._Normal, oScatterRecord._Dir), 0.f);
-  oScatterRecord._P = cosTheta / PI;
-  oScatterRecord._Attenuation = BRDF(iClosestHit._Normal, -iRay._Dir, oScatterRecord._Dir, iMat) * cosTheta;
+    float cosTheta = max(dot(iClosestHit._Normal, oScatterRecord._Dir), 0.f);
+    oScatterRecord._P = cosTheta / PI;
+    oScatterRecord._Attenuation = BRDF(iClosestHit._Normal, -iRay._Dir, oScatterRecord._Dir, iMat) * cosTheta;
+  }
 
   return true;
 }
