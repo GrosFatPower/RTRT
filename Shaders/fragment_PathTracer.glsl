@@ -144,30 +144,30 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
 // ----------------------------------------------------------------------------
 // DebugColor
 // ----------------------------------------------------------------------------
-vec3 DebugColor( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out vec3 oAttenuation )
+vec3 DebugColor( in Ray iRay, in HitPoint iClosestHit )
 {
   vec3 outColor;
 
   Material mat;
   LoadMaterial( iClosestHit, mat );
 
-  if ( 1 == u_DebugMode )
+  if ( 2 == u_DebugMode )
   {
     outColor = mat._Albedo;
   }
-  else if ( 2 == u_DebugMode )
+  else if ( 3 == u_DebugMode )
   {
     outColor = vec3(mat._Metallic);
   }
-  else if ( 3 == u_DebugMode )
+  else if ( 4 == u_DebugMode )
   {
     outColor = vec3(mat._Roughness);
   }
-  else if ( 4 == u_DebugMode )
+  else if ( 5 == u_DebugMode )
   {
     outColor = iClosestHit._Normal;
   }
-  else if ( 5 == u_DebugMode )
+  else if ( 6 == u_DebugMode )
   {
     outColor = vec3(iClosestHit._UV.x, iClosestHit._UV.y, 0.f);
   }
@@ -300,6 +300,12 @@ vec3 PathSample( in Ray iStartRay )
       break;
     }
 
+    if ( u_DebugMode > 1 )
+    {
+      radiance += DebugColor( ray, closestHit );
+      break;
+    }
+
     if ( closestHit._IsEmitter )
     {
       radiance += u_Lights[closestHit._LightID]._Emission * throughput;
@@ -317,7 +323,7 @@ vec3 PathSample( in Ray iStartRay )
     if ( SCATTER_NONE == sr._Type )
       break;
 
-    vec3 nextThroughput = throughput * sr._Attenuation / ( sr._P + EPSILON );
+    vec3 nextThroughput = throughput * ( sr._Attenuation / ( sr._P + EPSILON ) );
 
     Ray scatteredRay;
     scatteredRay._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
@@ -424,17 +430,6 @@ void main()
   else
     radiance = clamp(radiance, 0.f, 1.f);
 
-  if ( ( 6 == u_DebugMode ) && ( 1 == u_TiledRendering ) )
-  {
-    if ( ( fragUV.x < 0.01f )         || ( fragUV.y < 0.01f )
-      || ( fragUV.x > ( 1.- 0.01f ) ) || ( fragUV.y > ( 1.- 0.01f ) ) )
-    {
-      radiance.r = (u_NbCompleteFrames % 3) / 2.f;
-      radiance.g = (u_NbCompleteFrames % 4) / 3.f;
-      radiance.b = (u_NbCompleteFrames % 5) / 4.f;
-    }
-  }
-
   fragColor = vec4(radiance, 1.f);
 }
 
@@ -481,14 +476,14 @@ void main()
     }
 
     Ray scattered;
-    if ( ( 0 == u_DebugMode ) || ( 6 == u_DebugMode ) )
+    if ( u_DebugMode < 2 )
     {
       radiance += DirectIllumination( ray, closestHit, scattered, throughput );
       ray = scattered;
     }
     else
     {
-      radiance += DebugColor( ray, closestHit, scattered, throughput );
+      radiance += DebugColor( ray, closestHit );
       break;
     }
   }
@@ -500,17 +495,6 @@ void main()
   }
   else
     radiance = clamp(radiance, 0.f, 1.f);
-
-  if ( ( 6 == u_DebugMode ) && ( 1 == u_TiledRendering ) )
-  {
-    if ( ( fragUV.x < 0.01f )         || ( fragUV.y < 0.01f )
-      || ( fragUV.x > ( 1.- 0.01f ) ) || ( fragUV.y > ( 1.- 0.01f ) ) )
-    {
-      radiance.r = (u_NbCompleteFrames % 3) / 2.f;
-      radiance.g = (u_NbCompleteFrames % 4) / 3.f;
-      radiance.b = (u_NbCompleteFrames % 5) / 4.f;
-    }
-  }
 
   fragColor = vec4(radiance, 1.f);
 }

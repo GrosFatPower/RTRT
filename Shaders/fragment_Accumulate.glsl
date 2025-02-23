@@ -34,7 +34,7 @@ void main()
     fragColor.xyz = ( texture(u_PreviousFrame, realFragUV).xyz * u_NbCompleteFrames + fragColor.xyz ) * multiplier;
   }
 
-  if ( ( 6 == u_DebugMode ) && ( 1 == u_TiledRendering ) )
+  if ( ( 1 == u_DebugMode ) && ( 1 == u_TiledRendering ) )
   {
     if ( ( fragUV.x < 0.01f )         || ( fragUV.y < 0.01f )
       || ( fragUV.x > ( 1.- 0.01f ) ) || ( fragUV.y > ( 1.- 0.01f ) ) )

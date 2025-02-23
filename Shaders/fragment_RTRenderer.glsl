@@ -154,23 +154,23 @@ vec3 DebugColor( in Ray iRay, in HitPoint iClosestHit, out Ray oScattered, out v
   Material mat;
   LoadMaterial( iClosestHit, mat );
 
-  if ( 1 == u_DebugMode )
+  if ( 2 == u_DebugMode )
   {
     outColor = mat._Albedo;
   }
-  else if ( 2 == u_DebugMode )
+  else if ( 3 == u_DebugMode )
   {
     outColor = vec3(mat._Metallic);
   }
-  else if ( 3 == u_DebugMode )
+  else if ( 4 == u_DebugMode )
   {
     outColor = vec3(mat._Roughness);
   }
-  else if ( 4 == u_DebugMode )
+  else if ( 5 == u_DebugMode )
   {
     outColor = iClosestHit._Normal;
   }
-  else if ( 5 == u_DebugMode )
+  else if ( 6 == u_DebugMode )
   {
     outColor = vec3(iClosestHit._UV.x, iClosestHit._UV.y, 0.f);
   }
@@ -204,19 +204,16 @@ void main()
   centeredUV.x *= scale;
   centeredUV.y *= ( u_Resolution.y / u_Resolution.x ) * scale;
 
- if ( 6 == u_DebugMode )
+  if ( ( 1 == u_DebugMode ) && ( 1 == u_TiledRendering ) )
   {
-    if( 1 == u_TiledRendering )
+    if ( ( fragUV.x < 0.01f )         || ( fragUV.y < 0.01f )
+      || ( fragUV.x > ( 1.- 0.01f ) ) || ( fragUV.y > ( 1.- 0.01f ) ) )
     {
-      if ( ( fragUV.x < 0.01f )         || ( fragUV.y < 0.01f )
-        || ( fragUV.x > ( 1.- 0.01f ) ) || ( fragUV.y > ( 1.- 0.01f ) ) )
-      {
-        fragColor.r = (u_NbCompleteFrames % 3) / 2.f;
-        fragColor.g = (u_NbCompleteFrames % 4) / 3.f;
-        fragColor.b = (u_NbCompleteFrames % 5) / 4.f;
-        fragColor.a = 1.f;
-        return;
-      }
+      fragColor.r = (u_NbCompleteFrames % 3) / 2.f;
+      fragColor.g = (u_NbCompleteFrames % 4) / 3.f;
+      fragColor.b = (u_NbCompleteFrames % 5) / 4.f;
+      fragColor.a = 1.f;
+      return;
     }
   }
 
@@ -252,7 +249,7 @@ void main()
 
     Ray scattered;
     vec3 attenuation;
-    if ( ( 0 == u_DebugMode ) || ( 6 == u_DebugMode ) )
+    if ( u_DebugMode < 2 )
     {
       pixelColor += DirectIllumination( ray, closestHit, scattered, attenuation ) * multiplier;
       ray = scattered;

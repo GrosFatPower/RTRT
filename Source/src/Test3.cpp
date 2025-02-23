@@ -892,7 +892,7 @@ int Test3::DrawUI()
       if ( ImGui::SliderInt( "Bounces", &_Settings._Bounces, 1, 10 ) )
         _RenderSettingsModified = true;
 
-      static const char * DEBUG_MODES[] = { "Off", "Albedo", "Metalness", "Roughness", "Normals", "UV", "Tiles"};
+      static const char * DEBUG_MODES[] = { "Off", "Tiles", "Albedo", "Metalness", "Roughness", "Normals", "UV"};
       if ( ImGui::Combo( "Debug view", &_DebugMode, DEBUG_MODES, 7 ) )
         _RenderSettingsModified = true;
     }
