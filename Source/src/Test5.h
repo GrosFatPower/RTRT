@@ -8,6 +8,7 @@
 #include "Renderer.h"
 #include "KeyInput.h"
 #include "MouseInput.h"
+#include "GLUtil.h"
 #include "GL/glew.h"
 
 #include <memory>
@@ -86,10 +87,15 @@ protected:
   std::vector<const char*>   _SceneNames;
   std::vector<std::string>   _BackgroundFiles;
   std::vector<const char*>   _BackgroundNames;
+  std::vector<std::string>   _MaterialNames;
   int                        _CurSceneId       = -1;
   int                        _CurBackgroundId  = -1;
   bool                       _ReloadScene      = false;
   bool                       _ReloadBackground = false;
+  GLTexture                  _AlbedoTEX        = { 0, GL_TEXTURE_2D, 0 };
+  GLTexture                  _MetalRoughTEX    = { 0, GL_TEXTURE_2D, 0 };
+  GLTexture                  _NormalMapTEX     = { 0, GL_TEXTURE_2D, 0 };
+  GLTexture                  _EmissionMapTEX   = { 0, GL_TEXTURE_2D, 0 };
 
   bool                       _RenderToFile = false;
   std::filesystem::path      _CaptureOutputPath;

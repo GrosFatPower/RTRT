@@ -16,7 +16,7 @@ using TextureSlot = unsigned int;
 struct GLTexture
 {
   GLuint            _ID;
-  GLenum            _Type;
+  GLenum            _Target;
   const TextureSlot _Slot;
 };
 
@@ -88,7 +88,18 @@ static void ResizeFBO( GLFrameBuffer & ioFBO, GLint iInternalFormat, GLsizei iWi
 static void ActivateTexture( GLTexture & iTex )
 {
   glActiveTexture(GL_TEX_UNIT(iTex));
-  glBindTexture(iTex._Type, iTex._ID);
+  glBindTexture(iTex._Target, iTex._ID);
+}
+
+// LoadTexture
+static void LoadTexture( GLenum iTarget, GLint iInternalformat, GLsizei iWidth, GLsizei iHeight, GLenum iFormat, GLenum iType, const void * iData, GLTexture & ioTex )
+{
+  glGenTextures(1, &ioTex._ID);
+  glBindTexture(iTarget, ioTex._ID);
+  glTexImage2D(iTarget, 0, iInternalformat, iWidth, iHeight, 0, iFormat, iType, iData);
+  glTexParameteri(iTarget, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(iTarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glBindTexture(iTarget, 0);
 }
 
 // UniformArrayElementName

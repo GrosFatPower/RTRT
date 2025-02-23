@@ -123,6 +123,11 @@ Test5::~Test5()
     delete[] fileName;
   for ( auto fileName : _BackgroundNames )
     delete[] fileName;
+
+  GLUtil::DeleteTEX(_AlbedoTEX);
+  GLUtil::DeleteTEX(_MetalRoughTEX);
+  GLUtil::DeleteTEX(_NormalMapTEX);
+  GLUtil::DeleteTEX(_EmissionMapTEX);
 }
 
 // ----------------------------------------------------------------------------
@@ -537,6 +542,182 @@ int Test5::DrawUI()
       }
     }
 
+   if ( ImGui::CollapsingHeader("Materials") )
+    {
+      std::vector<Material> & Materials =  _Scene -> GetMaterials();
+      std::vector<Texture*> & Textures = _Scene -> GetTextures();
+
+      static int selectedMaterial = -1;
+      if ( selectedMaterial >= _MaterialNames.size() )
+        selectedMaterial = -1;
+
+      bool newMaterial = false;
+      if ( ImGui::ListBoxHeader("##MaterialNames") )
+      {
+        for (int i = 0; i < _MaterialNames.size(); i++)
+        {
+          bool is_selected = ( selectedMaterial == i );
+          if (ImGui::Selectable(_MaterialNames[i].c_str(), is_selected))
+          {
+            selectedMaterial = i;
+            newMaterial = true;
+          }
+        }
+        ImGui::ListBoxFooter();
+      }
+
+      if ( selectedMaterial >= 0 )
+      {
+        Material & curMat = Materials[selectedMaterial];
+
+        float rgb[3] = { curMat._Albedo.r, curMat._Albedo.g, curMat._Albedo.b };
+        if ( ImGui::ColorEdit3("Albedo", rgb) )
+        {
+          curMat._Albedo.r = rgb[0];
+          curMat._Albedo.g = rgb[1];
+          curMat._Albedo.b = rgb[2];
+          _Renderer -> Notify(DirtyState::SceneMaterials);
+        }
+
+        rgb[0] = curMat._Emission.r, rgb[1] = curMat._Emission.g, rgb[2] = curMat._Emission.b;
+        if ( ImGui::ColorEdit3("Emission", rgb) )
+        {
+          curMat._Emission.r = rgb[0];
+          curMat._Emission.g = rgb[1];
+          curMat._Emission.b = rgb[2];
+          _Renderer -> Notify(DirtyState::SceneMaterials);
+        }
+
+        if ( ImGui::SliderFloat("Metallic", &curMat._Metallic, 0.f, 1.f) )
+          _Renderer -> Notify(DirtyState::SceneMaterials);
+
+        if ( ImGui::SliderFloat("Roughness", &curMat._Roughness, 0.f, 1.f) )
+          _Renderer -> Notify(DirtyState::SceneMaterials);
+
+        if ( ImGui::SliderFloat("Reflectance", &curMat._Reflectance, 0.f, 1.f) )
+          _Renderer -> Notify(DirtyState::SceneMaterials);
+
+        if ( ImGui::SliderFloat("Subsurface", &curMat._Subsurface, 0.f, 1.f) )
+          _Renderer -> Notify(DirtyState::SceneMaterials);
+
+        if ( ImGui::SliderFloat("Sheen Tint", &curMat._SheenTint, 0.f, 1.f) )
+          _Renderer -> Notify(DirtyState::SceneMaterials);
+
+        if ( ImGui::SliderFloat("Anisotropic", &curMat._Anisotropic, 0.f, 1.f) )
+          _Renderer -> Notify(DirtyState::SceneMaterials);
+
+        if ( ImGui::SliderFloat("Specular Trans", &curMat._SpecTrans, 0.f, 1.f) )
+          _Renderer -> Notify(DirtyState::SceneMaterials);
+
+        if ( ImGui::SliderFloat("Specular Tint", &curMat._SpecularTint, 0.f, 1.f) )
+          _Renderer -> Notify(DirtyState::SceneMaterials);
+
+        if ( ImGui::SliderFloat("Clearcoat", &curMat._Clearcoat, 0.f, 1.f) )
+          _Renderer -> Notify(DirtyState::SceneMaterials);
+
+        if ( ImGui::SliderFloat("Clearcoat Gloss", &curMat._ClearcoatGloss, 0.f, 1.f) )
+          _Renderer -> Notify(DirtyState::SceneMaterials);
+
+        if ( ImGui::SliderFloat("IOR", &curMat._IOR, 1.f, 3.f) )
+          _Renderer -> Notify(DirtyState::SceneMaterials);
+
+        if ( ImGui::SliderFloat("Opacity", &curMat._Opacity, 0.f, 1.f) )
+          _Renderer -> Notify(DirtyState::SceneMaterials);
+
+        if ( curMat._BaseColorTexId >= 0 )
+        {
+          Texture * basecolorTexture = Textures[curMat._BaseColorTexId];
+          if ( basecolorTexture )
+          {
+            if ( newMaterial )
+            {
+              GLUtil::DeleteTEX(_AlbedoTEX);
+              if ( basecolorTexture -> GetUCData() )
+                GLUtil::LoadTexture(GL_TEXTURE_2D, GL_RGBA8, basecolorTexture -> GetWidth(), basecolorTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, basecolorTexture -> GetUCData(), _AlbedoTEX);
+              else if ( basecolorTexture -> GetFData() )
+                GLUtil::LoadTexture(GL_TEXTURE_2D, GL_RGBA32F, basecolorTexture -> GetWidth(), basecolorTexture -> GetHeight(), GL_RGBA, GL_FLOAT, basecolorTexture -> GetFData(), _AlbedoTEX);
+            }
+
+            if ( _AlbedoTEX._ID )
+            {
+              ImGui::Text("Base color :");
+              ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_AlbedoTEX._ID);
+              ImGui::Image(texture, ImVec2(256, 256));
+            }
+          }
+        }
+
+        if ( curMat._MetallicRoughnessTexID >= 0 )
+        {
+          Texture * metallicRoughnessTexture = Textures[curMat._MetallicRoughnessTexID];
+          if ( metallicRoughnessTexture )
+          {
+            if ( newMaterial )
+            {
+              GLUtil::DeleteTEX(_MetalRoughTEX);
+              if ( metallicRoughnessTexture -> GetUCData() )
+                GLUtil::LoadTexture(GL_TEXTURE_2D, GL_RGBA8, metallicRoughnessTexture -> GetWidth(), metallicRoughnessTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, metallicRoughnessTexture -> GetUCData(), _MetalRoughTEX);
+              else if ( metallicRoughnessTexture -> GetFData() )
+                GLUtil::LoadTexture(GL_TEXTURE_2D, GL_RGBA32F, metallicRoughnessTexture -> GetWidth(), metallicRoughnessTexture -> GetHeight(), GL_RGBA, GL_FLOAT, metallicRoughnessTexture -> GetFData(), _MetalRoughTEX);
+            }
+
+            if ( _MetalRoughTEX._ID )
+            {
+              ImGui::Text("Metallic Roughness :");
+              ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_MetalRoughTEX._ID);
+              ImGui::Image(texture, ImVec2(256, 256));
+            }
+          }
+        }
+
+        if ( curMat._NormalMapTexID >= 0 )
+        {
+          Texture * normalMapTexture = Textures[curMat._NormalMapTexID];
+          if ( normalMapTexture )
+          {
+            if ( newMaterial )
+            {
+              GLUtil::DeleteTEX(_NormalMapTEX);
+              if ( normalMapTexture -> GetUCData() )
+                GLUtil::LoadTexture(GL_TEXTURE_2D, GL_RGBA8, normalMapTexture -> GetWidth(), normalMapTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, normalMapTexture -> GetUCData(), _NormalMapTEX);
+              else if ( normalMapTexture -> GetFData() )
+                GLUtil::LoadTexture(GL_TEXTURE_2D, GL_RGBA32F, normalMapTexture -> GetWidth(), normalMapTexture -> GetHeight(), GL_RGBA, GL_FLOAT, normalMapTexture -> GetFData(), _NormalMapTEX);
+            }
+
+            if ( _NormalMapTEX._ID )
+            {
+              ImGui::Text("Normal map :");
+              ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_NormalMapTEX._ID);
+              ImGui::Image(texture, ImVec2(256, 256));
+            }
+          }
+        }
+
+        if ( curMat._EmissionMapTexID >= 0 )
+        {
+          Texture * emissionMapTexture = Textures[curMat._EmissionMapTexID];
+          if ( emissionMapTexture )
+          {
+            if ( newMaterial )
+            {
+              GLUtil::DeleteTEX(_EmissionMapTEX);
+              if ( emissionMapTexture -> GetUCData() )
+                GLUtil::LoadTexture(GL_TEXTURE_2D, GL_RGBA8, emissionMapTexture -> GetWidth(), emissionMapTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, emissionMapTexture -> GetUCData(), _EmissionMapTEX);
+              else if ( emissionMapTexture -> GetFData() )
+                GLUtil::LoadTexture(GL_TEXTURE_2D, GL_RGBA32F, emissionMapTexture -> GetWidth(), emissionMapTexture -> GetHeight(), GL_RGBA, GL_FLOAT, emissionMapTexture -> GetFData(), _EmissionMapTEX);
+            }
+
+            if ( _EmissionMapTEX._ID )
+            {
+              ImGui::Text("Emission map :");
+              ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_EmissionMapTEX._ID);
+              ImGui::Image(texture, ImVec2(256, 256));
+            }
+          }
+        }
+      }
+    }
+
     ImGui::End();
   }
 
@@ -718,6 +899,15 @@ int Test5::InitializeScene()
   }
   else
     _CurBackgroundId = -1;
+
+  _MaterialNames.clear();
+  const std::vector<Material> & Materials =  _Scene -> GetMaterials();
+  for ( auto & mat : Materials )
+    _MaterialNames.push_back(_Scene -> FindMaterialName(mat._ID));
+  GLUtil::DeleteTEX(_AlbedoTEX);
+  GLUtil::DeleteTEX(_MetalRoughTEX);
+  GLUtil::DeleteTEX(_NormalMapTEX);
+  GLUtil::DeleteTEX(_EmissionMapTEX);
 
   _DefaultCam = _Scene -> GetCamera();
 

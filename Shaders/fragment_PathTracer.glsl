@@ -229,13 +229,23 @@ bool Scatter( in Ray iRay, in HitPoint iClosestHit, in Material iMat, out Scatte
     return false;
 
   // TMP
-  vec3 normal = normalize(iClosestHit._Normal + iMat._Roughness * RandomVec3());
-
   if ( ( iMat._Roughness < EPSILON ) && ( iMat._Metallic > ( 1. - EPSILON ) ) )
+  {
     oScatterRecord._Type = SCATTER_EXPLICIT;
+    oScatterRecord._Dir  = reflect(iRay._Dir, iClosestHit._Normal);
+  }
   else
+  {
     oScatterRecord._Type = SCATTER_RANDOM;
-  oScatterRecord._Dir  = reflect(iRay._Dir, normal);
+
+    if ( rand() > iMat._Roughness )
+    {
+      vec3 normal = normalize(iClosestHit._Normal + iMat._Roughness * RandomVec3());
+      oScatterRecord._Dir  = reflect(iRay._Dir, normal);
+    }
+    else
+      oScatterRecord._Dir = SampleHemisphere(iClosestHit._Normal);
+  }
 
   float cosTheta = max(dot(iClosestHit._Normal, oScatterRecord._Dir), 0.f);
   oScatterRecord._P = cosTheta / PI;
