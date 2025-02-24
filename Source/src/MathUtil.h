@@ -230,6 +230,13 @@ public:
     return (iV1.x - iV0.x) * (iV2.y - iV0.y) - (iV1.y - iV0.y) * (iV2.x - iV0.x);     // Counter-Clockwise edge function
     //  return (iV2.x - iV0.x) * (iV1.y - iV0.y) - (iV2.y - iV0.y) * (iV1.x - iV0.x); // Clockwise edge function
   }
+
+  static float Luminance( const Vec3 iRGBColor )
+  {
+    const Vec3 Luma = Vec3( 0.299, 0.587, 0.114 ); // UIT-R BT 601
+    //const Vec3 Luma = Vec3(0.2126f, 0.7152f, 0.0722f); // UIT-R BT 709
+    return glm::dot(Luma, iRGBColor);
+  }
 };
 
 template <typename T>

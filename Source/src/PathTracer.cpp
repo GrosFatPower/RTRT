@@ -132,10 +132,11 @@ int PathTracer::UpdatePathTraceUniforms()
   {
     _PathTraceShader -> SetUniform("u_Bounces", _Settings._Bounces);
     _PathTraceShader -> SetUniform("u_BackgroundColor", _Settings._BackgroundColor);
-    _PathTraceShader -> SetUniform("u_EnableSkybox", (int)_Settings._EnableSkybox);
+    _PathTraceShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
     _PathTraceShader -> SetUniform("u_EnableBackground" , (int)_Settings._EnableBackGround);
-    _PathTraceShader -> SetUniform("u_SkyboxRotation", _Settings._SkyBoxRotation / 360.f);
-    _PathTraceShader -> SetUniform("u_SkyboxTexture", (int)PathTracerTexSlot::_EnvMap);
+    _PathTraceShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
+    _PathTraceShader -> SetUniform("u_EnvMap", (int)PathTracerTexSlot::_EnvMap);
+    _PathTraceShader -> SetUniform("u_EnvMapTotalWeight", _Scene.GetEnvMap().GetTotalWeight());
     _PathTraceShader -> SetUniform("u_Gamma", _Settings._Gamma);
     _PathTraceShader -> SetUniform("u_Exposure", _Settings._Exposure);
     _PathTraceShader -> SetUniform("u_ToneMapping", ( _Settings._ToneMapping ? 1 : 0 ));

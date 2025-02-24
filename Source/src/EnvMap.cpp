@@ -16,11 +16,14 @@ void EnvMap::Reset()
     stbi_image_free(_RawData);
   _RawData = nullptr;
 
+  DeleteTab(_CDF);
+
   _IsInitialized = false;
   _GLTexID         = -1;
   _Width         = 0;
   _Height        = 0;
   _Filename      = "";
+  _TotalWeight   = 0.f;
 }
 
 bool EnvMap::Load( const std::string & iFilename )
@@ -41,7 +44,39 @@ bool EnvMap::Load( const std::string & iFilename )
   _Filename      = iFilename;
   _IsInitialized = true;
 
+  BuildCDF();
+
   return true;
+}
+
+void EnvMap::BuildCDF()
+{
+  DeleteTab(_CDF);
+  _TotalWeight = 0.f;
+
+  if ( !_RawData || !_Width || !_Height )
+    return;
+
+  // Gather weights for CDF
+  std::vector<float> weights;
+  weights.resize(_Width * _Height);
+  for ( int y = 0; y < _Height; ++y )
+  {
+    for ( int x = 0; x < _Width; ++x )
+    {
+      int index = x + y * _Width;
+      weights[index] = MathUtil::Luminance(Vec3(_RawData[index * 3 + 0], _RawData[index * 3 + 1], _RawData[index * 3 + 2]));
+    }
+  }
+
+  // Build CDF
+  _CDF = new float[_Width * _Height];
+  _CDF[0] = weights[0];
+
+  for ( int i = 1; i < ( _Width * _Height ); ++i )
+    _CDF[i] = _CDF[i - 1] + weights[i];
+
+  _TotalWeight = _CDF[_Width * _Height - 1];
 }
 
 Vec4 EnvMap::Sample( int iX, int iY ) const

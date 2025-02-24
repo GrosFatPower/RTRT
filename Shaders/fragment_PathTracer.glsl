@@ -34,9 +34,10 @@ uniform int            u_ToneMapping;
 uniform vec3           u_BackgroundColor;
 uniform Camera         u_Camera;
 uniform int            u_EnableBackground;
-uniform int            u_EnableSkybox;
-uniform float          u_SkyboxRotation;
-uniform sampler2D      u_SkyboxTexture;
+uniform int            u_EnableEnvMap;
+uniform float          u_EnvMapRotation;
+uniform float          u_EnvMapTotalWeight;
+uniform sampler2D      u_EnvMap;
 
 uniform int            u_DebugMode;
 
@@ -93,8 +94,8 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
         if ( !AnyHit( occlusionTestRay, INFINITY ) )
         {
           vec3 envColor;
-          if ( 0 != u_EnableSkybox )
-            envColor = SampleSkybox( L, u_SkyboxTexture, u_SkyboxRotation );
+          if ( 0 != u_EnableEnvMap )
+            envColor = SampleSkybox( L, u_EnvMap, u_EnvMapRotation );
           else
             envColor = u_BackgroundColor;
           outColor += BRDF( iClosestHit._Normal, -iRay._Dir, L, mat ) * envColor * irradiance;
@@ -296,8 +297,8 @@ vec3 PathSample( in Ray iStartRay )
       if ( ( 0 == i ) && ( 0 == u_EnableBackground ) )
         break;
 
-      if ( 0 != u_EnableSkybox )
-        radiance += SampleSkybox(ray._Dir, u_SkyboxTexture, u_SkyboxRotation) * throughput;
+      if ( 0 != u_EnableEnvMap )
+        radiance += SampleSkybox(ray._Dir, u_EnvMap, u_EnvMapRotation) * throughput;
       else
         radiance += u_BackgroundColor * throughput;
       break;
@@ -465,8 +466,8 @@ void main()
       if ( ( 0 == i ) && ( 0 == u_EnableBackground ) )
         break;
 
-      else if ( 0 != u_EnableSkybox )
-        radiance += SampleSkybox(ray._Dir, u_SkyboxTexture, u_SkyboxRotation) * throughput;
+      else if ( 0 != u_EnableEnvMap )
+        radiance += SampleSkybox(ray._Dir, u_EnvMap, u_EnvMapRotation) * throughput;
       else
         radiance += u_BackgroundColor * throughput;
       break;

@@ -62,6 +62,22 @@ vec3 SampleSkybox( in vec3 iRayDir, in sampler2D iSkyboxTex, in float iSkyboxRot
 }
 
 // ----------------------------------------------------------------------------
+// SampleEnvMap
+// UV mapping : https://en.wikipedia.org/wiki/UV_mapping
+// iRayDir should be normalized
+// (U,V) = normalized spherical coordinates
+// ----------------------------------------------------------------------------
+vec4 SampleEnvMap( in vec3 iRayDir, in sampler2D iEnvMap, in float iRotation, in vec2 iRes, float iTotalWeight )
+{
+  float theta = asin(iRayDir.y);
+  float phi   = atan(iRayDir.z, iRayDir.x);
+  vec2 uv = vec2(.5f + phi * INV_TWO_PI, .5f - theta * INV_PI) + vec2(iRotation, 0.0);
+
+  vec3 color = texture(iEnvMap, uv).rgb;
+  return vec4(color, 0.f); // ToDo
+}
+
+// ----------------------------------------------------------------------------
 // PowerHeuristic
 // The power heuristic for Multiple Importance Sampling
 // Wf = ( f ^ 2 ) / ( f ^2 + g ^ 2 )

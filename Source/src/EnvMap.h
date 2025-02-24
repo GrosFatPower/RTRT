@@ -25,6 +25,8 @@ public:
   int GetHeight() const { return _Height; }
   float * GetRawData() const { return _RawData; }
 
+  float GetTotalWeight() const { return _TotalWeight; }
+
   GLuint GetGLTexID() const { return _GLTexID; }
   void SetGLTexID( GLuint iGLTexID ) { _GLTexID = iGLTexID; }
 
@@ -35,6 +37,9 @@ public:
   const std::string & Filename() const { return _Filename; }
 
 private:
+
+  void BuildCDF();
+
   bool          _IsInitialized = false;
   GLuint        _GLTexID       = -1;
   int           _Width         = 0;
@@ -42,6 +47,8 @@ private:
 
   std::string   _Filename      = "";
   float       * _RawData       = nullptr;
+  float       * _CDF           = nullptr; // Cumulative distribution function
+  float         _TotalWeight   = 0.f;
 
   EnvMap( const EnvMap & ); // not implemented
   EnvMap & operator=( const EnvMap & ); // not implemented
