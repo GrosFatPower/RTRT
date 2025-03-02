@@ -7,6 +7,106 @@
 
 #include Constants.glsl
 #include Structures.glsl
+#include RNG.glsl
+#include ToneMapping.glsl
+
+// ----------------------------------------------------------------------------
+// ComputeONB
+// Orthonormal Basis
+// ----------------------------------------------------------------------------
+void ComputeOnB( in vec3 iN, out vec3 oT, out vec3 oBT )
+{
+  vec3 up = ( abs( iN.z ) < 0.999 ) ? vec3( 0, 0, 1. ) : vec3( 1., 0, 0 );
+
+  oT = normalize( cross( up, iN ) );
+  oBT = cross( iN, oT );
+}
+
+// ----------------------------------------------------------------------------
+// ComputeTangentSpaceMatrix
+// ----------------------------------------------------------------------------
+mat3 ComputeTangentSpaceMatrix( in vec3 iN )
+{
+  vec3 T, BT;
+  ComputeOnB(iN, T, BT);
+
+  return mat3(T, BT, iN);
+}
+
+// ----------------------------------------------------------------------------
+// SampleHemisphere
+// ----------------------------------------------------------------------------
+vec3 SampleHemisphere( in vec3 iNormal )
+{
+  vec3 v;
+
+  while ( true )
+  {
+    v = RandomVec3();
+
+    float dotProd = dot(v, v);
+    if ( ( dotProd < 1.f ) && ( dotProd > EPSILON ) )
+    {
+      v /= dotProd;
+      if ( dot(iNormal,v) < 0.f )
+        v *= -1.f;
+      break;
+    }
+  }
+
+  return v;
+}
+
+// ----------------------------------------------------------------------------
+// UniformSampleHemisphere
+// ----------------------------------------------------------------------------
+vec3 UniformSampleHemisphere()
+{
+  float r1 = rand();
+  float r2 = rand();
+
+  float r = sqrt(max(0.0, 1.0 - r1 * r1));
+  float phi = TWO_PI * r2;
+
+  return vec3(r * cos(phi), r * sin(phi), r1);
+}
+
+// ----------------------------------------------------------------------------
+// UniformSampleonOrientedHemisphere
+// ----------------------------------------------------------------------------
+vec3 UniformSampleonOrientedHemisphere( in vec3 iNormal )
+{
+  vec3 localDir = UniformSampleHemisphere();
+
+  mat3 tangentToWorld = ComputeTangentSpaceMatrix(iNormal);
+
+  return tangentToWorld * localDir;
+}
+
+// ----------------------------------------------------------------------------
+// UniformSampleonOrientedHemisphere
+// ----------------------------------------------------------------------------
+vec3 UniformSampleonOrientedHemisphere( in vec3 iNormal, in vec3 iT, in vec3 iBT )
+{
+  vec3 localDir = UniformSampleHemisphere();
+
+  return mat3(iT, iBT, iNormal) * localDir;
+}
+
+// ----------------------------------------------------------------------------
+// UniformSampleSphere
+// ----------------------------------------------------------------------------
+vec3 UniformSampleSphere()
+{
+  float r1 = rand();
+  float r2 = rand();
+
+  float z = 1.0 - 2.0 * r1;
+  float r = sqrt(max(0.0, 1.0 - z * z));
+  float phi = TWO_PI * r2;
+
+  return vec3(r * cos(phi), r * sin(phi), z);
+}
 
 // ----------------------------------------------------------------------------
 // GetLightDirSample
@@ -53,12 +153,11 @@ vec3 GetLightDirSample( in vec3 iSamplePos, in Light iLight )
 // ----------------------------------------------------------------------------
 vec3 SampleSkybox( in vec3 iRayDir, in sampler2D iSkyboxTex, in float iSkyboxRotation )
 {
-  float theta = asin(iRayDir.y);
+  float theta = acos(iRayDir.y);
   float phi   = atan(iRayDir.z, iRayDir.x);
-  vec2 uv = vec2(.5f + phi * INV_TWO_PI, .5f - theta * INV_PI) + vec2(iSkyboxRotation, 0.0);
-
-  vec3 skycolor = texture(iSkyboxTex, uv).rgb;
-  return skycolor;
+  vec2 uv = vec2((PI + phi) * INV_TWO_PI, theta * INV_PI) + vec2(iSkyboxRotation, 0.0);
+  
+  return texture(iSkyboxTex, uv).rgb;
 }
 
 // ----------------------------------------------------------------------------
@@ -67,14 +166,81 @@ vec3 SampleSkybox( in vec3 iRayDir, in sampler2D iSkyboxTex, in float iSkyboxRot
 // iRayDir should be normalized
 // (U,V) = normalized spherical coordinates
 // ----------------------------------------------------------------------------
-vec4 SampleEnvMap( in vec3 iRayDir, in sampler2D iEnvMap, in float iRotation, in vec2 iRes, float iTotalWeight )
+vec4 SampleEnvMap( in vec3 iRayDir, in sampler2D iEnvMap, in float iRotation, in vec2 iEnvMapRes, float iTotalWeight )
 {
-  float theta = asin(iRayDir.y);
+  float theta = acos(iRayDir.y);
   float phi   = atan(iRayDir.z, iRayDir.x);
-  vec2 uv = vec2(.5f + phi * INV_TWO_PI, .5f - theta * INV_PI) + vec2(iRotation, 0.0);
+  vec2 uv = vec2((PI + phi) * INV_TWO_PI, theta * INV_PI) + vec2(iRotation, 0.0);
+  
+  vec3 color = texture(iEnvMap, uv).rgb;
+  float pdf = 0.;
+  if ( sin( theta ) != 0. )
+  {
+    pdf = Luminance(color) / iTotalWeight;
+    pdf *= ( iEnvMapRes.x * iEnvMapRes.y ) / ( TWO_PI * PI * sin(theta) );
+  }
+  
+  return vec4(color, pdf);
+}
+
+// ----------------------------------------------------------------------------
+// BinarySearch
+// ----------------------------------------------------------------------------
+vec2 BinarySearch( in float iValue, in sampler2D iEnvMap, in vec2 iEnvMapRes, in sampler2D iEnvMapCDF )
+{
+  ivec2 envMapRes = ivec2(iEnvMapRes);
+
+  int lower = 0;
+  int upper = envMapRes.y - 1;
+  while ( lower < upper )
+  {
+    int mid = ( lower + upper ) >> 1;
+    if ( iValue < texelFetch( iEnvMapCDF, ivec2( envMapRes.x - 1, mid ), 0 ).r )
+      upper = mid;
+    else
+      lower = mid + 1;
+  }
+  int y = clamp( lower, 0, envMapRes.y - 1 );
+
+  lower = 0;
+  upper = envMapRes.x - 1;
+  while ( lower < upper )
+  {
+    int mid = ( lower + upper ) >> 1;
+    if ( iValue < texelFetch( iEnvMapCDF, ivec2( mid, y ), 0 ).r )
+      upper = mid;
+    else
+      lower = mid + 1;
+  }
+
+  int x = clamp( lower, 0, envMapRes.x - 1 );
+
+  return vec2( x, y ) / iEnvMapRes;
+}
+
+// ----------------------------------------------------------------------------
+// SampleEnvMap
+// ----------------------------------------------------------------------------
+vec4 SampleEnvMap( in sampler2D iEnvMap, in float iRotation, in vec2 iEnvMapRes, in sampler2D iEnvMapCDF, in float iTotalWeight, out vec3 oDir )
+{
+  vec2 uv = BinarySearch(rand() * iTotalWeight, iEnvMap, iEnvMapRes, iEnvMapCDF);
+  
+  float phi = ( uv.x - iRotation ) * TWO_PI;
+  float theta = uv.y * PI;
+  oDir.x = -sin(theta) * cos(phi);
+  oDir.y = cos(theta);
+  oDir.z = -sin(theta) * sin(phi);
 
   vec3 color = texture(iEnvMap, uv).rgb;
-  return vec4(color, 0.f); // ToDo
+
+  float pdf = 0.;
+  if ( sin( theta ) != 0. )
+  {
+    pdf = Luminance(color) / iTotalWeight;
+    pdf *= ( iEnvMapRes.x * iEnvMapRes.y ) / ( TWO_PI * PI * sin(theta) );
+  }
+
+  return vec4(color, pdf);
 }
 
 // ----------------------------------------------------------------------------
@@ -135,7 +301,7 @@ float LightPDF( in Light iLight, in Ray iRay )
   }
   else
   {
-    // ToDo
+    pdf = 1.f;
   }
 
   return pdf;

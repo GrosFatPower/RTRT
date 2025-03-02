@@ -135,7 +135,9 @@ int PathTracer::UpdatePathTraceUniforms()
     _PathTraceShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
     _PathTraceShader -> SetUniform("u_EnableBackground" , (int)_Settings._EnableBackGround);
     _PathTraceShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
+    _PathTraceShader -> SetUniform("u_EnvMapRes", (float)_Scene.GetEnvMap().GetWidth(), (float)_Scene.GetEnvMap().GetHeight());
     _PathTraceShader -> SetUniform("u_EnvMap", (int)PathTracerTexSlot::_EnvMap);
+    _PathTraceShader -> SetUniform("u_EnvMapCDF", (int)PathTracerTexSlot::_EnvMapCDF);
     _PathTraceShader -> SetUniform("u_EnvMapTotalWeight", _Scene.GetEnvMap().GetTotalWeight());
     _PathTraceShader -> SetUniform("u_Gamma", _Settings._Gamma);
     _PathTraceShader -> SetUniform("u_Exposure", _Settings._Exposure);
@@ -300,6 +302,7 @@ int PathTracer::BindPathTraceTextures()
   GLUtil::ActivateTexture(_MaterialsTEX);
   GLUtil::ActivateTexture(_TLASTransformsIDTEX);
   GLUtil::ActivateTexture(_EnvMapTEX);
+  GLUtil::ActivateTexture(_EnvMapCDFTEX);
 
   GLUtil::ActivateTexture(_RenderTargetLowResFBO._Tex);
   GLUtil::ActivateTexture(_RenderTargetTileFBO._Tex);
@@ -683,7 +686,8 @@ int PathTracer::InitializeFrameBuffers()
 int PathTracer::RecompileShaders()
 {
   ShaderSource vertexShaderSrc = Shader::LoadShader("..\\..\\shaders\\vertex_Default.glsl");
-  ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_PathTracer.glsl");
+  //ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_PathTracer.glsl");
+  ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_PathTracer.v2.glsl");
 
   ShaderProgram * newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !newShader )
@@ -741,6 +745,7 @@ int PathTracer::UnloadScene()
   GLUtil::DeleteTEX(_MaterialsTEX);
   GLUtil::DeleteTEX(_TLASTransformsIDTEX);
   GLUtil::DeleteTEX(_EnvMapTEX);
+  GLUtil::DeleteTEX(_EnvMapCDFTEX);
 
   _FrameNum = 0;
 
@@ -828,6 +833,7 @@ int PathTracer::ReloadScene()
 int PathTracer::ReloadEnvMap()
 {
   GLUtil::DeleteTEX(_EnvMapTEX);
+  GLUtil::DeleteTEX(_EnvMapCDFTEX);
 
   if ( _Scene.GetEnvMap().IsInitialized() )
   {
@@ -839,6 +845,13 @@ int PathTracer::ReloadEnvMap()
     glBindTexture(GL_TEXTURE_2D, 0);
 
     _Scene.GetEnvMap().SetGLTexID(_EnvMapTEX._ID);
+
+    glGenTextures(1, &_EnvMapCDFTEX._ID);
+    glBindTexture(GL_TEXTURE_2D, _EnvMapCDFTEX._ID);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, _Scene.GetEnvMap().GetWidth(), _Scene.GetEnvMap().GetHeight(), 0, GL_RED, GL_FLOAT, _Scene.GetEnvMap().GetCDF());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, 0);
   }
   else
     _Settings._EnableSkybox = false;

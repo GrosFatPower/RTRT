@@ -24,6 +24,7 @@ public:
   int GetWidth() const { return _Width; }
   int GetHeight() const { return _Height; }
   float * GetRawData() const { return _RawData; }
+  float * GetCDF() const { return _CDF; }
 
   float GetTotalWeight() const { return _TotalWeight; }
 

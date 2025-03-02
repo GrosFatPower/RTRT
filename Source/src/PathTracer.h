@@ -42,7 +42,8 @@ struct PathTracerTexSlot
   static const TextureSlot _BLASPackedNormals      = 22;
   static const TextureSlot _BLASPackedUVs          = 23;
   static const TextureSlot _EnvMap                 = 24;
-  static const TextureSlot _Temporary              = 25;
+  static const TextureSlot _EnvMapCDF              = 25;
+  static const TextureSlot _Temporary              = 32;
 };
 
 class PathTracer : public Renderer
@@ -136,6 +137,7 @@ protected:
   GLTexture _MaterialsTEX        = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Materials        };
   GLTexture _TLASTransformsIDTEX = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_TLASTransformsID };
   GLTexture _EnvMapTEX           = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_EnvMap           };
+  GLTexture _EnvMapCDFTEX        = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_EnvMapCDF        };
 
   // Shaders
   std::unique_ptr<ShaderProgram> _PathTraceShader;
