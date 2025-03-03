@@ -123,33 +123,70 @@ Ray GetRay( in vec2 iCoordUV )
 vec3 DirectLight( in Ray iRay, in HitPoint iClosestHit, in Material iMat )
 {
   vec3 Ld = vec3(0.);
-  vec3 Li = vec3(0.);
   vec3 scatterPos = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
 
   // Environment Mapping
-  vec3 lightDir;
-  vec4 envMapColPdf = SampleEnvMap(u_EnvMap, u_EnvMapRotation , u_EnvMapRes, u_EnvMapCDF, u_EnvMapTotalWeight, lightDir);
-  //vec3 lightDir = UniformSampleSphere();
-  //vec4 envMapColPdf = SampleEnvMap(lightDir, u_EnvMap, u_EnvMapRotation , u_EnvMapRes, u_EnvMapTotalWeight);
-  Li = envMapColPdf.rgb;
-  float lightPdf = envMapColPdf.w;
-
-  Ray shadowRay = Ray(scatterPos, lightDir);
-  if ( !AnyHit( shadowRay, INFINITY ) && ( lightPdf != 0. ) )
   {
+    vec3 lightDir;
+    vec4 envMapColPdf = SampleEnvMap(u_EnvMap, u_EnvMapRotation , u_EnvMapRes, u_EnvMapCDF, u_EnvMapTotalWeight, lightDir);
+    //vec3 lightDir = UniformSampleSphere();
+    //vec4 envMapColPdf = SampleEnvMap(lightDir, u_EnvMap, u_EnvMapRotation , u_EnvMapRes, u_EnvMapTotalWeight);
+    float lightPdf = envMapColPdf.w;
+
     float cosTheta = dot(iClosestHit._Normal, lightDir);
-    if ( cosTheta > 0. )
+    if ( ( cosTheta > 0. ) && ( lightPdf > EPSILON ) )
     {
-      float pdf = cosTheta / PI;
-      vec3 f = BRDF(iClosestHit._Normal, -iRay._Dir, lightDir, iMat) * cosTheta;
+      Ray shadowRay = Ray(scatterPos, lightDir);
+      if ( !AnyHit( shadowRay, INFINITY ) )
+      {
+        float pdf = cosTheta / PI;
+        vec3 f = BRDF(iClosestHit._Normal, -iRay._Dir, lightDir, iMat) * cosTheta;
     
-      float misWeight = PowerHeuristic(lightPdf, pdf);
-      if ( misWeight > 0. )
-        Ld += misWeight * Li * f * u_EnvMapIntensity / lightPdf;
+        float misWeight = PowerHeuristic(lightPdf, pdf);
+        if ( misWeight > 0. )
+          Ld += misWeight * envMapColPdf.rgb * f * u_EnvMapIntensity / lightPdf;
+      }
     }
   }
 
-  // TMP : ToDo Lights sampling
+  // Lights sampling
+  {
+    // Choose a light source randomly
+    int lightInd = int(rand() * u_NbLights);
+
+    // Get direction to it
+    vec3 lightDir = GetLightDirSample(scatterPos, u_Lights[lightInd]);
+
+    float distToLight = length(lightDir);
+    normalize(lightDir);
+
+    float cosTheta = dot(iClosestHit._Normal, lightDir);
+    if ( cosTheta > 0. )
+    {
+      Ray shadowRay = Ray(scatterPos, lightDir);
+
+      // Get the pdf value for this direction
+      float lightPdf = 0.0f;
+      for ( int j = 0; j < u_NbLights; ++j )
+      {
+        lightPdf += LightPDF(u_Lights[j], shadowRay);
+      }
+      lightPdf /= u_NbLights;
+
+      if ( lightPdf > EPSILON )
+      {
+        if ( !AnyHit(shadowRay, distToLight) )
+        {
+          float pdf = cosTheta / PI;
+          vec3 f = BRDF(iClosestHit._Normal, -iRay._Dir, lightDir, iMat) * cosTheta;
+    
+          float misWeight = PowerHeuristic(lightPdf, pdf);
+          if ( misWeight > 0. )
+            Ld += misWeight * u_Lights[lightInd]._Emission * f / lightPdf;
+        }
+      }
+    }
+  }
 
   return Ld;
 }
