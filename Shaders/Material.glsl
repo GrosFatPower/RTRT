@@ -14,21 +14,23 @@ struct Material
 {
   int   _ID;
   vec3  _Emission;
-  vec3  _Albedo;         // Albedo for dialectrics, F0 for metals
-  vec3  _F0;             // Base reflectance
+  vec3  _Albedo;             // Albedo for dialectrics, F0 for metals
+  vec3  _F0;                 // Base reflectance
   float _Roughness;
-  float _Metallic;       // Metallic parameter. 0.0 for dialectrics, 1.0 for metals
-  float _Reflectance;    // Fresnel reflectance for dialectircs between [0.0, 1.0]
-  float _Subsurface;     // Disney BRDF
-  float _Sheen;          // Disney BRDF
-  float _SheenTint;      // Disney BRDF
-  float _Anisotropic;    // Disney BRDF
-  float _SpecularTrans;  // Disney BRDF
-  float _SpecularTint;   // Disney BRDF
-  float _Clearcoat;      // Disney BRDF
-  float _ClearcoatGloss; // Disney BRDF
+  float _Metallic;           // Metallic parameter. 0.0 for dialectrics, 1.0 for metals
+  float _Reflectance;        // Fresnel reflectance for dialectircs between [0.0, 1.0]
+  float _Subsurface;         // Disney BRDF
+  float _Sheen;              // Disney BRDF
+  float _SheenTint;          // Disney BRDF
+  float _Anisotropic;        // Disney BRDF
+  float _SpecularTrans;      // Disney BRDF
+  float _SpecularTint;       // Disney BRDF
+  float _Clearcoat;          // Disney BRDF
+  float _ClearcoatRoughness; // Disney BRDF
   float _IOR;
   float _Opacity;
+  float _Ax;                 // Disney BRDF
+  float _Ay;                 // Disney BRDF
 };
 
 // ----------------------------------------------------------------------------
@@ -67,7 +69,7 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
   oMat._Sheen                  = Params5.x;
   oMat._SheenTint              = Params5.y;
   oMat._Clearcoat              = Params5.z;
-  oMat._ClearcoatGloss         = Params5.w;
+  oMat._ClearcoatRoughness     = mix(0.1f, 0.001f, Params5.w); // Params5.w = _ClearcoatGloss
 
   oMat._SpecularTrans          = Params6.x;
   oMat._IOR                    = Params6.y;
@@ -119,6 +121,10 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
     if ( texArrayID >= 0 )
       oMat._Emission = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rgb;
   }
+
+  float aspect = sqrt(1.f - oMat._Anisotropic * .9f);
+  oMat._Ax = max(0.001f, oMat._Roughness / aspect);
+  oMat._Ay = max(0.001f, oMat._Roughness * aspect);
 
   // Base reflectance
   oMat._F0 = vec3(0.16f * pow(oMat._Reflectance, 2.));
