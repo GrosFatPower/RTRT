@@ -1023,7 +1023,7 @@ int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, cons
       else
         parsingError++;
     }
-    else if ( IsEqual("spectrans", tokens[0]) )
+    else if ( IsEqual("spectrans", tokens[0]) || IsEqual("transmission", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newMaterial._SpecTrans = std::stof(tokens[1]);

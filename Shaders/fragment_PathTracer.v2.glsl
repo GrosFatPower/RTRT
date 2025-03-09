@@ -228,7 +228,7 @@ vec3 PathSample( in Ray iStartRay )
   InitializeScatterRecord(scatterSample);
   scatterSample._Type = SCATTER_RANDOM;
 
-  float eta = 1.f;
+  float eta = 1.5f;
   Ray ray = iStartRay;
   for ( int depth = 0; ; ++depth )
   {
@@ -284,7 +284,9 @@ vec3 PathSample( in Ray iStartRay )
     Material mat;
     LoadMaterial(closestHit, mat);
 
-    eta = ( closestHit._FrontFace ) ? ( mat._IOR ) : ( 1.f / mat._IOR );
+    //eta = ( closestHit._FrontFace ) ? ( mat._IOR ) : ( 1.f / mat._IOR );
+    eta = ( closestHit._FrontFace ) ? ( 1.f / mat._IOR ) : ( mat._IOR );
+    //eta = dot(ray._Dir, closestHit._Normal) < 0.0 ? (1.0 / mat._IOR) : mat._IOR;
 
     radiance += mat._Emission * throughput; // Emission from meshes is not importance sampled
 
