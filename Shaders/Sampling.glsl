@@ -88,6 +88,23 @@ vec3 UniformSampleHemisphere()
 }
 
 // ----------------------------------------------------------------------------
+// CosineSampleHemisphere
+// ----------------------------------------------------------------------------
+vec3 CosineSampleHemisphere( in float iR1, in float iR2 )
+{
+  vec3 dir;
+
+  float r = sqrt(iR1);
+  float phi = TWO_PI * iR2;
+
+  dir.x = r * cos(phi);
+  dir.y = r * sin(phi);
+  dir.z = sqrt(max(0.f, 1.f - ( dir.x * dir.x ) - ( dir.y * dir.y )));
+
+  return dir;
+}
+
+// ----------------------------------------------------------------------------
 // UniformSampleonOrientedHemisphere
 // ----------------------------------------------------------------------------
 vec3 UniformSampleonOrientedHemisphere( in vec3 iNormal )

@@ -14,6 +14,7 @@ out vec4 fragColor;
 #include RayTrace.glsl
 #include BRDF.glsl
 #include ToneMapping.glsl
+#include DisneyBSDF.glsl
 
 // ============================================================================
 // Uniforms
@@ -120,7 +121,7 @@ Ray GetRay( in vec2 iCoordUV )
 // ----------------------------------------------------------------------------
 // DirectLight
 // ----------------------------------------------------------------------------
-vec3 DirectLight( in Ray iRay, in HitPoint iClosestHit, in Material iMat )
+vec3 DirectLight( in Ray iRay, in HitPoint iClosestHit, in Material iMat, float iEta )
 {
   vec3 Ld = vec3(0.);
   vec3 scatterPos = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
@@ -139,8 +140,10 @@ vec3 DirectLight( in Ray iRay, in HitPoint iClosestHit, in Material iMat )
       Ray shadowRay = Ray(scatterPos, lightDir);
       if ( !AnyHit( shadowRay, INFINITY ) )
       {
-        float pdf = cosTheta / PI;
-        vec3 f = BRDF(iClosestHit._Normal, -iRay._Dir, lightDir, iMat) * cosTheta;
+        //float pdf = cosTheta / PI;
+        //vec3 f = BRDF(iClosestHit._Normal, -iRay._Dir, lightDir, iMat) * cosTheta;
+        float pdf = 0.f;
+        vec3 f = DisneyEval( iClosestHit, iMat, iEta, -iRay._Dir, lightDir, pdf );
     
         float misWeight = PowerHeuristic(lightPdf, pdf);
         if ( misWeight > 0. )
@@ -177,8 +180,10 @@ vec3 DirectLight( in Ray iRay, in HitPoint iClosestHit, in Material iMat )
       {
         if ( !AnyHit(shadowRay, distToLight) )
         {
-          float pdf = cosTheta / PI;
-          vec3 f = BRDF(iClosestHit._Normal, -iRay._Dir, lightDir, iMat) * cosTheta;
+          //float pdf = cosTheta / PI;
+          //vec3 f = BRDF(iClosestHit._Normal, -iRay._Dir, lightDir, iMat) * cosTheta;
+          float pdf = 0.f;
+          vec3 f = DisneyEval( iClosestHit, iMat, iEta, -iRay._Dir, lightDir, pdf );
     
           float misWeight = PowerHeuristic(lightPdf, pdf);
           if ( misWeight > 0. )
@@ -217,6 +222,7 @@ vec3 PathSample( in Ray iStartRay )
   ScatterRecord scatterSample;
   InitializeScatterRecord(scatterSample);
 
+  float eta = 1.f;
   Ray ray = iStartRay;
   for ( int depth = 0; ; ++depth )
   {
@@ -280,7 +286,7 @@ vec3 PathSample( in Ray iStartRay )
     // DIRECT LIGHT
     //if ( SCATTER_RANDOM == scatterSample._Type ) // TMP : ToDo
     //{
-      radiance += DirectLight(ray, closestHit, mat) * throughput;
+      radiance += DirectLight(ray, closestHit, mat, eta) * throughput;
     //}
 
     // SCATTER
