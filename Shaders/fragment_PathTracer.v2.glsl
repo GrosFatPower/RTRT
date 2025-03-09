@@ -199,11 +199,16 @@ vec3 DirectLight( in Ray iRay, in HitPoint iClosestHit, in Material iMat, float 
 // ----------------------------------------------------------------------------
 // Scatter
 // ----------------------------------------------------------------------------
-bool Scatter( in Ray iRay, in HitPoint iClosestHit, in Material iMat, out ScatterRecord oScatterRecord )
+bool Scatter( in Ray iRay, in HitPoint iClosestHit, in Material iMat, in float iEta, out ScatterRecord oScatterRecord )
 {
   InitializeScatterRecord(oScatterRecord);
 
-  // ToDo
+  oScatterRecord._Attenuation = DisneySample( iClosestHit, iMat, iEta, -iRay._Dir, oScatterRecord._Dir, oScatterRecord._P );
+
+  if ( oScatterRecord._P < EPSILON )
+    return false;
+
+  oScatterRecord._Type = SCATTER_RANDOM; // ?? TMP
 
   return true;
 }
@@ -221,6 +226,7 @@ vec3 PathSample( in Ray iStartRay )
 
   ScatterRecord scatterSample;
   InitializeScatterRecord(scatterSample);
+  scatterSample._Type = SCATTER_RANDOM;
 
   float eta = 1.f;
   Ray ray = iStartRay;
@@ -278,20 +284,21 @@ vec3 PathSample( in Ray iStartRay )
     Material mat;
     LoadMaterial(closestHit, mat);
 
+    eta = ( closestHit._FrontFace ) ? ( mat._IOR ) : ( 1.f / mat._IOR );
+
     radiance += mat._Emission * throughput; // Emission from meshes is not importance sampled
 
     if ( depth >= MaxPathSegments )
       break; // Maximum depth reached
 
     // DIRECT LIGHT
-    //if ( SCATTER_RANDOM == scatterSample._Type ) // TMP : ToDo
-    //{
+    if ( SCATTER_RANDOM == scatterSample._Type )
+    {
       radiance += DirectLight(ray, closestHit, mat, eta) * throughput;
-    //}
+    }
 
     // SCATTER
-    break; // TMP : ToDo
-    if ( !Scatter(ray, closestHit, mat, scatterSample) )
+    if ( !Scatter(ray, closestHit, mat, eta, scatterSample) )
       break;
 
     throughput *= scatterSample._Attenuation / ( scatterSample._P + EPSILON );
