@@ -75,6 +75,7 @@ vec3 SampleHemisphere( in vec3 iNormal )
 
 // ----------------------------------------------------------------------------
 // UniformSampleHemisphere
+// https://www.scratchapixel.com/lessons/3d-basic-rendering/global-illumination-path-tracing/global-illumination-path-tracing-practical-implementation.html
 // ----------------------------------------------------------------------------
 vec3 UniformSampleHemisphere()
 {
@@ -85,6 +86,18 @@ vec3 UniformSampleHemisphere()
   float phi = TWO_PI * r2;
 
   return vec3(r * cos(phi), r * sin(phi), r1);
+}
+
+// ----------------------------------------------------------------------------
+// UniformSampleHemisphere
+// https://www.scratchapixel.com/lessons/3d-basic-rendering/global-illumination-path-tracing/global-illumination-path-tracing-practical-implementation.html
+// ----------------------------------------------------------------------------
+vec3 UniformSampleHemisphere( in float iR1, in float iR2 )
+{
+  float sinTheta = sqrt(max(0.0, 1.0 - iR1 * iR1));
+  float phi = TWO_PI * iR2;
+
+  return vec3(sinTheta * cos(phi), sinTheta * sin(phi), iR1);
 }
 
 // ----------------------------------------------------------------------------

@@ -287,7 +287,8 @@ vec3 DisneySample( in HitPoint iHP, in Material iMat, in float iEta, in vec3 iV,
   if ( r1 < cdf[0] ) // Diffuse Reflection Lobe
   {
     r1 /= cdf[0];
-    oL = CosineSampleHemisphere(r1, r2);
+    //oL = CosineSampleHemisphere(r1, r2);
+    oL = UniformSampleHemisphere(r1, r2);
 
     vec3 H = normalize(oL + iV);
 
