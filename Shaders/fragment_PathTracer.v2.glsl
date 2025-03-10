@@ -31,6 +31,7 @@ uniform int            u_Bounces;
 uniform int            u_ToneMapping;
 uniform vec3           u_BackgroundColor;
 uniform Camera         u_Camera;
+uniform int            u_RussianRoulette;
 uniform int            u_EnableBackground;
 uniform int            u_EnableEnvMap;
 uniform float          u_EnvMapRotation;
@@ -309,15 +310,20 @@ vec3 PathSample( in Ray iStartRay )
     ray._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
     ray._Dir = scatterSample._Dir;
 
-    // Russian Roulette
     if ( depth >= u_Bounces )
     {
-      float maxThroughput = max(throughput.x, max(throughput.y, throughput.z));
-      float q = min(maxThroughput + EPSILON, 0.95); // Lower throughput will lead to higher probability to cancel the path
-      if ( rand() > q )
+      // Russian Roulette
+      if ( u_RussianRoulette > 0 )
+      {
+        float maxThroughput = max( throughput.x, max( throughput.y, throughput.z ) );
+        float q = min( maxThroughput + EPSILON, 0.95 ); // Lower throughput will lead to higher probability to cancel the path
+        if ( rand() > q )
+          break;
+        float rrWeight = 1.0f / q;
+        throughput *= rrWeight;
+      }
+      else
         break;
-      float rrWeight = 1.0f / q;
-      throughput *= rrWeight;
     }
   }
 

@@ -131,6 +131,7 @@ int PathTracer::UpdatePathTraceUniforms()
   if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
   {
     _PathTraceShader -> SetUniform("u_Bounces", _Settings._Bounces);
+    _PathTraceShader -> SetUniform("u_RussianRoulette", (int)_Settings._RussianRoulette);
     _PathTraceShader -> SetUniform("u_BackgroundColor", _Settings._BackgroundColor);
     _PathTraceShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
     _PathTraceShader -> SetUniform("u_EnableBackground" , (int)_Settings._EnableBackGround);

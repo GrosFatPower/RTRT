@@ -25,6 +25,7 @@ struct RenderSettings
   bool         _EnableSkybox       = true;
   bool         _EnableUniformLight = true;
   bool         _AutoScale          = false;              // PathTracer
+  bool         _RussianRoulette    = true;               // PathTracer
   bool         _ToneMapping        = true;
   bool         _FXAA               = false;
   bool         _Accumulate         = true;               // PathTracer

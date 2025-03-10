@@ -332,6 +332,9 @@ int Test5::DrawUI()
         if ( ImGui::SliderInt( "Bounces", &_Settings._Bounces, 1, 10 ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
+        if ( ImGui::Checkbox( "Russian Roulette", &_Settings._RussianRoulette) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
         if ( ImGui::Checkbox("Show lights", &_Settings._ShowLights) )
           _Renderer -> Notify(DirtyState::SceneLights);
 
