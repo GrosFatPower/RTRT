@@ -335,9 +335,6 @@ int Test5::DrawUI()
         if ( ImGui::Checkbox( "Russian Roulette", &_Settings._RussianRoulette) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
-        if ( ImGui::Checkbox("Show lights", &_Settings._ShowLights) )
-          _Renderer -> Notify(DirtyState::SceneLights);
-
         if ( ImGui::Checkbox( "Accumulate", &_Settings._Accumulate ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
@@ -715,6 +712,105 @@ int Test5::DrawUI()
               ImGui::Text("Emission map :");
               ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_EmissionMapTEX._ID);
               ImGui::Image(texture, ImVec2(256, 256));
+            }
+          }
+        }
+      }
+    }
+
+    if ( ImGui::CollapsingHeader("Lights") )
+    {
+      if ( ImGui::Checkbox("Show lights", &_Settings._ShowLights) )
+        _Renderer -> Notify(DirtyState::SceneLights);
+
+      static int selectedLight = -1;
+      if ( ImGui::ListBoxHeader("##Lights") )
+      {
+        for (int i = 0; i < _Scene -> GetNbLights(); i++)
+        {
+          std::string lightName("Light#");
+          lightName += std::to_string(i);
+
+          bool is_selected = ( selectedLight == i );
+          if (ImGui::Selectable(lightName.c_str(), is_selected))
+          {
+            selectedLight = i;
+          }
+        }
+        ImGui::ListBoxFooter();
+      }
+
+      if (ImGui::Button("Add light"))
+      {
+        Light newLight;
+        _Scene -> AddLight(newLight);
+        selectedLight = _Scene -> GetNbLights() - 1;
+      }
+
+      if ( selectedLight >= 0 )
+      {
+        Light * curLight = _Scene -> GetLight(selectedLight);
+        if ( curLight )
+        {
+          const char * LightTypes[3] = { "Quad", "Sphere", "Distant" };
+
+          int lightType = (int)curLight -> _Type;
+          if ( ImGui::Combo("Type", &lightType, LightTypes, 3) )
+          {
+            if ( lightType != (int)curLight -> _Type )
+            {
+              curLight -> _Type = (float)lightType;
+              _Renderer -> Notify(DirtyState::SceneLights);
+            }
+          }
+
+          float pos[3] = { curLight -> _Pos.x, curLight -> _Pos.y, curLight -> _Pos.z };
+          if ( ImGui::InputFloat3("Position", pos) )
+          {
+            curLight -> _Pos.x = pos[0];
+            curLight -> _Pos.y = pos[1];
+            curLight -> _Pos.z = pos[2];
+            _Renderer -> Notify(DirtyState::SceneLights);
+          }
+
+          if ( ImGui::SliderFloat( "Intensity", &curLight -> _Intensity, 0.001f, 100.f ) )
+            _Renderer -> Notify(DirtyState::SceneLights);
+
+          float rgb[3] = { curLight -> _Emission.r, curLight -> _Emission.g, curLight -> _Emission.b };
+          if ( ImGui::ColorEdit3("Emission", rgb) )
+          {
+            curLight -> _Emission = Vec3( rgb[0], rgb[1], rgb[2] );
+            _Renderer -> Notify(DirtyState::SceneLights);
+          }
+
+          if ( LightType::SphereLight == (LightType) lightType )
+          {
+            if ( ImGui::SliderFloat("Light radius", &curLight -> _Radius, 0.001f, 1.f) )
+            {
+              curLight -> _Area = 4.0f * M_PI * curLight -> _Radius * curLight -> _Radius;
+              _Renderer -> Notify(DirtyState::SceneLights);
+            }
+          }
+          else if ( LightType::RectLight == (LightType) lightType )
+          {
+            float dirU[3] = { curLight -> _DirU.x, curLight -> _DirU.y, curLight -> _DirU.z };
+            if ( ImGui::InputFloat3("DirU", dirU) )
+            {
+              curLight -> _DirU.x = dirU[0];
+              curLight -> _DirU.y = dirU[1];
+              curLight -> _DirU.z = dirU[2];
+              curLight -> _Area = glm::length(glm::cross(curLight -> _DirU, curLight -> _DirV));
+              _Renderer -> Notify(DirtyState::SceneLights);
+            }
+
+            float dirV[3] = { curLight -> _DirV.x, curLight -> _DirV.y, curLight -> _DirV.z };
+            if ( ImGui::InputFloat3("DirV", dirV) )
+            {
+              curLight -> _DirV.x = dirV[0];
+              curLight -> _DirV.y = dirV[1];
+              curLight -> _DirV.z = dirV[2];
+              curLight -> _Area = glm::length(glm::cross(curLight -> _DirU, curLight -> _DirV));
+              _Renderer -> Notify(DirtyState::SceneLights);
             }
           }
         }

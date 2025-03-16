@@ -128,6 +128,7 @@ vec3 DirectLight( in Ray iRay, in HitPoint iClosestHit, in Material iMat, float 
   vec3 scatterPos = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
 
   // Environment Mapping
+  if ( u_EnableEnvMap > 0 )
   {
     vec3 lightDir;
     vec4 envMapColPdf = SampleEnvMap(u_EnvMap, u_EnvMapRotation , u_EnvMapRes, u_EnvMapCDF, u_EnvMapTotalWeight, lightDir);
@@ -241,7 +242,7 @@ vec3 PathSample( in Ray iStartRay )
     {
       if ( ( depth > 0 ) || ( 1 == u_EnableBackground ) )
       {
-        if ( 1 == u_EnableEnvMap )
+        if ( u_EnableEnvMap > 0 )
         {
           vec4 envMapColPdf = SampleEnvMap(ray._Dir, u_EnvMap, u_EnvMapRotation , u_EnvMapRes, u_EnvMapTotalWeight);
 
