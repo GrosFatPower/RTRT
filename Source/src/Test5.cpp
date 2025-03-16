@@ -745,6 +745,17 @@ int Test5::DrawUI()
         Light newLight;
         _Scene -> AddLight(newLight);
         selectedLight = _Scene -> GetNbLights() - 1;
+        _Renderer -> Notify(DirtyState::SceneLights);
+      }
+      ImGui::SameLine();
+      if (ImGui::Button("Remove light"))
+      {
+        if ( selectedLight >= 0 )
+        {
+          _Scene -> RemoveLight( selectedLight );
+          selectedLight = -1;
+          _Renderer -> Notify(DirtyState::SceneLights);
+        }
       }
 
       if ( selectedLight >= 0 )
@@ -975,13 +986,13 @@ int Test5::InitializeScene()
   _Scene.reset(newScene);
 
   // Scene should contain at least one light
-  Light * firstLight = _Scene -> GetLight(0);
-  if ( !firstLight )
-  {
-    Light newLight;
-    _Scene -> AddLight(newLight);
-    firstLight = _Scene -> GetLight(0);
-  }
+  //Light * firstLight = _Scene -> GetLight(0);
+  //if ( !firstLight )
+  //{
+  //  Light newLight;
+  //  _Scene -> AddLight(newLight);
+  //  firstLight = _Scene -> GetLight(0);
+  //}
 
   if ( _Scene -> GetEnvMap().IsInitialized() )
   {

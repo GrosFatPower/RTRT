@@ -48,6 +48,7 @@ public:
   Camera & GetCamera() { return _Camera; }
 
   void AddLight( const Light & iLight ) { _Lights.push_back(iLight); }
+  void RemoveLight( unsigned int iIndex ) { if ( iIndex < _Lights.size() ) _Lights.erase( _Lights.begin() + iIndex ); }
   Light * GetLight( unsigned int iIndex ) { return ( iIndex < _Lights.size() ) ? &_Lights[iIndex] : nullptr; }
 
   int FindMaterialID( const std::string & iMateralName ) const;
