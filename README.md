@@ -4,10 +4,10 @@ Various basic renderers
 =======================
 
 
-Test3 : GPU Path tracer
+Test3 : GPU Ray tracer
 --------
 
-A (poorly lit) physically based path tracer written in c++ and GLSL.
+A (poorly lit) ray tracer written in c++ and GLSL.
 
 ![CashRegister](./Captures/PathTracer_CashRegister_01_4k.gltf_458frames.png)
 
@@ -37,6 +37,12 @@ Basic phong reflecton model.
 ![spaceship_Rast](./Captures/Rasterizer_spaceship.scene.png)
 
 ![Sponza_Rast](./Captures/Rasterizer_Sponza.png)
+
+
+Test5 : GPU Path tracer / CPU Rasterizer
+--------
+
+![Sponza_PT](./Captures/PathTracer_Sponza_120633frames.png)
 
 
 References/Credits
