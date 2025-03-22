@@ -9,15 +9,15 @@ Test3 : GPU Ray tracer
 
 A (poorly lit) ray tracer written in c++ and GLSL.
 
-![CashRegister](./Captures/PathTracer_CashRegister_01_4k.gltf_458frames.png)
+![CashRegister_RT](./Captures/PathTracer_CashRegister_01_4k.gltf_458frames.png)
 
-![BarberShopChair](./Captures/PathTracer_BarberShopChair_01.scene_163frames.png)
+![BarberShopChair_RT](./Captures/PathTracer_BarberShopChair_01.scene_163frames.png)
 
-![mustang_red](./Captures/PathTracer_mustang_red.scene_40frames.png)
+![mustang_red_RT](./Captures/PathTracer_mustang_red.scene_40frames.png)
 
-![spaceship_PT](./Captures/PathTracer_spaceship.scene_50frames.png)
+![spaceship_RT](./Captures/PathTracer_spaceship.scene_50frames.png)
 
-![diningroom_PT](./Captures/PathTracer_diningroom.scene_4255frames.png)
+![diningroom_RT](./Captures/PathTracer_diningroom.scene_4255frames.png)
 
 
 Test4 : CPU Rasterizer
@@ -41,6 +41,12 @@ Basic phong reflecton model.
 
 Test5 : GPU Path tracer / CPU Rasterizer
 --------
+
+![mustang_white_PT](./Captures/PathTracer_mustang_31776frames.png)
+
+![CoffeeCart_PT](./Captures/PathTracer_CoffeeCart_192890frames.png)
+
+![Teapot_PT](./Captures/PathTracer_renderman_teapot_all_45844frames.png)
 
 ![Sponza_PT](./Captures/PathTracer_Sponza_120633frames.png)
 
