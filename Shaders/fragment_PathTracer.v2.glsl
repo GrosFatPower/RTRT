@@ -304,7 +304,7 @@ vec3 PathSample( in Ray iStartRay )
     throughput *= scatterSample._Attenuation / ( scatterSample._P + EPSILON );
 
     // NEXT RAY
-    ray._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
+    ray._Orig = closestHit._Pos + scatterSample._Dir * RESOLUTION;
     ray._Dir = scatterSample._Dir;
 
     if ( depth >= u_Bounces )
