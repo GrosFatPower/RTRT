@@ -1,0 +1,50 @@
+renderer
+{
+	resolution 1024 1024
+	enablebackground true
+	enableskybox true
+	envMap HDR/alps_field_2k.hdr
+	bounces 3
+}
+
+camera
+{
+	position 0.0 2.0 5.0
+	lookat 0.0 1.5 0.0
+	fov 80
+}
+
+light
+{
+	type sphere
+	position 2 3 3
+	emission 4. 4. 4.
+	radius .2
+}
+
+material Glass
+{
+	color 1.0 1.0 1.0
+	transmission 1.0
+	roughness 0.0
+	ior 1.45
+}
+
+material checker
+{
+	albedotexture teapot/checker.png
+	roughness 0.5
+}
+
+sphere
+{
+	radius 1.5
+	material Glass
+	position 0.0 1.5 0.0
+}
+
+mesh
+{
+	file teapot/Mesh050.obj
+	material checker
+}

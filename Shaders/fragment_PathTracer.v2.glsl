@@ -132,8 +132,6 @@ vec3 DirectLight( in Ray iRay, in HitPoint iClosestHit, in Material iMat, float 
   {
     vec3 lightDir;
     vec4 envMapColPdf = SampleEnvMap(u_EnvMap, u_EnvMapRotation , u_EnvMapRes, u_EnvMapCDF, u_EnvMapTotalWeight, lightDir);
-    //vec3 lightDir = UniformSampleSphere();
-    //vec4 envMapColPdf = SampleEnvMap(lightDir, u_EnvMap, u_EnvMapRotation , u_EnvMapRes, u_EnvMapTotalWeight);
     float lightPdf = envMapColPdf.w;
 
     float cosTheta = dot(iClosestHit._Normal, lightDir);
@@ -182,8 +180,6 @@ vec3 DirectLight( in Ray iRay, in HitPoint iClosestHit, in Material iMat, float 
       {
         if ( !AnyHit(shadowRay, distToLight) )
         {
-          //float pdf = cosTheta / PI;
-          //vec3 f = BRDF(iClosestHit._Normal, -iRay._Dir, lightDir, iMat) * cosTheta;
           float pdf = 0.f;
           vec3 f = DisneyEval( iClosestHit, iMat, iEta, -iRay._Dir, lightDir, pdf );
     
