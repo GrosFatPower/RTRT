@@ -251,7 +251,10 @@ bool TraceRay( in Ray iRay, out HitPoint oClosestHit )
     return false;
 
   if ( dot(iRay._Dir, oClosestHit._Normal) > 0.f )
+  {
     oClosestHit._FrontFace = false;
+    oClosestHit._Normal    = -oClosestHit._Normal;
+  }
   else
     oClosestHit._FrontFace = true;
 
