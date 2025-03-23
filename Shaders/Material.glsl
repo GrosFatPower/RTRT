@@ -23,8 +23,8 @@ struct Material
   float _Sheen;              // Disney BRDF
   float _SheenTint;          // Disney BRDF
   float _Anisotropic;        // Disney BRDF
-  float _SpecularTrans;      // Disney BRDF
-  float _SpecularTint;       // Disney BRDF
+  float _SpecTrans;          // Disney BRDF
+  float _SpecTint;           // Disney BRDF
   float _Clearcoat;          // Disney BRDF
   float _ClearcoatRoughness; // Disney BRDF
   float _IOR;
@@ -46,7 +46,7 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
   vec4 Params1 = texelFetch(u_MaterialsTexture, ivec2(index + 0, 0), 0); // _Albedo.r       | _Albedo.g               | _Albedo.b       | _ID
   vec4 Params2 = texelFetch(u_MaterialsTexture, ivec2(index + 1, 0), 0); // _Emission.r     | _Emission.g             | _Emission.b     | _Anisotropic
   vec4 Params3 = texelFetch(u_MaterialsTexture, ivec2(index + 2, 0), 0); // _MediumColor.r  | _MediumColor.g          | _MediumColor.b  | _MediumAnisotropy
-  vec4 Params4 = texelFetch(u_MaterialsTexture, ivec2(index + 3, 0), 0); // _Metallic       | _Roughness              | _Subsurface     | _SpecularTint
+  vec4 Params4 = texelFetch(u_MaterialsTexture, ivec2(index + 3, 0), 0); // _Metallic       | _Roughness              | _Subsurface     | _SpecTint
   vec4 Params5 = texelFetch(u_MaterialsTexture, ivec2(index + 4, 0), 0); // _Sheen          | _SheenTint              | _Clearcoat      | _ClearcoatGloss
   vec4 Params6 = texelFetch(u_MaterialsTexture, ivec2(index + 5, 0), 0); // _SpecTrans      | _IOR                    | _MediumType     | _MediumDensity
   vec4 Params7 = texelFetch(u_MaterialsTexture, ivec2(index + 6, 0), 0); // _BaseColorTexId | _MetallicRoughnessTexID | _NormalMapTexID | _EmissionMapTexID
@@ -64,14 +64,14 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
   oMat._Metallic               = Params4.x;
   oMat._Roughness              = Params4.y;
   oMat._Subsurface             = Params4.z;
-  oMat._SpecularTint           = Params4.w;
+  oMat._SpecTint               = Params4.w;
 
   oMat._Sheen                  = Params5.x;
   oMat._SheenTint              = Params5.y;
   oMat._Clearcoat              = Params5.z;
   oMat._ClearcoatRoughness     = mix(0.1f, 0.001f, Params5.w); // Params5.w = _ClearcoatGloss
 
-  oMat._SpecularTrans          = Params6.x;
+  oMat._SpecTrans              = Params6.x;
   oMat._IOR                    = Params6.y;
   // oMat._MediumType            = Params6.z;
   // oMat._MediumDensity         = Params6.w;

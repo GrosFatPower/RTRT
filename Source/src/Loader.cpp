@@ -984,7 +984,7 @@ int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, cons
     else if ( IsEqual("speculartint", tokens[0]) )
     {
       if ( 2 == nbTokens )
-        newMaterial._SpecularTint = std::stof(tokens[1]);
+        newMaterial._SpecTint = std::stof(tokens[1]);
       else
         parsingError++;
     }

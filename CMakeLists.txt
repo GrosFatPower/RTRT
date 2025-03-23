@@ -18,8 +18,8 @@ file(GLOB_RECURSE EXT_SOURCE ./Dependencies/RadeonRays/*.cpp)
 file(GLOB_RECURSE EXT_HEADER ./Dependencies/RadeonRays/*.h)
 file(GLOB_RECURSE SHADERS ./Shaders/*.glsl)
 
-source_group("src"    FILES ${CORE_SOURCE})
-source_group("header" FILES ${CORE_HEADER})
+source_group("src"    FILES ${CORE_SOURCE} ${EXT_SOURCE})
+source_group("header" FILES ${CORE_HEADER} ${EXT_HEADER})
 source_group("shaders" FILES ${SHADERS})
 
 SET(EXE_NAME "RT_renderer")

@@ -75,7 +75,7 @@ vec3 EvalDiffuse( in Material iMat, in vec3 iCsheen, in vec3 iV, in vec3 iL, in 
   vec3 Fsheen = FH * iMat._Sheen * iCsheen;
 
   oPdf = iL.z * INV_PI;
-  return (1.f - iMat._Metallic) * (1.f - iMat._SpecularTrans) * (INV_PI * mix(Fd, ss, iMat._Subsurface) * iMat._Albedo + Fsheen);
+  return (1.f - iMat._Metallic) * (1.f - iMat._SpecTrans) * (INV_PI * mix(Fd, ss, iMat._Subsurface) * iMat._Albedo + Fsheen);
 }
 
 // ----------------------------------------------------------------------------
@@ -202,7 +202,7 @@ vec3 EvalSpecRefraction( in Material iMat, in float iEta, in vec3 iV, in vec3 iL
 
   oPdf = G1 * max(0.f, dot(iV, iH)) * D * jacobian / iV.z;
 
-  return pow(iMat._Albedo, vec3(.5f)) * (1.f - iMat._Metallic) * iMat._SpecularTrans * (1.f - F) * D * G2 * abs(dot(iV, iH)) * jacobian * eta2 / abs(iL.z * iV.z);
+  return pow(iMat._Albedo, vec3(.5f)) * (1.f - iMat._Metallic) * iMat._SpecTrans * (1.f - F) * D * G2 * abs(dot(iV, iH)) * jacobian * eta2 / abs(iL.z * iV.z);
 }
 
 // ----------------------------------------------------------------------------
@@ -232,7 +232,7 @@ void GetSpecColor( in Material iMat, in float iEta, out vec3 oSpecCol, out vec3 
   float lum = Luminance(iMat._Albedo);
   vec3 ctint = ( lum > 0.f ) ? ( iMat._Albedo / lum ) : ( vec3(1.f) );
   float F0 = (1.f - iEta) / (1.f + iEta);
-  oSpecCol = mix(F0 * F0 * mix(vec3(1.f), ctint, iMat._SpecularTint), iMat._Albedo, iMat._Metallic);
+  oSpecCol = mix(F0 * F0 * mix(vec3(1.f), ctint, iMat._SpecTint), iMat._Albedo, iMat._Metallic);
   oSheenCol = mix(vec3(1.f), ctint, iMat._SheenTint);
 }
 
@@ -241,9 +241,9 @@ void GetSpecColor( in Material iMat, in float iEta, out vec3 oSpecCol, out vec3 
 // ----------------------------------------------------------------------------
 void GetLobeProbabilities( in Material iMat, in float iEta, in vec3 iSpecCol, in float iApproxFresnel, out float oDiffuseWeight, out float oSpecReflectWeight, out float oSpecRefractWeight, out float oClearcoatWeight )
 {
-  oDiffuseWeight     = Luminance(iMat._Albedo) * (1.f - iMat._Metallic) * (1.f - iMat._SpecularTrans);
+  oDiffuseWeight     = Luminance(iMat._Albedo) * (1.f - iMat._Metallic) * (1.f - iMat._SpecTrans);
   oSpecReflectWeight = Luminance(mix(iSpecCol, vec3(1.f), iApproxFresnel));
-  oSpecRefractWeight = (1.f - iApproxFresnel) * (1.f - iMat._Metallic) * iMat._SpecularTrans * Luminance(iMat._Albedo);
+  oSpecRefractWeight = (1.f - iApproxFresnel) * (1.f - iMat._Metallic) * iMat._SpecTrans * Luminance(iMat._Albedo);
   oClearcoatWeight   = .25f * iMat._Clearcoat * (1.f - iMat._Metallic);
   float totalWeight = oDiffuseWeight + oSpecReflectWeight + oSpecRefractWeight + oClearcoatWeight;
 
@@ -318,7 +318,7 @@ vec3 DisneySample( in HitPoint iHP, in Material iMat, in float iEta, in vec3 iV,
       H = -H;
 
     float fresnel = DisneyFresnel(iMat, iEta, dot(oL, H), dot(iV, H)); // TODO: Refactor into metallic BRDF and specular BSDF
-    float F = 1.f - ((1.f - fresnel) * iMat._SpecularTrans * (1.f - iMat._Metallic));
+    float F = 1.f - ((1.f - fresnel) * iMat._SpecTrans * (1.f - iMat._Metallic));
 
     if ( rand() < F )
     {

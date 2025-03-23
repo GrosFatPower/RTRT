@@ -111,22 +111,22 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
 
   // Reflect or refract ?
   double sinTheta = 1.f;
-  float refractionRatio = 1.f;
-  if ( mat._Opacity < 1.f )
+  float eta = 1.f;
+  if ( mat._SpecTrans > EPSILON )
   {
     double cosTheta = dot(-iRay._Dir, iClosestHit._Normal);
     sinTheta = sqrt(1.f - cosTheta * cosTheta);
 
     if ( iClosestHit._FrontFace )
-      refractionRatio = (1. / mat._IOR);
+      eta = (1. / mat._IOR);
     else
-      refractionRatio = mat._IOR;
+      eta = mat._IOR;
   }
 
   //vec3 normal = iClosestHit._Normal;
   vec3 normal = normalize(iClosestHit._Normal + mat._Roughness * RandomVec3());
 
-  if ( ( refractionRatio * sinTheta ) >= 1.f )
+  if ( ( eta * sinTheta ) >= 1.f )
   {
     // Must Reflect
     oScattered._Orig = iClosestHit._Pos + normal * RESOLUTION;
@@ -137,8 +137,8 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
   {
     // Can Refract
     oScattered._Orig = iClosestHit._Pos - normal;
-    oScattered._Dir  = refract(iRay._Dir, normal, refractionRatio);
-    oAttenuation = vec3(1.f - mat._Opacity);
+    oScattered._Dir  = refract(iRay._Dir, normal, eta);
+    oAttenuation = vec3(1.f - mat._F0);
   }
 
   return clamp(outColor, 0.f, 1.f);

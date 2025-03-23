@@ -39,7 +39,7 @@ struct Material
   float _Metallic               = 0.f;
   float _Roughness              = 0.5f;
   float _Subsurface             = 0.f;
-  float _SpecularTint           = 0.f;
+  float _SpecTint               = 0.f;
  
   // Params5
   float _Sheen                  = 0.f;

@@ -609,7 +609,7 @@ int Test5::DrawUI()
         if ( ImGui::SliderFloat("Specular Trans", &curMat._SpecTrans, 0.f, 1.f) )
           _Renderer -> Notify(DirtyState::SceneMaterials);
 
-        if ( ImGui::SliderFloat("Specular Tint", &curMat._SpecularTint, 0.f, 1.f) )
+        if ( ImGui::SliderFloat("Specular Tint", &curMat._SpecTint, 0.f, 1.f) )
           _Renderer -> Notify(DirtyState::SceneMaterials);
 
         if ( ImGui::SliderFloat("Clearcoat", &curMat._Clearcoat, 0.f, 1.f) )
