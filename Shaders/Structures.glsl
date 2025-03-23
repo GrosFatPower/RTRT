@@ -46,7 +46,7 @@ struct HitPoint
   bool  _IsEmitter;
 };
 
-class ScatterRecord
+struct ScatterRecord
 {
   uint  _Type;
   vec3  _Dir;
