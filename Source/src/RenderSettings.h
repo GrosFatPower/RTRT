@@ -35,6 +35,7 @@ struct RenderSettings
   bool         _WBuffer            = false;              // Raster
   ShadingType  _ShadingType        = ShadingType::Phong; // Raster
   int          _Bounces            = 1;                  // PathTracer
+  int          _NbSamplesPerPixel  = 1;                  // PathTracer
   int          _RenderScale        = 100;
   float        _LowResRatio        = 0.1f;               // PathTracer
   float        _TargetFPS          = 60.f;

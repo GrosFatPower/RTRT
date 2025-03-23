@@ -130,7 +130,8 @@ int PathTracer::UpdatePathTraceUniforms()
 
   if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
   {
-    _PathTraceShader -> SetUniform("u_Bounces", _Settings._Bounces);
+    _PathTraceShader -> SetUniform("u_NbBounces", _Settings._Bounces);
+    _PathTraceShader -> SetUniform("u_NbSamplesPerPixel", _Settings._NbSamplesPerPixel);
     _PathTraceShader -> SetUniform("u_RussianRoulette", (int)_Settings._RussianRoulette);
     _PathTraceShader -> SetUniform("u_BackgroundColor", _Settings._BackgroundColor);
     _PathTraceShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
@@ -687,8 +688,7 @@ int PathTracer::InitializeFrameBuffers()
 int PathTracer::RecompileShaders()
 {
   ShaderSource vertexShaderSrc = Shader::LoadShader("..\\..\\shaders\\vertex_Default.glsl");
-  //ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_PathTracer.glsl");
-  ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_PathTracer.v2.glsl");
+  ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_PathTracer.glsl");
 
   ShaderProgram * newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !newShader )

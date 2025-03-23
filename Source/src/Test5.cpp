@@ -329,6 +329,9 @@ int Test5::DrawUI()
           _Renderer -> Notify(DirtyState::RenderSettings);
         }
 
+        if ( ImGui::SliderInt( "SPP", &_Settings._NbSamplesPerPixel, 1, 10 ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
         if ( ImGui::SliderInt( "Bounces", &_Settings._Bounces, 1, 10 ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 

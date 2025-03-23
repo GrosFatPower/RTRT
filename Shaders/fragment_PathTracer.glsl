@@ -14,6 +14,7 @@ out vec4 fragColor;
 #include RayTrace.glsl
 #include BRDF.glsl
 #include ToneMapping.glsl
+#include DisneyBSDF.glsl
 
 // ============================================================================
 // Uniforms
@@ -24,18 +25,22 @@ uniform vec2           u_TileOffset;
 uniform vec2           u_InvNbTiles;
 uniform float          u_Time;
 uniform int            u_FrameNum;
-uniform int            u_TiledRendering;
 uniform int            u_NbCompleteFrames;
-uniform int            u_Bounces;
-uniform int            u_ToneMapping;
 uniform vec3           u_BackgroundColor;
 uniform Camera         u_Camera;
-uniform int            u_EnableBackground;
-uniform int            u_EnableEnvMap;
-uniform float          u_EnvMapRotation;
-uniform float          u_EnvMapTotalWeight;
+uniform int            u_ToneMapping       = 1;
+uniform int            u_TiledRendering    = 0;
+uniform int            u_RussianRoulette   = 1;
+uniform int            u_NbSamplesPerPixel = 1;
+uniform int            u_NbBounces         = 1;
+uniform int            u_EnableBackground  = 0;
+uniform int            u_EnableEnvMap      = 0;
+uniform float          u_EnvMapRotation    = 0.f;
+uniform float          u_EnvMapTotalWeight = 1.f;
+uniform float          u_EnvMapIntensity   = 1.f;
 uniform vec2           u_EnvMapRes;
 uniform sampler2D      u_EnvMap;
+uniform sampler2D      u_EnvMapCDF;
 
 uniform int            u_DebugMode;
 
@@ -116,59 +121,94 @@ Ray GetRay( in vec2 iCoordUV )
 }
 
 // ----------------------------------------------------------------------------
-// Scatter
+// DirectLight
 // ----------------------------------------------------------------------------
-bool Scatter( in Ray iRay, in HitPoint iClosestHit, in Material iMat, out ScatterRecord oScatterRecord )
+vec3 DirectLight( in Ray iRay, in HitPoint iClosestHit, in Material iMat, float iEta )
 {
-  InitializeScatterRecord(oScatterRecord);
+  vec3 Ld = vec3(0.);
+  vec3 scatterPos = iClosestHit._Pos + iClosestHit._Normal * RESOLUTION;
 
-  if ( ( iMat._Opacity == 1.f ) && !iClosestHit._FrontFace )
-    return false;
-
-  // TMP
-  if ( iMat._Roughness < RESOLUTION ) // Perfect mirror
+  // Environment Mapping
+  if ( u_EnableEnvMap > 0 )
   {
-    oScatterRecord._Type = SCATTER_EXPLICIT;
-    oScatterRecord._Dir  = reflect(iRay._Dir, iClosestHit._Normal);
+    vec3 lightDir;
+    vec4 envMapColPdf = SampleEnvMap(u_EnvMap, u_EnvMapRotation , u_EnvMapRes, u_EnvMapCDF, u_EnvMapTotalWeight, lightDir);
+    float lightPdf = envMapColPdf.w;
 
-    oScatterRecord._P = 1.;
-    oScatterRecord._Attenuation = iMat._Albedo;
-  }
-  else
-  {
-    oScatterRecord._Type = SCATTER_RANDOM;
-
-    if ( rand() > iMat._Roughness )
+    float cosTheta = dot(iClosestHit._Normal, lightDir);
+    if ( ( cosTheta > 0. ) && ( lightPdf > EPSILON ) )
     {
-      vec3 normal = normalize(iClosestHit._Normal + iMat._Roughness * RandomVec3());
-      oScatterRecord._Dir  = reflect(iRay._Dir, normal);
+      Ray shadowRay = Ray(scatterPos, lightDir);
+      if ( !AnyHit( shadowRay, INFINITY ) )
+      {
+        //float pdf = cosTheta / PI;
+        //vec3 f = BRDF(iClosestHit._Normal, -iRay._Dir, lightDir, iMat) * cosTheta;
+        float pdf = 0.f;
+        vec3 f = DisneyEval( iClosestHit, iMat, iEta, -iRay._Dir, lightDir, pdf );
+    
+        float misWeight = PowerHeuristic(lightPdf, pdf);
+        if ( misWeight > 0. )
+          Ld += misWeight * envMapColPdf.rgb * f * u_EnvMapIntensity / lightPdf;
+      }
     }
-    else
-      oScatterRecord._Dir = UniformSampleonOrientedHemisphere(iClosestHit._Tangent, iClosestHit._Bitangent ,iClosestHit._Normal);
-
-    float cosTheta = max(dot(iClosestHit._Normal, oScatterRecord._Dir), 0.f);
-    oScatterRecord._P = cosTheta / PI;
-    oScatterRecord._Attenuation = BRDF(iClosestHit._Normal, -iRay._Dir, oScatterRecord._Dir, iMat) * cosTheta;
   }
 
-  return true;
+  // Lights sampling
+  {
+    // Choose a light source randomly
+    int lightInd = int(rand() * u_NbLights);
+
+    // Get direction to it
+    vec3 lightDir = GetLightDirSample(scatterPos, u_Lights[lightInd]);
+
+    float distToLight = length(lightDir);
+    normalize(lightDir);
+
+    float cosTheta = dot(iClosestHit._Normal, lightDir);
+    if ( cosTheta > 0. )
+    {
+      Ray shadowRay = Ray(scatterPos, lightDir);
+
+      // Get the pdf value for this direction
+      float lightPdf = 0.0f;
+      for ( int j = 0; j < u_NbLights; ++j )
+      {
+        lightPdf += LightPDF(u_Lights[j], shadowRay);
+      }
+      lightPdf /= u_NbLights;
+
+      if ( lightPdf > EPSILON )
+      {
+        if ( !AnyHit(shadowRay, distToLight) )
+        {
+          float pdf = 0.f;
+          vec3 f = DisneyEval( iClosestHit, iMat, iEta, -iRay._Dir, lightDir, pdf );
+    
+          float misWeight = PowerHeuristic(lightPdf, pdf);
+          if ( misWeight > 0. )
+            Ld += misWeight * u_Lights[lightInd]._Emission * f / lightPdf;
+        }
+      }
+    }
+  }
+
+  return Ld;
 }
 
 // ----------------------------------------------------------------------------
-// ScatterToDirection
+// Scatter
 // ----------------------------------------------------------------------------
-void ScatterToDirection( in Ray iRay, in HitPoint iClosestHit, in vec3 iDir, in Material iMat, out ScatterRecord oScatterRecord )
+bool Scatter( in Ray iRay, in HitPoint iClosestHit, in Material iMat, in float iEta, out ScatterRecord oScatterRecord )
 {
-  InitializeScatterRecord(oScatterRecord);
-  oScatterRecord._Dir = iDir;
+  oScatterRecord = ScatterRecord(SCATTER_NONE, vec3(0.f), 0.f, vec3(0.f));
 
-  // TMP
-  float cosTheta = dot(iClosestHit._Normal, iDir);
-  if ( cosTheta <= 0.f )
-    return;
+  oScatterRecord._Attenuation = DisneySample( iClosestHit, iMat, iEta, -iRay._Dir, oScatterRecord._Dir, oScatterRecord._P );
 
-  oScatterRecord._P = cosTheta / PI;
-  oScatterRecord._Attenuation = BRDF(iClosestHit._Normal, -iRay._Dir, iDir, iMat) * cosTheta;
+  if ( oScatterRecord._P < EPSILON )
+    return false;
+
+  oScatterRecord._Type = SCATTER_RANDOM;
+  return true;
 }
 
 // ----------------------------------------------------------------------------
@@ -182,118 +222,102 @@ vec3 PathSample( in Ray iStartRay )
 
   const int MaxPathSegments = 128;
 
+  ScatterRecord scatterSample = ScatterRecord(SCATTER_RANDOM, vec3(0.f), 0.f, vec3(0.f));
+
+  float eta = 1.5f;
   Ray ray = iStartRay;
-  for ( int i = 0; i < MaxPathSegments; ++i )
+  for ( int depth = 0; ; ++depth )
   {
     HitPoint closestHit;
     TraceRay(ray, closestHit);
 
+    // NO HIT
     if ( closestHit._Dist < -RESOLUTION )
     {
-      if ( ( 0 == i ) && ( 0 == u_EnableBackground ) )
-        break;
+      if ( ( depth > 0 ) || ( 1 == u_EnableBackground ) )
+      {
+        if ( u_EnableEnvMap > 0 )
+        {
+          vec4 envMapColPdf = SampleEnvMap(ray._Dir, u_EnvMap, u_EnvMapRotation , u_EnvMapRes, u_EnvMapTotalWeight);
 
-      if ( 0 != u_EnableEnvMap )
-        radiance += SampleSkybox(ray._Dir, u_EnvMap, u_EnvMapRotation) * throughput;
-      else
-        radiance += u_BackgroundColor * throughput;
+          float misWeight = 1.;
+          // Gather radiance from envmap and use scatterSample.pdf from previous bounce for MIS
+          if ( depth > 0 )
+            misWeight = PowerHeuristic(scatterSample._P, envMapColPdf.w);
+
+          if( misWeight > 0. )
+            radiance += misWeight * envMapColPdf.rgb * throughput * u_EnvMapIntensity;
+        }
+        else
+          radiance += u_BackgroundColor * throughput;
+      }
+
       break;
     }
 
+    // DEBUG
     if ( u_DebugMode > 1 )
     {
       radiance += DebugColor( ray, closestHit );
       break;
     }
 
+    // EMITTER
     if ( closestHit._IsEmitter )
     {
-      radiance += u_Lights[closestHit._LightID]._Emission * throughput;
+      float misWeight = 1.;
+      if ( ( depth > 0 ) && ( closestHit._LightID >= 0 ) )
+      {
+        float lightP = LightPDF(u_Lights[closestHit._LightID], ray);
+        misWeight = PowerHeuristic(scatterSample._P, lightP);
+      }
+
+      if ( misWeight > 0. )
+        radiance += misWeight * u_Lights[closestHit._LightID]._Emission * throughput;
       break;
     }
 
+    // MATERIAL PROPERTIES
     Material mat;
     LoadMaterial(closestHit, mat);
+    eta = ( closestHit._FrontFace ) ? ( 1.f / mat._IOR ) : ( mat._IOR );
 
-    ScatterRecord sr;
-    Scatter(ray, closestHit, mat, sr);
+    radiance += mat._Emission * throughput; // Emission from meshes is not importance sampled
 
-    radiance += mat._Emission * throughput;
+    if ( depth >= MaxPathSegments )
+      break; // Maximum depth reached
 
-    if ( SCATTER_NONE == sr._Type )
-      break;
-
-    vec3 nextThroughput = throughput * ( sr._Attenuation / ( sr._P + EPSILON ) );
-
-    Ray scatteredRay;
-    scatteredRay._Orig = closestHit._Pos + closestHit._Normal * RESOLUTION;
-    scatteredRay._Dir = sr._Dir;
-
-    // Sample light source directly for MIS
-    if ( ( SCATTER_RANDOM == sr._Type ) && ( u_NbLights > 0 ) )
+    // DIRECT LIGHT
+    if ( SCATTER_RANDOM == scatterSample._Type )
     {
-      // Update the throughput for the next path segment
-      float lightsP = 0.0f;
-      for ( int j = 0; j < u_NbLights; ++j )
-      {
-        lightsP += LightPDF(u_Lights[j], scatteredRay);
-      }
-      lightsP /= u_NbLights;
-      nextThroughput *= PowerHeuristic(sr._P, lightsP);
-
-      // Choose a light source randomly
-      int lightInd = int(rand() * u_NbLights);
-
-      // Get direction to it
-      vec3 lightDir = GetLightDirSample(scatteredRay._Orig, u_Lights[lightInd]);
-
-      float distToLight = length(lightDir);
-      normalize(lightDir);
-
-      Ray lightRay;
-      lightRay._Orig = scatteredRay._Orig;
-      lightRay._Dir = lightDir;
-
-      // Get the pdf value for this direction
-      float lightDirP = 0.0f;
-      for ( int j = 0; j < u_NbLights; ++j )
-      {
-        lightDirP += LightPDF(u_Lights[j], lightRay);
-      }
-      lightDirP /= u_NbLights;
-
-      if ( lightDirP > EPSILON )
-      {
-        // Get information about a ray going from our current hit point in this direction
-        ScatterRecord lightSR;
-        ScatterToDirection(ray, closestHit, lightRay._Dir, mat, lightSR);
-
-        if ( lightSR._P > EPSILON )
-        {
-          // Shoot a ray from our current hit point in this direction
-          // check if we hit the hot spot we chose
-          if ( !AnyHit(lightRay, distToLight) )
-          {
-            // Add the contribution of the hot spot using the power heuristic weight
-            float weight = PowerHeuristic(lightDirP, lightSR._P);
-            radiance += throughput *  ( lightSR._Attenuation / lightDirP ) * weight * u_Lights[lightInd]._Emission;
-          }
-        }
-      }
+      radiance += DirectLight(ray, closestHit, mat, eta) * throughput;
     }
 
-    throughput = nextThroughput;
-    ray = scatteredRay;
+    // SCATTER
+    Scatter(ray, closestHit, mat, eta, scatterSample);
+    if ( SCATTER_NONE == scatterSample._Type )
+      break;
 
-    // Russian Roulette
-    if ( i >= u_Bounces )
+    throughput *= scatterSample._Attenuation / ( scatterSample._P + EPSILON );
+
+    // NEXT RAY
+    ray._Orig = closestHit._Pos + scatterSample._Dir * RESOLUTION;
+    ray._Dir = scatterSample._Dir;
+
+    if ( depth >= u_NbBounces )
     {
-      float maxThroughput = max(throughput.x, max(throughput.y, throughput.z));
-      float q = min(maxThroughput + EPSILON, 0.95); // Lower throughput will lead to higher probability to cancel the path
-      if ( rand() > q )
+      // Russian Roulette
+      if ( u_RussianRoulette > 0 )
+      {
+        float maxThroughput = max( throughput.x, max( throughput.y, throughput.z ) );
+        float q = min( maxThroughput + EPSILON, 0.95 ); // Lower throughput will lead to higher probability to cancel the path
+        if ( rand() > q )
+          break;
+        float rrWeight = 1.0f / q;
+        throughput *= rrWeight;
+      }
+      else
         break;
-      float rrWeight = 1.0f / q;
-      throughput *= rrWeight;
     }
   }
 
@@ -312,15 +336,13 @@ void main()
   if( 1 == u_TiledRendering )
     coordUV = mix(u_TileOffset, u_TileOffset + u_InvNbTiles, fragUV);
 
-  int nSPP = 1; // Nb samples per pixels
-
   vec3 radiance = vec3(0.f);
-  for ( int i = 0; i < nSPP; ++i )
+  for ( int i = 0; i < u_NbSamplesPerPixel; ++i )
   {
     Ray ray = GetRay(coordUV);
     radiance += PathSample(ray);
   }
-  radiance /= nSPP;
+  radiance /= u_NbSamplesPerPixel;
 
   if ( 0 != u_ToneMapping )
   {
