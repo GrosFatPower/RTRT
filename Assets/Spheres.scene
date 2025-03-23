@@ -22,12 +22,33 @@ light
 	radius .2
 }
 
+material Plastic_Black
+{
+	color 0.00063 0.00063 0.00063
+	roughness 0.1
+}
+
+material Plastic_Orange
+{
+	color 1.0 0.37 0.013
+	roughness 0.001
+	clearcoat 1.0
+	clearcoatGloss 1.0
+}
+
 material Glass
 {
 	color 1.0 1.0 1.0
 	transmission 1.0
 	roughness 0.0
 	ior 1.45
+}
+
+material Metal
+{
+	color 1.0 1.0 1.0
+	roughness 0.01
+	metallic 1.0
 }
 
 material checker
@@ -41,6 +62,27 @@ sphere
 	radius 1.5
 	material Glass
 	position 0.0 1.5 0.0
+}
+
+sphere
+{
+	radius 1
+	material Plastic_Orange
+	position 3 1 -2
+}
+
+sphere
+{
+	radius 0.5
+	material Metal
+	position -2 0.5 1
+}
+
+sphere
+{
+	radius 3
+	material Plastic_Black
+	position -5 3 -5
 }
 
 mesh
