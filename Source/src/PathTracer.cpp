@@ -68,6 +68,12 @@ int PathTracer::Initialize()
     return 1;
   }
 
+  if ( 0 != InitializeStats() )
+  {
+    std::cout << "PathTracer : Failed to initialize frame statistics !" << std::endl;
+    return 1;
+  }
+
   return 0;
 }
 
@@ -109,6 +115,117 @@ int PathTracer::Done()
     _NbCompleteFrames++;
 
   CleanStates();
+
+  UpdateStats();
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateStats
+// ----------------------------------------------------------------------------
+int PathTracer::InitializeStats()
+{
+  _PathTraceTime       = 0.;
+  _AccumulateTime     = 0.;
+  _DenoiseTime        = 0.;
+  _RenderToScreenTime = 0.;
+
+  glGenQueries( 1, &_PathTraceTimeId[0] );
+  glGenQueries( 1, &_PathTraceTimeId[1] );
+  glGenQueries( 1, &_AccumulateTimeId[0] );
+  glGenQueries( 1, &_AccumulateTimeId[1] );
+  glGenQueries( 1, &_DenoiseTimeId[0] );
+  glGenQueries( 1, &_DenoiseTimeId[1] );
+  glGenQueries( 1, &_RenderToScreenTimeId[0] );
+  glGenQueries( 1, &_RenderToScreenTimeId[1] );
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateStats
+// ----------------------------------------------------------------------------
+int PathTracer::UpdateStats()
+{
+  GLuint64 startTime = 0, endTime = 0, executionTime = 0;
+  GLint resultAvailable = 0;
+
+  // Path trace pass
+  while ( !resultAvailable )
+  {
+    glGetQueryObjectiv( _PathTraceTimeId[0], GL_QUERY_RESULT_AVAILABLE, &resultAvailable );
+  }
+  glGetQueryObjectui64v( _PathTraceTimeId[0], GL_QUERY_RESULT, &startTime );
+
+  resultAvailable = 0;
+  while ( !resultAvailable )
+  {
+    glGetQueryObjectiv( _PathTraceTimeId[1], GL_QUERY_RESULT_AVAILABLE, &resultAvailable );
+  }
+  glGetQueryObjectui64v( _PathTraceTimeId[1], GL_QUERY_RESULT, &endTime );
+
+  executionTime = endTime - startTime; // nano seconds
+  _PathTraceTime = (double)executionTime / 1000000000.; // Convert to seconds
+
+  // Accumulate pass
+  resultAvailable = 0;
+  while ( !resultAvailable )
+  {
+    glGetQueryObjectiv( _AccumulateTimeId[0], GL_QUERY_RESULT_AVAILABLE, &resultAvailable );
+  }
+  glGetQueryObjectui64v( _AccumulateTimeId[0], GL_QUERY_RESULT, &startTime );
+
+  resultAvailable = 0;
+  while ( !resultAvailable )
+  {
+    glGetQueryObjectiv( _AccumulateTimeId[1], GL_QUERY_RESULT_AVAILABLE, &resultAvailable );
+  }
+  glGetQueryObjectui64v( _AccumulateTimeId[1], GL_QUERY_RESULT, &endTime );
+
+  executionTime = endTime - startTime; // nano seconds
+  _AccumulateTime = (double)executionTime / 1000000000.; // Convert to seconds
+
+  // Denoise pass
+  if ( Denoise() )
+  {
+    resultAvailable = 0;
+    while ( !resultAvailable )
+    {
+      glGetQueryObjectiv( _DenoiseTimeId[0], GL_QUERY_RESULT_AVAILABLE, &resultAvailable );
+    }
+    glGetQueryObjectui64v( _DenoiseTimeId[0], GL_QUERY_RESULT, &startTime );
+
+    resultAvailable = 0;
+    while ( !resultAvailable )
+    {
+      glGetQueryObjectiv( _DenoiseTimeId[1], GL_QUERY_RESULT_AVAILABLE, &resultAvailable );
+    }
+    glGetQueryObjectui64v( _DenoiseTimeId[1], GL_QUERY_RESULT, &endTime );
+
+    executionTime = endTime - startTime; // nano seconds
+    _DenoiseTime = (double)executionTime / 1000000000.; // Convert to seconds
+  }
+  else
+    _DenoiseTime = 0.;
+
+  // Render to screen pass
+  resultAvailable = 0;
+  while ( !resultAvailable )
+  {
+    glGetQueryObjectiv( _RenderToScreenTimeId[0], GL_QUERY_RESULT_AVAILABLE, &resultAvailable );
+  }
+  glGetQueryObjectui64v( _RenderToScreenTimeId[0], GL_QUERY_RESULT, &startTime );
+
+  resultAvailable = 0;
+  while ( !resultAvailable )
+  {
+    glGetQueryObjectiv( _RenderToScreenTimeId[1], GL_QUERY_RESULT_AVAILABLE, &resultAvailable );
+  }
+  glGetQueryObjectui64v( _RenderToScreenTimeId[1], GL_QUERY_RESULT, &endTime );
+
+  executionTime = endTime - startTime; // nano seconds
+  _RenderToScreenTime = (double)executionTime / 1000000000.; // Convert to seconds
 
   return 0;
 }
@@ -376,6 +493,8 @@ int PathTracer::UpdateAccumulateUniforms()
 int PathTracer::RenderToTexture()
 {
   // Path trace
+  glQueryCounter(_PathTraceTimeId[0], GL_TIMESTAMP);
+
   if ( LowResPass() )
   {
     glBindFramebuffer(GL_FRAMEBUFFER, _RenderTargetLowResFBO._ID);
@@ -396,7 +515,11 @@ int PathTracer::RenderToTexture()
 
   _Quad.Render(*_PathTraceShader);
 
+  glQueryCounter(_PathTraceTimeId[1], GL_TIMESTAMP);
+
   // Accumulate
+  glQueryCounter(_AccumulateTimeId[0], GL_TIMESTAMP);
+
   glBindFramebuffer(GL_FRAMEBUFFER, _AccumulateFBO._ID);
   if ( TiledRendering() && !LowResPass() )
     glViewport(_Settings._TileResolution.x * _CurTile.x, _Settings._TileResolution.y * _CurTile.y, _Settings._TileResolution.x, _Settings._TileResolution.y);
@@ -406,6 +529,8 @@ int PathTracer::RenderToTexture()
   this -> BindAccumulateTextures();
 
   _Quad.Render(*_AccumulateShader);
+
+  glQueryCounter(_AccumulateTimeId[1], GL_TIMESTAMP);
 
   // Denoise
   if ( Denoise() )
@@ -419,6 +544,8 @@ int PathTracer::RenderToTexture()
 // ----------------------------------------------------------------------------
 int PathTracer::DenoiseOutput()
 {
+  glQueryCounter(_DenoiseTimeId[0], GL_TIMESTAMP);
+
   _DenoiserShader -> Use();
 
   this -> BindDenoiserTextures();
@@ -433,6 +560,8 @@ int PathTracer::DenoiseOutput()
   glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
   _DenoiserShader -> StopUsing();
+
+  glQueryCounter(_DenoiseTimeId[1], GL_TIMESTAMP);
 
   return 0;
 }
@@ -502,12 +631,16 @@ int PathTracer::BindRenderToScreenTextures()
 // ----------------------------------------------------------------------------
 int PathTracer::RenderToScreen()
 {
+  glQueryCounter(_RenderToScreenTimeId[0], GL_TIMESTAMP);
+
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
 
   this -> BindRenderToScreenTextures();
 
   _Quad.Render(*_RenderToScreenShader);
+
+  glQueryCounter(_RenderToScreenTimeId[1], GL_TIMESTAMP);
 
   return 0;
 }

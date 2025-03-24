@@ -61,6 +61,15 @@ public:
   virtual int RenderToScreen();
   virtual int RenderToFile( const std::filesystem::path & iFilePath );
 
+  unsigned int GetNbCompleteFrames()  const { return _NbCompleteFrames; }
+  unsigned int GetFrameNum()          const { return _FrameNum; }
+  double GetPathTraceTime()           const { return _PathTraceTime; }
+  double GetAccumulateTime()          const { return _AccumulateTime; }
+  double GetDenoiseTime()             const { return _DenoiseTime; }
+  double GetRenderToScreenTime()      const { return _RenderToScreenTime; }
+
+  virtual PathTracer * AsPathTracer() { return this; }
+
 protected:
 
   int UpdateRenderResolution();
@@ -82,6 +91,9 @@ protected:
   int BindAccumulateTextures();
   int BindDenoiserTextures();
   int BindRenderToScreenTextures();
+
+  int InitializeStats();
+  int UpdateStats();
 
   float RenderScale()       const { return ( _Settings._RenderScale * 0.01f ); }
   float LowResRenderScale() const { return ( RenderScale() * _Settings._LowResRatio ); }
@@ -148,15 +160,26 @@ protected:
   // Tiled rendering
   Vec2i        _CurTile;
   Vec2i        _NbTiles;
-  unsigned int _NbCompleteFrames = 0;
 
   // Accumulate
   unsigned int _FrameNum          = 1;
-  unsigned int _AccumulatedFrames = 0;
+  unsigned int _NbCompleteFrames  = 0;
 
   // Scene data
   int _NbTriangles     = 0;
   int _NbMeshInstances = 0;
+
+  // Stats
+  double _PathTraceTime      = 0.;
+  double _AccumulateTime     = 0.;
+  double _DenoiseTime        = 0.;
+  double _RenderToScreenTime = 0.;
+
+  GLuint _PathTraceTimeId[2]      = { 0, 0 };
+  GLuint _AccumulateTimeId[2]     = { 0, 0 };
+  GLuint _DenoiseTimeId[2]        = { 0, 0 };
+  GLuint _RenderToScreenTimeId[2] = { 0, 0 };
+
 };
 
 }

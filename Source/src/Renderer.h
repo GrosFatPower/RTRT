@@ -8,6 +8,8 @@ namespace RTRT
 
 class Scene;
 class RenderSettings;
+class PathTracer;
+class SoftwareRasterizer;
 
 enum class DirtyState
 {
@@ -37,6 +39,9 @@ public:
   void Notify( DirtyState iState ) { _DirtyStates |= (unsigned long)iState; };
 
   void SetDebugMode( const int iDebugMode );
+
+  virtual PathTracer * AsPathTracer() { return nullptr; }
+  virtual SoftwareRasterizer * AsSoftwareRasterizer() { return nullptr; }
 
 protected:
 

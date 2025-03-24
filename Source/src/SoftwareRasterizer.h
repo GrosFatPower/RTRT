@@ -53,6 +53,8 @@ public:
   virtual int RenderToScreen();
   virtual int RenderToFile( const std::filesystem::path & iFilePath );
 
+  virtual SoftwareRasterizer * AsSoftwareRasterizer() { return this; }
+
 public:
 
   struct FrameBuffer

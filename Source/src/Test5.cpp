@@ -285,10 +285,21 @@ int Test5::DrawUI()
 
     if (ImGui::CollapsingHeader("Rendering stats"))
     {
-      ImGui::Text("Window width %d: height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
-      ImGui::Text("Render width %d: height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
+      ImGui::Text("Window width : %d height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+      ImGui::Text("Render width : %d height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
 
-      ImGui::Text("Render time %.3f ms/frame", _FrameTime * 1000.);
+      ImGui::Text( "Render time           : %.3f ms/frame", _FrameTime * 1000. );
+
+      if ( RendererType::PathTracer == _RendererType )
+      {
+        ImGui::Text( "Path trace time       : %.3f ms", _Renderer -> AsPathTracer() -> GetPathTraceTime() * 1000. );
+        ImGui::Text( "Accumulate time       : %.3f ms", _Renderer -> AsPathTracer() -> GetAccumulateTime() * 1000. );
+        ImGui::Text( "Denoise time          : %.3f ms", _Renderer -> AsPathTracer() -> GetDenoiseTime() * 1000. );
+        ImGui::Text( "Render to screen time : %.3f ms", _Renderer -> AsPathTracer() -> GetRenderToScreenTime() * 1000. );
+
+        ImGui::Text( "Frame number          : %d", _Renderer -> AsPathTracer() -> GetFrameNum() );
+        ImGui::Text( "Nb complete frames    : %d", _Renderer -> AsPathTracer() -> GetNbCompleteFrames() );
+      }
 
     }
 
