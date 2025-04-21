@@ -915,7 +915,7 @@ int Test3::DrawUI()
 
     if ( ImGui::CollapsingHeader("Lights") )
     {
-      if ( ImGui::ListBoxHeader("##Lights") )
+      if ( ImGui::BeginListBox("##Lights") )
       {
         for (int i = 0; i < _Scene.GetNbLights(); i++)
         {
@@ -928,7 +928,7 @@ int Test3::DrawUI()
             _SelectedLight = i;
           }
         }
-        ImGui::ListBoxFooter();
+        ImGui::EndListBox();
       }
 
       if (ImGui::Button("Add light"))
@@ -1016,7 +1016,7 @@ int Test3::DrawUI()
       std::vector<Texture*> & Textures = _Scene.GetTextures();
 
       bool newMaterial = false;
-      if ( ImGui::ListBoxHeader("##MaterialNames") )
+      if ( ImGui::BeginListBox("##MaterialNames") )
       {
         for (int i = 0; i < _MaterialNames.size(); i++)
         {
@@ -1027,7 +1027,7 @@ int Test3::DrawUI()
             newMaterial = true;
           }
         }
-        ImGui::ListBoxFooter();
+        ImGui::EndListBox();
       }
 
       if ( _SelectedMaterial >= 0 )
@@ -1168,7 +1168,7 @@ int Test3::DrawUI()
       std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene.GetPrimitiveInstances();
 
       bool lookAtPrimitive = false;
-      if ( ImGui::ListBoxHeader("##PrimitivesNames") )
+      if ( ImGui::BeginListBox("##PrimitivesNames") )
       {
         for (int i = 0; i < _PrimitiveNames.size(); i++)
         {
@@ -1179,7 +1179,7 @@ int Test3::DrawUI()
             lookAtPrimitive = true;
           }
         }
-        ImGui::ListBoxFooter();
+        ImGui::EndListBox();
       }
 
       if ( _SelectedPrimitive >= 0 )

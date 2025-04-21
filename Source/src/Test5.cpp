@@ -566,7 +566,7 @@ int Test5::DrawUI()
         selectedMaterial = -1;
 
       bool newMaterial = false;
-      if ( ImGui::ListBoxHeader("##MaterialNames") )
+      if ( ImGui::BeginListBox("##MaterialNames") )
       {
         for (int i = 0; i < _MaterialNames.size(); i++)
         {
@@ -577,7 +577,7 @@ int Test5::DrawUI()
             newMaterial = true;
           }
         }
-        ImGui::ListBoxFooter();
+        ImGui::EndListBox();
       }
 
       if ( selectedMaterial >= 0 )
@@ -738,7 +738,7 @@ int Test5::DrawUI()
         _Renderer -> Notify(DirtyState::SceneLights);
 
       static int selectedLight = -1;
-      if ( ImGui::ListBoxHeader("##Lights") )
+      if ( ImGui::BeginListBox("##Lights") )
       {
         for (int i = 0; i < _Scene -> GetNbLights(); i++)
         {
@@ -751,7 +751,7 @@ int Test5::DrawUI()
             selectedLight = i;
           }
         }
-        ImGui::ListBoxFooter();
+        ImGui::EndListBox();
       }
 
       if (ImGui::Button("Add light"))
