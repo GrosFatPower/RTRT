@@ -647,9 +647,9 @@ int Test5::DrawUI()
             {
               GLUtil::DeleteTEX(_AlbedoTEX);
               if ( basecolorTexture -> GetUCData() )
-                GLUtil::LoadTexture(GL_TEXTURE_2D, GL_RGBA8, basecolorTexture -> GetWidth(), basecolorTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, basecolorTexture -> GetUCData(), _AlbedoTEX);
+                GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, basecolorTexture -> GetWidth(), basecolorTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, basecolorTexture -> GetUCData(), _AlbedoTEX);
               else if ( basecolorTexture -> GetFData() )
-                GLUtil::LoadTexture(GL_TEXTURE_2D, GL_RGBA32F, basecolorTexture -> GetWidth(), basecolorTexture -> GetHeight(), GL_RGBA, GL_FLOAT, basecolorTexture -> GetFData(), _AlbedoTEX);
+                GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, basecolorTexture -> GetWidth(), basecolorTexture -> GetHeight(), GL_RGBA, GL_FLOAT, basecolorTexture -> GetFData(), _AlbedoTEX);
             }
 
             if ( _AlbedoTEX._ID )
@@ -670,9 +670,9 @@ int Test5::DrawUI()
             {
               GLUtil::DeleteTEX(_MetalRoughTEX);
               if ( metallicRoughnessTexture -> GetUCData() )
-                GLUtil::LoadTexture(GL_TEXTURE_2D, GL_RGBA8, metallicRoughnessTexture -> GetWidth(), metallicRoughnessTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, metallicRoughnessTexture -> GetUCData(), _MetalRoughTEX);
+                GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, metallicRoughnessTexture -> GetWidth(), metallicRoughnessTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, metallicRoughnessTexture -> GetUCData(), _MetalRoughTEX);
               else if ( metallicRoughnessTexture -> GetFData() )
-                GLUtil::LoadTexture(GL_TEXTURE_2D, GL_RGBA32F, metallicRoughnessTexture -> GetWidth(), metallicRoughnessTexture -> GetHeight(), GL_RGBA, GL_FLOAT, metallicRoughnessTexture -> GetFData(), _MetalRoughTEX);
+                GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, metallicRoughnessTexture -> GetWidth(), metallicRoughnessTexture -> GetHeight(), GL_RGBA, GL_FLOAT, metallicRoughnessTexture -> GetFData(), _MetalRoughTEX);
             }
 
             if ( _MetalRoughTEX._ID )
@@ -693,9 +693,9 @@ int Test5::DrawUI()
             {
               GLUtil::DeleteTEX(_NormalMapTEX);
               if ( normalMapTexture -> GetUCData() )
-                GLUtil::LoadTexture(GL_TEXTURE_2D, GL_RGBA8, normalMapTexture -> GetWidth(), normalMapTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, normalMapTexture -> GetUCData(), _NormalMapTEX);
+                GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, normalMapTexture -> GetWidth(), normalMapTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, normalMapTexture -> GetUCData(), _NormalMapTEX);
               else if ( normalMapTexture -> GetFData() )
-                GLUtil::LoadTexture(GL_TEXTURE_2D, GL_RGBA32F, normalMapTexture -> GetWidth(), normalMapTexture -> GetHeight(), GL_RGBA, GL_FLOAT, normalMapTexture -> GetFData(), _NormalMapTEX);
+                GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, normalMapTexture -> GetWidth(), normalMapTexture -> GetHeight(), GL_RGBA, GL_FLOAT, normalMapTexture -> GetFData(), _NormalMapTEX);
             }
 
             if ( _NormalMapTEX._ID )
@@ -716,9 +716,9 @@ int Test5::DrawUI()
             {
               GLUtil::DeleteTEX(_EmissionMapTEX);
               if ( emissionMapTexture -> GetUCData() )
-                GLUtil::LoadTexture(GL_TEXTURE_2D, GL_RGBA8, emissionMapTexture -> GetWidth(), emissionMapTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, emissionMapTexture -> GetUCData(), _EmissionMapTEX);
+                GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, emissionMapTexture -> GetWidth(), emissionMapTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, emissionMapTexture -> GetUCData(), _EmissionMapTEX);
               else if ( emissionMapTexture -> GetFData() )
-                GLUtil::LoadTexture(GL_TEXTURE_2D, GL_RGBA32F, emissionMapTexture -> GetWidth(), emissionMapTexture -> GetHeight(), GL_RGBA, GL_FLOAT, emissionMapTexture -> GetFData(), _EmissionMapTEX);
+                GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, emissionMapTexture -> GetWidth(), emissionMapTexture -> GetHeight(), GL_RGBA, GL_FLOAT, emissionMapTexture -> GetFData(), _EmissionMapTEX);
             }
 
             if ( _EmissionMapTEX._ID )

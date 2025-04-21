@@ -120,10 +120,10 @@ protected:
   QuadMesh _Quad;
 
   // Frame buffers
-  GLFrameBuffer _RenderTargetFBO       = { 0, { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTarget } };
-  GLFrameBuffer _RenderTargetLowResFBO = { 0, { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetLowRes } };
-  GLFrameBuffer _RenderTargetTileFBO   = { 0, { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetTile } };
-  GLFrameBuffer _AccumulateFBO         = { 0, { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Accumulate } };
+  GLFrameBuffer _RenderTargetFBO;
+  GLFrameBuffer _RenderTargetLowResFBO;
+  GLFrameBuffer _RenderTargetTileFBO;
+  GLFrameBuffer _AccumulateFBO;
 
   // Texture buffers
   GLTextureBuffer _VtxTBO                     = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_Vertices               } };
@@ -144,12 +144,12 @@ protected:
   GLTextureBuffer _BLASPackedUVsTBO           = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_BLASPackedUVs          } };
 
   // Textures
-  GLTexture _DenoisedTEX         = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Denoised         };
-  GLTexture _TexArrayTEX         = { 0, GL_TEXTURE_2D_ARRAY, PathTracerTexSlot::_TexArray   };
-  GLTexture _MaterialsTEX        = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Materials        };
-  GLTexture _TLASTransformsIDTEX = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_TLASTransformsID };
-  GLTexture _EnvMapTEX           = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_EnvMap           };
-  GLTexture _EnvMapCDFTEX        = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_EnvMapCDF        };
+  GLTexture _DenoisedTEX         = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Denoised,         GL_RGBA32F, GL_RGBA, GL_FLOAT };
+  GLTexture _TexArrayTEX         = { 0, GL_TEXTURE_2D_ARRAY, PathTracerTexSlot::_TexArray,   GL_RGBA8,   GL_RGBA, GL_UNSIGNED_BYTE };
+  GLTexture _MaterialsTEX        = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Materials,        GL_RGBA32F, GL_RGBA, GL_FLOAT };
+  GLTexture _TLASTransformsIDTEX = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_TLASTransformsID, GL_RGBA32F, GL_RGBA, GL_FLOAT };
+  GLTexture _EnvMapTEX           = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_EnvMap,           GL_RGB32F,  GL_RGB,  GL_FLOAT };
+  GLTexture _EnvMapCDFTEX        = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_EnvMapCDF,        GL_R32F,    GL_RED,  GL_FLOAT };
 
   // Shaders
   std::unique_ptr<ShaderProgram> _PathTraceShader;

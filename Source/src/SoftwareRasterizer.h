@@ -201,11 +201,11 @@ protected:
   QuadMesh _Quad;
 
   // Frame buffers
-  GLFrameBuffer _RenderTargetFBO = { 0, { 0, GL_TEXTURE_2D, RasterTexSlot::_RenderTarget } };
+  GLFrameBuffer _RenderTargetFBO;
 
   // Textures
-  GLTexture _ColorBufferTEX = { 0, GL_TEXTURE_2D, RasterTexSlot::_ColorBuffer };
-  GLTexture _EnvMapTEX      = { 0, GL_TEXTURE_2D, RasterTexSlot::_EnvMap      };
+  GLTexture _ColorBufferTEX = { 0, GL_TEXTURE_2D, RasterTexSlot::_ColorBuffer, GL_RGBA8,  GL_RGBA, GL_UNSIGNED_BYTE };
+  GLTexture _EnvMapTEX      = { 0, GL_TEXTURE_2D, RasterTexSlot::_EnvMap,      GL_RGB32F, GL_RGB,  GL_FLOAT         };
 
   // Shaders
   std::unique_ptr<ShaderProgram> _RenderToTextureShader;
