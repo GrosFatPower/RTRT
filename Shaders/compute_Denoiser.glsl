@@ -13,11 +13,17 @@ layout(rgba32f, binding = 1) uniform image2D u_InputNormals;
 layout(rgba32f, binding = 2) uniform image2D u_InputPos;
 layout(rgba32f, binding = 3) uniform image2D u_OutputImage;
 
+uniform int u_DenoisingMethod = 0; // 0: Bilateral, 1: Wavelet, 2: Edge-aware
+
 uniform float u_Threshold; // Noise threshold (similar to wavelet thresholding)
 uniform int u_WaveletScale = 2; // Number of pixels to consider (1, 2, 4, ...)
 
-uniform float u_SigmaSpatial = 2.0;
-uniform float u_SigmaSange = 0.1;
+uniform float u_SigmaSpatial = 2.0f;
+uniform float u_SigmaRange   = 0.1f;
+
+uniform float u_ColorPhi    = 0.9f;
+uniform float u_NormalPhi   = 0.3f;
+uniform float u_PositionPhi = 0.6f;
 
 // ----------------------------------------------------------------------------
 // Soft thresholding function (similar to wavelet denoising)
@@ -124,7 +130,7 @@ vec4 BilateralFilter( in ivec2 iPixelCoord )
       vec4 neighborColor = imageLoad( u_InputImage, neighborCoord );
 
       float spatialWeight = exp( -dot( vec2( x, y ), vec2( x, y ) ) / ( 2.0 * u_SigmaSpatial * u_SigmaSpatial ) );
-      float rangeWeight = exp( -dot( neighborColor.rgb - centerColor.rgb, neighborColor.rgb - centerColor.rgb ) / ( 2.0 * u_SigmaSange * u_SigmaSange ) );
+      float rangeWeight = exp( -dot( neighborColor.rgb - centerColor.rgb, neighborColor.rgb - centerColor.rgb ) / ( 2.0 * u_SigmaRange * u_SigmaRange ) );
       float weight = spatialWeight * rangeWeight;
 
       sum += neighborColor * weight;
@@ -156,10 +162,8 @@ vec4 EdgeAwareDenoiser( in ivec2 iPixelCoord )
   ivec2(-2, 2), ivec2(-1, 2), ivec2(0, 2), ivec2(1, 2), ivec2(2, 2) );
   
   vec2 fragCoord = iPixelCoord;
+
   vec3 sum = vec3(0.0);
-  float colorPhi = .9f;
-  float normalPhi = .3f;
-  float positionPhi = .6f;
   
   vec3 cval = imageLoad(u_InputImage, iPixelCoord).rgb;    // Albedo
   vec3 nval = imageLoad(u_InputNormals, iPixelCoord).rgb;  // Normal
@@ -175,19 +179,19 @@ vec4 EdgeAwareDenoiser( in ivec2 iPixelCoord )
     vec3 ctmp = imageLoad(u_InputImage, uv).rgb;
     vec3 t = cval - ctmp;                           // Ip - Iq      (color difference)
     float dist2 = dot(t, t);                        // ||Ip - Iq||  (distance squared)
-    float c_w = min(exp(-(dist2) / colorPhi), 1.0); // w(p,q)       (weight function)
+    float c_w = min(exp(-(dist2) / u_ColorPhi), 1.0); // w(p,q)       (weight function)
     
     // Normals
     vec3 ntmp = imageLoad(u_InputNormals, uv).rgb;
     t = nval - ntmp;
     dist2 = dot(t, t);
-    float n_w = min(exp(-(dist2) / normalPhi), 1.0);
+    float n_w = min(exp(-(dist2) / u_NormalPhi), 1.0);
     
     // Positions
     vec3 ptmp = imageLoad(u_InputPos, uv).rgb;
     t = pval - ptmp;
     dist2 = dot(t, t);
-    float p_w = min(exp(-(dist2) / positionPhi), 1.0);
+    float p_w = min(exp(-(dist2) / u_PositionPhi), 1.0);
     
     float weight = c_w * n_w * p_w;
     sum += ctmp * weight * Kernel[i];
@@ -208,12 +212,18 @@ void main()
   if ( pixelCoord.x >= size.x || pixelCoord.y >= size.y )
     return; // Do not read/write outside limits
 
-  vec4 finalColor = EdgeAwareDenoiser(pixelCoord);
-  //if ( u_WaveletScale > 1 )
-  //  finalColor = MultiScaleDenoiser(pixelCoord, size);
-  //else
-  //  finalColor = SingleScaleDenoiser(pixelCoord);
-  //finalColor = BilateralFilter(pixelCoord);
-
-  imageStore(u_OutputImage, pixelCoord, finalColor);
+  // Select the denoising method
+  if ( 0 == u_DenoisingMethod )
+    imageStore(u_OutputImage, pixelCoord, BilateralFilter(pixelCoord));
+  else if ( 1 == u_DenoisingMethod )
+  {
+    if ( u_WaveletScale > 1 )
+      imageStore(u_OutputImage, pixelCoord, MultiScaleDenoiser(pixelCoord, size));
+    else
+      imageStore(u_OutputImage, pixelCoord, SingleScaleDenoiser(pixelCoord));
+  }
+  else if ( 2 == u_DenoisingMethod )
+    imageStore(u_OutputImage, pixelCoord, EdgeAwareDenoiser(pixelCoord));
+  else
+    imageStore(u_OutputImage, pixelCoord, vec4(0.0));
 }

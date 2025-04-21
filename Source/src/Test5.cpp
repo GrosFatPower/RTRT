@@ -374,8 +374,41 @@ int Test5::DrawUI()
 
         if ( _Settings._Denoise )
         {
-          if ( ImGui::SliderFloat( "Threshold", &_Settings._DenoiserThreshold, .01f, 1.f ) )
-          { }
+          static const char * DENOISING_METHODS[] = { "Bilateral", "Wavelet", "Edge-aware" };
+          int denoisingMethod = (int)_Settings._DenoisingMethod;
+          if ( ImGui::Combo( "Denoising method", &denoisingMethod, DENOISING_METHODS, 3 ) )
+          {
+            _Settings._DenoisingMethod = denoisingMethod;
+            _Renderer -> Notify( DirtyState::RenderSettings );
+          }
+
+          if ( 0 == _Settings._DenoisingMethod )
+          {
+            if ( ImGui::SliderFloat( "Sigma spatial", &_Settings._DenoiserSigmaSpatial, 0.1f, 10.f ) )
+            {}
+
+            if ( ImGui::SliderFloat( "Sigma range", &_Settings._DenoiserSigmaRange, 0.01f, 1.f ) )
+            {}
+          }
+          else if ( 1 == _Settings._DenoisingMethod )
+          {
+            if ( ImGui::SliderInt( "Wavelet scale", (int*)&_Settings._DenoisingWaveletScale, 1, 5 ) )
+            {}
+
+            if ( ImGui::SliderFloat( "Threshold", &_Settings._DenoiserThreshold, .01f, 1.f ) )
+            {}
+          }
+          else if ( 2 == _Settings._DenoisingMethod )
+          {
+            if ( ImGui::SliderFloat( "Color phi", &_Settings._DenoiserColorPhi, 0.01f, 1.f ) )
+            {}
+
+            if ( ImGui::SliderFloat( "Normal phi", &_Settings._DenoiserNormalPhi, 0.01f, 1.f ) )
+            {}
+
+            if ( ImGui::SliderFloat( "Position phi", &_Settings._DenoiserPositionPhi, 0.01f, 1.f ) )
+            {}
+          }
         }
       }
       else if ( RendererType::SoftwareRasterizer == _RendererType )

@@ -576,7 +576,14 @@ int PathTracer::UpdateDenoiserUniforms()
 {
   _DenoiserShader -> Use();
 
-  _DenoiserShader -> SetUniform("u_Threshold", _Settings._DenoiserThreshold);
+  _DenoiserShader -> SetUniform("u_DenoisingMethod", (int)_Settings._DenoisingMethod);    // 0: Bilateral, 1: Wavelet, 2: Edge-aware
+  _DenoiserShader -> SetUniform("u_SigmaSpatial", _Settings._DenoiserSigmaSpatial);       // Bilateral
+  _DenoiserShader -> SetUniform("u_SigmaRange", _Settings._DenoiserSigmaRange);           // Bilateral
+  _DenoiserShader -> SetUniform("u_Threshold", _Settings._DenoiserThreshold);             // Wavelet
+  _DenoiserShader -> SetUniform("u_WaveletScale", (int)_Settings._DenoisingWaveletScale); // Wavelet
+  _DenoiserShader -> SetUniform("u_ColorPhi", _Settings._DenoiserColorPhi);               // Edge-aware
+  _DenoiserShader -> SetUniform("u_NormalPhi", _Settings._DenoiserNormalPhi);             // Edge-aware
+  _DenoiserShader -> SetUniform("u_PositionPhi", _Settings._DenoiserPositionPhi);         // Edge-aware
 
   _DenoiserShader -> StopUsing();
 
