@@ -4,7 +4,9 @@
 #include FXAA.glsl
 
 in vec2 fragUV;
-out vec4 fragColor;
+layout(location = 0) out vec4 fragColor;
+layout(location = 1) out vec4 fragNormal;
+layout(location = 2) out vec4 fragPosition;
 
 // ============================================================================
 // Uniforms
@@ -17,12 +19,16 @@ uniform vec2      u_TileOffset;
 uniform vec2      u_InvNbTiles;
 uniform sampler2D u_PreviousFrame;
 uniform sampler2D u_NewFrame;
+uniform sampler2D u_NewFrameNormals;
+uniform sampler2D u_NewFramePos;
 
 uniform int       u_DebugMode;
 
 void main()
 {
   fragColor = texture(u_NewFrame, fragUV);
+  fragNormal = texture(u_NewFrameNormals, fragUV);
+  fragPosition = texture(u_NewFramePos, fragUV);
 
   if ( ( 1 == u_Accumulate ) && ( u_NbCompleteFrames > 0 ) )
   {

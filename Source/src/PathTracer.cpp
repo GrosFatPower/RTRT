@@ -469,6 +469,9 @@ int PathTracer::UpdateAccumulateUniforms()
   else
     _AccumulateShader -> SetUniform("u_NewFrame", (int)PathTracerTexSlot::_RenderTarget);
 
+  _AccumulateShader -> SetUniform("u_NewFrameNormals", (int)PathTracerTexSlot::_RenderTargetNormals);
+  _AccumulateShader -> SetUniform("u_NewFramePos", (int)PathTracerTexSlot::_RenderTargetPos);
+
   if ( !Dirty() && _Settings._Accumulate && ( _NbCompleteFrames > 0 ) )
     _AccumulateShader -> SetUniform("u_Accumulate", 1);
   else
@@ -585,9 +588,13 @@ int PathTracer::UpdateDenoiserUniforms()
 // ----------------------------------------------------------------------------
 int PathTracer::BindDenoiserTextures()
 {
-  if ( _AccumulateFBO._Tex.size() )
+  if ( 3 ==_AccumulateFBO._Tex.size() )
+  {
     glBindImageTexture(0, _AccumulateFBO._Tex[0]._ID, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-  glBindImageTexture(1, _DenoisedTEX._ID, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+    glBindImageTexture(1, _AccumulateFBO._Tex[1]._ID, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+    glBindImageTexture(2, _AccumulateFBO._Tex[2]._ID, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+  }
+  glBindImageTexture(3, _DenoisedTEX._ID, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
 
   return 0;
 }
@@ -747,11 +754,19 @@ int PathTracer::InitializeFrameBuffers()
   // Render target textures
   _RenderTargetFBO._Tex.clear();
   _RenderTargetFBO._Tex.push_back( { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTarget, GL_RGBA32F, GL_RGBA, GL_FLOAT } );
-  GLUtil::GenTexture( GL_TEXTURE_2D, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _RenderTargetFBO._Tex[0] );
+  GLUtil::GenTexture( GL_TEXTURE_2D, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _RenderTargetFBO._Tex[0] ); // Albedo
+  _RenderTargetFBO._Tex.push_back( { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT } );
+  GLUtil::GenTexture( GL_TEXTURE_2D, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _RenderTargetFBO._Tex[1] ); // Normals
+  _RenderTargetFBO._Tex.push_back( { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetPos, GL_RGBA32F, GL_RGBA, GL_FLOAT } );
+  GLUtil::GenTexture( GL_TEXTURE_2D, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _RenderTargetFBO._Tex[2] ); // Positions
 
   _RenderTargetTileFBO._Tex.clear();
   _RenderTargetTileFBO._Tex.push_back( { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetTile, GL_RGBA32F, GL_RGBA, GL_FLOAT } );
-  GLUtil::GenTexture( GL_TEXTURE_2D, GL_RGBA32F, TileWidth(), TileHeight(), GL_RGBA, GL_FLOAT, nullptr, _RenderTargetTileFBO._Tex[0] );
+  GLUtil::GenTexture( GL_TEXTURE_2D, GL_RGBA32F, TileWidth(), TileHeight(), GL_RGBA, GL_FLOAT, nullptr, _RenderTargetTileFBO._Tex[0] ); // Albedo
+  _RenderTargetTileFBO._Tex.push_back( { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT } );
+  GLUtil::GenTexture( GL_TEXTURE_2D, GL_RGBA32F, TileWidth(), TileHeight(), GL_RGBA, GL_FLOAT, nullptr, _RenderTargetTileFBO._Tex[1] ); // Normals
+  _RenderTargetTileFBO._Tex.push_back( { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetPos, GL_RGBA32F, GL_RGBA, GL_FLOAT } );
+  GLUtil::GenTexture( GL_TEXTURE_2D, GL_RGBA32F, TileWidth(), TileHeight(), GL_RGBA, GL_FLOAT, nullptr, _RenderTargetTileFBO._Tex[2] ); // Positions
 
   _RenderTargetLowResFBO._Tex.clear();
   _RenderTargetLowResFBO._Tex.push_back( { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetLowRes, GL_RGBA32F, GL_RGBA, GL_FLOAT } );
@@ -759,20 +774,47 @@ int PathTracer::InitializeFrameBuffers()
 
   _AccumulateFBO._Tex.clear();
   _AccumulateFBO._Tex.push_back( { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Accumulate, GL_RGBA32F, GL_RGBA, GL_FLOAT } );
-  GLUtil::GenTexture( GL_TEXTURE_2D, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _AccumulateFBO._Tex[0] );
+  GLUtil::GenTexture( GL_TEXTURE_2D, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _AccumulateFBO._Tex[0] ); // Albedo
+  _AccumulateFBO._Tex.push_back( { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulateNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT } );
+  GLUtil::GenTexture( GL_TEXTURE_2D, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _AccumulateFBO._Tex[1] ); // Normals
+  _AccumulateFBO._Tex.push_back( { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulatePos, GL_RGBA32F, GL_RGBA, GL_FLOAT } );
+  GLUtil::GenTexture( GL_TEXTURE_2D, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _AccumulateFBO._Tex[2] ); // Positions
 
   // Render target Frame buffers
+  GLenum DrawBuffers[] =
+  {
+      GL_COLOR_ATTACHMENT0,
+      GL_COLOR_ATTACHMENT1,
+      GL_COLOR_ATTACHMENT2
+  };
+
   glGenFramebuffers(1, &_RenderTargetFBO._ID);
   glBindFramebuffer(GL_FRAMEBUFFER, _RenderTargetFBO._ID);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _RenderTargetFBO._Tex[0]._ID, 0);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _RenderTargetFBO._Tex[0]._ID, 0); // Albedo
   if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
     return 1;
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, _RenderTargetFBO._Tex[1]._ID, 0); // Normals
+  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+    return 1;
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, _RenderTargetFBO._Tex[2]._ID, 0); // Positions
+  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+    return 1;
+
+  glDrawBuffers(3, DrawBuffers);
 
   glGenFramebuffers(1, &_RenderTargetTileFBO._ID);
   glBindFramebuffer(GL_FRAMEBUFFER, _RenderTargetTileFBO._ID);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _RenderTargetTileFBO._Tex[0]._ID, 0);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _RenderTargetTileFBO._Tex[0]._ID, 0); // Albedo
   if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
     return 1;
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, _RenderTargetTileFBO._Tex[1]._ID, 0); // Normals
+  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+    return 1;
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, _RenderTargetTileFBO._Tex[2]._ID, 0); // Positions
+  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+    return 1;
+
+  glDrawBuffers(3, DrawBuffers);
 
   glGenFramebuffers(1, &_RenderTargetLowResFBO._ID);
   glBindFramebuffer(GL_FRAMEBUFFER, _RenderTargetLowResFBO._ID);
@@ -782,9 +824,17 @@ int PathTracer::InitializeFrameBuffers()
 
   glGenFramebuffers(1, &_AccumulateFBO._ID);
   glBindFramebuffer(GL_FRAMEBUFFER, _AccumulateFBO._ID);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _AccumulateFBO._Tex[0]._ID, 0);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _AccumulateFBO._Tex[0]._ID, 0); // Albedo
   if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
     return 1;
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, _AccumulateFBO._Tex[1]._ID, 0); // Normals
+  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+    return 1;
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, _AccumulateFBO._Tex[2]._ID, 0); // Positions
+  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+    return 1;
+
+  glDrawBuffers(3, DrawBuffers);
 
   // Denoised texture
   GLUtil::GenTexture( GL_TEXTURE_2D, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _DenoisedTEX );

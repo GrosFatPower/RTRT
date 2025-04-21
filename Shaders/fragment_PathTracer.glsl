@@ -1,7 +1,9 @@
 #version 430 core
 
 in vec2 fragUV;
-out vec4 fragColor;
+layout(location = 0) out vec4 fragColor;
+layout(location = 1) out vec4 fragNormal;
+layout(location = 2) out vec4 fragPosition;
 
 #include Constants.glsl
 #include Structures.glsl
@@ -230,6 +232,20 @@ vec3 PathSample( in Ray iStartRay )
   {
     HitPoint closestHit;
     TraceRay(ray, closestHit);
+
+    if ( 0 == depth )
+    {
+      if ( closestHit._Dist < -RESOLUTION )
+      {
+        fragPosition = vec4(INFINITY, INFINITY, INFINITY, 1.f);
+        fragNormal = vec4(-ray._Dir, 1.f);
+      }
+      else
+      {
+        fragPosition = vec4(closestHit._Pos, 1.f);
+        fragNormal = vec4(closestHit._Normal, 1.f);
+      }
+    }
 
     // NO HIT
     if ( closestHit._Dist < -RESOLUTION )
