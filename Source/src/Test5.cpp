@@ -379,7 +379,6 @@ int Test5::DrawUI()
           if ( ImGui::Combo( "Denoising method", &denoisingMethod, DENOISING_METHODS, 3 ) )
           {
             _Settings._DenoisingMethod = denoisingMethod;
-            _Renderer -> Notify( DirtyState::RenderSettings );
           }
 
           if ( 0 == _Settings._DenoisingMethod )
