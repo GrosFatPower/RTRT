@@ -90,7 +90,11 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
   {
     int texArrayID = texelFetch(u_TexIndTexture, baseColorTexID).x;
     if ( texArrayID >= 0 )
-      oMat._Albedo = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rgb * oMat._Albedo;
+    {
+      vec4 texColor = texture( u_TexArrayTexture, vec3( ioClosestHit._UV, float( texArrayID ) ) );
+      oMat._Albedo *= texColor.rgb;
+      oMat._Opacity *= texColor.a;
+    }
   }
 
   if ( normalMapTexID >= 0 )

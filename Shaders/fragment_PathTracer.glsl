@@ -303,18 +303,27 @@ vec3 PathSample( in Ray iStartRay )
     if ( depth >= MaxPathSegments )
       break; // Maximum depth reached
 
-    // DIRECT LIGHT
-    if ( SCATTER_RANDOM == scatterSample._Type )
+    if ( ( mat._Opacity < 1.f ) && ( rand() > mat._Opacity ) )
     {
-      radiance += DirectLight(ray, closestHit, mat, eta) * throughput;
+      // Ignore intersection and continue ray based on alpha test
+      scatterSample._Dir = ray._Dir;
+      depth--;
     }
+    else
+    {
+      // DIRECT LIGHT
+      if ( SCATTER_RANDOM == scatterSample._Type )
+      {
+        radiance += DirectLight(ray, closestHit, mat, eta) * throughput;
+      }
 
-    // SCATTER
-    Scatter(ray, closestHit, mat, eta, scatterSample);
-    if ( SCATTER_NONE == scatterSample._Type )
-      break;
+      // SCATTER
+      Scatter(ray, closestHit, mat, eta, scatterSample);
+      if ( SCATTER_NONE == scatterSample._Type )
+        break;
 
-    throughput *= scatterSample._Attenuation / ( scatterSample._P + EPSILON );
+      throughput *= scatterSample._Attenuation / ( scatterSample._P + EPSILON );
+    }
 
     // NEXT RAY
     ray._Orig = closestHit._Pos + scatterSample._Dir * RESOLUTION;
