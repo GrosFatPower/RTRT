@@ -135,4 +135,32 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
   oMat._F0 = mix(oMat._F0, oMat._Albedo, oMat._Metallic);
 }
 
+// ----------------------------------------------------------------------------
+// LoadOpacityValues
+// ----------------------------------------------------------------------------
+float LoadOpacityValues( in int iMatID, in vec2 iUV )//, out int oAlphaMode, out float oAlphaCutoff )
+{
+  int index = iMatID * 8;
+
+  vec4 Params7 = texelFetch(u_MaterialsTexture, ivec2(index + 6, 0), 0); // _BaseColorTexId | _MetallicRoughnessTexID | _NormalMapTexID | _EmissionMapTexID
+  vec4 Params8 = texelFetch(u_MaterialsTexture, ivec2(index + 7, 0), 0); // _Opacity        | _AlphaMode              | _AlphaCutoff    | _Reflectance
+
+  float opacity     = Params8.x;
+  //oAlphaMode   = (int)Params8.y;
+  //oAlphaCutoff = Params8.z;
+
+  int baseColorTexID = int(Params7.x);
+  if ( baseColorTexID >= 0 )
+  {
+    int texArrayID = texelFetch(u_TexIndTexture, baseColorTexID).x;
+    if ( texArrayID >= 0 )
+    {
+      vec4 texColor = texture( u_TexArrayTexture, vec3( iUV, float( texArrayID ) ) );
+      opacity *= texColor.a;
+    }
+  }
+
+  return opacity;
+}
+
 #endif
