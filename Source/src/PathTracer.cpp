@@ -261,6 +261,7 @@ int PathTracer::UpdatePathTraceUniforms()
     _PathTraceShader -> SetUniform("u_Gamma", _Settings._Gamma);
     _PathTraceShader -> SetUniform("u_Exposure", _Settings._Exposure);
     _PathTraceShader -> SetUniform("u_ToneMapping", ( _Settings._ToneMapping ? 1 : 0 ));
+    //_PathTraceShader -> SetUniform("u_ToneMapping", 0);
     _PathTraceShader -> SetUniform("u_DebugMode" , _DebugMode );
   }
 
@@ -620,6 +621,7 @@ int PathTracer::UpdateRenderToScreenUniforms()
   _RenderToScreenShader -> SetUniform("u_RenderRes", (float)_Settings._WindowResolution.x, (float)_Settings._WindowResolution.y);
   _RenderToScreenShader -> SetUniform("u_Gamma", _Settings._Gamma);
   _RenderToScreenShader -> SetUniform("u_Exposure", _Settings._Exposure);
+  //_RenderToScreenShader -> SetUniform("u_ToneMapping", ( _Settings._ToneMapping ? 1 : 0 ));
   _RenderToScreenShader -> SetUniform("u_ToneMapping", 0);
   _RenderToScreenShader -> SetUniform("u_FXAA", (_Settings._FXAA ?  1 : 0 ));
 

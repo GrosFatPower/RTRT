@@ -7,8 +7,9 @@
 
 #include Structures.glsl
 #include Textures.glsl
+#include RNG.glsl
 
-uniform sampler2D      u_MaterialsTexture;
+uniform sampler2D u_MaterialsTexture;
 
 struct Material
 {
@@ -161,6 +162,41 @@ float LoadOpacityValues( in int iMatID, in vec2 iUV )//, out int oAlphaMode, out
   }
 
   return opacity;
+}
+
+// ----------------------------------------------------------------------------
+// IsOpaque
+// ----------------------------------------------------------------------------
+bool IsOpaque( in float iOpacity )//, in int iAlphaMode, in float iAlphaCutoff )
+{
+  if ( iOpacity < 1.0f )
+  {
+    if ( rand() > iOpacity )
+      return false;
+  }
+
+  //if ( iAlphaMode == 0 )
+  //  return false;
+  //if ( iAlphaMode == 1 )
+  //  return ( iOpacity > iAlphaCutoff );
+
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// IsOpaque
+// ----------------------------------------------------------------------------
+bool IsOpaque( in int iMatID, in vec2 iUV )
+{
+  if ( iMatID >= 0 )
+  {
+    // float alphaMode = 0;
+    // float alphaCutoff = 0;
+    float opacity = LoadOpacityValues( iMatID, iUV );//, alphaMode, alphaCutoff);
+    return IsOpaque( opacity );//, alphaMode, alphaCutoff);
+  }
+
+  return true;
 }
 
 #endif

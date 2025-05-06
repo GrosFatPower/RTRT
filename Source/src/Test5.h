@@ -92,10 +92,10 @@ protected:
   int                        _CurBackgroundId  = -1;
   bool                       _ReloadScene      = false;
   bool                       _ReloadBackground = false;
-  GLTexture                  _AlbedoTEX        = { 0, GL_TEXTURE_2D, 0 };
-  GLTexture                  _MetalRoughTEX    = { 0, GL_TEXTURE_2D, 0 };
-  GLTexture                  _NormalMapTEX     = { 0, GL_TEXTURE_2D, 0 };
-  GLTexture                  _EmissionMapTEX   = { 0, GL_TEXTURE_2D, 0 };
+  GLTexture                  _AlbedoTEX        = { 0, GL_TEXTURE_2D, 31, GL_RGBA32F, GL_RGBA, GL_FLOAT };
+  GLTexture                  _MetalRoughTEX    = { 0, GL_TEXTURE_2D, 31, GL_RGBA32F, GL_RGBA, GL_FLOAT };
+  GLTexture                  _NormalMapTEX     = { 0, GL_TEXTURE_2D, 31, GL_RGBA32F, GL_RGBA, GL_FLOAT };
+  GLTexture                  _EmissionMapTEX   = { 0, GL_TEXTURE_2D, 31, GL_RGBA32F, GL_RGBA, GL_FLOAT };
 
   bool                       _RenderToFile = false;
   std::filesystem::path      _CaptureOutputPath;

@@ -97,15 +97,7 @@ bool TraceRay_ThroughBLAS( in Ray iRay, in mat4 iInvTransfo, in int iBlasNodesOf
 
             vec2 uv = uvID0 * ( 1 - uv.x - uv.y ) + uvID1 * uv.x + uvID2 * uv.y;
 
-            bool isOpaque = true;
-            if ( iMatID >= 0 )
-            {
-              float opacity = LoadOpacityValues( iMatID, uv );
-              if ( ( opacity < 1.f ) && ( rand() > opacity ) )
-                isOpaque = false;
-            }
-
-            if ( isOpaque )
+            if ( IsOpaque(iMatID, uv) )
             {
               vec3 norm0 = texelFetch(u_BLASPackedNormTexture, vInd0.y).xyz;
               vec3 norm1 = texelFetch(u_BLASPackedNormTexture, vInd1.y).xyz;
@@ -240,15 +232,7 @@ bool AnyHit_ThroughBLAS( in Ray iRay, in mat4 iInvTransfo, in int iBlasNodesOffs
 
             vec2 uv = uvID0 * ( 1 - uv.x - uv.y ) + uvID1 * uv.x + uvID2 * uv.y;
 
-            bool isOpaque = true;
-            if ( iMatID >= 0 )
-            {
-              float opacity = LoadOpacityValues( iMatID, uv );
-              if ( ( opacity < 1.f ) && ( rand() > opacity ) )
-                isOpaque = false;
-            }
-
-            if ( isOpaque )
+            if ( IsOpaque(iMatID, uv) )
               return true;
           }
         }

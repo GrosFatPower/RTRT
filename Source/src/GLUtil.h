@@ -125,6 +125,7 @@ static void GenTexture( GLenum iTarget, GLint iInternalformat, GLsizei iWidth, G
   ioTex._Target         = iTarget;
   ioTex._InternalFormat = iInternalformat;
   ioTex._DataFormat     = iFormat;
+  ioTex._DataType       = iType;
   glGenTextures(1, &ioTex._ID);
 
   LoadTexture(iWidth, iHeight, iData, ioTex);

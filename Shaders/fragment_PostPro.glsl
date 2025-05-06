@@ -36,7 +36,7 @@ void main()
 
   if ( 0 != u_ToneMapping )
   {
-    color = ReinhardToneMapping( color );
+    color = ReinhardToneMapping_Luminance( color );
     color = GammaCorrection( color );
   }
 

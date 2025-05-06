@@ -303,13 +303,7 @@ vec3 PathSample( in Ray iStartRay )
     if ( depth >= MaxPathSegments )
       break; // Maximum depth reached
 
-    if ( ( mat._Opacity < 1.f ) && ( rand() > mat._Opacity ) )
-    {
-      // Ignore intersection and continue ray based on alpha test
-      scatterSample._Dir = ray._Dir;
-      depth--;
-    }
-    else
+    if ( IsOpaque(mat._Opacity) )
     {
       // DIRECT LIGHT
       if ( SCATTER_RANDOM == scatterSample._Type )
@@ -323,6 +317,12 @@ vec3 PathSample( in Ray iStartRay )
         break;
 
       throughput *= scatterSample._Attenuation / ( scatterSample._P + EPSILON );
+    }
+    else
+    {
+      // Ignore intersection and continue ray based on alpha test
+      scatterSample._Dir = ray._Dir;
+      depth--;
     }
 
     // NEXT RAY
@@ -371,7 +371,7 @@ void main()
 
   if ( 0 != u_ToneMapping )
   {
-    radiance = ReinhardToneMapping( radiance );
+    radiance = ReinhardToneMapping_Luminance( radiance );
     radiance = GammaCorrection( radiance );
   }
   else

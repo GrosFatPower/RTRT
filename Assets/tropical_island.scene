@@ -1,34 +1,19 @@
-#renderer
-#{
-#	#resolution 1500 1500
-#	#windowresolution 800 800
-#	#maxdepth 20
-#	#tilewidth 400
-#	#tileheight 400
-#	#independentrendersize true
-#	resolution 800 800
-#	maxdepth 4
-#	enablevolumemis true
-#	tilewidth 200
-#	tileheight 200
-#	envmapfile HDR/spiaggia_di_mondello_4k_new.hdr
-#	envmapintensity 1.0
-#}  
-
-light
-{
-	type sphere
-	position  2 4 2
-	emission 1 1 1
-	radius .5
-}
-
 renderer
 {
+	#resolution 1500 1500
+	#windowresolution 800 800
+	#maxdepth 20
+	#tilewidth 400
+	#tileheight 400
+	#independentrendersize true
 	resolution 800 800
-	maxdepth 3
-  enablebackground true
-}
+	maxdepth 4
+	enablevolumemis true
+	tilewidth 200
+	tileheight 200
+	envmapfile HDR/spiaggia_di_mondello_4k_new.hdr
+	envmapintensity 1.0
+}  
 
 camera
 {
