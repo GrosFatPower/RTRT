@@ -307,7 +307,7 @@ int Test5::DrawUI()
     {
       static const char * YESorNO[] = { "No", "Yes" };
 
-      static bool vSync = true;
+      static bool vSync = false;
       if ( ImGui::Checkbox( "VSync", &vSync ) )
       {
         if ( vSync )
@@ -1220,7 +1220,7 @@ int Test5::Run()
     glfwSetKeyCallback( _MainWindow.get(), Test5::KeyCallback );
 
     glfwMakeContextCurrent( _MainWindow.get() );
-    glfwSwapInterval( 1 ); // Enable vsync
+    glfwSwapInterval( 0 ); // Disable vsync
 
     // Setup Dear ImGui context
     if ( 0 != InitializeUI() )

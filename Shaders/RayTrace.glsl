@@ -118,12 +118,16 @@ bool TraceRay( in Ray iRay, out HitPoint oClosestHit )
             vec3 uvMatID1 = texelFetch(u_VtxUVTexture, vInd1.z).xyz;
             vec3 uvMatID2 = texelFetch(u_VtxUVTexture, vInd2.z).xyz;
 
-            oClosestHit._Dist       = hitDist;
-            oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
-            oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
-            oClosestHit._UV         = uvMatID0.xy * ( 1 - uv.x - uv.y ) + uvMatID1.xy * uv.x + uvMatID2.xy * uv.y;
-            oClosestHit._MaterialID = int(uvMatID0.z);
-            TriangleTangents(v0, v1, v2, uvMatID0.xy, uvMatID1.xy, uvMatID2.xy, oClosestHit._Tangent, oClosestHit._Bitangent);
+            vec2 texUV = uvMatID0.xy * ( 1 - uv.x - uv.y ) + uvMatID1.xy * uv.x + uvMatID2.xy * uv.y;
+            if ( IsOpaque(iMatID, texUV) )
+            {
+              oClosestHit._Dist       = hitDist;
+              oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+              oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
+              oClosestHit._UV         = texUV;
+              oClosestHit._MaterialID = int(uvMatID0.z);
+              TriangleTangents(v0, v1, v2, uvMatID0.xy, uvMatID1.xy, uvMatID2.xy, oClosestHit._Tangent, oClosestHit._Bitangent);
+            }
           }
         }
       }
@@ -155,12 +159,16 @@ bool TraceRay( in Ray iRay, out HitPoint oClosestHit )
         vec3 uvMatID1 = texelFetch(u_VtxUVTexture, vInd1.z).xyz;
         vec3 uvMatID2 = texelFetch(u_VtxUVTexture, vInd2.z).xyz;
 
-        oClosestHit._Dist       = hitDist;
-        oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
-        oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
-        oClosestHit._UV         = uvMatID0.xy * ( 1 - uv.x - uv.y ) + uvMatID1.xy * uv.x + uvMatID2.xy * uv.y;
-        oClosestHit._MaterialID = int(uvMatID0.z);
-        TriangleTangents(v0, v1, v2, uvMatID0.xy, uvMatID1.xy, uvMatID2.xy, oClosestHit._Tangent, oClosestHit._Bitangent);
+        vec2 texUV = uvMatID0.xy * ( 1 - uv.x - uv.y ) + uvMatID1.xy * uv.x + uvMatID2.xy * uv.y;
+        if ( IsOpaque(iMatID, texUV) )
+        {
+          oClosestHit._Dist       = hitDist;
+          oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
+          oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
+          oClosestHit._UV         = texUV;
+          oClosestHit._MaterialID = int(uvMatID0.z);
+          TriangleTangents(v0, v1, v2, uvMatID0.xy, uvMatID1.xy, uvMatID2.xy, oClosestHit._Tangent, oClosestHit._Bitangent);
+        }
       }
     }
   }

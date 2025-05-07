@@ -71,7 +71,7 @@ vec3 DebugColor( in Ray iRay, in HitPoint iClosestHit )
   }
   else if ( 5 == u_DebugMode )
   {
-    outColor = iClosestHit._Normal;
+    outColor = abs(iClosestHit._Normal);
   }
   else if ( 6 == u_DebugMode )
   {

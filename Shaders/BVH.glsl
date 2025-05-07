@@ -95,9 +95,9 @@ bool TraceRay_ThroughBLAS( in Ray iRay, in mat4 iInvTransfo, in int iBlasNodesOf
             vec2 uvID1 = texelFetch(u_BLASPackedUVTexture, vInd1.z).xy;
             vec2 uvID2 = texelFetch(u_BLASPackedUVTexture, vInd2.z).xy;
 
-            vec2 uv = uvID0 * ( 1 - uv.x - uv.y ) + uvID1 * uv.x + uvID2 * uv.y;
+            vec2 texUV = uvID0 * ( 1 - uv.x - uv.y ) + uvID1 * uv.x + uvID2 * uv.y;
 
-            if ( IsOpaque(iMatID, uv) )
+            if ( IsOpaque(iMatID, texUV) )
             {
               vec3 norm0 = texelFetch(u_BLASPackedNormTexture, vInd0.y).xyz;
               vec3 norm1 = texelFetch(u_BLASPackedNormTexture, vInd1.y).xyz;
@@ -107,7 +107,7 @@ bool TraceRay_ThroughBLAS( in Ray iRay, in mat4 iInvTransfo, in int iBlasNodesOf
               oClosestHit._Dist       = hitDist;
               oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
               oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
-              oClosestHit._UV         = uv;
+              oClosestHit._UV         = texUV;
               oClosestHit._MaterialID = iMatID;
               TriangleTangents(v0, v1, v2, uvID0, uvID1, uvID2, oClosestHit._Tangent, oClosestHit._Bitangent);
             }
