@@ -303,7 +303,7 @@ vec3 PathSample( in Ray iStartRay )
     if ( depth >= MaxPathSegments )
       break; // Maximum depth reached
 
-    if ( IsOpaque(mat._Opacity) )
+    if ( IsOpaque(mat) )
     {
       // DIRECT LIGHT
       if ( SCATTER_RANDOM == scatterSample._Type )

@@ -11,9 +11,14 @@
 
 uniform sampler2D u_MaterialsTexture;
 
+#define ALPHA_MODE_OPAQUE 0
+#define ALPHA_MODE_BLEND 1
+#define ALPHA_MODE_MASK 2
+
 struct Material
 {
   int   _ID;
+  int   _AlphaMode;          // 0: OPAQUE, 1: MASK, 2: BLEND
   vec3  _Emission;
   vec3  _Albedo;             // Albedo for dialectrics, F0 for metals
   vec3  _F0;                 // Base reflectance
@@ -30,6 +35,7 @@ struct Material
   float _ClearcoatRoughness; // Disney BRDF
   float _IOR;
   float _Opacity;
+  float _AlphaCutoff;        // Alpha cutoff for MASK mode
   float _Ax;                 // Disney BRDF
   float _Ay;                 // Disney BRDF
 };
@@ -83,8 +89,8 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
   int emissionMapTexID         = int(Params7.w);
 
   oMat._Opacity                = Params8.x;
-  // oMat._AlphaMode             = Params8.y;
-  // oMat._AlphaCutoff           = Params8.z;
+  oMat._AlphaMode              = int(Params8.y);
+  oMat._AlphaCutoff            = Params8.z;
   oMat._Reflectance            = Params8.w;
 
   if ( baseColorTexID >= 0 )
@@ -139,16 +145,16 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
 // ----------------------------------------------------------------------------
 // LoadOpacityValues
 // ----------------------------------------------------------------------------
-float LoadOpacityValues( in int iMatID, in vec2 iUV )//, out int oAlphaMode, out float oAlphaCutoff )
+float LoadOpacityValues( in int iMatID, in vec2 iUV, out int oAlphaMode, out float oAlphaCutoff )
 {
   int index = iMatID * 8;
 
   vec4 Params7 = texelFetch(u_MaterialsTexture, ivec2(index + 6, 0), 0); // _BaseColorTexId | _MetallicRoughnessTexID | _NormalMapTexID | _EmissionMapTexID
   vec4 Params8 = texelFetch(u_MaterialsTexture, ivec2(index + 7, 0), 0); // _Opacity        | _AlphaMode              | _AlphaCutoff    | _Reflectance
 
-  float opacity     = Params8.x;
-  //oAlphaMode   = (int)Params8.y;
-  //oAlphaCutoff = Params8.z;
+  float opacity = Params8.x;
+  oAlphaMode   = int(Params8.y);
+  oAlphaCutoff = Params8.z;
 
   int baseColorTexID = int(Params7.x);
   if ( baseColorTexID >= 0 )
@@ -167,18 +173,29 @@ float LoadOpacityValues( in int iMatID, in vec2 iUV )//, out int oAlphaMode, out
 // ----------------------------------------------------------------------------
 // IsOpaque
 // ----------------------------------------------------------------------------
-bool IsOpaque( in float iOpacity )//, in int iAlphaMode, in float iAlphaCutoff )
+bool IsOpaque( in float iOpacity, in int iAlphaMode, in float iAlphaCutoff )
 {
-  if ( iOpacity < 1.0f )
+  // Opaque
+  if ( ALPHA_MODE_OPAQUE == iAlphaMode )
   {
-    if ( rand() > iOpacity )
-      return false;
   }
 
-  //if ( iAlphaMode == 0 )
-  //  return false;
-  //if ( iAlphaMode == 1 )
-  //  return ( iOpacity > iAlphaCutoff );
+  // Blend
+  else if ( ALPHA_MODE_BLEND == iAlphaMode )
+  {
+    if ( iOpacity < 1.0f )
+    {
+      if ( rand() > iOpacity )
+        return false;
+    }
+  }
+  
+  // Mask
+  else if ( ALPHA_MODE_MASK == iAlphaMode )
+  {
+    if ( iOpacity < iAlphaCutoff )
+      return false;
+  } 
 
   return true;
 }
@@ -190,13 +207,21 @@ bool IsOpaque( in int iMatID, in vec2 iUV )
 {
   if ( iMatID >= 0 )
   {
-    // float alphaMode = 0;
-    // float alphaCutoff = 0;
-    float opacity = LoadOpacityValues( iMatID, iUV );//, alphaMode, alphaCutoff);
-    return IsOpaque( opacity );//, alphaMode, alphaCutoff);
+    int alphaMode = 0;
+    float alphaCutoff = 0;
+    float opacity = LoadOpacityValues( iMatID, iUV, alphaMode, alphaCutoff);
+    return IsOpaque( opacity, alphaMode, alphaCutoff);
   }
 
   return true;
+}
+
+// ----------------------------------------------------------------------------
+// IsOpaque
+// ----------------------------------------------------------------------------
+bool IsOpaque( in Material iMat )
+{
+  return IsOpaque( iMat._Opacity, iMat._AlphaMode, iMat._AlphaCutoff );
 }
 
 #endif

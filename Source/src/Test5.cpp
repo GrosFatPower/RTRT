@@ -432,7 +432,7 @@ int Test5::DrawUI()
       }
 
       if ( ImGui::Checkbox( "FXAA", &_Settings._FXAA ) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
+      {}
 
       if ( ImGui::Checkbox( "Tone mapping", &_Settings._ToneMapping ) )
         _Renderer -> Notify(DirtyState::RenderSettings);
@@ -667,8 +667,25 @@ int Test5::DrawUI()
         if ( ImGui::SliderFloat("IOR", &curMat._IOR, 1.f, 3.f) )
           _Renderer -> Notify(DirtyState::SceneMaterials);
 
-        if ( ImGui::SliderFloat("Opacity", &curMat._Opacity, 0.f, 1.f) )
-          _Renderer -> Notify(DirtyState::SceneMaterials);
+        static const char * ALPHA_MODES[] = { "Opaque", "Blend", "Mask" };
+        int alphaMode = (int)curMat._AlphaMode;
+        if ( ImGui::Combo( "Alpha mode", &alphaMode, ALPHA_MODES, 3 ) )
+        {
+          curMat._AlphaMode = (float)alphaMode;
+          _Renderer -> Notify( DirtyState::SceneMaterials );
+        }
+
+        if ( curMat._AlphaMode != 0.f )
+        {
+          if ( ImGui::SliderFloat("Opacity", &curMat._Opacity, 0.f, 1.f) )
+            _Renderer -> Notify(DirtyState::SceneMaterials);
+        }
+
+        if ( AlphaMode::Mask == (AlphaMode)curMat._AlphaMode )
+        {
+          if ( ImGui::SliderFloat("Alpha cutoff", &curMat._AlphaCutoff, 0.f, 1.f) )
+            _Renderer -> Notify(DirtyState::SceneMaterials);
+        }
 
         if ( curMat._BaseColorTexId >= 0 )
         {
