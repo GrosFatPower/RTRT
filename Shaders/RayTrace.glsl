@@ -67,14 +67,14 @@ bool TraceRay( in Ray iRay, out HitPoint oClosestHit )
     vec4 up      = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 1, 0), 0).xyzw;
     vec4 forward = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 2, 0), 0).xyzw;
     vec4 trans   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 3, 0), 0).xyzw;
-    mat4 invTransform = inverse(mat4(right, up, forward, trans));
+    mat4 transform = mat4(right, up, forward, trans);
 
     ivec2 blasRange = texelFetch(u_BLASNodesRangeTexture, meshMatID.x).xy;
     ivec2 triRange  = texelFetch(u_BLASPackedIndicesRangeTexture, meshMatID.x).xy;
     blasRange.x *= 3;
 
     HitPoint closestHit;
-    if ( TraceRay_ThroughBLAS(iRay, invTransform, blasRange.x, triRange.x, meshMatID.y, oClosestHit._Dist, closestHit ) )
+    if ( TraceRay_ThroughBLAS(iRay, transform, blasRange.x, triRange.x, meshMatID.y, oClosestHit._Dist, closestHit ) )
     {
       oClosestHit = closestHit;
     }
@@ -290,13 +290,13 @@ bool AnyHit( in Ray iRay, in float iMaxDist )
     vec4 up      = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 1, 0), 0).xyzw;
     vec4 forward = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 2, 0), 0).xyzw;
     vec4 trans   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 3, 0), 0).xyzw;
-    mat4 invTransform = inverse(mat4(right, up, forward, trans));
+    mat4 transform = mat4(right, up, forward, trans);
 
     ivec2 blasRange = texelFetch(u_BLASNodesRangeTexture, meshMatID.x).xy;
     ivec2 triRange  = texelFetch(u_BLASPackedIndicesRangeTexture, meshMatID.x).xy;
     blasRange.x *= 3;
 
-    if ( AnyHit_ThroughBLAS(iRay, invTransform, blasRange.x, triRange.x, iMaxDist ) )
+    if ( AnyHit_ThroughBLAS(iRay, transform, blasRange.x, triRange.x, meshMatID.y, iMaxDist ) )
       return true;
   }
 #elif defined(OPTIM_AABB)
