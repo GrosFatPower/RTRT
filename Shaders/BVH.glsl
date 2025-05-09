@@ -33,7 +33,7 @@ uniform samplerBuffer  u_BLASPackedUVTexture;
 // ----------------------------------------------------------------------------
 // TraceRay_ThroughBLAS
 // ----------------------------------------------------------------------------
-bool TraceRay_ThroughBLAS( in Ray iRay, in mat4 iInvTransfo, in int iBlasNodesOffset, in int iTriOffset, in int iMatID, in float iMaxDist, out HitPoint oClosestHit )
+bool TraceRay_ThroughBLAS( in Ray iRay, in mat4 iTransfo, in int iBlasNodesOffset, in int iTriOffset, in int iMatID, in float iMaxDist, out HitPoint oClosestHit )
 {
   InitializeHitPoint(oClosestHit);
 
@@ -53,9 +53,11 @@ bool TraceRay_ThroughBLAS( in Ray iRay, in mat4 iInvTransfo, in int iBlasNodesOf
   int   topPtr = 0;
   Stack[topPtr++] = -1;
 
+  mat4 invTransfo = inverse(iTransfo);
+
   Ray transRay;
-  transRay._Orig = (iInvTransfo * vec4(iRay._Orig, 1.0)).xyz;
-  transRay._Dir  = (iInvTransfo * vec4(iRay._Dir, 0.0)).xyz;
+  transRay._Orig = (invTransfo * vec4(iRay._Orig, 1.0)).xyz;
+  transRay._Dir  = (invTransfo * vec4(iRay._Dir, 0.0)).xyz;
 
   leftBboxMin  = texelFetch(u_BLASNodesTexture, iBlasNodesOffset    ).xyz;
   leftBboxMax  = texelFetch(u_BLASNodesTexture, iBlasNodesOffset + 1).xyz;
@@ -99,17 +101,22 @@ bool TraceRay_ThroughBLAS( in Ray iRay, in mat4 iInvTransfo, in int iBlasNodesOf
 
             if ( IsOpaque(iMatID, texUV) )
             {
-              vec3 norm0 = texelFetch(u_BLASPackedNormTexture, vInd0.y).xyz;
-              vec3 norm1 = texelFetch(u_BLASPackedNormTexture, vInd1.y).xyz;
-              vec3 norm2 = texelFetch(u_BLASPackedNormTexture, vInd2.y).xyz;
+              vec3 norm0  = texelFetch(u_BLASPackedNormTexture, vInd0.y).xyz;
+              vec3 norm1  = texelFetch(u_BLASPackedNormTexture, vInd1.y).xyz;
+              vec3 norm2  = texelFetch(u_BLASPackedNormTexture, vInd2.y).xyz;
+              vec3 locNorm = ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2;
+
+              vec3 locTangent, locBitangent;
+              TriangleTangents(v0, v1, v2, uvID0, uvID1, uvID2, locTangent, locBitangent);
 
               iMaxDist                = hitDist;
               oClosestHit._Dist       = hitDist;
               oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;
-              oClosestHit._Normal     = normalize( ( 1 - uv.x - uv.y ) * norm0 + uv.x * norm1 + uv.y * norm2 );
+              oClosestHit._Normal     = normalize(transpose(mat3(invTransfo)) * locNorm);
               oClosestHit._UV         = texUV;
               oClosestHit._MaterialID = iMatID;
-              TriangleTangents(v0, v1, v2, uvID0, uvID1, uvID2, oClosestHit._Tangent, oClosestHit._Bitangent);
+              oClosestHit._Tangent = normalize( mat3(iTransfo) * locTangent );
+              oClosestHit._Bitangent = normalize( mat3(iTransfo) * locBitangent );
             }
           }
         }
@@ -170,7 +177,7 @@ bool TraceRay_ThroughBLAS( in Ray iRay, in mat4 iInvTransfo, in int iBlasNodesOf
 // ----------------------------------------------------------------------------
 // AnyHit_ThroughBLAS
 // ----------------------------------------------------------------------------
-bool AnyHit_ThroughBLAS( in Ray iRay, in mat4 iInvTransfo, in int iBlasNodesOffset, in int iTriOffset, in int iMatID, in float iMaxDist )
+bool AnyHit_ThroughBLAS( in Ray iRay, in mat4 iTransfo, in int iBlasNodesOffset, in int iTriOffset, in int iMatID, in float iMaxDist )
 {
   int   index       = 0; // BLAS Root
   bool  leftHit     = false;
@@ -188,9 +195,11 @@ bool AnyHit_ThroughBLAS( in Ray iRay, in mat4 iInvTransfo, in int iBlasNodesOffs
   int   topPtr = 0;
   Stack[topPtr++] = -1;
 
+  mat4 invTransfo = inverse(iTransfo);
+
   Ray transRay;
-  transRay._Orig = (iInvTransfo * vec4(iRay._Orig, 1.0)).xyz;
-  transRay._Dir  = (iInvTransfo * vec4(iRay._Dir, 0.0)).xyz;
+  transRay._Orig = (invTransfo * vec4(iRay._Orig, 1.0)).xyz;
+  transRay._Dir  = (invTransfo * vec4(iRay._Dir, 0.0)).xyz;
 
   leftBboxMin  = texelFetch(u_BLASNodesTexture, iBlasNodesOffset    ).xyz;
   leftBboxMax  = texelFetch(u_BLASNodesTexture, iBlasNodesOffset + 1).xyz;
@@ -327,15 +336,15 @@ bool TraceRay_ThroughTLAS( in Ray iRay, out HitPoint oClosestHit )
         vec4 right   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 0, 0), 0).xyzw;
         vec4 up      = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 1, 0), 0).xyzw;
         vec4 forward = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 2, 0), 0).xyzw;
-        vec4 trans   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 3, 0), 0).xyzw;
-        mat4 invTransform = inverse(mat4(right, up, forward, trans));
+        vec4 transl  = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 3, 0), 0).xyzw;
+        mat4 transfo = mat4(right, up, forward, transl);
 
         ivec2 blasRange = texelFetch(u_BLASNodesRangeTexture, meshMatID.x).xy;
         ivec2 triRange  = texelFetch(u_BLASPackedIndicesRangeTexture, meshMatID.x).xy;
         blasRange.x *= 3;
 
         HitPoint closestHit;
-        if ( TraceRay_ThroughBLAS(iRay, invTransform, blasRange.x, triRange.x, meshMatID.y, oClosestHit._Dist, closestHit ) )
+        if ( TraceRay_ThroughBLAS(iRay, transfo, blasRange.x, triRange.x, meshMatID.y, oClosestHit._Dist, closestHit ) )
           oClosestHit = closestHit;
       }
     }
@@ -434,14 +443,14 @@ bool AnyHit_ThroughTLAS( in Ray iRay, in float iMaxDist )
         vec4 right   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 0, 0), 0).xyzw;
         vec4 up      = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 1, 0), 0).xyzw;
         vec4 forward = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 2, 0), 0).xyzw;
-        vec4 trans   = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 3, 0), 0).xyzw;
-        mat4 invTransform = inverse(mat4(right, up, forward, trans));
+        vec4 transl  = texelFetch(u_TLASTransformsTexture, ivec2(ind * 4 + 3, 0), 0).xyzw;
+        mat4 transfo = mat4(right, up, forward, transl);
 
         ivec2 blasRange = texelFetch(u_BLASNodesRangeTexture, meshMatID.x).xy;
         ivec2 triRange  = texelFetch(u_BLASPackedIndicesRangeTexture, meshMatID.x).xy;
         blasRange.x *= 3;
 
-        if ( AnyHit_ThroughBLAS(iRay, invTransform, blasRange.x, triRange.x, meshMatID.y, iMaxDist ) )
+        if ( AnyHit_ThroughBLAS(iRay, transfo, blasRange.x, triRange.x, meshMatID.y, iMaxDist ) )
           return true;
       }
     }
