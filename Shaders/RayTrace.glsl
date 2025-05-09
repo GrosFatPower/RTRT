@@ -119,7 +119,7 @@ bool TraceRay( in Ray iRay, out HitPoint oClosestHit )
             vec3 uvMatID2 = texelFetch(u_VtxUVTexture, vInd2.z).xyz;
 
             vec2 texUV = uvMatID0.xy * ( 1 - uv.x - uv.y ) + uvMatID1.xy * uv.x + uvMatID2.xy * uv.y;
-            if ( IsOpaque(iMatID, texUV) )
+            if ( IsOpaque(int(uvMatID0.z), texUV) )
             {
               oClosestHit._Dist       = hitDist;
               oClosestHit._Pos        = iRay._Orig + hitDist * iRay._Dir;

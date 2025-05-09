@@ -153,7 +153,7 @@ bool Mesh::LoadOBJ( const std::string & iFilename )
           Vec3i indices;
           indices.x = idx.vertex_index;
           indices.y = idx.normal_index;
-          indices.z = idx.texcoord_index;
+          indices.z = ( idx.texcoord_index >= 0 ) ? ( idx.texcoord_index ) : ( 0 );
 
           _Indices.push_back(indices);
         }
