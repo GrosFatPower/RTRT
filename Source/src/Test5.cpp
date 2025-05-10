@@ -448,8 +448,8 @@ int Test5::DrawUI()
 
       if ( RendererType::PathTracer == _RendererType )
       {
-        static const char * PATH_TRACE_DEBUG_MODES[] = { "Off", "Tiles", "Albedo", "Metalness", "Roughness", "Normals", "UV"};
-        if ( ImGui::Combo( "Debug view", &g_DebugMode, PATH_TRACE_DEBUG_MODES, 7 ) )
+        static const char * PATH_TRACE_DEBUG_MODES[] = { "Off", "Tiles", "Albedo", "Metalness", "Roughness", "Normals", "UV", "BLAS"};
+        if ( ImGui::Combo( "Debug view", &g_DebugMode, PATH_TRACE_DEBUG_MODES, 8 ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
       }
       else if ( RendererType::SoftwareRasterizer == _RendererType )

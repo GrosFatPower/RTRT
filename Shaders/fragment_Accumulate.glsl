@@ -1,5 +1,6 @@
 #version 430 core
 
+#include Globals.glsl
 #include ToneMapping.glsl
 #include FXAA.glsl
 
@@ -21,8 +22,6 @@ uniform sampler2D u_PreviousFrame;
 uniform sampler2D u_NewFrame;
 uniform sampler2D u_NewFrameNormals;
 uniform sampler2D u_NewFramePos;
-
-uniform int       u_DebugMode;
 
 void main()
 {

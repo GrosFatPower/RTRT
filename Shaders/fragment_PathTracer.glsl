@@ -6,6 +6,7 @@ layout(location = 1) out vec4 fragNormal;
 layout(location = 2) out vec4 fragPosition;
 
 #include Constants.glsl
+#include Globals.glsl
 #include Structures.glsl
 #include RNG.glsl
 #include Textures.glsl
@@ -30,7 +31,6 @@ uniform int            u_FrameNum;
 uniform int            u_NbCompleteFrames;
 uniform vec3           u_BackgroundColor;
 uniform Camera         u_Camera;
-uniform int            u_ToneMapping       = 1;
 uniform int            u_TiledRendering    = 0;
 uniform int            u_RussianRoulette   = 1;
 uniform int            u_NbSamplesPerPixel = 1;
@@ -43,9 +43,6 @@ uniform float          u_EnvMapIntensity   = 1.f;
 uniform vec2           u_EnvMapRes;
 uniform sampler2D      u_EnvMap;
 uniform sampler2D      u_EnvMapCDF;
-
-uniform int            u_DebugMode;
-
 
 // ----------------------------------------------------------------------------
 // DebugColor
@@ -272,7 +269,7 @@ vec3 PathSample( in Ray iStartRay )
     }
 
     // DEBUG
-    if ( u_DebugMode > 1 )
+    if ( ( u_DebugMode > 1 ) && ( u_DebugMode < 7 ) )
     {
       radiance += DebugColor( ray, closestHit );
       break;

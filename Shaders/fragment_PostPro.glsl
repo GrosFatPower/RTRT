@@ -1,5 +1,6 @@
 #version 430 core
 
+#include Globals.glsl
 #include ToneMapping.glsl
 #include FXAA.glsl
 
@@ -9,7 +10,6 @@ out vec4 fragColor;
 uniform sampler2D u_ScreenTexture;
 uniform vec2      u_RenderRes;
 uniform int       u_AccumulatedFrames;
-uniform int       u_ToneMapping;
 uniform int       u_FXAA;
 
 void main()

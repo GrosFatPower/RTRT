@@ -4,6 +4,7 @@ in vec2 fragUV;
 out vec4 fragColor;
 
 #include Constants.glsl
+#include Globals.glsl
 #include Structures.glsl
 #include RNG.glsl
 #include Textures.glsl
@@ -28,15 +29,12 @@ uniform int            u_Accumulate;
 uniform int            u_TiledRendering;
 uniform int            u_NbCompleteFrames;
 uniform int            u_Bounces;
-uniform int            u_ToneMapping;
 uniform vec3           u_BackgroundColor;
 uniform Camera         u_Camera;
 uniform int            u_EnableBackground;
 uniform int            u_EnableSkybox;
 uniform float          u_SkyboxRotation;
 uniform sampler2D      u_SkyboxTexture;
-
-uniform int            u_DebugMode;
 
 // ----------------------------------------------------------------------------
 // DirectIllumination (PBR)
