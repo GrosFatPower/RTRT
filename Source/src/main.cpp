@@ -76,7 +76,7 @@ int TestSelectionPanel( GLFWwindow * iMainWindow )
     {
       ImGui::Begin("Test selection");
 
-      int comboSelection = 0;
+      int comboSelection = -1;
       if ( ImGui::Combo("Test selection", &comboSelection, TestNames, 5) )
       {
         selectedTest = comboSelection + 1;
