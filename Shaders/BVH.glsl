@@ -72,11 +72,14 @@ bool TraceRay_ThroughBLAS( in Ray iRay, in mat4 iTransfo, in int iBlasNodesOffse
     {
       oClosestHit._Dist       = leftDist;
       oClosestHit._Pos        = iRay._Orig + leftDist * iRay._Dir;
-      oClosestHit._Normal     = BoxNormal(leftBboxMin, leftBboxMax, mat4(1.f), oClosestHit._Pos);
       oClosestHit._UV         = vec2(0.);
       oClosestHit._MaterialID = 0;
 
+      vec3 locHitPoint = transRay._Orig + leftDist * transRay._Dir;
+      vec3 locNorm = BoxNormal(leftBboxMin, leftBboxMax, mat4(1.f), locHitPoint);
+      oClosestHit._Normal = normalize(transpose(mat3(invTransfo)) * locNorm);
       ComputeOnB(oClosestHit._Normal, oClosestHit._Tangent, oClosestHit._Bitangent);
+
       return true;
     }
   }
@@ -222,6 +225,11 @@ bool AnyHit_ThroughBLAS( in Ray iRay, in mat4 iTransfo, in int iBlasNodesOffset,
   leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
   if ( !leftHit )
     index = -1;
+  else if ( 7 == u_DebugMode )
+  {
+    if ( ( iMaxDist < 0 ) || ( leftDist < iMaxDist ) )
+      return true;
+  }
 
   while ( index != -1 )
   {

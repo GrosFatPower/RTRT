@@ -74,6 +74,10 @@ vec3 DebugColor( in Ray iRay, in HitPoint iClosestHit )
   {
     outColor = vec3(iClosestHit._UV.x, iClosestHit._UV.y, 0.f);
   }
+  else if ( 7 == u_DebugMode )
+  {
+    outColor = abs(iClosestHit._Normal);
+  }
 
   return outColor;
 }
@@ -269,7 +273,7 @@ vec3 PathSample( in Ray iStartRay )
     }
 
     // DEBUG
-    if ( ( u_DebugMode > 1 ) && ( u_DebugMode < 7 ) )
+    if ( u_DebugMode > 1 )
     {
       radiance += DebugColor( ray, closestHit );
       break;
