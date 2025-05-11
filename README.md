@@ -50,6 +50,8 @@ Test5 : GPU Path tracer / CPU Rasterizer
 
 ![spaceship_PT](./Captures/PathTracer_spaceship_5736frames.png)
 
+![slum_house_PT](./Captures/PathTracer_slum_house.gltf_16578frames.png)
+
 ![Sponza_PT](./Captures/PathTracer_Sponza_120633frames.png)
 
 
