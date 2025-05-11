@@ -58,7 +58,7 @@ namespace std
 namespace RTRT
 {
 
-const char * Test4::GetTestHeader() { return "Test 4 : CPU Rasterizer"; }
+const char * Test4::GetTestHeader() { return "CPU Rasterizer"; }
 
 // ----------------------------------------------------------------------------
 // Global variables

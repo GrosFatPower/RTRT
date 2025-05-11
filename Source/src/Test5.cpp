@@ -19,7 +19,7 @@
 namespace RTRT
 {
 
-const char * Test5::GetTestHeader() { return "Test 5 : Renderers"; }
+const char * Test5::GetTestHeader() { return "Renderers"; }
 
 // ----------------------------------------------------------------------------
 // Global variables

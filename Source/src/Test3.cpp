@@ -40,7 +40,7 @@ namespace fs = std::filesystem;
 namespace RTRT
 {
 
-const char * Test3::GetTestHeader() { return "Test 3 : Simple ray tracer"; }
+const char * Test3::GetTestHeader() { return "Simple ray tracer"; }
 
 // ----------------------------------------------------------------------------
 // GLOBAL VARIABLES

@@ -22,7 +22,7 @@
 namespace RTRT
 {
 
-const char * Test1::GetTestHeader() { return "Test 1 : Render to texture"; }
+const char * Test1::GetTestHeader() { return "Render to texture"; }
 
 // ----------------------------------------------------------------------------
 // Global variables

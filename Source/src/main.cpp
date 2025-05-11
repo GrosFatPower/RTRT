@@ -57,11 +57,11 @@ int TestSelectionPanel( GLFWwindow * iMainWindow )
   ImGui_ImplOpenGL3_Init(glsl_version);
 
   // Our state
-  const char * TestNames[] = { RTRT::Test1::GetTestHeader(),
-                               RTRT::Test2::GetTestHeader(),
-                               RTRT::Test3::GetTestHeader(),
-                               RTRT::Test4::GetTestHeader(),
-                               RTRT::Test5::GetTestHeader() };
+  const char * TestHeaders[] = { RTRT::Test1::GetTestHeader(),
+                                 RTRT::Test2::GetTestHeader(),
+                                 RTRT::Test3::GetTestHeader(),
+                                 RTRT::Test4::GetTestHeader(),
+                                 RTRT::Test5::GetTestHeader() };
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   while (!glfwWindowShouldClose(iMainWindow) && !selectedTest)
@@ -76,10 +76,15 @@ int TestSelectionPanel( GLFWwindow * iMainWindow )
     {
       ImGui::Begin("Test selection");
 
-      int comboSelection = -1;
-      if ( ImGui::Combo("Test selection", &comboSelection, TestNames, 5) )
+      for ( int i = 0; i < 5; ++i )
       {
-        selectedTest = comboSelection + 1;
+        std::string buttonName = std::string( "Test " ) + std::to_string( i + 1 );
+        if ( ImGui::Button( buttonName.c_str() ) )
+        {
+          selectedTest = i + 1;
+        }
+        ImGui::SameLine();
+        ImGui::Text(": %s", TestHeaders[i]);
       }
 
       ImGui::End();

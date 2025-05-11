@@ -61,9 +61,9 @@ bool TraceRay_ThroughBLAS( in Ray iRay, in mat4 iTransfo, in int iBlasNodesOffse
   transRay._Orig = (invTransfo * vec4(iRay._Orig, 1.0)).xyz;
   transRay._Dir  = (invTransfo * vec4(iRay._Dir, 0.0)).xyz;
 
-  leftBboxMin  = texelFetch(u_BLASNodesTexture, iBlasNodesOffset    ).xyz;
-  leftBboxMax  = texelFetch(u_BLASNodesTexture, iBlasNodesOffset + 1).xyz;
-  leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
+  leftBboxMin = texelFetch(u_BLASNodesTexture, iBlasNodesOffset    ).xyz;
+  leftBboxMax = texelFetch(u_BLASNodesTexture, iBlasNodesOffset + 1).xyz;
+  leftHit = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
   if ( !leftHit )
     index = -1;
   else if ( 7 == u_DebugMode )
@@ -220,9 +220,9 @@ bool AnyHit_ThroughBLAS( in Ray iRay, in mat4 iTransfo, in int iBlasNodesOffset,
   transRay._Orig = (invTransfo * vec4(iRay._Orig, 1.0)).xyz;
   transRay._Dir  = (invTransfo * vec4(iRay._Dir, 0.0)).xyz;
 
-  leftBboxMin  = texelFetch(u_BLASNodesTexture, iBlasNodesOffset    ).xyz;
-  leftBboxMax  = texelFetch(u_BLASNodesTexture, iBlasNodesOffset + 1).xyz;
-  leftHit   = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
+  leftBboxMin = texelFetch(u_BLASNodesTexture, iBlasNodesOffset    ).xyz;
+  leftBboxMax = texelFetch(u_BLASNodesTexture, iBlasNodesOffset + 1).xyz;
+  leftHit = BoxIntersection(leftBboxMin, leftBboxMax, transRay, leftDist);
   if ( !leftHit )
     index = -1;
   else if ( 7 == u_DebugMode )

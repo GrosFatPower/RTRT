@@ -16,7 +16,7 @@
 namespace RTRT
 {
 
-const char * Test2::GetTestHeader() { return "Test 2 : Scene loader"; }
+const char * Test2::GetTestHeader() { return "Scene loader"; }
 
 // ----------------------------------------------------------------------------
 // Global variables
