@@ -145,9 +145,7 @@ void GetLocalTransfo( const tinygltf::Node & iGltfNode, Mat4x4 & oLocalTransfoMa
 
     if ( iGltfNode.translation.size() > 0 )
     {
-      translate[3][0] = iGltfNode.translation[0];
-      translate[3][1] = iGltfNode.translation[1];
-      translate[3][2] = iGltfNode.translation[2];
+      translate = glm::translate(Mat4x4(1.f), Vec3(iGltfNode.translation[0], iGltfNode.translation[1], iGltfNode.translation[2]));
     }
 
     if ( iGltfNode.rotation.size() > 0 )
@@ -157,9 +155,7 @@ void GetLocalTransfo( const tinygltf::Node & iGltfNode, Mat4x4 & oLocalTransfoMa
 
     if ( iGltfNode.scale.size() > 0 )
     {
-      scale[0][0] = iGltfNode.scale[0];
-      scale[1][1] = iGltfNode.scale[1];
-      scale[2][2] = iGltfNode.scale[2];
+      scale = glm::scale(Mat4x4(1.f), Vec3(iGltfNode.scale[0], iGltfNode.scale[1], iGltfNode.scale[2]));
     }
 
     oLocalTransfoMat = translate * rot * scale;
@@ -489,7 +485,7 @@ void TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx,
   Mat4x4 localTransfoMat;
   GetLocalTransfo( gltfNode , localTransfoMat );
 
-  Mat4x4 transfoMat = localTransfoMat * iParentTransfoMat;
+  Mat4x4 transfoMat = iParentTransfoMat * localTransfoMat;
 
   if ( 0 == gltfNode.children.size() )
   {
