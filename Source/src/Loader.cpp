@@ -162,7 +162,7 @@ void GetLocalTransfo( const tinygltf::Node & iGltfNode, Mat4x4 & oLocalTransfoMa
       scale[2][2] = iGltfNode.scale[2];
     }
 
-    oLocalTransfoMat = scale * rot * translate;
+    oLocalTransfoMat = translate * rot * scale;
   }
 }
 
