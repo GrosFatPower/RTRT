@@ -18,6 +18,8 @@
 #include <sstream>
 #include <fstream>
 
+#include <glm/gtc/type_ptr.hpp>
+
 #define TINYGLTF_IMPLEMENTATION
 #include "tiny_gltf.h"
 
@@ -122,22 +124,7 @@ void GetLocalTransfo( const tinygltf::Node & iGltfNode, Mat4x4 & oLocalTransfoMa
 {
   if ( iGltfNode.matrix.size() > 0 )
   {
-    oLocalTransfoMat = { iGltfNode.matrix[0],
-                         iGltfNode.matrix[1],
-                         iGltfNode.matrix[2],
-                         iGltfNode.matrix[3],
-                         iGltfNode.matrix[4],
-                         iGltfNode.matrix[5],
-                         iGltfNode.matrix[6],
-                         iGltfNode.matrix[7],
-                         iGltfNode.matrix[8],
-                         iGltfNode.matrix[9],
-                         iGltfNode.matrix[10],
-                         iGltfNode.matrix[11],
-                         iGltfNode.matrix[12],
-                         iGltfNode.matrix[13],
-                         iGltfNode.matrix[14],
-                         iGltfNode.matrix[15] };
+    oLocalTransfoMat = glm::make_mat4(iGltfNode.matrix.data());
   }
   else
   {
