@@ -15,7 +15,7 @@ using TextureSlot = unsigned int;
 
 struct GLTexture
 {
-  GLuint            _ID = 0;
+  GLuint            _Handle = 0;
   GLenum            _Target;
   const TextureSlot _Slot;
   GLint             _InternalFormat = GL_RGBA32F;
@@ -25,13 +25,13 @@ struct GLTexture
 
 struct GLFrameBuffer
 {
-  GLuint       _ID = 0;
+  GLuint                 _Handle = 0;
   std::vector<GLTexture> _Tex;
 };
 
 struct GLTextureBuffer
 {
-  GLuint    _ID = 0;
+  GLuint    _Handle = 0;
   GLTexture _Tex;
 };
 
@@ -42,45 +42,45 @@ public:
 // DeleteTEX
 static void DeleteTEX( GLTexture & ioTEX )
 {
-  if ( ioTEX._ID )
-    glDeleteTextures(1, &ioTEX._ID);
-  ioTEX._ID = 0;
+  if ( ioTEX._Handle)
+    glDeleteTextures(1, &ioTEX._Handle);
+  ioTEX._Handle = 0;
 }
 
 // DeleteFBO
 static void DeleteFBO( GLFrameBuffer & ioFBO )
 {
-  if ( ioFBO._ID )
-    glDeleteFramebuffers(1, &ioFBO._ID);
+  if ( ioFBO._Handle)
+    glDeleteFramebuffers(1, &ioFBO._Handle);
   for ( auto tex : ioFBO._Tex )
     DeleteTEX(tex);
-  ioFBO._ID;
+  ioFBO._Handle;
 }
 
 // DeleteTBO
 static void DeleteTBO( GLTextureBuffer & ioTBO )
 {
-  if ( ioTBO._ID )
-    glDeleteBuffers(1, &ioTBO._ID);
+  if ( ioTBO._Handle)
+    glDeleteBuffers(1, &ioTBO._Handle);
   DeleteTEX(ioTBO._Tex);
-  ioTBO._ID = 0;
+  ioTBO._Handle = 0;
 }
 
 // InitializeTBO
 static void InitializeTBO( GLTextureBuffer & ioTBO, GLsizeiptr iSize, const void * iData, GLenum iInternalformat )
 {
-  glGenBuffers(1, &ioTBO._ID);
-  glBindBuffer(GL_TEXTURE_BUFFER, ioTBO._ID);
+  glGenBuffers(1, &ioTBO._Handle);
+  glBindBuffer(GL_TEXTURE_BUFFER, ioTBO._Handle);
   glBufferData(GL_TEXTURE_BUFFER, iSize, iData, GL_STATIC_DRAW);
-  glGenTextures(1, &ioTBO._Tex._ID);
-  glBindTexture(GL_TEXTURE_BUFFER, ioTBO._Tex._ID);
-  glTexBuffer(GL_TEXTURE_BUFFER, iInternalformat, ioTBO._ID);
+  glGenTextures(1, &ioTBO._Tex._Handle);
+  glBindTexture(GL_TEXTURE_BUFFER, ioTBO._Tex._Handle);
+  glTexBuffer(GL_TEXTURE_BUFFER, iInternalformat, ioTBO._Handle);
 }
 
 // ResizeTexture
 static void ResizeTexture( GLTexture & ioTex, GLsizei iWidth, GLsizei iHeight )
 {
-  glBindTexture(GL_TEXTURE_2D, ioTex._ID);
+  glBindTexture(GL_TEXTURE_2D, ioTex._Handle);
   glTexImage2D(GL_TEXTURE_2D, 0, ioTex._InternalFormat, iWidth, iHeight, 0, ioTex._DataFormat, ioTex._DataType, NULL);
   glBindTexture(GL_TEXTURE_2D, 0);
 }
@@ -91,7 +91,7 @@ static void ResizeFBO( GLFrameBuffer & ioFBO, GLsizei iWidth, GLsizei iHeight )
   for ( auto tex : ioFBO._Tex )
     ResizeTexture( tex, iWidth, iHeight );
 
-  glBindFramebuffer(GL_FRAMEBUFFER, ioFBO._ID);
+  glBindFramebuffer(GL_FRAMEBUFFER, ioFBO._Handle);
   glClear(GL_COLOR_BUFFER_BIT);
 }
 
@@ -99,7 +99,7 @@ static void ResizeFBO( GLFrameBuffer & ioFBO, GLsizei iWidth, GLsizei iHeight )
 static void ActivateTexture( GLTexture & iTex )
 {
   glActiveTexture(GL_TEX_UNIT(iTex));
-  glBindTexture(iTex._Target, iTex._ID);
+  glBindTexture(iTex._Target, iTex._Handle);
 }
 
 // ActivateTexture
@@ -112,7 +112,7 @@ static void ActivateTextures( GLFrameBuffer & ioFBO )
 // LoadTexture
 static void LoadTexture( GLsizei iWidth, GLsizei iHeight, const void * iData, GLTexture & ioTex )
 {
-  glBindTexture(ioTex._Target, ioTex._ID);
+  glBindTexture(ioTex._Target, ioTex._Handle);
   glTexImage2D(ioTex._Target, 0, ioTex._InternalFormat, iWidth, iHeight, 0, ioTex._DataFormat, ioTex._DataType, iData);
   glTexParameteri(ioTex._Target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(ioTex._Target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -126,7 +126,7 @@ static void GenTexture( GLenum iTarget, GLint iInternalformat, GLsizei iWidth, G
   ioTex._InternalFormat = iInternalformat;
   ioTex._DataFormat     = iFormat;
   ioTex._DataType       = iType;
-  glGenTextures(1, &ioTex._ID);
+  glGenTextures(1, &ioTex._Handle);
 
   LoadTexture(iWidth, iHeight, iData, ioTex);
 }

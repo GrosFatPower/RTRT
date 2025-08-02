@@ -19,7 +19,7 @@ void EnvMap::Reset()
   DeleteTab(_CDF);
 
   _IsInitialized = false;
-  _GLTexID         = -1;
+  _Handle        = -1;
   _Width         = 0;
   _Height        = 0;
   _Filename      = "";

@@ -25,6 +25,10 @@ source_group("shaders" FILES ${SHADERS})
 SET(EXE_NAME "RT_renderer")
 add_executable(${EXE_NAME} ${CORE_SOURCE} ${CORE_HEADER} ${EXT_SOURCE} ${EXT_HEADER} ${SHADERS})
 
+set_target_properties(${EXE_NAME} PROPERTIES
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+)
+											   
 # IMGUI
 option(RTRT_IMGUI_IMGUI_SHARED "Use imgui as a shared library" OFF)
 option(RTRT_BUILD_IMGUI "Build imgui using sources provided in external/imgui" ON)
@@ -68,4 +72,3 @@ target_compile_definitions(${EXE_NAME}
 target_compile_features(${EXE_NAME}
  PRIVATE cxx_std_17
 )
-

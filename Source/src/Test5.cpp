@@ -580,9 +580,9 @@ int Test5::DrawUI()
           _Renderer -> Notify(DirtyState::RenderSettings);
         }
 
-        if ( _Scene -> GetEnvMap().IsInitialized() && _Scene -> GetEnvMap().GetGLTexID() )
+        if ( _Scene -> GetEnvMap().IsInitialized() && _Scene -> GetEnvMap().GetHandle() )
         {
-          ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_Scene -> GetEnvMap().GetGLTexID());
+          ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_Scene -> GetEnvMap().GetHandle());
           ImGui::Image(texture, ImVec2(128, 128));
         }
       }
@@ -701,10 +701,10 @@ int Test5::DrawUI()
                 GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, basecolorTexture -> GetWidth(), basecolorTexture -> GetHeight(), GL_RGBA, GL_FLOAT, basecolorTexture -> GetFData(), _AlbedoTEX);
             }
 
-            if ( _AlbedoTEX._ID )
+            if ( _AlbedoTEX._Handle )
             {
               ImGui::Text("Base color :");
-              ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_AlbedoTEX._ID);
+              ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_AlbedoTEX._Handle);
               ImGui::Image(texture, ImVec2(256, 256));
             }
           }
@@ -724,10 +724,10 @@ int Test5::DrawUI()
                 GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, metallicRoughnessTexture -> GetWidth(), metallicRoughnessTexture -> GetHeight(), GL_RGBA, GL_FLOAT, metallicRoughnessTexture -> GetFData(), _MetalRoughTEX);
             }
 
-            if ( _MetalRoughTEX._ID )
+            if ( _MetalRoughTEX._Handle )
             {
               ImGui::Text("Metallic Roughness :");
-              ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_MetalRoughTEX._ID);
+              ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_MetalRoughTEX._Handle);
               ImGui::Image(texture, ImVec2(256, 256));
             }
           }
@@ -747,10 +747,10 @@ int Test5::DrawUI()
                 GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, normalMapTexture -> GetWidth(), normalMapTexture -> GetHeight(), GL_RGBA, GL_FLOAT, normalMapTexture -> GetFData(), _NormalMapTEX);
             }
 
-            if ( _NormalMapTEX._ID )
+            if ( _NormalMapTEX._Handle )
             {
               ImGui::Text("Normal map :");
-              ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_NormalMapTEX._ID);
+              ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_NormalMapTEX._Handle);
               ImGui::Image(texture, ImVec2(256, 256));
             }
           }
@@ -770,10 +770,10 @@ int Test5::DrawUI()
                 GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, emissionMapTexture -> GetWidth(), emissionMapTexture -> GetHeight(), GL_RGBA, GL_FLOAT, emissionMapTexture -> GetFData(), _EmissionMapTEX);
             }
 
-            if ( _EmissionMapTEX._ID )
+            if ( _EmissionMapTEX._Handle )
             {
               ImGui::Text("Emission map :");
-              ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_EmissionMapTEX._ID);
+              ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_EmissionMapTEX._Handle);
               ImGui::Image(texture, ImVec2(256, 256));
             }
           }

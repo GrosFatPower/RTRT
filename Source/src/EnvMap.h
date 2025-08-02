@@ -28,8 +28,8 @@ public:
 
   float GetTotalWeight() const { return _TotalWeight; }
 
-  GLuint GetGLTexID() const { return _GLTexID; }
-  void SetGLTexID( GLuint iGLTexID ) { _GLTexID = iGLTexID; }
+  GLuint GetHandle() const { return _Handle; }
+  void SetHandle( GLuint iHandle) { _Handle = iHandle; }
 
   Vec4 Sample( int iX, int iY ) const;
   Vec4 Sample( Vec2 iUV ) const;
@@ -42,7 +42,7 @@ private:
   void BuildCDF();
 
   bool          _IsInitialized = false;
-  GLuint        _GLTexID       = -1;
+  GLuint        _Handle        = -1;
   int           _Width         = 0;
   int           _Height        = 0;
 
