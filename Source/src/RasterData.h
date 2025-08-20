@@ -50,9 +50,9 @@ namespace RasterData
   {
     const std::vector<Material>* _Materials = nullptr;
     const std::vector<Texture*>* _Textures = nullptr;
-    std::vector<Light>            _Lights;
-    Vec3                          _CameraPos;
-    bool                          _BilinearSampling = true;
+    std::vector<Light>           _Lights;
+    Vec3                         _CameraPos;
+    bool                         _BilinearSampling = true;
   };
 
   struct Vertex
@@ -102,10 +102,12 @@ namespace RasterData
 
   struct Tile
   {
-    int _X;
-    int _Y;
-    int _Width;
-    int _Height;
+    int                          _X;
+    int                          _Y;
+    int                          _Width;
+    int                          _Height;
+    FrameBuffer                  _LocalFB;
+    std::vector<RasterTriangle*> _RasterTris;
   };
 
 }

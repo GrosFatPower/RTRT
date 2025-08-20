@@ -133,14 +133,6 @@ int SoftwareRasterizer::UpdateNumberOfWorkers( bool iForce )
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::Update()
 {
-  //if ( Dirty() )
-  //{
-  //  this -> ResetTiles();
-  //  _NbCompleteFrames = 0;
-  //}
-  //else if ( TiledRendering() )
-  //  this -> NextTile();
-
   if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
   {
     this -> ResizeRenderTarget();
@@ -376,6 +368,33 @@ int SoftwareRasterizer::UpdateRenderResolution()
   _ImageBuffer._ColorBuffer.resize(RenderWidth() * RenderHeight());
   _ImageBuffer._DepthBuffer.resize(RenderWidth() * RenderHeight());
 
+
+  _TileCountX = (RenderWidth() + TILE_SIZE - 1) / TILE_SIZE;
+  _TileCountY = (RenderHeight() + TILE_SIZE - 1) / TILE_SIZE;
+  _Tiles.resize(_TileCountX * _TileCountY);
+
+  for ( int ty = 0; ty < _TileCountY; ++ty )
+  {
+    for ( int tx = 0; tx < _TileCountX; ++tx )
+    {
+      int tileIndex = ty * _TileCountX + tx;
+      rd::Tile & curTile = _Tiles[tileIndex];
+
+      curTile._X = tx * TILE_SIZE;
+      curTile._Y = ty * TILE_SIZE;
+      curTile._Width  = std::min(TILE_SIZE, RenderWidth()  - curTile._X);
+      curTile._Height = std::min(TILE_SIZE, RenderHeight() - curTile._Y);
+
+      curTile._RasterTris.reserve(100);
+
+      curTile._LocalFB._ColorBuffer.resize(curTile._Width * curTile._Height);
+      curTile._LocalFB._DepthBuffer.resize(curTile._Width * curTile._Height);
+
+      std::fill(policy, curTile._LocalFB._ColorBuffer.begin(), curTile._LocalFB._ColorBuffer.end(), RGBA8(0, 0, 0, uint8_t(255)));
+      std::fill(policy, curTile._LocalFB._DepthBuffer.begin(), curTile._LocalFB._DepthBuffer.end(), std::numeric_limits<float>::max());
+    }
+  }
+
   return 0;
 }
 
@@ -567,35 +586,6 @@ int SoftwareRasterizer::ReloadEnvMap()
     _Settings._EnableSkybox = false;
 
   return 0;
-}
-
-// ----------------------------------------------------------------------------
-// NextTile
-// ----------------------------------------------------------------------------
-void SoftwareRasterizer::NextTile()
-{
-  _CurTile.x++;
-  if ( _CurTile.x >= NbTiles().x )
-  {
-    _CurTile.x = 0;
-    _CurTile.y--;
-    if ( _CurTile.y < 0 )
-    {
-      _CurTile.x = 0;
-      _CurTile.y = NbTiles().y - 1;
-      _NbCompleteFrames++;
-    }
-  }
-}
-
-// ----------------------------------------------------------------------------
-// ResetTiles
-// ----------------------------------------------------------------------------
-void SoftwareRasterizer::ResetTiles()
-{
-  _CurTile.x = -1;
-  _CurTile.y = NbTiles().y - 1;
-  _NbCompleteFrames = 0;
 }
 
 // ----------------------------------------------------------------------------

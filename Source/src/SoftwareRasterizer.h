@@ -20,7 +20,6 @@ struct RasterTexSlot
 {
   static const TextureSlot _RenderTarget       = 0;
   static const TextureSlot _ColorBuffer        = 1;
-  //static const TextureSlot _RenderTargetTile   = 2;
   static const TextureSlot _EnvMap             = 3;
   static const TextureSlot _Temporary          = 4;
 };
@@ -86,8 +85,6 @@ protected:
   int TileWidth()           const { return ( _Settings._TileResolution.x > 0 ) ? ( _Settings._TileResolution.x ) : ( 64 ); }
   int TileHeight()          const { return ( _Settings._TileResolution.y > 0 ) ? ( _Settings._TileResolution.y ) : ( 64 ); }
   Vec2i NbTiles()           const { return Vec2i(std::ceil(((float)RenderWidth())/_Settings._TileResolution.x), std::ceil(((float)RenderHeight())/_Settings._TileResolution.y)); }
-  void  NextTile();
-  void  ResetTiles();
 
   Vec4 SampleEnvMap( const Vec3 & iDir );
 
@@ -123,15 +120,17 @@ protected:
   std::unique_ptr<ShaderProgram> _RenderToTextureShader;
   std::unique_ptr<ShaderProgram> _RenderToScreenShader;
 
-  // Tiled rendering
-  Vec2i        _CurTile;
-  Vec2i        _NbTiles;
-  unsigned int _NbCompleteFrames = 0;
-
-  unsigned int _FrameNum = 1;
+  // Multi-threading
   unsigned int _NbJobs = 1;
 
+  // Tile rendering
+  int _TileCountX, _TileCountY;
+  std::vector<RasterData::Tile> _Tiles;
+  static constexpr int TILE_SIZE = 64;
+
   // Frame data
+  unsigned int _FrameNum = 1;
+  unsigned int _NbCompleteFrames = 0;
   RasterData::FrameBuffer _ImageBuffer;
 
   // Scene data
