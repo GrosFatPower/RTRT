@@ -231,6 +231,21 @@ public:
     //  return (iV2.x - iV0.x) * (iV1.y - iV0.y) - (iV2.y - iV0.y) * (iV1.x - iV0.x); // Clockwise edge function
   }
 
+  static void EdgeFunctionCoefficients(const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2, float oEdgeA[3], float oEdgeB[3], float oEdgeC[3])
+  {
+    oEdgeA[0] = iV1.y - iV2.y;
+    oEdgeA[1] = iV2.y - iV0.y;
+    oEdgeA[2] = iV0.y - iV1.y;
+
+    oEdgeB[0] = iV2.x - iV1.x;
+    oEdgeB[1] = iV0.x - iV2.x;
+    oEdgeB[2] = iV1.x - iV0.x;
+
+    oEdgeC[0] = iV1.x * iV2.y - iV2.x * iV1.y;
+    oEdgeC[1] = iV2.x * iV0.y - iV0.x * iV2.y;
+    oEdgeC[2] = iV0.x * iV1.y - iV1.x * iV0.y;
+  }
+
   static float Luminance( const Vec3 iRGBColor )
   {
     const Vec3 Luma = Vec3( 0.299, 0.587, 0.114 ); // UIT-R BT 601

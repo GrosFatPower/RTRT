@@ -385,6 +385,7 @@ int SoftwareRasterizer::UpdateRenderResolution()
       curTile._Width  = std::min(TILE_SIZE, RenderWidth()  - curTile._X);
       curTile._Height = std::min(TILE_SIZE, RenderHeight() - curTile._Y);
 
+      curTile._RasterTris.clear();
       curTile._RasterTris.reserve(100);
 
       curTile._LocalFB._ColorBuffer.resize(curTile._Width * curTile._Height);
@@ -786,18 +787,11 @@ int SoftwareRasterizer::ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP )
   _ProjVerticesBuf.resize(nbVertices);
   _ProjVerticesBuf.reserve(nbVertices*2);
 
-  //for ( int i = 0; i < _NbJobs; ++i )
-  //{
-  //  int startInd = ( _Vertices.size() / _NbJobs ) * i;
-  //  int endInd = ( i == _NbJobs-1 ) ? ( _Vertices.size() ) : ( startInd + ( _Vertices.size() / _NbJobs ) );
-  //
-  //  JobSystem::Get().Execute([this, MVP, startInd, endInd](){ this -> ProcessVertices(MVP, startInd, endInd); });
-  //}
-
+  const int chunkSize = 512;
   int curInd = 0;
   do
   {
-    int nextInd = std::min(curInd + 512, nbVertices);
+    int nextInd = std::min(curInd + chunkSize, nbVertices);
 
     JobSystem::Get().Execute([this, MVP, curInd, nextInd](){ this -> ProcessVertices(MVP, curInd, nextInd); });
 
@@ -818,9 +812,7 @@ void SoftwareRasterizer::ProcessVertices( const Mat4x4 & iMVP, int iStartInd, in
   for ( int i = iStartInd; i < iEndInd; ++i )
   {
     rd::Vertex & vert = _Vertices[i];
-
-    rd::ProjectedVertex & projVtx = _ProjVerticesBuf[i];
-    VertexShader(Vec4(vert._WorldPos ,1.f), vert._UV, vert._Normal, iMVP, projVtx);
+    VertexShader(Vec4(vert._WorldPos ,1.f), vert._UV, vert._Normal, iMVP, _ProjVerticesBuf[i]);
   }
 }
 
@@ -920,7 +912,10 @@ void SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin,
             rasterTri._BBox.Insert(rasterTri._V[k]);
           }
 
-          float area = MathUtil::EdgeFunction(rasterTri._V[0], rasterTri._V[1], rasterTri._V[2]);
+          // Edge function coefficients
+          MathUtil::EdgeFunctionCoefficients(rasterTri._V[0], rasterTri._V[1], rasterTri._V[2], rasterTri._EdgeA, rasterTri._EdgeB, rasterTri._EdgeC);
+
+          float area = rasterTri._EdgeC[0] + rasterTri._EdgeC[1] + rasterTri._EdgeC[2];
           if ( area > 0.f )
             rasterTri._InvArea = 1.f / area;
           else
@@ -954,8 +949,11 @@ void SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin,
         rasterTri._BBox.Insert(rasterTri._V[j]);
       }
 
-      float area = MathUtil::EdgeFunction(rasterTri._V[0], rasterTri._V[1], rasterTri._V[2]);
-      if ( area > 0.f )
+      // Edge function coefficients
+      MathUtil::EdgeFunctionCoefficients(rasterTri._V[0], rasterTri._V[1], rasterTri._V[2], rasterTri._EdgeA, rasterTri._EdgeB, rasterTri._EdgeC);
+
+      float area = rasterTri._EdgeC[0] + rasterTri._EdgeC[1] + rasterTri._EdgeC[2];
+      if (area > 0.f)
         rasterTri._InvArea = 1.f / area;
       else
         continue;
@@ -1037,9 +1035,9 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
           Vec3 coord(x + .5f, y + .5f, 0.f);
 
           Vec3 W;
-          W.x = MathUtil::EdgeFunction(tri._V[1], tri._V[2], coord);
-          W.y = MathUtil::EdgeFunction(tri._V[2], tri._V[0], coord);
-          W.z = MathUtil::EdgeFunction(tri._V[0], tri._V[1], coord);
+          W.x = tri._EdgeA[0] * x + tri._EdgeB[0] * y + tri._EdgeC[0];
+          W.y = tri._EdgeA[1] * x + tri._EdgeB[1] * y + tri._EdgeC[1];
+          W.z = tri._EdgeA[2] * x + tri._EdgeB[2] * y + tri._EdgeC[2];
           if ( ( W.x < 0.f )
             || ( W.y < 0.f )
             || ( W.z < 0.f ) )

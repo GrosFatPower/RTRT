@@ -86,6 +86,9 @@ namespace RasterData
   {
     int        _Indices[3];
     Vec3       _V[3];
+    float      _EdgeA[3];
+    float      _EdgeB[3];
+    float      _EdgeC[3];
     float      _InvW[3];
     float      _InvArea;
     AABB<Vec2> _BBox;
