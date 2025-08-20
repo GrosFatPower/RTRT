@@ -37,9 +37,9 @@ constexpr std::execution::sequenced_policy policy = std::execution::seq;
 namespace std
 {
   template <>
-  struct hash<RTRT::SoftwareRasterizer::Vertex>
+  struct hash<RTRT::RasterData::Vertex>
   {
-    size_t operator()(RTRT::SoftwareRasterizer::Vertex const & iV) const
+    size_t operator()(RTRT::RasterData::Vertex const & iV) const
     {
       return
         ( (hash<Vec3>()(iV._WorldPos))
@@ -51,6 +51,7 @@ namespace std
 
 
 namespace fs = std::filesystem;
+namespace rd = RTRT::RasterData;
 
 namespace RTRT
 {
@@ -487,20 +488,20 @@ int SoftwareRasterizer::ReloadScene()
   const std::vector<Texture*> & Textures  = _Scene.GetTextures();
   const int nbTris = Indices.size() / 3;
 
-  std::unordered_map<Vertex, int> VertexIDs;
+  std::unordered_map<rd::Vertex, int> VertexIDs;
   VertexIDs.reserve(Vertices.size());
 
   _Triangles.resize(nbTris);
   for ( int i = 0; i < nbTris; ++i )
   {
-    Triangle & tri = _Triangles[i];
+    rd::Triangle & tri = _Triangles[i];
 
     Vec3i Index[3];
     Index[0] = Indices[i*3];
     Index[1] = Indices[i*3+1];
     Index[2] = Indices[i*3+2];
 
-    Vertex Vert[3];
+    rd::Vertex Vert[3];
     for ( int j = 0; j < 3; ++j )
     {
       Vert[j]._WorldPos = Vertices[Index[j].x];
@@ -622,7 +623,7 @@ Vec4 SoftwareRasterizer::SampleEnvMap( const Vec3 & iDir )
 // ----------------------------------------------------------------------------
 // VertexShader
 // ----------------------------------------------------------------------------
-void SoftwareRasterizer::VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 iNormal, const Mat4x4 iMVP, ProjectedVertex & oProjectedVertex )
+void SoftwareRasterizer::VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 iNormal, const Mat4x4 iMVP, rd::ProjectedVertex & oProjectedVertex )
 {
   oProjectedVertex._ProjPos          = iMVP * iVertexPos;
   oProjectedVertex._Attrib._WorldPos = iVertexPos;
@@ -633,7 +634,7 @@ void SoftwareRasterizer::VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV
 // ----------------------------------------------------------------------------
 // FragmentShader_Color
 // ----------------------------------------------------------------------------
-void SoftwareRasterizer::FragmentShader_Color( const Fragment & iFrag, Uniform & iUniforms, Vec4 & oColor )
+void SoftwareRasterizer::FragmentShader_Color( const rd::Fragment & iFrag, rd::Uniform & iUniforms, Vec4 & oColor )
 {
   Vec4 albedo;
   if ( iFrag._MatID >= 0 )
@@ -677,7 +678,7 @@ void SoftwareRasterizer::FragmentShader_Color( const Fragment & iFrag, Uniform &
 // ----------------------------------------------------------------------------
 // FragmentShader_Depth
 // ----------------------------------------------------------------------------
-void SoftwareRasterizer::FragmentShader_Depth( const Fragment  & iFrag, Uniform & iUniforms, Vec4 & oColor )
+void SoftwareRasterizer::FragmentShader_Depth( const rd::Fragment  & iFrag, rd::Uniform & iUniforms, Vec4 & oColor )
 {
   oColor = Vec4(Vec3(iFrag._FragCoords.z + 1.f) * .5f, 1.f);
   return;
@@ -686,7 +687,7 @@ void SoftwareRasterizer::FragmentShader_Depth( const Fragment  & iFrag, Uniform 
 // ----------------------------------------------------------------------------
 // FragmentShader_Normal
 // ----------------------------------------------------------------------------
-void SoftwareRasterizer::FragmentShader_Normal( const Fragment  & iFrag, Uniform & iUniforms, Vec4 & oColor )
+void SoftwareRasterizer::FragmentShader_Normal( const rd::Fragment  & iFrag, rd::Uniform & iUniforms, Vec4 & oColor )
 {
   oColor = Vec4(glm::abs(iFrag._Attrib._Normal),1.f);
   return;
@@ -695,7 +696,7 @@ void SoftwareRasterizer::FragmentShader_Normal( const Fragment  & iFrag, Uniform
 // ----------------------------------------------------------------------------
 // FragmentShader_Wires
 // ----------------------------------------------------------------------------
-void SoftwareRasterizer::FragmentShader_Wires( const Fragment & iFrag, const Vec3 iVertCoord[3], Uniform & iUniforms, Vec4 & oColor )
+void SoftwareRasterizer::FragmentShader_Wires( const rd::Fragment & iFrag, const Vec3 iVertCoord[3], rd::Uniform & iUniforms, Vec4 & oColor )
 {
   Vec2 P(iFrag._FragCoords);
   if ( ( MathUtil::DistanceToSegment(iVertCoord[0], iVertCoord[1], P) <= 1.f )
@@ -826,9 +827,9 @@ void SoftwareRasterizer::ProcessVertices( const Mat4x4 & iMVP, int iStartInd, in
 {
   for ( int i = iStartInd; i < iEndInd; ++i )
   {
-    Vertex & vert = _Vertices[i];
+    rd::Vertex & vert = _Vertices[i];
 
-    ProjectedVertex & projVtx = _ProjVerticesBuf[i];
+    rd::ProjectedVertex & projVtx = _ProjVerticesBuf[i];
     VertexShader(Vec4(vert._WorldPos ,1.f), vert._UV, vert._Normal, iMVP, projVtx);
   }
 }
@@ -867,7 +868,7 @@ void SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin,
   _RasterTrianglesBuf[iThreadBin].clear();
   for ( int i = iStartInd; i < iEndInd; ++i )
   {
-    Triangle & tri = _Triangles[i];
+    rd::Triangle & tri = _Triangles[i];
 
     uint32_t clipCode0 = SutherlandHodgman::ComputeClipCode(_ProjVerticesBuf[tri._Indices[0]]._ProjPos);
     uint32_t clipCode1 = SutherlandHodgman::ComputeClipCode(_ProjVerticesBuf[tri._Indices[1]]._ProjPos);
@@ -889,7 +890,7 @@ void SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin,
           // Preserve winding
           Polygon::Point Points[3] = { poly[0], poly[j - 1], poly[j] };
 
-          RasterTriangle rasterTri;
+          rd::RasterTriangle rasterTri;
           for ( int k = 0; k < 3; ++k )
           {
             if ( Points[k]._Distances.x == 1.f )
@@ -906,7 +907,7 @@ void SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin,
             }
             else
             {
-              ProjectedVertex newProjVert;
+              rd::ProjectedVertex newProjVert;
               newProjVert._ProjPos = Points[k]._Pos;
               newProjVert._Attrib  = _ProjVerticesBuf[tri._Indices[0]]._Attrib * Points[k]._Distances.x + 
                                      _ProjVerticesBuf[tri._Indices[1]]._Attrib * Points[k]._Distances.y +
@@ -945,12 +946,12 @@ void SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin,
     else
     {
       // No clipping needed
-      RasterTriangle rasterTri;
+      rd::RasterTriangle rasterTri;
       for ( int j = 0; j < 3; ++j )
       {
         rasterTri._Indices[j] = tri._Indices[j];
 
-        ProjectedVertex & projVert = _ProjVerticesBuf[tri._Indices[j]];
+        rd::ProjectedVertex & projVert = _ProjVerticesBuf[tri._Indices[j]];
 
         Vec3 homogeneousProjPos;
         rasterTri._InvW[j] = 1.f / projVert._ProjPos.w;
@@ -1010,7 +1011,7 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
   float zNear, zFar;
   _Scene.GetCamera().GetZNearFar(zNear, zFar);
 
-  Uniform uniforms;
+  rd::Uniform uniforms;
   uniforms._CameraPos        = _Scene.GetCamera().GetPos();
   uniforms._BilinearSampling = _Settings._BilinearSampling;
   uniforms._Materials        = &_Scene.GetMaterials();
@@ -1022,7 +1023,7 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
   {
     for ( int j = 0; j < _RasterTrianglesBuf[i].size(); ++j )
     {
-      RasterTriangle & tri = _RasterTrianglesBuf[i][j];
+      rd::RasterTriangle & tri = _RasterTrianglesBuf[i][j];
 
       // Backface culling
       if ( 0 )
@@ -1076,12 +1077,12 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
               continue;
           }
 
-          Varying Attrib[3];
+          rd::Varying Attrib[3];
           Attrib[0] = _ProjVerticesBuf[tri._Indices[0]]._Attrib;
           Attrib[1] = _ProjVerticesBuf[tri._Indices[1]]._Attrib;
           Attrib[2] = _ProjVerticesBuf[tri._Indices[2]]._Attrib;
 
-          Fragment frag;
+          rd::Fragment frag;
           frag._FragCoords = coord;
           frag._MatID      = tri._MatID;
           frag._Attrib     = Attrib[0] * W.x + Attrib[1] * W.y + Attrib[2] * W.z;

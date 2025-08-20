@@ -6,6 +6,7 @@
 #include "QuadMesh.h"
 #include "GLUtil.h"
 #include "RGBA8.h"
+#include "RasterData.h"
 
 #include "GL/glew.h"
 
@@ -55,95 +56,6 @@ public:
 
   virtual SoftwareRasterizer * AsSoftwareRasterizer() { return this; }
 
-public:
-
-  struct FrameBuffer
-  {
-    std::vector<RGBA8> _ColorBuffer;
-    std::vector<float> _DepthBuffer;
-  };
-
-  struct Varying
-  {
-    Vec3 _WorldPos;
-    Vec2 _UV;
-    Vec3 _Normal;
-
-    Varying operator*(float t) const
-    {
-      auto copy = *this;
-      copy._WorldPos *= t;
-      copy._Normal   *= t;
-      copy._UV       *= t;
-      return copy;
-    }
-
-    Varying operator+(const Varying & iRhs) const
-    {
-      Varying copy = *this;
-
-      copy._WorldPos += iRhs._WorldPos;
-      copy._Normal   += iRhs._Normal;
-      copy._UV       += iRhs._UV;
-
-      return copy;
-    }
-  };
-
-  struct Uniform
-  {
-    const std::vector<Material> * _Materials = nullptr;
-    const std::vector<Texture*> * _Textures  = nullptr;
-    std::vector<Light>            _Lights;
-    Vec3                          _CameraPos;
-    bool                          _BilinearSampling = true;
-  };
-
-  struct Vertex
-  {
-    Vec3 _WorldPos;
-    Vec2 _UV;
-    Vec3 _Normal;
-
-    bool operator==(const Vertex & iRhs) const
-    {
-      return ( ( _WorldPos == iRhs._WorldPos )
-            && ( _Normal   == iRhs._Normal   )
-            && ( _UV       == iRhs._UV       ) );
-    }
-  };
-
-  struct Triangle
-  {
-    int   _Indices[3];
-    Vec3  _Normal;
-    int   _MatID;
-  };
-
-  struct ProjectedVertex
-  {
-    Vec4    _ProjPos;
-    Varying _Attrib;
-  };
-
-  struct RasterTriangle
-  {
-    int        _Indices[3];
-    Vec3       _V[3];
-    float      _InvW[3];
-    float      _InvArea;
-    AABB<Vec2> _BBox;
-    Vec3       _Normal;
-    int        _MatID;
-  };
-
-  struct Fragment
-  {
-    Vec3    _FragCoords;
-    int     _MatID;
-    Varying _Attrib;
-  };
-
 protected:
 
   int UpdateRenderResolution();
@@ -179,11 +91,11 @@ protected:
 
   Vec4 SampleEnvMap( const Vec3 & iDir );
 
-  static void VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 iNormal, const Mat4x4 iMVP, ProjectedVertex & oProjectedVertex );
-  static void FragmentShader_Color( const Fragment & iFrag, Uniform & iUniforms, Vec4 & oColor );
-  static void FragmentShader_Depth( const Fragment & iFrag, Uniform & iUniforms, Vec4 & oColor );
-  static void FragmentShader_Normal( const Fragment & iFrag, Uniform & iUniforms, Vec4 & oColor );
-  static void FragmentShader_Wires( const Fragment & iFrag, const Vec3 iVertCoord[3], Uniform & iUniforms, Vec4 & oColor );
+  static void VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 iNormal, const Mat4x4 iMVP, RasterData::ProjectedVertex & oProjectedVertex );
+  static void FragmentShader_Color( const RasterData::Fragment & iFrag, RasterData::Uniform & iUniforms, Vec4 & oColor );
+  static void FragmentShader_Depth( const RasterData::Fragment & iFrag, RasterData::Uniform & iUniforms, Vec4 & oColor );
+  static void FragmentShader_Normal( const RasterData::Fragment & iFrag, RasterData::Uniform & iUniforms, Vec4 & oColor );
+  static void FragmentShader_Wires( const RasterData::Fragment & iFrag, const Vec3 iVertCoord[3], RasterData::Uniform & iUniforms, Vec4 & oColor );
 
   int RenderBackground( float iTop, float iRight );
   void RenderBackgroundRows( int iStartY, int iEndY, Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY );
@@ -220,14 +132,14 @@ protected:
   unsigned int _NbJobs = 1;
 
   // Frame data
-  FrameBuffer _ImageBuffer;
+  RasterData::FrameBuffer _ImageBuffer;
 
   // Scene data
-  std::vector<Vertex>                      _Vertices;
-  std::vector<Triangle>                    _Triangles;
-  std::vector<ProjectedVertex>             _ProjVerticesBuf;
-  std::mutex                               _ProjVerticesMutex;
-  std::vector<std::vector<RasterTriangle>> _RasterTrianglesBuf;
+  std::vector<RasterData::Vertex>                      _Vertices;
+  std::vector<RasterData::Triangle>                    _Triangles;
+  std::vector<RasterData::ProjectedVertex>             _ProjVerticesBuf;
+  std::mutex                                           _ProjVerticesMutex;
+  std::vector<std::vector<RasterData::RasterTriangle>> _RasterTrianglesBuf;
 };
 
 }
