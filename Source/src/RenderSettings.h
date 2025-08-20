@@ -32,7 +32,7 @@ struct RenderSettings
   bool         _Denoise               = false;              // PathTracer
   bool         _TiledRendering        = false;
   bool         _BilinearSampling      = true;               // Raster
-  bool         _WBuffer               = false;              // Raster
+  bool         _WBuffer               = true;               // Raster
   ShadingType  _ShadingType           = ShadingType::Phong; // Raster
   int          _Bounces               = 1;                  // PathTracer
   int          _NbSamplesPerPixel     = 1;                  // PathTracer

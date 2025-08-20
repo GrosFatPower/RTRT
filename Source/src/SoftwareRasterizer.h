@@ -105,6 +105,10 @@ protected:
   int ProcessFragments();
   void ProcessFragments( int iStartY, int iEndY );
 
+  void BinTrianglesToTiles();
+  void BinTrianglesToTiles( int iBufferIndex );
+  void ProcessFragments( RasterData::Tile & ioTile );
+
 protected:
 
   QuadMesh _Quad;

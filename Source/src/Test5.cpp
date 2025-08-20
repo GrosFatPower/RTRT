@@ -324,6 +324,11 @@ int Test5::DrawUI()
           _Settings._NbThreads = numThreads;
           _Renderer -> Notify(DirtyState::RenderSettings);
         }
+
+        if (ImGui::Checkbox("Tiled rendering", &_Settings._TiledRendering))
+        {
+          _Renderer->Notify(DirtyState::RenderSettings);
+        }
       }
 
       int scale = _Settings._RenderScale;
