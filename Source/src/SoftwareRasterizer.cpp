@@ -49,12 +49,13 @@ namespace std
   };
 }
 
-
 namespace fs = std::filesystem;
 namespace rd = RTRT::RasterData;
 
 namespace RTRT
 {
+
+static constexpr RGBA8 S_DefaultColor(0, 0, 0, (uint8_t)255);
 
 // ----------------------------------------------------------------------------
 // METHODS
@@ -1135,14 +1136,19 @@ void SoftwareRasterizer::BinTrianglesToTiles()
   for (auto& tile : _Tiles)
   {
     tile._RasterTris.clear();
+    std::fill(policy, tile._LocalFB._ColorBuffer.begin(), tile._LocalFB._ColorBuffer.end(), S_DefaultColor);
     std::fill(policy, tile._LocalFB._DepthBuffer.begin(), tile._LocalFB._DepthBuffer.end(), zFar);
   }
 
+  // Not thread safe !!
+  //for (int i = 0; i < _NbJobs; ++i)
+  //{
+  //  JobSystem::Get().Execute([this, i]() { this -> BinTrianglesToTiles(i); });
+  //}
+  //JobSystem::Get().Wait();
+
   for (int i = 0; i < _NbJobs; ++i)
-  {
-    JobSystem::Get().Execute([this, i]() { this -> BinTrianglesToTiles(i); });
-  }
-  JobSystem::Get().Wait();
+    this -> BinTrianglesToTiles(i);
 }
 
 // ----------------------------------------------------------------------------
@@ -1186,7 +1192,7 @@ void SoftwareRasterizer::BinTrianglesToTiles( int iBufferIndex )
 // ----------------------------------------------------------------------------
 // ProcessFragments
 // ----------------------------------------------------------------------------
-void SoftwareRasterizer::ProcessFragments( RasterData::Tile & ioTile)
+void SoftwareRasterizer::ProcessFragments( RasterData::Tile & ioTile )
 {
   const std::vector<Material>& Materials = _Scene.GetMaterials();
 
@@ -1194,10 +1200,10 @@ void SoftwareRasterizer::ProcessFragments( RasterData::Tile & ioTile)
   _Scene.GetCamera().GetZNearFar(zNear, zFar);
 
   rd::Uniform uniforms;
-  uniforms._CameraPos = _Scene.GetCamera().GetPos();
+  uniforms._CameraPos        = _Scene.GetCamera().GetPos();
   uniforms._BilinearSampling = _Settings._BilinearSampling;
-  uniforms._Materials = &_Scene.GetMaterials();
-  uniforms._Textures = &_Scene.GetTextures();
+  uniforms._Materials        = &_Scene.GetMaterials();
+  uniforms._Textures         = &_Scene.GetTextures();
   for (int i = 0; i < _Scene.GetNbLights(); ++i)
     uniforms._Lights.push_back(*_Scene.GetLight(i));
 
@@ -1297,17 +1303,33 @@ void SoftwareRasterizer::ProcessFragments( RasterData::Tile & ioTile)
   }
 
   // Copy tile to main buffer
-  for ( int y = 0; y < ioTile._Height; ++y )
+  //for ( int y = 0; y < ioTile._Height; ++y )
+  //{
+  //  const int globalY = ioTile._Y + y;
+  //  const int localRowStart = y * ioTile._Width;
+  //  const int globalRowStart = globalY * RenderWidth() + ioTile._X;
+  //
+  //  memcpy(
+  //    &_ImageBuffer._ColorBuffer[globalRowStart],
+  //    &ioTile._LocalFB._ColorBuffer[localRowStart],
+  //    ioTile._Width * sizeof(RGBA8)
+  //  );
+  //}
+
+  for (int y = 0; y < ioTile._Height; ++y)
   {
     const int globalY = ioTile._Y + y;
-    const int localRowStart = y * ioTile._Width;
-    const int globalRowStart = globalY * RenderWidth() + ioTile._X;
 
-    memcpy(
-      &_ImageBuffer._ColorBuffer[globalRowStart],
-      &ioTile._LocalFB._ColorBuffer[localRowStart],
-      ioTile._Width * sizeof(RGBA8)
-    );
+    for (int x = 0; x < ioTile._Width; ++x)
+    {
+      const int globalX = ioTile._X + x;
+      const int localIndex = y * ioTile._Width + x;
+      const int globalIndex = globalY * RenderWidth() + globalX;
+
+      RGBA8 & localColor = ioTile._LocalFB._ColorBuffer[localIndex];
+      if ( localColor._A != 255 )
+        _ImageBuffer._ColorBuffer[globalIndex] = localColor;
+    }  
   }
 
 }
