@@ -5,6 +5,7 @@
 #include "ShaderProgram.h"
 #include "SutherlandHodgman.h"
 #include "JobSystem.h"
+#include "PathUtils.h"
 
 #include <string>
 #include <iostream>
@@ -454,8 +455,8 @@ int SoftwareRasterizer::InitializeFrameBuffers()
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::RecompileShaders()
 {
-  ShaderSource vertexShaderSrc = Shader::LoadShader("..\\..\\shaders\\vertex_Default.glsl");
-  ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_drawTexture.glsl");
+  ShaderSource vertexShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("vertex_Default.glsl"));
+  ShaderSource fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_drawTexture.glsl"));
 
   ShaderProgram * newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
@@ -463,7 +464,7 @@ int SoftwareRasterizer::RecompileShaders()
     return 1;
   _RenderToTextureShader.reset(newShader);
 
-  fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Postprocess.glsl");
+  fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Postprocess.glsl"));
   newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !newShader )
     return 1;

@@ -12,6 +12,7 @@
 #include "Loader.h"
 #include "Util.h"
 #include "GLUtil.h"
+#include "PathUtils.h"
 
 #include "tinydir.h"
 
@@ -398,19 +399,19 @@ int Test3::RecompileShaders()
     delete _RenderToScreenShader;
   _RenderToScreenShader = nullptr;
 
-  ShaderSource vertexShaderSrc = Shader::LoadShader("..\\..\\shaders\\vertex_Default.glsl");
-  ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_RTRenderer.glsl");
+  ShaderSource vertexShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("vertex_Default.glsl"));
+  ShaderSource fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_RTRenderer.glsl"));
 
   _RayTraceShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !_RayTraceShader )
     return 1;
 
-  fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Output.glsl");
+  fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Output.glsl"));
   _RenderToTextureShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !_RenderToTextureShader )
     return 1;
 
-  fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Postpro.glsl");
+  fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Postpro.glsl"));
   _RenderToScreenShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !_RenderToScreenShader )
     return 1;

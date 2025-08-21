@@ -4,6 +4,7 @@
 #include "EnvMap.h"
 #include "ShaderProgram.h"
 #include "GLUtil.h"
+#include "PathUtils.h"
 
 #include <string>
 #include <iostream>
@@ -862,27 +863,27 @@ int PathTracer::InitializeFrameBuffers()
 // ----------------------------------------------------------------------------
 int PathTracer::RecompileShaders()
 {
-  ShaderSource vertexShaderSrc = Shader::LoadShader("..\\..\\shaders\\vertex_Default.glsl");
-  ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_PathTracer.glsl");
+  ShaderSource vertexShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("vertex_Default.glsl"));
+  ShaderSource fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_PathTracer.glsl"));
 
   ShaderProgram * newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !newShader )
     return 1;
   _PathTraceShader.reset(newShader);
 
-  fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Accumulate.glsl");
+  fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Accumulate.glsl"));
   newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !newShader )
     return 1;
   _AccumulateShader.reset(newShader);
 
-  fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Postprocess.glsl");
+  fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Postprocess.glsl"));
   newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !newShader )
     return 1;
   _RenderToScreenShader.reset(newShader);
 
-  ShaderSource computeShaderSrc = Shader::LoadShader("..\\..\\shaders\\compute_Denoiser.glsl");
+  ShaderSource computeShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("compute_Denoiser.glsl"));
   newShader = ShaderProgram::LoadShaders(computeShaderSrc);
   if ( !newShader )
     return 1;

@@ -10,6 +10,7 @@
 #include "ShaderProgram.h"
 #include "QuadMesh.h"
 #include "Texture.h"
+#include "PathUtils.h"
 
 #include <vector>
 #include <deque>
@@ -138,42 +139,42 @@ static int RecompileShaders()
   {
   case 0 :
   default :
-    vertexShaderSrc = Shader::LoadShader("..\\..\\shaders\\vertex_Default.glsl");
+    vertexShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("vertex_Default.glsl"));
   }
 
   ShaderSource fragmentShaderSrc;
   switch ( g_FragShaderNum )
   {
   case 1 :
-    fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_DrawWarpedTexture.glsl");
+    fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_DrawWarpedTexture.glsl"));
     break;
   case 2 :
-    fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_RayMarching.glsl");
+    fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_RayMarching.glsl"));
     break;
   case 3 :
-    fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_ScreenSaver.glsl");
+    fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_ScreenSaver.glsl"));
     break;
   case 4 :
-    fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Mandelbrot.glsl");
+    fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Mandelbrot.glsl"));
     break;
   case 5 :
-    fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Whitenoise.glsl");
+    fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Whitenoise.glsl"));
     break;
   case 6 :
-    fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Octagrams.glsl");
+    fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Octagrams.glsl"));
     break;
   case 7 :
-    fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_FantasyEscape.glsl");
+    fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_FantasyEscape.glsl"));
     break;
   default :
-    fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Default.glsl");
+    fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Default.glsl"));
   }
 
   g_RTTShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !g_RTTShader )
     return 0;
 
-  fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Output.glsl");
+  fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Output.glsl"));
   g_OutputShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !g_OutputShader )
     return 0;
