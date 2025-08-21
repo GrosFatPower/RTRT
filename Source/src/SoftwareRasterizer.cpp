@@ -160,8 +160,7 @@ int SoftwareRasterizer::Done()
 {
   _FrameNum++;
 
-  //if ( !Dirty() && !TiledRendering() )
-    _NbCompleteFrames++;
+  _NbCompleteFrames++;
 
   CleanStates();
 
@@ -189,6 +188,11 @@ int SoftwareRasterizer::UpdateImageBuffer()
   int height = _Settings._RenderResolution.y;
   float ratio = width / float(height);
 
+  float zNear, zFar = 1.f;
+  if (_Settings._WBuffer)
+    _Scene.GetCamera().GetZNearFar(zNear, zFar);
+  std::fill(policy, _ImageBuffer._DepthBuffer.begin(), _ImageBuffer._DepthBuffer.end(), zFar);
+
   Mat4x4 MV;
   _Scene.GetCamera().ComputeLookAtMatrix(MV);
 
@@ -200,6 +204,8 @@ int SoftwareRasterizer::UpdateImageBuffer()
   _Scene.GetCamera().ComputeRasterMatrix(width, height, RasterM);
 
   Mat4x4 MVP = P * MV;
+
+  ResetTiles();
 
   RenderBackground(top, right);
 
@@ -386,14 +392,8 @@ int SoftwareRasterizer::UpdateRenderResolution()
       curTile._Width  = std::min(TILE_SIZE, RenderWidth()  - curTile._X);
       curTile._Height = std::min(TILE_SIZE, RenderHeight() - curTile._Y);
 
-      curTile._RasterTris.clear();
-      curTile._RasterTris.reserve(100);
-
       curTile._LocalFB._ColorBuffer.resize(curTile._Width * curTile._Height);
       curTile._LocalFB._DepthBuffer.resize(curTile._Width * curTile._Height);
-
-      std::fill(policy, curTile._LocalFB._ColorBuffer.begin(), curTile._LocalFB._ColorBuffer.end(), RGBA8(0, 0, 0, uint8_t(255)));
-      std::fill(policy, curTile._LocalFB._DepthBuffer.begin(), curTile._LocalFB._DepthBuffer.end(), std::numeric_limits<float>::max());
     }
   }
 
@@ -567,6 +567,42 @@ int SoftwareRasterizer::ReloadScene()
 }
 
 // ----------------------------------------------------------------------------
+// ResetTiles
+// ----------------------------------------------------------------------------
+void SoftwareRasterizer::ResetTiles()
+{
+  if ( !TiledRendering() )
+    return;
+
+  for ( auto & tile : _Tiles )
+  {
+    tile._RasterTris.clear();
+    tile._RasterTris.reserve(100);
+    std::fill(policy, tile._LocalFB._ColorBuffer.begin(), tile._LocalFB._ColorBuffer.end(), S_DefaultColor);
+    std::fill(policy, tile._LocalFB._DepthBuffer.begin(), tile._LocalFB._DepthBuffer.end(), std::numeric_limits<float>::max());
+  }
+}
+
+//-----------------------------------------------------------------------------
+// CopyTileToMainBuffer
+//-----------------------------------------------------------------------------
+void SoftwareRasterizer::CopyTileToMainBuffer( const RasterData::Tile & iTile )
+{
+  for ( int y = 0; y < iTile._Height; ++y )
+  {
+    const int globalY = iTile._Y + y;
+    const int localRowStart = y * iTile._Width;
+    const int globalRowStart = globalY * RenderWidth() + iTile._X;
+  
+    memcpy(
+      &_ImageBuffer._ColorBuffer[globalRowStart],
+      &iTile._LocalFB._ColorBuffer[localRowStart],
+      iTile._Width * sizeof(RGBA8)
+    );
+  }
+}
+
+// ----------------------------------------------------------------------------
 // ReloadEnvMap
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::ReloadEnvMap()
@@ -720,8 +756,16 @@ int SoftwareRasterizer::RenderBackground( float iTop, float iRight )
     Vec3 dX = _Scene.GetCamera().GetRight() * ( 2 * iRight / width );
     Vec3 dY = _Scene.GetCamera().GetUp() * ( 2 * iTop / height );
 
-    for ( int i = 0; i < height; ++i )
-      JobSystem::Get().Execute([this, i, bottomLeft, dX, dY](){ this -> RenderBackgroundRows(i, i+1, bottomLeft, dX, dY); });
+    if (TiledRendering())
+    {
+      for ( auto & tile : _Tiles )
+        JobSystem::Get().Execute([this, bottomLeft, dX, dY, &tile]() { this->RenderBackground(bottomLeft, dX, dY, tile); });
+    }
+    else
+    {
+      for (int i = 0; i < height; ++i)
+        JobSystem::Get().Execute([this, i, bottomLeft, dX, dY]() { this->RenderBackgroundRows(i, i + 1, bottomLeft, dX, dY); });
+    }
 
     JobSystem::Get().Wait();
   }
@@ -752,19 +796,25 @@ void SoftwareRasterizer::RenderBackgroundRows( int iStartY, int iEndY, Vec3 iBot
 }
 
 // ----------------------------------------------------------------------------
+// RenderBackground
+// ----------------------------------------------------------------------------
+void SoftwareRasterizer::RenderBackground(Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY, RasterData::Tile& ioTile)
+{
+  for ( int y = 0; y < ioTile._Height; ++y )
+  {
+    for ( int x = 0; x < ioTile._Width; ++x )
+    {
+      Vec3 worldP = glm::normalize(iBottomLeft + iDX * (float)( x + ioTile._X ) + iDY * (float)( y + ioTile._Y ));
+      ioTile._LocalFB._ColorBuffer[x + ioTile._Width * y] = SampleEnvMap(worldP);
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
 // RenderScene
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP, const Mat4x4 & iRasterM )
 {
-  if ( _Settings._WBuffer )
-  {
-    float zNear, zFar;
-    _Scene.GetCamera().GetZNearFar(zNear, zFar);
-    std::fill(policy, _ImageBuffer._DepthBuffer.begin(), _ImageBuffer._DepthBuffer.end(), zFar);
-  }
-  else
-    std::fill(policy, _ImageBuffer._DepthBuffer.begin(), _ImageBuffer._DepthBuffer.end(), 1.f);
-
   int ko = ProcessVertices(iMV, iP);
 
   if ( !ko )
@@ -775,7 +825,6 @@ int SoftwareRasterizer::RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP, cons
 
   return ko;
 }
-
 
 // ----------------------------------------------------------------------------
 // ProcessVertices
@@ -977,9 +1026,14 @@ int SoftwareRasterizer::ProcessFragments()
     for ( auto & tile : _Tiles )
     {
       if ( tile._RasterTris.empty() )
-        continue;
-      JobSystem::Get().Execute([this, &tile]() { this->ProcessFragments(tile); });
+        JobSystem::Get().Execute([this, &tile]() { this -> CopyTileToMainBuffer(tile); });
+      else
+        JobSystem::Get().Execute([this, &tile]() { this -> ProcessFragments(tile); });
     }
+    JobSystem::Get().Wait();
+
+    //for ( auto & tile : _Tiles )
+    //  JobSystem::Get().Execute([this, tile]() { this -> CopyTileToMainBuffer(tile); });
   }
   else
   {
@@ -1128,18 +1182,6 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
 // ----------------------------------------------------------------------------
 void SoftwareRasterizer::BinTrianglesToTiles()
 {
-  float zNear, zFar;
-  _Scene.GetCamera().GetZNearFar(zNear, zFar);
-  if ( !_Settings._WBuffer )
-    zFar = 1.f;
-
-  for (auto& tile : _Tiles)
-  {
-    tile._RasterTris.clear();
-    std::fill(policy, tile._LocalFB._ColorBuffer.begin(), tile._LocalFB._ColorBuffer.end(), S_DefaultColor);
-    std::fill(policy, tile._LocalFB._DepthBuffer.begin(), tile._LocalFB._DepthBuffer.end(), zFar);
-  }
-
   // Not thread safe !!
   //for (int i = 0; i < _NbJobs; ++i)
   //{
@@ -1302,36 +1344,7 @@ void SoftwareRasterizer::ProcessFragments( RasterData::Tile & ioTile )
     }
   }
 
-  // Copy tile to main buffer
-  //for ( int y = 0; y < ioTile._Height; ++y )
-  //{
-  //  const int globalY = ioTile._Y + y;
-  //  const int localRowStart = y * ioTile._Width;
-  //  const int globalRowStart = globalY * RenderWidth() + ioTile._X;
-  //
-  //  memcpy(
-  //    &_ImageBuffer._ColorBuffer[globalRowStart],
-  //    &ioTile._LocalFB._ColorBuffer[localRowStart],
-  //    ioTile._Width * sizeof(RGBA8)
-  //  );
-  //}
-
-  for (int y = 0; y < ioTile._Height; ++y)
-  {
-    const int globalY = ioTile._Y + y;
-
-    for (int x = 0; x < ioTile._Width; ++x)
-    {
-      const int globalX = ioTile._X + x;
-      const int localIndex = y * ioTile._Width + x;
-      const int globalIndex = globalY * RenderWidth() + globalX;
-
-      RGBA8 & localColor = ioTile._LocalFB._ColorBuffer[localIndex];
-      if ( localColor._A != 255 )
-        _ImageBuffer._ColorBuffer[globalIndex] = localColor;
-    }  
-  }
-
+  this -> CopyTileToMainBuffer(ioTile);
 }
 
 }

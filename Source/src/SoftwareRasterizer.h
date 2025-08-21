@@ -81,6 +81,8 @@ protected:
   int RenderWidth()         const { return _Settings._RenderResolution.x; }
   int RenderHeight()        const { return _Settings._RenderResolution.y; }
 
+  void ResetTiles();
+  void CopyTileToMainBuffer( const RasterData::Tile & iTile );
   bool TiledRendering()     const { return _Settings._TiledRendering; }
   int TileWidth()           const { return ( _Settings._TileResolution.x > 0 ) ? ( _Settings._TileResolution.x ) : ( 64 ); }
   int TileHeight()          const { return ( _Settings._TileResolution.y > 0 ) ? ( _Settings._TileResolution.y ) : ( 64 ); }
@@ -96,6 +98,7 @@ protected:
 
   int RenderBackground( float iTop, float iRight );
   void RenderBackgroundRows( int iStartY, int iEndY, Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY );
+  void RenderBackground( Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY, RasterData::Tile& ioTile );
 
   int RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP, const Mat4x4 & iRasterM );
   int ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP );
