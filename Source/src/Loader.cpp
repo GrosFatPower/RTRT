@@ -826,7 +826,7 @@ bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTra
       tinygltf::TinyGLTF loader;
       std::string err;
       std::string warn;
-      if ( isBinary )
+  if ( isBinary )
         ret = loader.LoadBinaryFromFile(&gltfModel, &err, &warn, iGltfFilename);
       else
         ret = loader.LoadASCIIFromFile(&gltfModel, &err, &warn, iGltfFilename);

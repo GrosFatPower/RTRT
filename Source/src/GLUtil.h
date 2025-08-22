@@ -54,7 +54,7 @@ static void DeleteFBO( GLFrameBuffer & ioFBO )
     glDeleteFramebuffers(1, &ioFBO._Handle);
   for ( auto tex : ioFBO._Tex )
     DeleteTEX(tex);
-  ioFBO._Handle;
+  ioFBO._Handle = 0;
 }
 
 // DeleteTBO

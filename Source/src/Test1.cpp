@@ -250,7 +250,7 @@ int Test1::Run()
   io.Fonts->AddFontDefault();
 
   // Setup Platform/Renderer backends
-  const char* glsl_version = "#version 130";
+  const char* glsl_version = "#version 410";
   ImGui_ImplGlfw_InitForOpenGL(_MainWindow.get(), true);
   ImGui_ImplOpenGL3_Init(glsl_version);
 
@@ -274,7 +274,7 @@ int Test1::Run()
   GLuint shaderProgramID = g_RTTShader -> GetShaderProgramID();
 
   Texture backgroundTex;
-  if ( !backgroundTex.Load("..\\..\\Resources\\Img\\nature.png", 4) )
+  if ( !backgroundTex.Load(PathUtils::GetImgPath("nature.png"), 4) )
   {
     glfwTerminate();
     return 1;

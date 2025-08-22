@@ -1,4 +1,4 @@
-#version 430 core
+#version 410 core
 
 in vec2 fragUV;
 out vec4 fragColor;
@@ -33,7 +33,8 @@ uniform int       u_Frame;
 // and
 //    https://iquilezles.org/articles/distfunctions
 
-#if HW_PERFORMANCE==1
+#define HW_PERFORMANCE 1  // set to 1 for high performance (less AA), 0 for high quality (more AA)
+#if (HW_PERFORMANCE == 1)
 #define AA 1
 #else
 #define AA 2   // make this 2 or 3 for antialiasing

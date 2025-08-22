@@ -1,4 +1,4 @@
-#version 430 core
+#version 410 core
 
 #include Globals.glsl
 #include ToneMapping.glsl

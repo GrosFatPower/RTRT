@@ -4,6 +4,7 @@
 #include "PathTracer.h"
 #include "SoftwareRasterizer.h"
 #include "Util.h"
+#include "PathUtils.h"
 
 #include <string>
 #include <iostream>
@@ -24,8 +25,6 @@ const char * Test5::GetTestHeader() { return "Renderers"; }
 // ----------------------------------------------------------------------------
 // Global variables
 // ----------------------------------------------------------------------------
-static std::string g_AssetsDir = "..\\..\\Assets\\";
-
 static int g_DebugMode    = 0;
 static int g_FStopMode    = 0;
 static unsigned int g_NbThreadsMax = std::thread::hardware_concurrency();
@@ -136,7 +135,7 @@ Test5::~Test5()
 int Test5::InitializeSceneFiles()
 {
   std::vector<std::string> sceneNames;
-  Util::RetrieveSceneFiles(g_AssetsDir, _SceneFiles, &sceneNames);
+  Util::RetrieveSceneFiles(PathUtils::GetAssetPath(""), _SceneFiles, &sceneNames);
 
   for ( int i = 0; i < sceneNames.size(); ++i )
   {
@@ -165,7 +164,7 @@ int Test5::InitializeSceneFiles()
 int Test5::InitializeBackgroundFiles()
 {
   std::vector<std::string> backgroundNames;
-  Util::RetrieveBackgroundFiles(g_AssetsDir + "HDR\\", _BackgroundFiles, &backgroundNames);
+  Util::RetrieveBackgroundFiles(PathUtils::GetEnvMapPath(""), _BackgroundFiles, &backgroundNames);
 
   for ( int i = 0; i < backgroundNames.size(); ++i )
   {
@@ -199,7 +198,7 @@ int Test5::InitializeUI()
   io.Fonts -> AddFontDefault();
 
   // Setup Platform/Renderer backends
-  const char* glsl_version = "#version 130";
+  const char* glsl_version = "#version 410";
   ImGui_ImplGlfw_InitForOpenGL(_MainWindow.get(), true);
   ImGui_ImplOpenGL3_Init(glsl_version);
 
@@ -248,7 +247,7 @@ int Test5::DrawUI()
       int offset = ( s_LastFrameIndex >= 119 ) ? ( 0 ) : ( s_LastFrameIndex + 1 );
 
       char overlay[32];
-      sprintf( overlay, "%.1f FPS", _FrameRate );
+      snprintf( overlay, 32, "%.1f FPS", _FrameRate );
       ImGui::PlotLines( "Frame rate", &s_FrameRateHistory[0], s_FrameRateHistory.size(), offset, overlay, -0.1f, s_Max, ImVec2( 0, 80.0f ) );
     }
 

@@ -47,7 +47,7 @@ namespace RadeonRays
           kLeaf
       };
 
-      struct Bvh::Node
+      struct Node
       {
           // Node bounds in world space
           bbox bounds;
@@ -113,8 +113,7 @@ namespace RadeonRays
     protected:
         // Build function
         virtual void BuildImpl(bbox const* bounds, int numbounds);
-        // BVH node
-        struct Node;
+
         // Node allocation
         virtual Node* AllocateNode();
         virtual void  InitNodeAllocator(size_t maxnum);

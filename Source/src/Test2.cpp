@@ -12,6 +12,7 @@
 #include "Scene.h"
 #include "RenderSettings.h"
 #include "Loader.h"
+#include "PathUtils.h"
 
 namespace RTRT
 {
@@ -26,7 +27,7 @@ static double g_MouseY       = 0.;
 static bool   g_LeftClick    = false;
 static bool   g_RightClick   = false;
 
-static std::string g_AssetsDir = "..\\..\\Assets\\";
+static std::string g_AssetsDir = PathUtils::GetAssetPath("");
 static int         g_CurSceneIndex = 0;
 static int         g_LoadingState = 0;
 
@@ -144,7 +145,7 @@ int Test2::Run()
   io.Fonts->AddFontDefault();
 
   // Setup Platform/Renderer backends
-  const char* glsl_version = "#version 130";
+  const char* glsl_version = "#version 410";
   ImGui_ImplGlfw_InitForOpenGL(_MainWindow.get(), true);
   ImGui_ImplOpenGL3_Init(glsl_version);
 

@@ -46,8 +46,6 @@ const char * Test3::GetTestHeader() { return "Simple ray tracer"; }
 // ----------------------------------------------------------------------------
 // GLOBAL VARIABLES
 // ----------------------------------------------------------------------------
-static std::string g_AssetsDir = "..\\..\\Assets\\";
-
 static bool g_RenderToFile = false;
 static fs::path g_FilePath;
 
@@ -282,7 +280,7 @@ void Test3::ClearSceneData()
 int Test3::InitializeSceneFiles()
 {
   std::vector<std::string> sceneNames;
-  Util::RetrieveSceneFiles(g_AssetsDir, _SceneFiles, &sceneNames);
+  Util::RetrieveSceneFiles(PathUtils::GetAssetPath(""), _SceneFiles, &sceneNames);
 
   for ( int i = 0; i < sceneNames.size(); ++i )
   {
@@ -303,7 +301,7 @@ int Test3::InitializeSceneFiles()
 int Test3::InitializeBackgroundFiles()
 {
   std::vector<std::string> backgroundNames;
-  Util::RetrieveBackgroundFiles(g_AssetsDir + "HDR\\", _BackgroundFiles, &backgroundNames);
+  Util::RetrieveBackgroundFiles(PathUtils::GetEnvMapPath(""), _BackgroundFiles, &backgroundNames);
 
   for ( int i = 0; i < backgroundNames.size(); ++i )
   {
@@ -699,7 +697,7 @@ int Test3::InitializeUI()
   io.Fonts->AddFontDefault();
 
   // Setup Platform/Renderer backends
-  const char* glsl_version = "#version 130";
+  const char* glsl_version = "#version 410";
   ImGui_ImplGlfw_InitForOpenGL(_MainWindow.get(), true);
   ImGui_ImplOpenGL3_Init(glsl_version);
 
@@ -753,7 +751,7 @@ int Test3::DrawUI()
       int offset = ( s_LastFrameIndex >= 119 ) ? ( 0 ) : ( s_LastFrameIndex + 1 );
 
       char overlay[32];
-      sprintf( overlay, "%.1f FPS", _FrameRate );
+      snprintf( overlay, 32, "%.1f FPS", _FrameRate );
       ImGui::PlotLines( "Frame rate", &s_FrameRateHistory[0], s_FrameRateHistory.size(), offset, overlay, -0.1f, s_Max, ImVec2( 0, 80.0f ) );
     }
 

@@ -2,7 +2,7 @@
  * Designed with ChatGPT & MistralAI
  */
 
-#version 450
+#version 410
 
 #include Constants.glsl
 

@@ -1,4 +1,4 @@
-#version 430 core
+#version 410 core
 
 in vec2 fragUV;
 out vec4 fragColor;
@@ -15,7 +15,7 @@ void RenderToTexture()
 {
   float t = u_Time * 1.25;
 
-  vec2 textUV = { fragUV.x, 1.0 - fragUV.y };
+  vec2 textUV = vec2( fragUV.x, 1.0 - fragUV.y );
   vec2 screenUV = (textUV - 0.5) * 2.0;
   float vignette = abs(sin(3.0*t+6.0*pow(distance(screenUV,vec2(0.0,0.0)), .65)));
 

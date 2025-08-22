@@ -22,7 +22,6 @@ THE SOFTWARE.
 #ifndef BBOX_H
 #define BBOX_H
 
-#include "Math.h"
 #include "MathUtil.h"
 #include <cmath>
 #include <algorithm>

@@ -20,13 +20,11 @@
 #include "stb_image_write.h"
 
 
-#define PARALLEL
-#ifdef PARALLEL
-constexpr std::execution::parallel_policy policy = std::execution::par;
+#if defined(_WIN32) || defined(_WIN64)
+static constexpr auto & policy = std::execution::par;
 #else
-constexpr std::execution::sequenced_policy policy = std::execution::seq;
+static constexpr auto & policy = std::execution::seq;
 #endif
-
 
 /**
  * The vertices vector contains a lot of duplicated vertex data,

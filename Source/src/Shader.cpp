@@ -20,8 +20,11 @@ static bool S_DEBUG_SHADERS = true;
 // ----------------------------------------------------------------------------
 void GetFilePath(const std::string & iFullPath, std::string& oPathWithoutFileName)
 {
-  size_t found = iFullPath.find_last_of("/\\");
-  oPathWithoutFileName = iFullPath.substr(0, found + 1);
+  fs::path filepath = iFullPath;
+  oPathWithoutFileName = filepath.parent_path().string() + fs::path::preferred_separator;
+
+  //size_t found = iFullPath.find_last_of("/\\");
+  //oPathWithoutFileName = iFullPath.substr(0, found + 1);
 }
 
 namespace RTRT

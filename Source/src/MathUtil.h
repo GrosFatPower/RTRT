@@ -3,7 +3,7 @@
 
 #define _USE_MATH_DEFINES
 
-#include <Math.h>
+#include <math.h>
 #include <cmath>
 #include <algorithm>
 

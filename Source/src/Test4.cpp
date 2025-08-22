@@ -10,6 +10,7 @@
 #include "SutherlandHodgman.h"
 #include "JobSystem.h"
 #include "Util.h"
+#include "PathUtils.h"
 
 #include "tinydir.h"
 
@@ -29,7 +30,11 @@
 //#include <omp.h>
 #include <thread>
 
-constexpr std::execution::parallel_policy policy = std::execution::par;
+#if defined(_WIN32) || defined(_WIN64)
+static constexpr auto & policy = std::execution::par;
+#else
+static constexpr auto & policy = std::execution::seq;
+#endif
 
 namespace fs = std::filesystem;
 
@@ -63,8 +68,6 @@ const char * Test4::GetTestHeader() { return "CPU Rasterizer"; }
 // ----------------------------------------------------------------------------
 // Global variables
 // ----------------------------------------------------------------------------
-static std::string g_AssetsDir = "..\\..\\Assets\\";
-
 static bool g_RenderToFile = false;
 static fs::path g_FilePath;
 
@@ -306,7 +309,7 @@ Test4::~Test4()
 int Test4::InitializeSceneFiles()
 {
   std::vector<std::string> sceneNames;
-  Util::RetrieveSceneFiles(g_AssetsDir, _SceneFiles, &sceneNames);
+  Util::RetrieveSceneFiles(PathUtils::GetAssetPath(""), _SceneFiles, &sceneNames);
 
   for ( int i = 0; i < sceneNames.size(); ++i )
   {
@@ -327,7 +330,7 @@ int Test4::InitializeSceneFiles()
 int Test4::InitializeBackgroundFiles()
 {
   std::vector<std::string> backgroundNames;
-  Util::RetrieveBackgroundFiles(g_AssetsDir + "HDR\\", _BackgroundFiles, &backgroundNames);
+  Util::RetrieveBackgroundFiles(PathUtils::GetEnvMapPath(""), _BackgroundFiles, &backgroundNames);
 
   for ( int i = 0; i < backgroundNames.size(); ++i )
   {
@@ -428,15 +431,15 @@ int Test4::InitializeFrameBuffer()
 // ---------------------------------------------------------------------------
 int Test4::RecompileShaders()
 {
-  ShaderSource vertexShaderSrc = Shader::LoadShader("..\\..\\shaders\\vertex_Default.glsl");
-  ShaderSource fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_drawTexture.glsl");
+  ShaderSource vertexShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("vertex_Default.glsl"));
+  ShaderSource fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_drawTexture.glsl"));
 
   ShaderProgram * newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !newShader )
     return 1;
   _RTTShader.reset(newShader);
 
-  fragmentShaderSrc = Shader::LoadShader("..\\..\\shaders\\fragment_Output.glsl");
+  fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Output.glsl"));
   newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !newShader )
     return 1;
@@ -621,7 +624,7 @@ int Test4::InitializeUI()
   io.Fonts -> AddFontDefault();
 
   // Setup Platform/Renderer backends
-  const char* glsl_version = "#version 130";
+  const char* glsl_version = "#version 410";
   ImGui_ImplGlfw_InitForOpenGL(_MainWindow.get(), true);
   ImGui_ImplOpenGL3_Init(glsl_version);
 
@@ -707,8 +710,8 @@ void Test4::DrawUI()
       ImGui::Text("Render to screen        : %.3f ms/frame", _RTSElapsed * 1000.f);
 
       ImGui::Text("Nb threads              : %d", _NbThreads);
-      ImGui::Text("Nb vertices             : %d", _Vertices.size());
-      ImGui::Text("Nb triangles            : %d", _Triangles.size());
+      ImGui::Text("Nb vertices             : %d", (int)_Vertices.size());
+      ImGui::Text("Nb triangles            : %d", (int)_Triangles.size());
 
       unsigned int nbRasterTris = 0;
       for ( int i = 0; i < _NbThreads; ++i )
