@@ -18,13 +18,10 @@ static bool S_DEBUG_SHADERS = true;
 // GetFilePath
 // Remove the file name and store the path to this folder
 // ----------------------------------------------------------------------------
-void GetFilePath(const std::string & iFullPath, std::string& oPathWithoutFileName)
+void GetFilePath(const std::string& iFullPath, std::string& oPathWithoutFileName)
 {
   fs::path filepath = iFullPath;
-  oPathWithoutFileName = filepath.parent_path().string() + fs::path::preferred_separator;
-
-  //size_t found = iFullPath.find_last_of("/\\");
-  //oPathWithoutFileName = iFullPath.substr(0, found + 1);
+  oPathWithoutFileName = filepath.parent_path().string() + std::string(1, fs::path::preferred_separator);
 }
 
 namespace RTRT
