@@ -551,6 +551,9 @@ int PathTracer::DenoiseOutput()
 {
   glQueryCounter(_DenoiseTimeId[0], GL_TIMESTAMP);
 
+  if ( !_DenoiserShader )
+    return 1;
+
   _DenoiserShader -> Use();
 
   this -> BindDenoiserTextures();
@@ -576,6 +579,9 @@ int PathTracer::DenoiseOutput()
 // ----------------------------------------------------------------------------
 int PathTracer::UpdateDenoiserUniforms()
 {
+  if ( !_DenoiserShader )
+    return 1;
+
   _DenoiserShader -> Use();
 
   _DenoiserShader -> SetUniform("u_DenoisingMethod", (int)_Settings._DenoisingMethod);    // 0: Bilateral, 1: Wavelet, 2: Edge-aware
@@ -883,11 +889,13 @@ int PathTracer::RecompileShaders()
     return 1;
   _RenderToScreenShader.reset(newShader);
 
+#if defined(_WIN32) || defined(_WIN64)
   ShaderSource computeShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("compute_Denoiser.glsl"));
   newShader = ShaderProgram::LoadShaders(computeShaderSrc);
   if ( !newShader )
     return 1;
   _DenoiserShader.reset(newShader);
+#endif
 
   return 0;
 }
