@@ -19,6 +19,9 @@
 *.out
 *.app
 
+# Mac OS files
+.DS_Store
+
 # Directories
 .vs/
 Bin/
