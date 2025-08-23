@@ -105,12 +105,12 @@ namespace RasterData
 
   struct Tile
   {
-    int                          _X;
-    int                          _Y;
-    int                          _Width;
-    int                          _Height;
-    FrameBuffer                  _LocalFB;
-    std::vector<RasterTriangle*> _RasterTris;
+    int         _X;
+    int         _Y;
+    int         _Width;
+    int         _Height;
+    FrameBuffer _LocalFB;
+    std::vector<std::vector<RasterTriangle*>> _RasterTrisBins;
   };
 
 }

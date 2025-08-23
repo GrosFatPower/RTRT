@@ -125,6 +125,13 @@ int SoftwareRasterizer::UpdateNumberOfWorkers( bool iForce )
 
     for ( unsigned int i = 0; i < _NbJobs; ++i )
       _RasterTrianglesBuf[i].reserve(std::max(_Triangles.size()/_NbJobs, (size_t)1));
+
+    for ( auto & tile : _Tiles )
+    {
+      tile._RasterTrisBins.resize(_NbJobs);
+      for ( auto & bin : tile._RasterTrisBins)
+        bin.reserve(100);
+    }
   }
 
   return 0;
@@ -395,6 +402,9 @@ int SoftwareRasterizer::UpdateRenderResolution()
 
       curTile._LocalFB._ColorBuffer.resize(curTile._Width * curTile._Height);
       curTile._LocalFB._DepthBuffer.resize(curTile._Width * curTile._Height);
+
+      if (_NbJobs )
+        curTile._RasterTrisBins.resize(_NbJobs);
     }
   }
 
@@ -577,8 +587,11 @@ void SoftwareRasterizer::ResetTiles()
 
   for ( auto & tile : _Tiles )
   {
-    tile._RasterTris.clear();
-    tile._RasterTris.reserve(100);
+    for (auto& bin : tile._RasterTrisBins)
+    {
+      bin.clear();
+      bin.reserve(100);
+    }
     std::fill(policy, tile._LocalFB._ColorBuffer.begin(), tile._LocalFB._ColorBuffer.end(), S_DefaultColor);
     std::fill(policy, tile._LocalFB._DepthBuffer.begin(), tile._LocalFB._DepthBuffer.end(), std::numeric_limits<float>::max());
   }
@@ -1019,7 +1032,11 @@ int SoftwareRasterizer::ProcessFragments()
 
     for ( auto & tile : _Tiles )
     {
-      if ( tile._RasterTris.empty() )
+      unsigned int totalTris = 0;
+      for ( auto & bin : tile._RasterTrisBins )
+        totalTris += static_cast<int>(bin.size());
+
+      if ( 0 == totalTris )
         JobSystem::Get().Execute([this, &tile]() { this -> CopyTileToMainBuffer(tile); });
       else
         JobSystem::Get().Execute([this, &tile]() { this -> ProcessFragments(tile); });
@@ -1173,15 +1190,11 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
 // ----------------------------------------------------------------------------
 void SoftwareRasterizer::BinTrianglesToTiles()
 {
-  // Not thread safe !!
-  //for ( unsigned int i = 0; i < _NbJobs; ++i )
-  //{
-  //  JobSystem::Get().Execute([this, i]() { this -> BinTrianglesToTiles(i); });
-  //}
-  //JobSystem::Get().Wait();
-
   for ( unsigned int i = 0; i < _NbJobs; ++i )
-    this -> BinTrianglesToTiles(i);
+  {
+    JobSystem::Get().Execute([this, i]() { this -> BinTrianglesToTiles(i); });
+  }
+  JobSystem::Get().Wait();
 }
 
 // ----------------------------------------------------------------------------
@@ -1215,7 +1228,7 @@ void SoftwareRasterizer::BinTrianglesToTiles( unsigned int iBufferIndex )
         {
           int tileIndex = ty * _TileCountX + tx;
           rd::Tile& curTile = _Tiles[tileIndex];
-          curTile._RasterTris.push_back(&tri);
+          curTile._RasterTrisBins[iBufferIndex].push_back(&tri);
         }
       }
     }
@@ -1238,97 +1251,100 @@ void SoftwareRasterizer::ProcessFragments( RasterData::Tile & ioTile )
   for (int i = 0; i < _Scene.GetNbLights(); ++i)
     uniforms._Lights.push_back(*_Scene.GetLight(i));
 
-  for ( const rd::RasterTriangle * tri : ioTile._RasterTris )
+  for ( auto & bin : ioTile._RasterTrisBins )
   {
-    if ( !tri )
-      continue;
-
-    int startX = std::max(ioTile._X, (int)std::floor(tri -> _BBox._Low.x));
-    int endX   = std::min(ioTile._X + ioTile._Width - 1, (int)std::ceil(tri -> _BBox._High.x));
-    int startY = std::max(ioTile._Y, (int)std::floor(tri -> _BBox._Low.y));
-    int endY   = std::min(ioTile._Y + ioTile._Height - 1, (int)std::ceil(tri -> _BBox._High.y));
-
-    for (int y = startY; y <= endY; ++y)
+    for ( const rd::RasterTriangle* tri : bin )
     {
-      for (int x = startX; x <= endX; ++x)
+      if (!tri)
+        continue;
+
+      int startX = std::max(ioTile._X, (int)std::floor(tri->_BBox._Low.x));
+      int endX = std::min(ioTile._X + ioTile._Width - 1, (int)std::ceil(tri->_BBox._High.x));
+      int startY = std::max(ioTile._Y, (int)std::floor(tri->_BBox._Low.y));
+      int endY = std::min(ioTile._Y + ioTile._Height - 1, (int)std::ceil(tri->_BBox._High.y));
+
+      for (int y = startY; y <= endY; ++y)
       {
-        Vec3 coord(x + .5f, y + .5f, 0.f);
-
-        Vec3 W;
-        W.x = tri -> _EdgeA[0] * x + tri -> _EdgeB[0] * y + tri -> _EdgeC[0];
-        W.y = tri -> _EdgeA[1] * x + tri -> _EdgeB[1] * y + tri -> _EdgeC[1];
-        W.z = tri -> _EdgeA[2] * x + tri -> _EdgeB[2] * y + tri -> _EdgeC[2];
-        if ( (W.x < 0.f)
-          || (W.y < 0.f)
-          || (W.z < 0.f))
-          continue;
-
-        // Perspective correction
-        W *= tri -> _InvArea;
-
-        W.x *= tri -> _InvW[0]; // W0 / -z0
-        W.y *= tri -> _InvW[1]; // W1 / -z1
-        W.z *= tri -> _InvW[2]; // W2 / -z2
-
-        float Z = 1.f / (W.x + W.y + W.z);
-        W *= Z;
-
-        coord.z = W.x * tri -> _V[0].z + W.y * tri -> _V[1].z + W.z * tri -> _V[2].z;
-
-
-        int localX = x - ioTile._X;
-        int localY = y - ioTile._Y;
-        int localPixelIndex = localY * ioTile._Width + localX;
-
-        if (_Settings._WBuffer)
+        for (int x = startX; x <= endX; ++x)
         {
-          if (Z > ioTile._LocalFB._DepthBuffer[localPixelIndex] || (Z < zNear))
+          Vec3 coord(x + .5f, y + .5f, 0.f);
+
+          Vec3 W;
+          W.x = tri->_EdgeA[0] * x + tri->_EdgeB[0] * y + tri->_EdgeC[0];
+          W.y = tri->_EdgeA[1] * x + tri->_EdgeB[1] * y + tri->_EdgeC[1];
+          W.z = tri->_EdgeA[2] * x + tri->_EdgeB[2] * y + tri->_EdgeC[2];
+          if ((W.x < 0.f)
+            || (W.y < 0.f)
+            || (W.z < 0.f))
             continue;
+
+          // Perspective correction
+          W *= tri->_InvArea;
+
+          W.x *= tri->_InvW[0]; // W0 / -z0
+          W.y *= tri->_InvW[1]; // W1 / -z1
+          W.z *= tri->_InvW[2]; // W2 / -z2
+
+          float Z = 1.f / (W.x + W.y + W.z);
+          W *= Z;
+
+          coord.z = W.x * tri->_V[0].z + W.y * tri->_V[1].z + W.z * tri->_V[2].z;
+
+
+          int localX = x - ioTile._X;
+          int localY = y - ioTile._Y;
+          int localPixelIndex = localY * ioTile._Width + localX;
+
+          if (_Settings._WBuffer)
+          {
+            if (Z > ioTile._LocalFB._DepthBuffer[localPixelIndex] || (Z < zNear))
+              continue;
+          }
+          else
+          {
+            if (coord.z > ioTile._LocalFB._DepthBuffer[localPixelIndex] || (coord.z < -1.f))
+              continue;
+          }
+
+          rd::Varying Attrib[3];
+          Attrib[0] = _ProjVerticesBuf[tri->_Indices[0]]._Attrib;
+          Attrib[1] = _ProjVerticesBuf[tri->_Indices[1]]._Attrib;
+          Attrib[2] = _ProjVerticesBuf[tri->_Indices[2]]._Attrib;
+
+          rd::Fragment frag;
+          frag._FragCoords = coord;
+          frag._MatID = tri->_MatID;
+          frag._Attrib = Attrib[0] * W.x + Attrib[1] * W.y + Attrib[2] * W.z;
+
+          if (ShadingType::Phong == _Settings._ShadingType)
+            frag._Attrib._Normal = glm::normalize(frag._Attrib._Normal);
+          else
+            frag._Attrib._Normal = tri->_Normal;
+
+          Vec4 fragColor(1.f);
+
+          if (_DebugMode & (int)RasterDebugModes::DepthBuffer)
+            FragmentShader_Depth(frag, uniforms, fragColor);
+          else if (_DebugMode & (int)RasterDebugModes::Normals)
+            FragmentShader_Normal(frag, uniforms, fragColor);
+          else
+            FragmentShader_Color(frag, uniforms, fragColor);
+
+          if (_DebugMode & (int)RasterDebugModes::Wires)
+          {
+            Vec4 wireColor(1.f);
+            FragmentShader_Wires(frag, tri->_V, uniforms, wireColor);
+            fragColor.x = glm::mix(fragColor.x, wireColor.x, wireColor.w);
+            fragColor.y = glm::mix(fragColor.y, wireColor.y, wireColor.w);
+            fragColor.z = glm::mix(fragColor.z, wireColor.z, wireColor.w);
+          }
+
+          ioTile._LocalFB._ColorBuffer[localPixelIndex] = fragColor;
+          if (_Settings._WBuffer)
+            ioTile._LocalFB._DepthBuffer[localPixelIndex] = Z;
+          else
+            ioTile._LocalFB._DepthBuffer[localPixelIndex] = coord.z;
         }
-        else
-        {
-          if (coord.z > ioTile._LocalFB._DepthBuffer[localPixelIndex] || (coord.z < -1.f))
-            continue;
-        }
-
-        rd::Varying Attrib[3];
-        Attrib[0] = _ProjVerticesBuf[tri -> _Indices[0]]._Attrib;
-        Attrib[1] = _ProjVerticesBuf[tri -> _Indices[1]]._Attrib;
-        Attrib[2] = _ProjVerticesBuf[tri -> _Indices[2]]._Attrib;
-
-        rd::Fragment frag;
-        frag._FragCoords = coord;
-        frag._MatID = tri -> _MatID;
-        frag._Attrib = Attrib[0] * W.x + Attrib[1] * W.y + Attrib[2] * W.z;
-
-        if (ShadingType::Phong == _Settings._ShadingType)
-          frag._Attrib._Normal = glm::normalize(frag._Attrib._Normal);
-        else
-          frag._Attrib._Normal = tri -> _Normal;
-
-        Vec4 fragColor(1.f);
-
-        if (_DebugMode & (int)RasterDebugModes::DepthBuffer)
-          FragmentShader_Depth(frag, uniforms, fragColor);
-        else if (_DebugMode & (int)RasterDebugModes::Normals)
-          FragmentShader_Normal(frag, uniforms, fragColor);
-        else
-          FragmentShader_Color(frag, uniforms, fragColor);
-
-        if (_DebugMode & (int)RasterDebugModes::Wires)
-        {
-          Vec4 wireColor(1.f);
-          FragmentShader_Wires(frag, tri -> _V, uniforms, wireColor);
-          fragColor.x = glm::mix(fragColor.x, wireColor.x, wireColor.w);
-          fragColor.y = glm::mix(fragColor.y, wireColor.y, wireColor.w);
-          fragColor.z = glm::mix(fragColor.z, wireColor.z, wireColor.w);
-        }
-
-        ioTile._LocalFB._ColorBuffer[localPixelIndex] = fragColor;
-        if (_Settings._WBuffer)
-          ioTile._LocalFB._DepthBuffer[localPixelIndex] = Z;
-        else
-          ioTile._LocalFB._DepthBuffer[localPixelIndex] = coord.z;
       }
     }
   }
