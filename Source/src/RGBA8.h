@@ -31,7 +31,7 @@ public:
 
   RGBA8(Vec4 iRGBA32) noexcept { Load(iRGBA32.r, iRGBA32.g, iRGBA32.b, iRGBA32.a); }
   RGBA8(Vec3 iRGB32, float iA) noexcept  { Load(iRGB32.r, iRGB32.g, iRGB32.b, iA); }
-  RGBA8(float iR, float iG, float iB, float iA) noexcept  { Load(iA, iG, iB, iA); }
+  RGBA8(float iR, float iG, float iB, float iA) noexcept  { Load(iR, iG, iB, iA); }
 
   RGBA8 operator *( float iVal ) const;
   RGBA8 & operator *=( float iVal );

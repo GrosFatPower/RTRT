@@ -1,3 +1,5 @@
+#pragma warning(disable : 4100) // unreferenced formal parameter
+
 #include "Test1.h"
 
 #include "imgui.h"
@@ -72,11 +74,11 @@ static const GLfloat g_QuadUVs[] =
 // ----------------------------------------------------------------------------
 // Global functions
 // ----------------------------------------------------------------------------
-static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-  if (action == GLFW_PRESS)
-    std::cout << "EVENT : KEY PRESSED" << std::endl;
-}
+//static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
+//{
+//  if (action == GLFW_PRESS)
+//    std::cout << "EVENT : KEY PRESSED" << std::endl;
+//}
 
 static void MousebuttonCallback(GLFWwindow* window, int button, int action, int mods)
 {
@@ -188,8 +190,8 @@ void UpdateUniforms()
   {
     g_RTTShader -> Use();
     GLuint shaderProgramID = g_RTTShader -> GetShaderProgramID();
-    glUniform3f(glGetUniformLocation(shaderProgramID, "u_Resolution"), g_ScreenWidth, g_ScreenHeight, 0.f);
-    glUniform4f(glGetUniformLocation(shaderProgramID, "u_Mouse"), g_MouseX, g_MouseY, (float) g_LeftClick, (float) g_RightClick);
+    glUniform3f(glGetUniformLocation(shaderProgramID, "u_Resolution"), static_cast<GLfloat>(g_ScreenWidth), static_cast<GLfloat>(g_ScreenHeight), 0.f);
+    glUniform4f(glGetUniformLocation(shaderProgramID, "u_Mouse"), static_cast<GLfloat>(g_MouseX), static_cast<GLfloat>(g_MouseY), (float) g_LeftClick, (float) g_RightClick);
     glUniform1f(glGetUniformLocation(shaderProgramID, "u_Time"), g_CurLoopTime);
     glUniform1f(glGetUniformLocation(shaderProgramID, "u_TimeDelta"), g_TimeDelta);
     glUniform1i(glGetUniformLocation(shaderProgramID, "u_Frame"), (int)g_Frame);
@@ -321,12 +323,12 @@ int Test1::Run()
   // Main loop
   std::deque<float> lastDeltas;
 
-  double oldCpuTime = glfwGetTime();
+  float oldCpuTime = static_cast<float>(glfwGetTime());
   while (!glfwWindowShouldClose(_MainWindow.get()))
   {
     g_Frame++;
 
-    g_CurLoopTime = glfwGetTime();
+    g_CurLoopTime = static_cast<float>(glfwGetTime());
 
     g_TimeDelta = g_CurLoopTime - oldCpuTime;
     oldCpuTime = g_CurLoopTime;
@@ -335,13 +337,13 @@ int Test1::Run()
     while ( lastDeltas.size() > 60 )
       lastDeltas.pop_front();
     
-    double totalDelta = 0.;
+    float totalDelta = 0.;
     for ( auto delta : lastDeltas )
       totalDelta += delta;
-    double averageDelta = totalDelta / lastDeltas.size();
+    float averageDelta = totalDelta / lastDeltas.size();
 
     if ( averageDelta > 0. )
-      g_FrameRate = 1. / (float)averageDelta;
+      g_FrameRate = 1.f / (float)averageDelta;
 
     // Poll and handle events (inputs, window resize, etc.)
     // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.

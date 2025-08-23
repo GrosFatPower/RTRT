@@ -6,7 +6,7 @@
 namespace RTRT
 {
 
-enum class LightType
+enum struct LightType
 {
   RectLight = 0,
   SphereLight,
@@ -21,7 +21,7 @@ struct Light
   Vec3       _DirV      = { 0.f, 0.f, 1.f };
   float      _Intensity = 1.f;
   float      _Radius    = 1.f;
-  float      _Area      = 4.f * M_PI;
+  float      _Area      = 4.f * static_cast<float>(M_PI);
   float      _Type      = (float)LightType::SphereLight;
 };
 

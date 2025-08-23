@@ -24,6 +24,8 @@ THE SOFTWARE.
 #ifndef BVH_H
 #define BVH_H
 
+#pragma warning(disable : 4201) // nonstandard extension used : nameless struct/union
+
 #include <memory>
 #include <vector>
 #include <list>

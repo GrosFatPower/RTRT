@@ -3,6 +3,8 @@
   already derived from: https://github.com/mmacklin/tinsel
 */
 
+#pragma warning(disable : 4100) // unreferenced formal parameter
+
 #include "Loader.h"
 #include "Scene.h"
 #include "Mesh.h"
@@ -195,7 +197,7 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
       std::string texName;
       GetTextureName(iGltfModel, gltfTex, texName);
 
-      material._BaseColorTexId = ioScene.FindTextureID(texName);
+      material._BaseColorTexId = static_cast<float>(ioScene.FindTextureID(texName));
       if ( material._BaseColorTexId < 0 )
       {
         ret = false;
@@ -225,7 +227,7 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
       std::string texName;
       GetTextureName(iGltfModel, gltfTex, texName);
 
-      material._MetallicRoughnessTexID = ioScene.FindTextureID(texName);
+      material._MetallicRoughnessTexID = static_cast<float>(ioScene.FindTextureID(texName));
       if ( material._MetallicRoughnessTexID < 0 )
       {
         ret = false;
@@ -241,7 +243,7 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
       std::string texName;
       GetTextureName(iGltfModel, gltfTex, texName);
 
-      material._NormalMapTexID = ioScene.FindTextureID(texName);
+      material._NormalMapTexID = static_cast<float>(ioScene.FindTextureID(texName));
       if ( material._NormalMapTexID < 0 )
       {
         ret = false;
@@ -258,7 +260,7 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
       std::string texName;
       GetTextureName(iGltfModel, gltfTex, texName);
 
-      material._EmissionMapTexID = ioScene.FindTextureID(texName);
+      material._EmissionMapTexID = static_cast<float>(ioScene.FindTextureID(texName));
       if ( material._EmissionMapTexID < 0 )
       {
         ret = false;
@@ -275,7 +277,7 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
     }
 
     std::string matName;
-    GetMaterialName(iGltfModel, gltfMaterial, indMat, matName);
+    GetMaterialName(iGltfModel, gltfMaterial, static_cast<int>(indMat), matName);
 
     ioScene.AddMaterial(material, matName);
   }
@@ -444,7 +446,7 @@ bool LoadMeshes( Scene & ioScene, tinygltf::Model & iGltfModel )
 
       // Intanciate mesh object
       std::string meshName;
-      GetMeshName( gltfMesh, indMesh, indPrim, meshName );
+      GetMeshName( gltfMesh, static_cast<int>(indMesh), static_cast<int>(indPrim), meshName );
 
       Mesh* newMesh = new Mesh( meshName, vertices, normals, uvs, indices );
       int meshID = ioScene.AddMesh( newMesh );
@@ -488,7 +490,7 @@ void TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx,
           continue;
 
         std::string meshName;
-        GetMeshName( gltfMesh, gltfNode.mesh, indPrim, meshName );
+        GetMeshName( gltfMesh, gltfNode.mesh, static_cast<int>(indPrim), meshName );
 
         int meshID = ioScene.FindMeshID( meshName );
         if ( meshID < 0 )
@@ -638,7 +640,7 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene & oScene, Re
   {
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
-    int nbTokens = tokens.size();
+    int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
     if ( State::ExpectNewBlock != curState )
@@ -881,7 +883,7 @@ int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, cons
   {
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
-    int nbTokens = tokens.size();
+    int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
 
@@ -1097,13 +1099,13 @@ int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, cons
       newMaterial._MediumType = (float)MediumType::Emissive;
 
     if ( !albedoTexName.empty() )
-      newMaterial._BaseColorTexId = ioScene.AddTexture(iPath + albedoTexName);
+      newMaterial._BaseColorTexId = static_cast<float>(ioScene.AddTexture(iPath + albedoTexName));
     if ( !metallicRoughnessTexName.empty() )
-      newMaterial._MetallicRoughnessTexID = ioScene.AddTexture(iPath + metallicRoughnessTexName);
+      newMaterial._MetallicRoughnessTexID = static_cast<float>(ioScene.AddTexture(iPath + metallicRoughnessTexName));
     if ( !normalTexName.empty() )
-      newMaterial._NormalMapTexID = ioScene.AddTexture(iPath + normalTexName);
+      newMaterial._NormalMapTexID = static_cast<float>(ioScene.AddTexture(iPath + normalTexName));
     if ( !emissionTexName.empty() )
-      newMaterial._EmissionMapTexID = ioScene.AddTexture(iPath + emissionTexName);
+      newMaterial._EmissionMapTexID = static_cast<float>(ioScene.AddTexture(iPath + emissionTexName));
 
      ioScene.AddMaterial(newMaterial, iMaterialName);
   }
@@ -1127,7 +1129,7 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
   {
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
-    int nbTokens = tokens.size();
+    int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
 
@@ -1223,7 +1225,7 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
     }
     else if ( LightType::SphereLight == (LightType)newLight._Type )
     {
-      newLight._Area = 4.0f * M_PI * newLight._Radius * newLight._Radius;
+      newLight._Area = 4.0f * static_cast<float>(M_PI) * newLight._Radius * newLight._Radius;
     }
     else if ( LightType::DistantLight == (LightType)newLight._Type )
     {
@@ -1260,7 +1262,7 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
   {
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
-    int nbTokens = tokens.size();
+    int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
 
@@ -1418,7 +1420,7 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath
   {
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
-    int nbTokens = tokens.size();
+    int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
 
@@ -1618,7 +1620,7 @@ int Loader::ParseSphere( std::ifstream & iStr, Scene & ioScene )
   {
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
-    int nbTokens = tokens.size();
+    int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
 
@@ -1769,7 +1771,7 @@ int Loader::ParseBox( std::ifstream & iStr, Scene & ioScene )
   {
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
-    int nbTokens = tokens.size();
+    int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
 
@@ -1927,7 +1929,7 @@ int Loader::ParsePlane( std::ifstream & iStr, Scene & ioScene )
   {
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
-    int nbTokens = tokens.size();
+    int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
 
@@ -2086,7 +2088,7 @@ int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scen
   {
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
-    int nbTokens = tokens.size();
+    int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
 
@@ -2249,7 +2251,7 @@ int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & 
   {
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
-    int nbTokens = tokens.size();
+    int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
 

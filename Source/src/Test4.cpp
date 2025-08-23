@@ -1,3 +1,5 @@
+#pragma warning(disable : 4100) // unreferenced formal parameter
+
 #include "Test4.h"
 
 #include "QuadMesh.h"
@@ -249,8 +251,8 @@ void Test4::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 
   this_ -> _Settings._WindowResolution.x = width;
   this_ -> _Settings._WindowResolution.y = height;
-  this_ -> _Settings._RenderResolution.x = width  * ( this_ -> _Settings._RenderScale * 0.01f );
-  this_ -> _Settings._RenderResolution.y = height * ( this_ -> _Settings._RenderScale * 0.01f );
+  this_ -> _Settings._RenderResolution.x = static_cast<int>(width  * ( this_ -> _Settings._RenderScale * 0.01f ));
+  this_ -> _Settings._RenderResolution.y = static_cast<int>(height * ( this_ -> _Settings._RenderScale * 0.01f ));
 
   this_ -> ResizeImageBuffers();
 
@@ -271,8 +273,8 @@ Test4::Test4( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iSc
 
   _Settings._WindowResolution.x = iScreenWidth;
   _Settings._WindowResolution.y = iScreenHeight;
-  _Settings._RenderResolution.x = iScreenWidth  * ( _Settings._RenderScale * 0.01f );
-  _Settings._RenderResolution.y = iScreenHeight * ( _Settings._RenderScale * 0.01f );
+  _Settings._RenderResolution.x = static_cast<int>(iScreenWidth  * ( _Settings._RenderScale * 0.01f ));
+  _Settings._RenderResolution.y = static_cast<int>(iScreenHeight * ( _Settings._RenderScale * 0.01f ));
   ResizeImageBuffers();
 
   _Settings._Gamma = 1.5f;
@@ -350,8 +352,8 @@ int Test4::InitializeBackgroundFiles()
 // ----------------------------------------------------------------------------
 void Test4::ResizeImageBuffers()
 {
-  _Settings._RenderResolution.x = _Settings._WindowResolution.x * ( _Settings._RenderScale * 0.01f );
-  _Settings._RenderResolution.y = _Settings._WindowResolution.y * ( _Settings._RenderScale * 0.01f );
+  _Settings._RenderResolution.x = static_cast<int>(_Settings._WindowResolution.x * ( _Settings._RenderScale * 0.01f ));
+  _Settings._RenderResolution.y = static_cast<int>(_Settings._WindowResolution.y * ( _Settings._RenderScale * 0.01f ));
 
   _ImageBuffer._ColorBuffer.resize(_Settings._RenderResolution.x  * _Settings._RenderResolution.y);
   _ImageBuffer._DepthBuffer.resize(_Settings._RenderResolution.x  * _Settings._RenderResolution.y);
@@ -471,7 +473,7 @@ int Test4::UpdateUniforms()
     GLuint RTSProgramID = _RTSShader -> GetShaderProgramID();
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), 0);
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedFrames"), 1);
-    glUniform2f(glGetUniformLocation(RTSProgramID, "u_RenderRes"), _Settings._RenderResolution.x, _Settings._RenderResolution.y );
+    glUniform2f(glGetUniformLocation(RTSProgramID, "u_RenderRes"), static_cast<float>(_Settings._RenderResolution.x), static_cast<float>(_Settings._RenderResolution.y) );
     glUniform1f(glGetUniformLocation(RTSProgramID, "u_Gamma"), _Settings._Gamma );
     glUniform1f(glGetUniformLocation(RTSProgramID, "u_Exposure"), _Settings._Exposure );
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_ToneMapping"), ( _Settings._ToneMapping ? 1 : 0 ) );
@@ -666,21 +668,21 @@ void Test4::DrawUI()
     if (ImGui::CollapsingHeader("Scene "))
     {
       int selectedSceneId = _CurSceneId;
-      if ( ImGui::Combo("Scene", &selectedSceneId, _SceneNames.data(), _SceneNames.size()) )
+      if ( ImGui::Combo("Scene", &selectedSceneId, _SceneNames.data(), static_cast<int>(_SceneNames.size())) )
       {
-        if ( selectedSceneId != _CurSceneId )
+        if (static_cast<unsigned int>(selectedSceneId) != _CurSceneId )
         {
-          _CurSceneId = selectedSceneId;
+          _CurSceneId = static_cast<unsigned int>(selectedSceneId);
           _ReloadScene = true;
         }
       }
 
       int selectedBgdId = _CurBackgroundId;
-      if ( ImGui::Combo("Background", &selectedBgdId, _BackgroundNames.data(), _BackgroundNames.size()) )
+      if ( ImGui::Combo("Background", &selectedBgdId, _BackgroundNames.data(), static_cast<int>(_BackgroundNames.size())) )
       {
-        if ( selectedBgdId != _CurBackgroundId )
+        if (static_cast<unsigned int>(selectedBgdId) != _CurBackgroundId )
         {
-          _CurBackgroundId = selectedBgdId;
+          _CurBackgroundId = static_cast<unsigned int>(selectedBgdId);
           _ReloadBackground = true;
         }
       }
@@ -942,7 +944,7 @@ int Test4::ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP )
 
   Mat4x4 MVP = iP * iMV;
 
-  int nbVertices = _Vertices.size();
+  int nbVertices = static_cast<int>(_Vertices.size());
   _ProjVerticesBuf.resize(nbVertices);
   _ProjVerticesBuf.reserve(nbVertices*2);
 
@@ -1000,7 +1002,7 @@ void Test4::VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 
 // ----------------------------------------------------------------------------
 int Test4::ClipTriangles( const Mat4x4 & iRasterM )
 {
-  int nbTriangles = _Triangles.size();
+  int nbTriangles = static_cast<int>(_Triangles.size());
 
   if ( !_RasterTrianglesBuf )
   {
@@ -1035,9 +1037,6 @@ int Test4::ClipTriangles( const Mat4x4 & iRasterM )
 // ----------------------------------------------------------------------------
 void Test4::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin, int iStartInd, int iEndInd )
 {
-  int width  = _Settings._RenderResolution.x;
-  int height = _Settings._RenderResolution.y;
-
   _NbRasterTriPerBuf[iThreadBin] = 0;
   for ( int i = iStartInd; i < iEndInd; ++i )
   {
@@ -1087,7 +1086,7 @@ void Test4::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin, int iStartIn
                                      _ProjVerticesBuf[tri._Indices[2]]._Attrib * Points[k]._Distances.z;
               {
                 std::unique_lock<std::mutex> lock(_ProjVerticesMutex);
-                rasterTri._Indices[k] = _ProjVerticesBuf.size();
+                rasterTri._Indices[k] = static_cast<int>(_ProjVerticesBuf.size());
                 _ProjVerticesBuf.emplace_back(newProjVert);
               }
             }
@@ -1187,10 +1186,7 @@ int Test4::ProcessFragments()
 // ----------------------------------------------------------------------------
 void Test4::ProcessFragments( int iStartY, int iEndY )
 {
-  const std::vector<Material> & Materials = _Scene -> GetMaterials();
-
   int width  = _Settings._RenderResolution.x;
-  int height = _Settings._RenderResolution.y;
 
   float zNear, zFar;
   _Scene -> GetCamera().GetZNearFar(zNear, zFar);
@@ -1317,7 +1313,7 @@ void Test4::FragmentShader_Color( const Fragment & iFrag, Uniform & iUniforms, V
     const Material & mat = (*iUniforms._Materials)[iFrag._MatID];
     if ( mat._BaseColorTexId >= 0 )
     {
-      const Texture * tex = (*iUniforms._Textures)[mat._BaseColorTexId];
+      const Texture * tex = (*iUniforms._Textures)[static_cast<int>(mat._BaseColorTexId)];
       if ( iUniforms._BilinearSampling )
         albedo = tex -> BiLinearSample(iFrag._Attrib._UV);
       else
@@ -1342,7 +1338,7 @@ void Test4::FragmentShader_Color( const Fragment & iFrag, Uniform & iUniforms, V
     Vec3 reflectDir = glm::reflect(-dirToLight, iFrag._Attrib._Normal);
 
     static float specularStrength = 0.5f;
-    specular = pow(std::max(glm::dot(viewDir, reflectDir), 0.f), 32) * specularStrength;
+    specular = static_cast<float>(pow(std::max(glm::dot(viewDir, reflectDir), 0.f), 32) * specularStrength);
 
     alpha += std::min(diffuse+ambientStrength+specular, 1.f) * Vec4(glm::normalize(light._Emission), 1.f);
   }
@@ -1452,9 +1448,9 @@ int Test4::InitializeScene()
   const std::vector<Vec3>     & Vertices  = _Scene -> GetVertices();
   const std::vector<Vec3>     & Normals   = _Scene -> GetNormals();
   const std::vector<Vec3>     & UVMatIDs  = _Scene -> GetUVMatID();
-  const std::vector<Material> & Materials = _Scene -> GetMaterials();
-  const std::vector<Texture*> & Textures  = _Scene -> GetTextures();
-  const int nbTris = Indices.size() / 3;
+  //const std::vector<Material> & Materials = _Scene -> GetMaterials();
+  //const std::vector<Texture*> & Textures  = _Scene -> GetTextures();
+  const int nbTris = static_cast<int>(Indices.size() / 3);
 
   std::unordered_map<Vertex, int> VertexIDs;
   VertexIDs.reserve(Vertices.size());
@@ -1596,8 +1592,8 @@ int Test4::UpdateScene()
     double oldMouseY = _MouseState._MouseY;
     glfwGetCursorPos(_MainWindow.get(), &_MouseState._MouseX, &_MouseState._MouseY);
 
-    double deltaX = _MouseState._MouseX - oldMouseX;
-    double deltaY = _MouseState._MouseY - oldMouseY;
+    float deltaX = static_cast<float>(_MouseState._MouseX - oldMouseX);
+    float deltaY = static_cast<float>(_MouseState._MouseY - oldMouseY);
 
     if ( _MouseState._LeftClick )
     {
@@ -1626,7 +1622,7 @@ int Test4::UpdateScene()
 
     if ( _KeyState._KeyUp )
     {
-      float newRadius = _Scene -> GetCamera().GetRadius() - _TimeDelta;
+      float newRadius = static_cast<float>(_Scene -> GetCamera().GetRadius() - _TimeDelta);
       if ( newRadius > 0.f )
       {
         _Scene -> GetCamera().SetRadius(newRadius);
@@ -1634,7 +1630,7 @@ int Test4::UpdateScene()
     }
     if ( _KeyState._KeyDown )
     {
-      float newRadius = _Scene -> GetCamera().GetRadius() + _TimeDelta;
+      float newRadius = static_cast<float>(_Scene -> GetCamera().GetRadius() + _TimeDelta);
       if ( newRadius > 0.f )
       {
         _Scene -> GetCamera().SetRadius(newRadius);
@@ -1642,11 +1638,11 @@ int Test4::UpdateScene()
     }
     if ( _KeyState._KeyLeft )
     {
-      _Scene -> GetCamera().OffsetOrientations(_TimeDelta * velocity, 0.f);
+      _Scene -> GetCamera().OffsetOrientations(static_cast<float>(_TimeDelta * velocity), 0.f);
     }
     if ( _KeyState._KeyRight )
     {
-      _Scene -> GetCamera().OffsetOrientations(-_TimeDelta * velocity, 0.f);
+      _Scene -> GetCamera().OffsetOrientations(static_cast<float>(-_TimeDelta * velocity), 0.f);
     }
   }
 

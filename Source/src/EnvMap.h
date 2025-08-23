@@ -42,7 +42,7 @@ private:
   void BuildCDF();
 
   bool          _IsInitialized = false;
-  GLuint        _Handle        = -1;
+  GLuint        _Handle        = 0;
   int           _Width         = 0;
   int           _Height        = 0;
 

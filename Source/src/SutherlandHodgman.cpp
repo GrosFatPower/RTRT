@@ -11,7 +11,7 @@ Polygon SutherlandHodgman::ClipPlane( uint32_t iClipPlane, const Polygon & iInPo
   Polygon outPolygon;
 
   // For each edge/segment
-  for ( uint32_t i = 0, j = 1; i < iInPolygon.Size(); ++i, ++j )
+  for ( int i = 0, j = 1; i < iInPolygon.Size(); ++i, ++j )
   {
     if ( iInPolygon.Size() == j )
       j = 0;

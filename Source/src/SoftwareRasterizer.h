@@ -35,9 +35,9 @@ enum class RasterDebugModes
 
 class ShaderProgram;
 class Scene;
-class Material;
+struct Material;
 class Texture;
-class Light;
+struct Light;
 
 class SoftwareRasterizer : public Renderer
 {
@@ -109,7 +109,7 @@ protected:
   void ProcessFragments( int iStartY, int iEndY );
 
   void BinTrianglesToTiles();
-  void BinTrianglesToTiles( int iBufferIndex );
+  void BinTrianglesToTiles( unsigned int iBufferIndex );
   void ProcessFragments( RasterData::Tile & ioTile );
 
 protected:

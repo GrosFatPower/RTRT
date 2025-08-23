@@ -64,16 +64,16 @@ int ProcessNodes( TLASNode * iNode, GpuTLAS * ioGpuTLAS )
 
   if ( iNode -> type == RadeonRays::Bvh::NodeType::kLeaf )
   {
-    ioGpuTLAS -> _Nodes[ioGpuTLAS -> _CurNode]._LcRcLeaf.x = iNode -> startidx;
-    ioGpuTLAS -> _Nodes[ioGpuTLAS -> _CurNode]._LcRcLeaf.y = iNode -> numprims;
-    ioGpuTLAS -> _Nodes[ioGpuTLAS -> _CurNode]._LcRcLeaf.z = -1;
+    ioGpuTLAS -> _Nodes[ioGpuTLAS -> _CurNode]._LcRcLeaf.x = static_cast<float>(iNode -> startidx);
+    ioGpuTLAS -> _Nodes[ioGpuTLAS -> _CurNode]._LcRcLeaf.y = static_cast<float>(iNode -> numprims);
+    ioGpuTLAS -> _Nodes[ioGpuTLAS -> _CurNode]._LcRcLeaf.z = static_cast<float>(-1);
   }
   else
   {
     ioGpuTLAS -> _CurNode++;
-    ioGpuTLAS -> _Nodes[index]._LcRcLeaf.x = ProcessNodes( iNode -> lc, ioGpuTLAS );
+    ioGpuTLAS -> _Nodes[index]._LcRcLeaf.x = static_cast<float>(ProcessNodes( iNode -> lc, ioGpuTLAS ));
     ioGpuTLAS -> _CurNode++;
-    ioGpuTLAS -> _Nodes[index]._LcRcLeaf.y = ProcessNodes( iNode -> rc, ioGpuTLAS );
+    ioGpuTLAS -> _Nodes[index]._LcRcLeaf.y = static_cast<float>(ProcessNodes( iNode -> rc, ioGpuTLAS ));
   }
 
   return index;
@@ -84,7 +84,7 @@ int GpuTLAS::Build( std::vector<Mesh*> & iMeshes, std::vector<MeshInstance> & iM
   auto startTime = std::chrono::system_clock::now();
 
   // 1. Compute BVH
-  const int nbInstances = iMeshInstances.size();
+  const int nbInstances = static_cast<int>(iMeshInstances.size());
   if ( 0 == nbInstances )
     return 0;
 
@@ -142,7 +142,7 @@ int GpuTLAS::Build( std::vector<Mesh*> & iMeshes, std::vector<MeshInstance> & iM
   }
 
   auto endTime = std::chrono::system_clock::now();
-  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>( endTime - startTime ).count();
+  auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>( endTime - startTime ).count();
   std::cout << "GpuTLAS built in " << elapsed << "ms\n";
 
   return 0;
@@ -202,16 +202,16 @@ int ProcessNodes( BLASNode * iNode, GpuBLAS * ioGpuBLAS )
 
   if ( iNode -> type == RadeonRays::Bvh::NodeType::kLeaf )
   {
-    ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.x = iNode -> startidx;
-    ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.y = iNode -> numprims;
-    ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.z = 1;
+    ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.x = static_cast<float>(iNode -> startidx);
+    ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.y = static_cast<float>(iNode -> numprims);
+    ioGpuBLAS -> _Nodes[ioGpuBLAS -> _CurNode]._LcRcLeaf.z = static_cast < float>(1);
   }
   else
   {
     ioGpuBLAS -> _CurNode++;
-    ioGpuBLAS -> _Nodes[index]._LcRcLeaf.x = ProcessNodes( iNode -> lc, ioGpuBLAS );
+    ioGpuBLAS -> _Nodes[index]._LcRcLeaf.x = static_cast<float>(ProcessNodes( iNode -> lc, ioGpuBLAS ));
     ioGpuBLAS -> _CurNode++;
-    ioGpuBLAS -> _Nodes[index]._LcRcLeaf.y = ProcessNodes( iNode -> rc, ioGpuBLAS );
+    ioGpuBLAS -> _Nodes[index]._LcRcLeaf.y = static_cast<float>(ProcessNodes( iNode -> rc, ioGpuBLAS ));
   }
 
   return index;
@@ -223,7 +223,7 @@ int GpuBLAS::Build( Mesh & iMesh )
   auto startTime = std::chrono::system_clock::now();
 
   // 1. Compute BVH
-  const int nbTris = iMesh.GetIndices().size() / 3;
+  const int nbTris = static_cast<int>(iMesh.GetIndices().size()) / 3;
   if ( 0 == nbTris )
     return 1;
 
@@ -323,7 +323,7 @@ int GpuBLAS::Build( Mesh & iMesh )
   #endif
 
   auto endTime = std::chrono::system_clock::now();
-  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>( endTime - startTime ).count();
+  auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>( endTime - startTime ).count();
   std::cout << "GpuBLAS built in " << elapsed << "ms\n";
 
   return 0;

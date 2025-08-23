@@ -42,8 +42,8 @@ public:
   template <typename T>
   static int Sign(T val) { return (T(0) < val) - (val < T(0)); }
 
-  static float ToDegrees(float radians) { return radians * (180.f / M_PI); };
-  static float ToRadians(float degrees) { return degrees * (M_PI / 180.f); };
+  static float ToDegrees(float radians) { return radians * (180.f / static_cast<float>(M_PI)); };
+  static float ToRadians(float degrees) { return degrees * (static_cast<float>(M_PI) / 180.f); };
 
   template <typename T>
   static T Clamp(T x, T lower, T upper) { return std::min(upper, std::max(x, lower)); };
@@ -173,6 +173,49 @@ public:
     out[3][0] = 0;
     out[3][1] = 0;
     out[3][2] = 0;
+    out[3][3] = 1.0f;
+
+    return out;
+  }
+
+  static Mat4x4 QuatToMatrix(double x, double y, double z, double s) // q = s + ix + jy + kz
+  {
+    Mat4x4 out;
+
+    const double x2 = x + x;
+    const double y2 = y + y;
+    const double z2 = z + z;
+
+    const double xx = x * x2;
+    const double xy = x * y2;
+    const double xz = x * z2;
+
+    const double yy = y * y2;
+    const double yz = y * z2;
+    const double zz = z * z2;
+
+    const double sx = s * x2;
+    const double sy = s * y2;
+    const double sz = s * z2;
+
+    out[0][0] = static_cast<float>(1.0f - (yy + zz));
+    out[0][1] = static_cast<float>(xy + sz);
+    out[0][2] = static_cast<float>(xz - sy);
+    out[0][3] = 0.0f;
+
+    out[1][0] = static_cast<float>(xy - sz);
+    out[1][1] = static_cast<float>(1.0f - (xx + zz));
+    out[1][2] = static_cast<float>(yz + sx);
+    out[1][3] = 0.0f;
+
+    out[2][0] = static_cast<float>(xz + sy);
+    out[2][1] = static_cast<float>(yz - sx);
+    out[2][2] = static_cast<float>(1.0f - (xx + yy));
+    out[2][3] = 0.0f;
+
+    out[3][0] = 0.0f;
+    out[3][1] = 0.0f;
+    out[3][2] = 0.0f;
     out[3][3] = 1.0f;
 
     return out;

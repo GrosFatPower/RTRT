@@ -1,3 +1,5 @@
+#pragma warning(disable : 4100) // unreferenced formal parameter
+
 #include "Test3.h"
 #include "QuadMesh.h"
 #include "ShaderProgram.h"
@@ -455,12 +457,12 @@ int Test3::UpdateUniforms()
   {
     _RayTraceShader -> Use();
     GLuint RTTProgramID = _RayTraceShader -> GetShaderProgramID();
-    glUniform2f(glGetUniformLocation(RTTProgramID, "u_Resolution"), RenderWidth(), RenderHeight());
+    glUniform2f(glGetUniformLocation(RTTProgramID, "u_Resolution"), static_cast<GLfloat>(RenderWidth()), static_cast<GLfloat>(RenderHeight()));
     glUniform1i(glGetUniformLocation(RTTProgramID, "u_TiledRendering"), ( TiledRendering() && !Dirty() ) ? ( 1 ) : ( 0 ));
     glUniform2f(glGetUniformLocation(RTTProgramID, "u_TileOffset"), TileOffset().x, TileOffset().y);
     glUniform2f(glGetUniformLocation(RTTProgramID, "u_InvNbTiles"), InvNbTiles().x, InvNbTiles().y);
     glUniform1i(glGetUniformLocation(RTTProgramID, "u_NbCompleteFrames"), (int)_NbCompleteFrames);
-    glUniform1f(glGetUniformLocation(RTTProgramID, "u_Time"), _CPULoopTime);
+    glUniform1f(glGetUniformLocation(RTTProgramID, "u_Time"), static_cast<GLfloat>(_CPULoopTime));
     glUniform1i(glGetUniformLocation(RTTProgramID, "u_FrameNum"), _FrameNum);
 
     if ( !Dirty() && _AccumulateFrames )
@@ -530,10 +532,8 @@ int Test3::UpdateUniforms()
 
     if ( _SceneMaterialsModified )
     {
-      const std::vector<Material> & Materials =  _Scene.GetMaterials();
-
       glBindTexture(GL_TEXTURE_2D, _MaterialsTextureID);
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, (sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size(), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetMaterials()[0]);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>((sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size()), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetMaterials()[0]);
       glBindTexture(GL_TEXTURE_2D, 0);
     }
 
@@ -640,7 +640,7 @@ int Test3::UpdateUniforms()
     GLuint RTSProgramID = _RenderToScreenShader -> GetShaderProgramID();
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_ScreenTexture"), (int)TexType::RenderTarget);
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_AccumulatedFrames"), (TiledRendering()) ? (0) :(_AccumulatedFrames));
-    glUniform2f(glGetUniformLocation(RTSProgramID, "u_RenderRes" ), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+    glUniform2f(glGetUniformLocation(RTSProgramID, "u_RenderRes" ), static_cast<GLfloat>(_Settings._WindowResolution.x), static_cast<GLfloat>(_Settings._WindowResolution.y));
     glUniform1f(glGetUniformLocation(RTSProgramID, "u_Gamma"), _Settings._Gamma);
     glUniform1f(glGetUniformLocation(RTSProgramID, "u_Exposure"), _Settings._Exposure);
     glUniform1i(glGetUniformLocation(RTSProgramID, "u_ToneMapping"), 0);
@@ -752,15 +752,15 @@ int Test3::DrawUI()
 
       char overlay[32];
       snprintf( overlay, 32, "%.1f FPS", _FrameRate );
-      ImGui::PlotLines( "Frame rate", &s_FrameRateHistory[0], s_FrameRateHistory.size(), offset, overlay, -0.1f, s_Max, ImVec2( 0, 80.0f ) );
+      ImGui::PlotLines( "Frame rate", &s_FrameRateHistory[0], static_cast<GLsizei>(s_FrameRateHistory.size()), offset, overlay, -0.1f, s_Max, ImVec2( 0, 80.0f ) );
     }
 
     int selectedSceneId = _CurSceneId;
-    if ( ImGui::Combo("Scene", &selectedSceneId, _SceneNames.data(), _SceneNames.size()) )
+    if ( ImGui::Combo("Scene", &selectedSceneId, _SceneNames.data(), static_cast<GLsizei>(_SceneNames.size())) )
     {
-      if ( selectedSceneId != _CurSceneId )
+      if (static_cast<unsigned int>(selectedSceneId) != _CurSceneId )
       {
-        _CurSceneId = selectedSceneId;
+        _CurSceneId = static_cast<unsigned int>(selectedSceneId);
         _ReloadScene = true;
       }
     }
@@ -795,7 +795,7 @@ int Test3::DrawUI()
 
       if ( _Settings._AutoScale )
       {
-        int targetFrameRate = _Settings._TargetFPS;
+        int targetFrameRate = static_cast<int>(_Settings._TargetFPS);
         if ( ImGui::SliderInt( "Target FPS", &targetFrameRate, 1, 200 ) )
         {
           _Settings._TargetFPS = (float)targetFrameRate;
@@ -867,11 +867,11 @@ int Test3::DrawUI()
         if ( _Settings._EnableSkybox )
         {
           int selectedBgdId = _CurBackgroundId;
-          if ( ImGui::Combo( "Background", &selectedBgdId, _BackgroundNames.data(), _BackgroundNames.size() ) )
+          if ( ImGui::Combo( "Background", &selectedBgdId, _BackgroundNames.data(), static_cast<int>(_BackgroundNames.size()) ) )
           {
-            if ( selectedBgdId != _CurBackgroundId )
+            if (static_cast<unsigned int>(selectedBgdId) != _CurBackgroundId )
             {
-              _CurBackgroundId = selectedBgdId;
+              _CurBackgroundId = static_cast<unsigned int>(selectedBgdId);
               _ReloadBackground = true;
             }
             _RenderSettingsModified = true;
@@ -976,7 +976,7 @@ int Test3::DrawUI()
           {
             if ( ImGui::SliderFloat("Light radius", &curLight -> _Radius, 0.001f, 1.f) )
             {
-              curLight -> _Area = 4.0f * M_PI * curLight -> _Radius * curLight -> _Radius;
+              curLight -> _Area = 4.0f * static_cast<float>(M_PI) * curLight -> _Radius * curLight -> _Radius;
               _SceneLightsModified = true;
             }
           }
@@ -1089,7 +1089,7 @@ int Test3::DrawUI()
 
         if ( curMat._BaseColorTexId >= 0 )
         {
-          Texture * basecolorTexture = Textures[curMat._BaseColorTexId];
+          Texture * basecolorTexture = Textures[static_cast<int>(curMat._BaseColorTexId)];
           if ( basecolorTexture )
           {
             static GLuint S_ImGUI_TexID = 0;
@@ -1107,7 +1107,7 @@ int Test3::DrawUI()
 
         if ( curMat._MetallicRoughnessTexID >= 0 )
         {
-          Texture * metallicRoughnessTexture = Textures[curMat._MetallicRoughnessTexID];
+          Texture * metallicRoughnessTexture = Textures[static_cast<int>(curMat._MetallicRoughnessTexID)];
           if ( metallicRoughnessTexture )
           {
             static GLuint S_ImGUI_TexID = 0;
@@ -1125,7 +1125,7 @@ int Test3::DrawUI()
 
         if ( curMat._NormalMapTexID >= 0 )
         {
-          Texture * normalMapTexture = Textures[curMat._NormalMapTexID];
+          Texture * normalMapTexture = Textures[static_cast<int>(curMat._NormalMapTexID)];
           if ( normalMapTexture )
           {
             static GLuint S_ImGUI_TexID = 0;
@@ -1143,7 +1143,7 @@ int Test3::DrawUI()
 
         if ( curMat._EmissionMapTexID >= 0 )
         {
-          Texture * emissionMapTexture = Textures[curMat._EmissionMapTexID];
+          Texture * emissionMapTexture = Textures[static_cast<int>(curMat._EmissionMapTexID)];
           if ( emissionMapTexture )
           {
             static GLuint S_ImGUI_TexID = 0;
@@ -1231,9 +1231,9 @@ int Test3::DrawUI()
 
             if ( _SceneInstancesModified )
             {
-              eulerAngles.x = YawPitchRoll[1] * ( M_PI / 180.f );
-              eulerAngles.y = YawPitchRoll[0] * ( M_PI / 180.f );
-              eulerAngles.z = YawPitchRoll[2] * ( M_PI / 180.f );
+              eulerAngles.x = YawPitchRoll[1] * ( static_cast<float>(M_PI) / 180.f );
+              eulerAngles.y = YawPitchRoll[0] * ( static_cast<float>(M_PI) / 180.f );
+              eulerAngles.z = YawPitchRoll[2] * ( static_cast<float>(M_PI) / 180.f );
 
               rotation = glm::quat(eulerAngles);
             }
@@ -1259,7 +1259,7 @@ int Test3::DrawUI()
 
         {
           int matID = primInstance._MaterialID;
-          if ( ImGui::Combo("MaterialNames", &matID, &VectorOfStringGetter, &_MaterialNames, _MaterialNames.size()) )
+          if ( ImGui::Combo("MaterialNames", &matID, &VectorOfStringGetter, &_MaterialNames, static_cast<int>(_MaterialNames.size())) )
           {
             if ( matID >= 0 )
             {
@@ -1341,7 +1341,7 @@ void Test3::AdjustRenderScale()
 
   int newScale = _Settings._RenderScale;
 
-  float diff = _FrameRate - _Settings._TargetFPS;
+  float diff = static_cast<float>(_FrameRate) - _Settings._TargetFPS;
   if ( abs(diff) > ( _Settings._TargetFPS * .05f ) )
   {
     double timeSinceLastAdjust = _CPULoopTime - _LastAdjustmentTime;
@@ -1461,7 +1461,7 @@ int Test3::InitializeScene()
 
     glGenTextures(1, &_MaterialsTextureID);
     glBindTexture(GL_TEXTURE_2D, _MaterialsTextureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, (sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size(), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetMaterials()[0]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>((sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size()), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetMaterials()[0]);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -1476,7 +1476,7 @@ int Test3::InitializeScene()
 
     glGenTextures(1, &_TLASTransformsIDTextureID);
     glBindTexture(GL_TEXTURE_2D, _TLASTransformsIDTextureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, (sizeof(Mat4x4) / sizeof(Vec4)) * _Scene.GetTLASPackedTransforms().size(), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetTLASPackedTransforms()[0]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>((sizeof(Mat4x4) / sizeof(Vec4)) * _Scene.GetTLASPackedTransforms().size()), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetTLASPackedTransforms()[0]);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -1541,7 +1541,7 @@ int Test3::InitializeScene()
 
   const std::vector<Material> & Materials =  _Scene.GetMaterials();
   for ( auto & mat : Materials )
-    _MaterialNames.push_back(_Scene.FindMaterialName(mat._ID));
+    _MaterialNames.push_back(_Scene.FindMaterialName(static_cast<int>(mat._ID)));
 
   const std::vector<PrimitiveInstance> & PrimitiveInstances = _Scene.GetPrimitiveInstances();
   for ( int i = 0; i < PrimitiveInstances.size(); ++i )
@@ -1625,8 +1625,8 @@ int Test3::UpdateScene()
 
     glfwGetCursorPos(_MainWindow.get(), &_MouseX, &_MouseY);
 
-    double deltaX = _MouseX - _OldMouseX;
-    double deltaY = _MouseY - _OldMouseY;
+    float deltaX = static_cast<float>(_MouseX - _OldMouseX);
+    float deltaY = static_cast<float>(_MouseY - _OldMouseY);
 
     if ( _LeftClick )
     {
@@ -1661,7 +1661,7 @@ int Test3::UpdateScene()
 
     if ( _KeyUp )
     {
-      float newRadius = _Scene.GetCamera().GetRadius() - _TimeDelta;
+      float newRadius = _Scene.GetCamera().GetRadius() - static_cast<float>(_TimeDelta);
       if ( newRadius > 0.f )
       {
         _Scene.GetCamera().SetRadius(newRadius);
@@ -1670,7 +1670,7 @@ int Test3::UpdateScene()
     }
     if ( _KeyDown )
     {
-      float newRadius = _Scene.GetCamera().GetRadius() + _TimeDelta;
+      float newRadius = _Scene.GetCamera().GetRadius() + static_cast<float>(_TimeDelta);
       if ( newRadius > 0.f )
       {
         _Scene.GetCamera().SetRadius(newRadius);
@@ -1679,12 +1679,12 @@ int Test3::UpdateScene()
     }
     if ( _KeyLeft )
     {
-      _Scene.GetCamera().OffsetOrientations(_TimeDelta * velocity, 0.f);
+      _Scene.GetCamera().OffsetOrientations(static_cast<float>(_TimeDelta * velocity), 0.f);
       _SceneCameraModified = true;
     }
     if ( _KeyRight )
     {
-      _Scene.GetCamera().OffsetOrientations(-_TimeDelta * velocity, 0.f);
+      _Scene.GetCamera().OffsetOrientations(static_cast<float>(-_TimeDelta * velocity), 0.f);
       _SceneCameraModified = true;
     }
 

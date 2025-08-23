@@ -7,9 +7,9 @@ namespace RTRT
 {
 
 class Scene;
-class RenderSettings;
 class PathTracer;
 class SoftwareRasterizer;
+struct RenderSettings;
 
 enum class DirtyState
 {

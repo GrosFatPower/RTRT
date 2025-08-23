@@ -1,3 +1,5 @@
+#pragma warning(disable : 4100) // unreferenced formal parameter
+
 #include "Test2.h"
 
 #include "imgui.h"
@@ -34,11 +36,11 @@ static int         g_LoadingState = 0;
 // ----------------------------------------------------------------------------
 // Global functions
 // ----------------------------------------------------------------------------
-static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-  if (action == GLFW_PRESS)
-    std::cout << "EVENT : KEY PRESSED" << std::endl;
-}
+//static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
+//{
+//  if (action == GLFW_PRESS)
+//    std::cout << "EVENT : KEY PRESSED" << std::endl;
+//}
 
 static void MousebuttonCallback(GLFWwindow* window, int button, int action, int mods)
 {
@@ -170,8 +172,6 @@ int Test2::Run()
   while (!glfwWindowShouldClose(_MainWindow.get()))
   {
     double curLoopTime = glfwGetTime();
-
-    double timeDelta = curLoopTime - oldCpuTime;
     oldCpuTime = curLoopTime;
 
     if ( forceResize )
@@ -196,7 +196,7 @@ int Test2::Run()
       for (int i = 0; i < _SceneFiles.size(); ++i)
           sceneNames.push_back(_SceneFiles[i].c_str());
 
-      if ( ImGui::Combo("Scene selection", &g_CurSceneIndex, sceneNames.data(), sceneNames.size()) )
+      if ( ImGui::Combo("Scene selection", &g_CurSceneIndex, sceneNames.data(), static_cast<int>(sceneNames.size())) )
       {
         int failed = LoadScene(_SceneFiles[g_CurSceneIndex], _Scene, _Settings);
         if ( !failed )

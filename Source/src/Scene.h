@@ -59,12 +59,12 @@ public:
 
   std::string FindPrimitiveName( int iPrimitiveInstanceID ) const;
 
-  int GetNbLights()             const { return _Lights.size();             }
-  int GetNbMaterials()          const { return _Materials.size();          }
-  int GetNbTextures()           const { return _Textures.size();           }
-  int GetNbMeshes()             const { return _Meshes.size();             }
-  int GetNbMeshInstances()      const { return _MeshInstances.size();      }
-  int GetNbPrimitiveInstances() const { return _PrimitiveInstances.size(); }
+  int GetNbLights()             const { return static_cast<int>(_Lights.size());             }
+  int GetNbMaterials()          const { return static_cast<int>(_Materials.size());          }
+  int GetNbTextures()           const { return static_cast<int>(_Textures.size());           }
+  int GetNbMeshes()             const { return static_cast<int>(_Meshes.size());             }
+  int GetNbMeshInstances()      const { return static_cast<int>(_MeshInstances.size());      }
+  int GetNbPrimitiveInstances() const { return static_cast<int>(_PrimitiveInstances.size()); }
 
   EnvMap & GetEnvMap() { return _EnvMap; }
 

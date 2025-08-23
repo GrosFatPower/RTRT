@@ -33,7 +33,7 @@ struct Polygon
     Vec3 _Distances; // Distances used for linear interpolation between segment and frustum plane
   };
 
-  int Size() const { return _Points.size(); }
+  int Size() const { return static_cast<int>(_Points.size()); }
   void Clear() { _Points.clear(); }
 
   void Add( const Point & iP ) { _Points.emplace_back(iP); }

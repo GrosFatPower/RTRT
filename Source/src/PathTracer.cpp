@@ -307,10 +307,8 @@ int PathTracer::UpdatePathTraceUniforms()
 
   if ( _DirtyStates & (unsigned long)DirtyState::SceneMaterials )
   {
-    const std::vector<Material> & Materials =  _Scene.GetMaterials();
-
     glBindTexture(GL_TEXTURE_2D, _MaterialsTEX._Handle);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, (sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size(), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetMaterials()[0]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>((sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size()), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetMaterials()[0]);
     glBindTexture(GL_TEXTURE_2D, 0);
   }
 
@@ -560,8 +558,8 @@ int PathTracer::DenoiseOutput()
 
   // Dispatch compute shader (assuming texture size is 512x512)
   const int workGroupSizeX = 16, workGroupSizeY = 16;
-  const int nbGroupsX = std::ceil(((float)RenderWidth())/workGroupSizeX);
-  const int nbGroupsY = std::ceil(((float)RenderHeight())/workGroupSizeY);
+  const int nbGroupsX = static_cast<int>(std::ceil(((float)RenderWidth()) / workGroupSizeX));
+  const int nbGroupsY = static_cast<int>(std::ceil(((float)RenderHeight())/workGroupSizeY));
   glDispatchCompute(nbGroupsX, nbGroupsY, 1);
 
   // Ensure GPU has completed work before continuing
@@ -982,7 +980,7 @@ int PathTracer::ReloadScene()
 
     glGenTextures(1, &_MaterialsTEX._Handle);
     glBindTexture(GL_TEXTURE_2D, _MaterialsTEX._Handle);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, (sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size(), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetMaterials()[0]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>((sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size()), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetMaterials()[0]);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -992,7 +990,7 @@ int PathTracer::ReloadScene()
 
     glGenTextures(1, &_TLASTransformsIDTEX._Handle);
     glBindTexture(GL_TEXTURE_2D, _TLASTransformsIDTEX._Handle);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, (sizeof(Mat4x4) / sizeof(Vec4)) * _Scene.GetTLASPackedTransforms().size(), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetTLASPackedTransforms()[0]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>((sizeof(Mat4x4) / sizeof(Vec4)) * _Scene.GetTLASPackedTransforms().size()), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetTLASPackedTransforms()[0]);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);

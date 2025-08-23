@@ -21,7 +21,7 @@ namespace RTRT
 class QuadMesh;
 class ShaderProgram;
 class Scene;
-class Material;
+struct Material;
 class Texture;
 
 class Test4 : public BaseTest

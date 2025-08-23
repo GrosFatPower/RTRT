@@ -343,12 +343,10 @@ namespace RadeonRays
         // calc centroids histogram
         int const kNumBins = 128;
         // Set SAH to maximum float value as a start
-        auto sah = std::numeric_limits<float>::max();
         SahSplit split;
         split.dim = 0;
         split.split = std::numeric_limits<float>::quiet_NaN();
-        split.sah = sah;
-
+        split.sah = std::numeric_limits<float>::max();
 
         // Extents
         Vec3 extents = req.bounds.extents();

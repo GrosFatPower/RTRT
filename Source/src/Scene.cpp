@@ -87,7 +87,7 @@ int Scene::AddTexture( const std::string & iFilename, int iNbComponents, TexForm
     std::cout << "Scene : Loading texture " << iFilename << std::endl;
     if ( texture -> Load(iFilename, iNbComponents, iFormat) )
     {
-      texID = _Textures.size();
+      texID = static_cast<int>(_Textures.size());
       texture -> SetTexID(texID);
       _Textures.push_back(texture);
     }
@@ -113,7 +113,7 @@ int Scene::AddTexture( const std::string & iTexName, unsigned char * iTexData, i
     std::cout << "Scene : Loading texture " << iTexName << std::endl;
     Texture * texture = new Texture(iTexName, iTexData, iWidth, iHeight, iNbComponents);
 
-    texID = _Textures.size();
+    texID = static_cast<int>(_Textures.size());
     texture -> SetTexID(texID);
     _Textures.push_back(texture);
   }
@@ -139,7 +139,7 @@ int Scene::AddMesh( Mesh * iMesh )
 
   if ( meshID < 0 )
   {
-    meshID = _Meshes.size();
+    meshID = static_cast<int>(_Meshes.size());
     iMesh -> SetMeshID( meshID );
     _Meshes.push_back( iMesh );
   }
@@ -168,7 +168,7 @@ int Scene::AddMesh( const std::string & iFilename )
     std::cout << "Scene : Loading mesh " << iFilename << std::endl;
     if ( newMesh -> LoadOBJ(iFilename) )
     {
-      meshID = _Meshes.size();
+      meshID = static_cast<int>(_Meshes.size());
       newMesh -> SetMeshID(meshID);
       _Meshes.push_back(newMesh);
     }
@@ -187,7 +187,7 @@ int Scene::AddMesh( const std::string & iFilename )
 
 int Scene::AddMaterial( Material & ioMaterial, const std::string & iName )
 {
-  int matID = _Materials.size();
+  int matID = static_cast<int>(_Materials.size());
   ioMaterial._ID = (float)matID;
   _Materials.push_back(ioMaterial);
 
@@ -198,7 +198,7 @@ int Scene::AddMaterial( Material & ioMaterial, const std::string & iName )
 
 int Scene::AddMeshInstance( MeshInstance & iMeshInstance )
 {
-  int instanceID = _MeshInstances.size();
+  int instanceID = static_cast<int>(_MeshInstances.size());
   _MeshInstances.push_back(iMeshInstance);
   return instanceID;
 }
@@ -270,7 +270,7 @@ std::string Scene::FindPrimitiveName( int iPrimitiveInstanceID ) const
 
 int Scene::AddPrimitive( const Primitive & iPrimitive )
 {
-  int PrimitiveID = _Primitives.size();
+  int PrimitiveID = static_cast<int>(_Primitives.size());
 
   Primitive * newPrimitive = nullptr;
   if ( iPrimitive._Type == PrimitiveType::Sphere )
@@ -291,7 +291,7 @@ int Scene::AddPrimitive( const Primitive & iPrimitive )
 
 int Scene::AddPrimitiveInstance( PrimitiveInstance & iPrimitiveInstance )
 {
-  int instanceID = _PrimitiveInstances.size();
+  int instanceID = static_cast<int>(_PrimitiveInstances.size());
   _PrimitiveInstances.push_back(iPrimitiveInstance);
 
   {
@@ -319,8 +319,6 @@ int Scene::AddPrimitiveInstance( int iPrimitiveID, int iMaterialID, const Mat4x4
 
   if ( iPrimitiveID >= 0 && iPrimitiveID < _Primitives.size() )
   {
-    Primitive * curPrimitive = _Primitives[iPrimitiveID];
-
     PrimitiveInstance instance(iPrimitiveID, iMaterialID, iTransform);
     return AddPrimitiveInstance(instance);
   }
@@ -372,7 +370,7 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
     uvMatIDs.resize(curUVs.size());
     offsetIdx.resize(curIndices.size());
 
-    Vec3 low, high;
+    Vec3 low(0.f), high(0.f);
     for ( int i = 0; i < curVertices.size(); ++i )
     {
       Vec4 transformedVtx = meshInst._Transform * Vec4(curVertices[i], 1.f);
@@ -429,20 +427,20 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
 
     _MeshBBoxes.push_back(low);
     _MeshBBoxes.push_back(high);
-    _MeshIdxRange.push_back(_Indices.size());
-    _MeshIdxRange.push_back(_Indices.size() + curIndices.size() - 1);
+    _MeshIdxRange.push_back(static_cast<int>(_Indices.size()));
+    _MeshIdxRange.push_back(static_cast<int>(_Indices.size() + curIndices.size() - 1));
 
     _Vertices.insert(std::end(_Vertices), std::begin(transformedVertices), std::end(transformedVertices));
     _Normals.insert(std::end(_Normals), std::begin(transformedNormals), std::end(transformedNormals));
     _UVMatID.insert(std::end(_UVMatID), std::begin(uvMatIDs), std::end(uvMatIDs));
     _Indices.insert(std::end(_Indices), std::begin(offsetIdx), std::end(offsetIdx));
 
-    vtxIndexOffset  += transformedVertices.size();
-    normIndexOffset += transformedNormals.size();
-    uvIndexOffset   += uvMatIDs.size();
+    vtxIndexOffset  += static_cast<int>(transformedVertices.size());
+    normIndexOffset += static_cast<int>(transformedNormals.size());
+    uvIndexOffset   += static_cast<int>(uvMatIDs.size());
   }
 
-  _NbFaces = _Indices.size() / 3;
+  _NbFaces = static_cast<int>(_Indices.size() / 3);
 
   // Textures
   if ( iBuildTextureArray )
@@ -532,8 +530,8 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
 
       std::shared_ptr<GpuBLAS> curBLAS = mesh -> GetBvh();
 
-      int nbNodes = curBLAS -> _Nodes.size();
-      int startIdx = _BLASNodes.size();
+      int nbNodes = static_cast<int>(curBLAS -> _Nodes.size());
+      int startIdx = static_cast<int>(_BLASNodes.size());
       _BLASNodes.insert(_BLASNodes.end(), curBLAS -> _Nodes.begin(), curBLAS -> _Nodes.end());
       _BLASNodesRange.emplace_back(startIdx, nbNodes);
 
@@ -546,8 +544,8 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
       _BLASPackedNormals. insert(_BLASPackedNormals.end(),  curNormals.begin(),  curNormals.end());
       _BLASPackedUVs.     insert(_BLASPackedUVs.end(),      curUVs.begin(),      curUVs.end());
 
-      int nbIndices = curBLAS -> GetPackedTriangleIdx().size();
-      startIdx = _BLASPackedIndices.size();
+      int nbIndices = static_cast<int>(curBLAS -> GetPackedTriangleIdx().size());
+      startIdx = static_cast<int>(_BLASPackedIndices.size());
       for (auto & indices : curBLAS -> GetPackedTriangleIdx())
         _BLASPackedIndices.emplace_back(indices + offset);
       _BLASPackedIndicesRange.emplace_back(startIdx, nbIndices);
@@ -555,7 +553,7 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
   }
 
   auto endTime = std::chrono::system_clock::now();
-  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>( endTime - startTime ).count();
+  auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>( endTime - startTime ).count();
   std::cout << "Scene compiled in " << elapsed << "ms\n";
 }
 

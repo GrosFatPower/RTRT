@@ -1,3 +1,5 @@
+#pragma warning(disable : 4100) // unreferenced formal parameter
+
 #include "SoftwareRasterizer.h"
 
 #include "Scene.h"
@@ -121,7 +123,7 @@ int SoftwareRasterizer::UpdateNumberOfWorkers( bool iForce )
 
     _RasterTrianglesBuf.resize(_NbJobs);
 
-    for ( int i = 0; i < _NbJobs; ++i )
+    for ( unsigned int i = 0; i < _NbJobs; ++i )
       _RasterTrianglesBuf[i].reserve(std::max(_Triangles.size()/_NbJobs, (size_t)1));
   }
 
@@ -504,9 +506,9 @@ int SoftwareRasterizer::ReloadScene()
   const std::vector<Vec3>     & Vertices  = _Scene.GetVertices();
   const std::vector<Vec3>     & Normals   = _Scene.GetNormals();
   const std::vector<Vec3>     & UVMatIDs  = _Scene.GetUVMatID();
-  const std::vector<Material> & Materials = _Scene.GetMaterials();
-  const std::vector<Texture*> & Textures  = _Scene.GetTextures();
-  const int nbTris = Indices.size() / 3;
+  //const std::vector<Material> & Materials = _Scene.GetMaterials();
+  //const std::vector<Texture*> & Textures  = _Scene.GetTextures();
+  const int nbTris = static_cast<int>(Indices.size() / 3);
 
   std::unordered_map<rd::Vertex, int> VertexIDs;
   VertexIDs.reserve(Vertices.size());
@@ -630,8 +632,6 @@ int SoftwareRasterizer::ReloadEnvMap()
 // ----------------------------------------------------------------------------
 Vec4 SoftwareRasterizer::SampleEnvMap( const Vec3 & iDir )
 {
-  std::vector<Texture*> & textures = _Scene.GetTextures();
-
   if ( ( _Scene.GetEnvMap().IsInitialized() ) )
   {
     float theta = std::asin(iDir.y);
@@ -669,7 +669,7 @@ void SoftwareRasterizer::FragmentShader_Color( const rd::Fragment & iFrag, rd::U
     const Material & mat = (*iUniforms._Materials)[iFrag._MatID];
     if ( mat._BaseColorTexId >= 0 )
     {
-      const Texture * tex = (*iUniforms._Textures)[mat._BaseColorTexId];
+      const Texture * tex = (*iUniforms._Textures)[static_cast<int>(mat._BaseColorTexId)];
       if ( iUniforms._BilinearSampling )
         albedo = tex -> BiLinearSample(iFrag._Attrib._UV);
       else
@@ -694,7 +694,7 @@ void SoftwareRasterizer::FragmentShader_Color( const rd::Fragment & iFrag, rd::U
     Vec3 reflectDir = glm::reflect(-dirToLight, iFrag._Attrib._Normal);
 
     static float specularStrength = 0.5f;
-    specular = pow(std::max(glm::dot(viewDir, reflectDir), 0.f), 32) * specularStrength;
+    specular = static_cast<float>(pow(std::max(glm::dot(viewDir, reflectDir), 0.f), 32)) * specularStrength;
 
     alpha += std::min(diffuse+ambientStrength+specular, 1.f) * Vec4(glm::normalize(light._Emission), 1.f);
   }
@@ -741,8 +741,6 @@ void SoftwareRasterizer::FragmentShader_Wires( const rd::Fragment & iFrag, const
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::RenderBackground( float iTop, float iRight )
 {
-  double startTime = glfwGetTime();
-
   int width  = _Settings._RenderResolution.x;
   int height = _Settings._RenderResolution.y;
 
@@ -832,7 +830,7 @@ int SoftwareRasterizer::ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP )
 {
   Mat4x4 MVP = iP * iMV;
 
-  int nbVertices = _Vertices.size();
+  int nbVertices = static_cast<int>(_Vertices.size());
   _ProjVerticesBuf.resize(nbVertices);
   _ProjVerticesBuf.reserve(nbVertices*2);
 
@@ -870,9 +868,9 @@ void SoftwareRasterizer::ProcessVertices( const Mat4x4 & iMVP, int iStartInd, in
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM )
 {
-  int nbTriangles = _Triangles.size();
+  int nbTriangles = static_cast<int>(_Triangles.size());
 
-  for ( int i = 0; i < _NbJobs; ++i )
+  for ( unsigned int i = 0; i < _NbJobs; ++i )
   {
     int startInd = ( nbTriangles / _NbJobs ) * i;
     int endInd = ( i == _NbJobs-1 ) ? ( nbTriangles ) : ( startInd + ( nbTriangles / _NbJobs ) );
@@ -893,9 +891,6 @@ int SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM )
 // ----------------------------------------------------------------------------
 void SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin, int iStartInd, int iEndInd )
 {
-  int width  = _Settings._RenderResolution.x;
-  int height = _Settings._RenderResolution.y;
-
   _RasterTrianglesBuf[iThreadBin].clear();
   for ( int i = iStartInd; i < iEndInd; ++i )
   {
@@ -945,7 +940,7 @@ void SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin,
                                      _ProjVerticesBuf[tri._Indices[2]]._Attrib * Points[k]._Distances.z;
               {
                 std::unique_lock<std::mutex> lock(_ProjVerticesMutex);
-                rasterTri._Indices[k] = _ProjVerticesBuf.size();
+                rasterTri._Indices[k] = static_cast<int>(_ProjVerticesBuf.size());
                 _ProjVerticesBuf.emplace_back(newProjVert);
               }
             }
@@ -1038,7 +1033,7 @@ int SoftwareRasterizer::ProcessFragments()
   {
     int height = _Settings._RenderResolution.y;
 
-    for (int i = 0; i < _NbJobs; ++i)
+    for ( unsigned int i = 0; i < _NbJobs; ++i )
     {
       int startY = (height / _NbJobs) * i;
       int endY = (i == _NbJobs - 1) ? (height) : (startY + (height / _NbJobs));
@@ -1057,10 +1052,7 @@ int SoftwareRasterizer::ProcessFragments()
 // ----------------------------------------------------------------------------
 void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
 {
-  const std::vector<Material> & Materials = _Scene.GetMaterials();
-
   int width  = _Settings._RenderResolution.x;
-  int height = _Settings._RenderResolution.y;
 
   float zNear, zFar;
   _Scene.GetCamera().GetZNearFar(zNear, zFar);
@@ -1073,7 +1065,7 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
   for ( int i = 0; i < _Scene.GetNbLights(); ++i )
     uniforms._Lights.push_back(*_Scene.GetLight(i));
 
-  for ( int i = 0; i < _NbJobs; ++i )
+  for ( unsigned int i = 0; i < _NbJobs; ++i )
   {
     for ( int j = 0; j < _RasterTrianglesBuf[i].size(); ++j )
     {
@@ -1182,20 +1174,20 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
 void SoftwareRasterizer::BinTrianglesToTiles()
 {
   // Not thread safe !!
-  //for (int i = 0; i < _NbJobs; ++i)
+  //for ( unsigned int i = 0; i < _NbJobs; ++i )
   //{
   //  JobSystem::Get().Execute([this, i]() { this -> BinTrianglesToTiles(i); });
   //}
   //JobSystem::Get().Wait();
 
-  for (int i = 0; i < _NbJobs; ++i)
+  for ( unsigned int i = 0; i < _NbJobs; ++i )
     this -> BinTrianglesToTiles(i);
 }
 
 // ----------------------------------------------------------------------------
 // BinTrianglesToTiles
 // ----------------------------------------------------------------------------
-void SoftwareRasterizer::BinTrianglesToTiles( int iBufferIndex )
+void SoftwareRasterizer::BinTrianglesToTiles( unsigned int iBufferIndex )
 {
   if ( ( iBufferIndex < 0 ) || ( iBufferIndex >= _NbJobs ) )
   {
@@ -1235,8 +1227,6 @@ void SoftwareRasterizer::BinTrianglesToTiles( int iBufferIndex )
 // ----------------------------------------------------------------------------
 void SoftwareRasterizer::ProcessFragments( RasterData::Tile & ioTile )
 {
-  const std::vector<Material>& Materials = _Scene.GetMaterials();
-
   float zNear, zFar;
   _Scene.GetCamera().GetZNearFar(zNear, zFar);
 

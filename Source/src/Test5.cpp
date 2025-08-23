@@ -1,3 +1,5 @@
+#pragma warning(disable : 4100) // unreferenced formal parameter
+
 #include "Test5.h"
 
 #include "Loader.h"
@@ -32,68 +34,68 @@ static unsigned int g_NbThreadsMax = std::thread::hardware_concurrency();
 // ----------------------------------------------------------------------------
 // KeyCallback
 // ----------------------------------------------------------------------------
-void Test5::KeyCallback(GLFWwindow* window, const int key, const int scancode, const int action, const int mods)
+void Test5::KeyCallback(GLFWwindow* iWindow, const int iKey, const int iScancode, const int iAction, const int iMods)
 {
-  auto * const this_ = static_cast<Test5*>(glfwGetWindowUserPointer(window));
+  auto * const this_ = static_cast<Test5*>(glfwGetWindowUserPointer(iWindow));
   if ( !this_ )
     return;
 
-  if ( ( action == GLFW_PRESS ) ||  ( action == GLFW_RELEASE ) )
-    this_ -> _KeyInput.AddEvent(key, action, mods);
+  if ( (iAction == GLFW_PRESS ) ||  (iAction == GLFW_RELEASE ) )
+    this_ -> _KeyInput.AddEvent(iKey, iAction, iMods);
 }
 
 // ----------------------------------------------------------------------------
 // MouseButtonCallback
 // ----------------------------------------------------------------------------
-void Test5::MouseButtonCallback(GLFWwindow* window, const int button, const int action, const int mods)
+void Test5::MouseButtonCallback(GLFWwindow* iWindow, const int iButton, const int iAction, const int iMods)
 {
   if ( !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) )
   {
-    auto * const this_ = static_cast<Test5*>(glfwGetWindowUserPointer(window));
+    auto * const this_ = static_cast<Test5*>(glfwGetWindowUserPointer(iWindow));
     if ( !this_ )
       return;
 
     double mouseX = 0., mouseY = 0.;
-    glfwGetCursorPos(window, &mouseX, &mouseY);
+    glfwGetCursorPos(iWindow, &mouseX, &mouseY);
 
-    if ( ( action == GLFW_PRESS ) ||  ( action == GLFW_RELEASE ) )
-      this_ -> _MouseInput.AddButtonEvent(button, action, mouseX, mouseY);
+    if ( (iAction == GLFW_PRESS ) ||  (iAction == GLFW_RELEASE ) )
+      this_ -> _MouseInput.AddButtonEvent(iButton, iAction, mouseX, mouseY);
   }
 }
 
 // ----------------------------------------------------------------------------
 // MouseScrollCallback
 // ----------------------------------------------------------------------------
-void Test5::MouseScrollCallback(GLFWwindow * window, const double xoffset, const double yoffset)
+void Test5::MouseScrollCallback(GLFWwindow* iWindow, const double iOffsetX, const double iOffsetY)
 {
   if ( !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) )
   {
-    auto * const this_ = static_cast<Test5*>(glfwGetWindowUserPointer(window));
+    auto * const this_ = static_cast<Test5*>(glfwGetWindowUserPointer(iWindow));
     if ( !this_ )
       return;
 
-    this_ -> _MouseInput.AddScrollEvent(xoffset, yoffset);
+    this_ -> _MouseInput.AddScrollEvent(iOffsetX, iOffsetY);
   }
 }
 
 // ----------------------------------------------------------------------------
 // FramebufferSizeCallback
 // ----------------------------------------------------------------------------
-void Test5::FramebufferSizeCallback(GLFWwindow* window, const int width, const int height)
+void Test5::FramebufferSizeCallback(GLFWwindow* iWindow, const int iWidth, const int iHeight)
 {
-  auto * const this_ = static_cast<Test5*>(glfwGetWindowUserPointer(window));
+  auto * const this_ = static_cast<Test5*>(glfwGetWindowUserPointer(iWindow));
   if ( !this_ )
     return;
 
-  std::cout << "EVENT : FRAME BUFFER RESIZED. WIDTH = " << width << " HEIGHT = " << height << std::endl;
+  std::cout << "EVENT : FRAME BUFFER RESIZED. WIDTH = " << iWidth << " HEIGHT = " << iHeight << std::endl;
 
-  if ( !width || !height )
+  if ( !iWidth || !iHeight)
     return;
 
-  this_ -> _Settings._WindowResolution.x = width;
-  this_ -> _Settings._WindowResolution.y = height;
-  this_ -> _Settings._RenderResolution.x = width;
-  this_ -> _Settings._RenderResolution.y = height;
+  this_ -> _Settings._WindowResolution.x = iWidth;
+  this_ -> _Settings._WindowResolution.y = iHeight;
+  this_ -> _Settings._RenderResolution.x = iWidth;
+  this_ -> _Settings._RenderResolution.y = iHeight;
 
   glViewport(0, 0, this_ -> _Settings._WindowResolution.x, this_ -> _Settings._WindowResolution.y);
 
@@ -248,7 +250,7 @@ int Test5::DrawUI()
 
       char overlay[32];
       snprintf( overlay, 32, "%.1f FPS", _FrameRate );
-      ImGui::PlotLines( "Frame rate", &s_FrameRateHistory[0], s_FrameRateHistory.size(), offset, overlay, -0.1f, s_Max, ImVec2( 0, 80.0f ) );
+      ImGui::PlotLines( "Frame rate", &s_FrameRateHistory[0], static_cast<int>(s_FrameRateHistory.size()), offset, overlay, -0.1f, s_Max, ImVec2( 0, 80.0f ) );
     }
 
     // Renderer selection
@@ -266,7 +268,7 @@ int Test5::DrawUI()
     // Scene selection
     {
       int selectedSceneId = _CurSceneId;
-      if ( ImGui::Combo("Scene selection", &selectedSceneId, &_SceneNames[0], _SceneNames.size()) )
+      if ( ImGui::Combo("Scene selection", &selectedSceneId, &_SceneNames[0], static_cast<int>(_SceneNames.size())) )
       {
         if ( selectedSceneId != _CurSceneId )
         {
@@ -519,7 +521,7 @@ int Test5::DrawUI()
       if ( RendererType::PathTracer == _RendererType )
       {
         float focalDist = _Scene -> GetCamera().GetFocalDist();
-        float fStop = ( _Scene -> GetCamera().GetAperture() > 0.f ) ? ( focalDist / _Scene -> GetCamera().GetAperture() ) : ( 1.4f );
+        //float fStop = ( _Scene -> GetCamera().GetAperture() > 0.f ) ? ( focalDist / _Scene -> GetCamera().GetAperture() ) : ( 1.4f );
         if ( ImGui::SliderFloat( "Focal distance", &focalDist, 0.1f, 10.f ) )
         {
           _Scene -> GetCamera().SetFocalDist(focalDist);
@@ -574,7 +576,7 @@ int Test5::DrawUI()
       if ( _Settings._EnableSkybox && _BackgroundNames.size() && ( _CurBackgroundId >= 0 ) )
       {
         int selectedBgdId = _CurBackgroundId;
-        if ( ImGui::Combo( "Background selection", &selectedBgdId, _BackgroundNames.data(), _BackgroundNames.size() ) )
+        if ( ImGui::Combo( "Background selection", &selectedBgdId, _BackgroundNames.data(), static_cast<int>(_BackgroundNames.size()) ) )
         {
           if ( selectedBgdId != _CurBackgroundId )
           {
@@ -693,7 +695,7 @@ int Test5::DrawUI()
 
         if ( curMat._BaseColorTexId >= 0 )
         {
-          Texture * basecolorTexture = Textures[curMat._BaseColorTexId];
+          Texture * basecolorTexture = Textures[static_cast<int>(curMat._BaseColorTexId)];
           if ( basecolorTexture )
           {
             if ( newMaterial )
@@ -716,7 +718,7 @@ int Test5::DrawUI()
 
         if ( curMat._MetallicRoughnessTexID >= 0 )
         {
-          Texture * metallicRoughnessTexture = Textures[curMat._MetallicRoughnessTexID];
+          Texture * metallicRoughnessTexture = Textures[static_cast<int>(curMat._MetallicRoughnessTexID)];
           if ( metallicRoughnessTexture )
           {
             if ( newMaterial )
@@ -739,7 +741,7 @@ int Test5::DrawUI()
 
         if ( curMat._NormalMapTexID >= 0 )
         {
-          Texture * normalMapTexture = Textures[curMat._NormalMapTexID];
+          Texture * normalMapTexture = Textures[static_cast<int>(curMat._NormalMapTexID)];
           if ( normalMapTexture )
           {
             if ( newMaterial )
@@ -762,7 +764,7 @@ int Test5::DrawUI()
 
         if ( curMat._EmissionMapTexID >= 0 )
         {
-          Texture * emissionMapTexture = Textures[curMat._EmissionMapTexID];
+          Texture * emissionMapTexture = Textures[static_cast<int>(curMat._EmissionMapTexID)];
           if ( emissionMapTexture )
           {
             if ( newMaterial )
@@ -865,7 +867,7 @@ int Test5::DrawUI()
           {
             if ( ImGui::SliderFloat("Light radius", &curLight -> _Radius, 0.001f, 1.f) )
             {
-              curLight -> _Area = 4.0f * M_PI * curLight -> _Radius * curLight -> _Radius;
+              curLight -> _Area = 4.0f * static_cast<float>(M_PI) * curLight -> _Radius * curLight -> _Radius;
               _Renderer -> Notify(DirtyState::SceneLights);
             }
           }
@@ -923,15 +925,15 @@ int Test5::ProcessInput()
   {
     const float MouseSensitivity[6] = { 1.f, 0.5f, 0.01f, 0.01f, .5f, 0.01f }; // Yaw, Pitch, StafeRight, StrafeUp, ScrollInOut, ZoomInOut
 
-    double deltaX = 0., deltaY = 0.;
+    float deltaX = 0., deltaY = 0.;
     double mouseX = 0.f, mouseY = 0.f;
      // RIGHT CLICK
     if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_2, mouseX, mouseY) )
     {
       _Scene -> GetCamera().SetCameraMode(CameraMode::FreeLook);
 
-      deltaX = curMouseX - mouseX;
-      deltaY = curMouseY - mouseY;
+      deltaX = static_cast<float>(curMouseX - mouseX);
+      deltaY = static_cast<float>(curMouseY - mouseY);
       _Scene -> GetCamera().OffsetOrientations(MouseSensitivity[0] * deltaX, MouseSensitivity[1] * -deltaY);
 
       _Renderer -> Notify(DirtyState::SceneCamera);
@@ -941,22 +943,22 @@ int Test5::ProcessInput()
     {
       if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1, mouseX, mouseY) ) // Left Pressed
       {
-        deltaX = curMouseX - mouseX;
-        deltaY = curMouseY - mouseY;
+        deltaX = static_cast<float>(curMouseX - mouseX);
+        deltaY = static_cast<float>(curMouseY - mouseY);
         _Scene -> GetCamera().OffsetOrientations(MouseSensitivity[0] * deltaX, MouseSensitivity[1] * -deltaY);
       }
       else if ( _MouseInput.IsButtonReleased(GLFW_MOUSE_BUTTON_1, mouseX, mouseY) || toggleZoom ) // Left released
       {
         toggleZoom = true;
-        deltaY = curMouseY - mouseY;
+        deltaY = static_cast<float>(curMouseY - mouseY);
         float newRadius = _Scene -> GetCamera().GetRadius() + MouseSensitivity[5] * deltaY;
         if ( newRadius > 0.f )
           _Scene -> GetCamera().SetRadius(newRadius);
       }
       else
       {
-        deltaX = curMouseX - mouseX;
-        deltaY = curMouseY - mouseY;
+        deltaX = static_cast<float>(curMouseX - mouseX);
+        deltaY = static_cast<float>(curMouseY - mouseY);
         _Scene -> GetCamera().Strafe(MouseSensitivity[2] * deltaX, MouseSensitivity[2] * deltaY);
         _Renderer -> Notify(DirtyState::SceneCamera);
       }
@@ -965,7 +967,7 @@ int Test5::ProcessInput()
 
     if ( _MouseInput.IsScrolled(mouseX, mouseY) )
     {
-      float newRadius = _Scene -> GetCamera().GetRadius() + MouseSensitivity[4] * mouseY;
+      float newRadius = _Scene -> GetCamera().GetRadius() + MouseSensitivity[4] * static_cast<float>(mouseY);
       if ( newRadius > 0.f )
       {
         _Scene -> GetCamera().SetRadius(newRadius);
@@ -989,10 +991,10 @@ int Test5::ProcessInput()
     if ( _KeyInput.IsKeyDown(GLFW_KEY_W) )
     {
       if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_2) )
-        _Scene -> GetCamera().Walk(_DeltaTime * Velocity[0]);
+        _Scene -> GetCamera().Walk(static_cast<float>(_DeltaTime * Velocity[0]));
       else
       {
-        float newRadius = _Scene -> GetCamera().GetRadius() - _DeltaTime;
+        float newRadius = static_cast<float>(_Scene -> GetCamera().GetRadius() - _DeltaTime);
         if ( newRadius > 0.f )
           _Scene -> GetCamera().SetRadius(newRadius);
       }
@@ -1002,10 +1004,10 @@ int Test5::ProcessInput()
     if ( _KeyInput.IsKeyDown(GLFW_KEY_S) )
     {
       if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_2) )
-        _Scene -> GetCamera().Walk(-_DeltaTime * Velocity[0]);
+        _Scene -> GetCamera().Walk(static_cast<float>(-_DeltaTime * Velocity[0]));
       else
       {
-        float newRadius = _Scene -> GetCamera().GetRadius() + _DeltaTime;
+        float newRadius = static_cast<float>(_Scene -> GetCamera().GetRadius() + _DeltaTime);
         if ( newRadius > 0.f )
           _Scene -> GetCamera().SetRadius(newRadius);
       }
@@ -1015,18 +1017,18 @@ int Test5::ProcessInput()
     if ( _KeyInput.IsKeyDown(GLFW_KEY_A) )
     {
       if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_2) )
-        _Scene -> GetCamera().Strafe(_DeltaTime * Velocity[0], 0.f);
+        _Scene -> GetCamera().Strafe(static_cast<float>(_DeltaTime * Velocity[0]), 0.f);
       else
-        _Scene -> GetCamera().OffsetOrientations(_DeltaTime * Velocity[1], 0.f);
+        _Scene -> GetCamera().OffsetOrientations(static_cast<float>(_DeltaTime * Velocity[1]), 0.f);
       _Renderer -> Notify(DirtyState::SceneCamera);
     }
 
     if ( _KeyInput.IsKeyDown(GLFW_KEY_D) )
     {
       if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_2) )
-        _Scene -> GetCamera().Strafe(-_DeltaTime * Velocity[0], 0.f);
+        _Scene -> GetCamera().Strafe(static_cast<float>(-_DeltaTime * Velocity[0]), 0.f);
       else
-        _Scene -> GetCamera().OffsetOrientations(-_DeltaTime * Velocity[1], 0.f);
+        _Scene -> GetCamera().OffsetOrientations(static_cast<float>(-_DeltaTime * Velocity[1]), 0.f);
       _Renderer -> Notify(DirtyState::SceneCamera);
     }
   }
@@ -1080,7 +1082,7 @@ int Test5::InitializeScene()
   _MaterialNames.clear();
   const std::vector<Material> & Materials =  _Scene -> GetMaterials();
   for ( auto & mat : Materials )
-    _MaterialNames.push_back(_Scene -> FindMaterialName(mat._ID));
+    _MaterialNames.push_back(_Scene -> FindMaterialName(static_cast<int>(mat._ID)));
   GLUtil::DeleteTEX(_AlbedoTEX);
   GLUtil::DeleteTEX(_MetalRoughTEX);
   GLUtil::DeleteTEX(_NormalMapTEX);

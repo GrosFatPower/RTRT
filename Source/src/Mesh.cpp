@@ -31,7 +31,7 @@ Mesh::Mesh(const std::string        & iName,
 , _UVs( iUVs )
 , _Indices( iIndices )
 {
-  _NbFaces = _Indices.size() / 3;
+  _NbFaces = static_cast<int>(_Indices.size()) / 3;
 
   _Bvh = std::make_shared<GpuBLAS>();
 
