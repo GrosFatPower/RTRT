@@ -46,13 +46,13 @@ public:
   SoftwareRasterizer( Scene & iScene, RenderSettings & iSettings );
   virtual ~SoftwareRasterizer();
 
-  virtual int Initialize();
-  virtual int Update();
-  virtual int Done();
+  virtual int Initialize() override;
+  virtual int Update() override;
+  virtual int Done() override;
 
-  virtual int RenderToTexture();
-  virtual int RenderToScreen();
-  virtual int RenderToFile( const std::filesystem::path & iFilePath );
+  virtual int RenderToTexture() override;
+  virtual int RenderToScreen() override;
+  virtual int RenderToFile( const std::filesystem::path & iFilePath ) override;
 
   virtual SoftwareRasterizer * AsSoftwareRasterizer() override { return this; }
 

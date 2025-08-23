@@ -112,7 +112,7 @@ inline float32x4_t SetVectorElement(float iValue, float32x4_t & iVector, int iIn
   default: throw std::out_of_range("Invalid vector index");
   }
 
-  return vector; // Should never reach here
+  return iVector; // Should never reach here
 }
 
 inline uint32x4_t SetVectorElement(uint32_t iValue, uint32x4_t& iVector, int iIndex)
@@ -126,7 +126,7 @@ inline uint32x4_t SetVectorElement(uint32_t iValue, uint32x4_t& iVector, int iIn
   default: throw std::out_of_range("Invalid vector index");
   }
 
-  return vector; // Should never reach here
+  return iVector; // Should never reach here
 }
 #endif // SIMD_ARM_NEON
 }
