@@ -665,7 +665,7 @@ Vec4 SoftwareRasterizer::SampleEnvMap( const Vec3 & iDir )
 // ----------------------------------------------------------------------------
 void SoftwareRasterizer::VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 iNormal, const Mat4x4 iMVP, rd::ProjectedVertex & oProjectedVertex )
 {
-  oProjectedVertex._ProjPos          = iMVP * iVertexPos;
+  oProjectedVertex._ProjPos          = iMVP * iVertexPos; // in clip space
   oProjectedVertex._Attrib._WorldPos = iVertexPos;
   oProjectedVertex._Attrib._UV       = iUV;
   oProjectedVertex._Attrib._Normal   = iNormal;
@@ -958,13 +958,13 @@ void SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin,
               }
             }
 
-            Vec3 homogeneousProjPos;
+            Vec3 homogeneousProjPos; // NDC space
             rasterTri._InvW[k] = 1.f / Points[k]._Pos.w;
             homogeneousProjPos.x = Points[k]._Pos.x * rasterTri._InvW[k];
             homogeneousProjPos.y = Points[k]._Pos.y * rasterTri._InvW[k];
             homogeneousProjPos.z = Points[k]._Pos.z * rasterTri._InvW[k];
 
-            rasterTri._V[k] = MathUtil::TransformPoint(homogeneousProjPos, iRasterM);
+            rasterTri._V[k] = MathUtil::TransformPoint(homogeneousProjPos, iRasterM); // to screen space
 
             rasterTri._BBox.Insert(rasterTri._V[k]);
           }
@@ -994,13 +994,13 @@ void SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin,
 
         rd::ProjectedVertex & projVert = _ProjVerticesBuf[tri._Indices[j]];
 
-        Vec3 homogeneousProjPos;
+        Vec3 homogeneousProjPos; // NDC space
         rasterTri._InvW[j] = 1.f / projVert._ProjPos.w;
         homogeneousProjPos.x = projVert._ProjPos.x * rasterTri._InvW[j];
         homogeneousProjPos.y = projVert._ProjPos.y * rasterTri._InvW[j];
         homogeneousProjPos.z = projVert._ProjPos.z * rasterTri._InvW[j];
 
-        rasterTri._V[j] = MathUtil::TransformPoint(homogeneousProjPos, iRasterM);
+        rasterTri._V[j] = MathUtil::TransformPoint(homogeneousProjPos, iRasterM); // to screen space
 
         rasterTri._BBox.Insert(rasterTri._V[j]);
       }
@@ -1028,7 +1028,11 @@ int SoftwareRasterizer::ProcessFragments()
 {
   if ( TiledRendering() )
   {
-    this -> BinTrianglesToTiles();
+    for ( unsigned int i = 0; i < _NbJobs; ++i )
+    {
+      JobSystem::Get().Execute([this, i]() { this->BinTrianglesToTiles(i); });
+    }
+    JobSystem::Get().Wait();
 
     for ( auto & tile : _Tiles )
     {
@@ -1042,9 +1046,6 @@ int SoftwareRasterizer::ProcessFragments()
         JobSystem::Get().Execute([this, &tile]() { this -> ProcessFragments(tile); });
     }
     JobSystem::Get().Wait();
-
-    //for ( auto & tile : _Tiles )
-    //  JobSystem::Get().Execute([this, tile]() { this -> CopyTileToMainBuffer(tile); });
   }
   else
   {
@@ -1057,9 +1058,8 @@ int SoftwareRasterizer::ProcessFragments()
 
       JobSystem::Get().Execute([this, startY, endY]() { this->ProcessFragments(startY, endY); });
     }
+    JobSystem::Get().Wait();
   }
-
-  JobSystem::Get().Wait();
 
   return 0;
 }
@@ -1098,17 +1098,19 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
           continue;
       }
 
-      int xMin = std::max(0,       std::min((int)std::floorf(tri._BBox._Low.x),  width - 1));
-      int yMin = std::max(iStartY, std::min((int)std::floorf(tri._BBox._Low.y),  iEndY - 1 ));
-      int xMax = std::max(0,       std::min((int)std::floorf(tri._BBox._High.x), width - 1));
-      int yMax = std::max(iStartY, std::min((int)std::floorf(tri._BBox._High.y), iEndY - 1 ));
+      int xMin = std::max(0,       std::min(static_cast<int>(std::floorf(tri._BBox._Low.x)),  width - 1));
+      int yMin = std::max(iStartY, std::min(static_cast<int>(std::floorf(tri._BBox._Low.y)),  iEndY - 1 ));
+      int xMax = std::max(0,       std::min(static_cast<int>(std::floorf(tri._BBox._High.x)), width - 1));
+      int yMax = std::max(iStartY, std::min(static_cast<int>(std::floorf(tri._BBox._High.y)), iEndY - 1 ));
 
       for ( int y = yMin; y <= yMax; ++y )
       {
         for ( int x = xMin; x <= xMax; ++x )
         {
+          // Frag coord
           Vec3 coord(x + .5f, y + .5f, 0.f);
 
+          // Barycentric coordinates
           Vec3 W;
           W.x = tri._EdgeA[0] * x + tri._EdgeB[0] * y + tri._EdgeC[0];
           W.y = tri._EdgeA[1] * x + tri._EdgeB[1] * y + tri._EdgeC[1];
@@ -1118,17 +1120,19 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
             || ( W.z < 0.f ) )
             continue;
 
-          // Perspective correction
           W *= tri._InvArea;
 
+          // Perspective correction
           W.x *= tri._InvW[0]; // W0 / -z0
           W.y *= tri._InvW[1]; // W1 / -z1
           W.z *= tri._InvW[2]; // W2 / -z2
 
           float Z = 1.f / (W.x + W.y + W.z);
-          W *= Z;
 
+          W *= Z;
           coord.z = W.x * tri._V[0].z + W.y * tri._V[1].z + W.z * tri._V[2].z;
+
+          // Depth test
           if ( _Settings._WBuffer )
           {
             if ( Z > _ImageBuffer._DepthBuffer[x + width * y] || ( Z < zNear ) )
@@ -1140,6 +1144,7 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
               continue;
           }
 
+          // Setup fragment
           rd::Varying Attrib[3];
           Attrib[0] = _ProjVerticesBuf[tri._Indices[0]]._Attrib;
           Attrib[1] = _ProjVerticesBuf[tri._Indices[1]]._Attrib;
@@ -1155,6 +1160,7 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
           else
             frag._Attrib._Normal = tri._Normal;
 
+          // Shade fragment
           Vec4 fragColor(1.f);
 
           if ( _DebugMode & (int)RasterDebugModes::DepthBuffer )
@@ -1188,18 +1194,6 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
 // ----------------------------------------------------------------------------
 // BinTrianglesToTiles
 // ----------------------------------------------------------------------------
-void SoftwareRasterizer::BinTrianglesToTiles()
-{
-  for ( unsigned int i = 0; i < _NbJobs; ++i )
-  {
-    JobSystem::Get().Execute([this, i]() { this -> BinTrianglesToTiles(i); });
-  }
-  JobSystem::Get().Wait();
-}
-
-// ----------------------------------------------------------------------------
-// BinTrianglesToTiles
-// ----------------------------------------------------------------------------
 void SoftwareRasterizer::BinTrianglesToTiles( unsigned int iBufferIndex )
 {
   if ( ( iBufferIndex < 0 ) || ( iBufferIndex >= _NbJobs ) )
@@ -1210,15 +1204,15 @@ void SoftwareRasterizer::BinTrianglesToTiles( unsigned int iBufferIndex )
 
   for ( rd::RasterTriangle & tri : _RasterTrianglesBuf[iBufferIndex] )
   {
-    float xMin = std::max(0.f, std::min(tri._BBox._Low.x, (float)RenderWidth() - 1.f));
-    float yMin = std::max(0.f, std::min(tri._BBox._Low.y, (float)RenderHeight() - 1.f));
-    float xMax = std::max(0.f, std::min(tri._BBox._High.x, (float)RenderWidth() - 1.f));
-    float yMax = std::max(0.f, std::min(tri._BBox._High.y, (float)RenderHeight() - 1.f));
+    float xMin = std::max(0.f, std::min(tri._BBox._Low.x,  static_cast<float>(RenderWidth() - 1.f)));
+    float yMin = std::max(0.f, std::min(tri._BBox._Low.y,  static_cast<float>(RenderHeight() - 1.f)));
+    float xMax = std::max(0.f, std::min(tri._BBox._High.x, static_cast<float>(RenderWidth() - 1.f)));
+    float yMax = std::max(0.f, std::min(tri._BBox._High.y, static_cast<float>(RenderHeight() - 1.f)));
 
-    int tileXMin = std::max(0, (int)(xMin / TILE_SIZE));
-    int tileYMin = std::max(0, (int)(yMin / TILE_SIZE));
-    int tileXMax = std::min(_TileCountX - 1, (int)(xMax / TILE_SIZE));
-    int tileYMax = std::min(_TileCountY - 1, (int)(yMax / TILE_SIZE));
+    int tileXMin = std::max(0, static_cast<int>(xMin / TILE_SIZE));
+    int tileYMin = std::max(0, static_cast<int>(yMin / TILE_SIZE));
+    int tileXMax = std::min(_TileCountX - 1, static_cast<int>(xMax / TILE_SIZE));
+    int tileYMax = std::min(_TileCountY - 1, static_cast<int>(yMax / TILE_SIZE));
 
     for (int ty = tileYMin; ty <= tileYMax; ++ty)
     {
@@ -1258,54 +1252,56 @@ void SoftwareRasterizer::ProcessFragments( RasterData::Tile & ioTile )
       if (!tri)
         continue;
 
-      int startX = std::max(ioTile._X, (int)std::floor(tri->_BBox._Low.x));
-      int endX = std::min(ioTile._X + ioTile._Width - 1, (int)std::ceil(tri->_BBox._High.x));
-      int startY = std::max(ioTile._Y, (int)std::floor(tri->_BBox._Low.y));
-      int endY = std::min(ioTile._Y + ioTile._Height - 1, (int)std::ceil(tri->_BBox._High.y));
+      int startX = std::max(ioTile._X,                      static_cast<int>(std::floor(tri->_BBox._Low.x)));
+      int endX   = std::min(ioTile._X + ioTile._Width - 1,  static_cast<int>(std::ceil(tri->_BBox._High.x)));
+      int startY = std::max(ioTile._Y,                      static_cast<int>(std::floor(tri->_BBox._Low.y)));
+      int endY   = std::min(ioTile._Y + ioTile._Height - 1, static_cast<int>(std::ceil(tri->_BBox._High.y)));
 
       for (int y = startY; y <= endY; ++y)
       {
         for (int x = startX; x <= endX; ++x)
         {
+          // Frag coord
           Vec3 coord(x + .5f, y + .5f, 0.f);
 
+          // Barycentric coordinates
           Vec3 W;
           W.x = tri->_EdgeA[0] * x + tri->_EdgeB[0] * y + tri->_EdgeC[0];
           W.y = tri->_EdgeA[1] * x + tri->_EdgeB[1] * y + tri->_EdgeC[1];
           W.z = tri->_EdgeA[2] * x + tri->_EdgeB[2] * y + tri->_EdgeC[2];
-          if ((W.x < 0.f)
+          if ( (W.x < 0.f)
             || (W.y < 0.f)
-            || (W.z < 0.f))
+            || (W.z < 0.f) )
             continue;
 
-          // Perspective correction
           W *= tri->_InvArea;
 
-          W.x *= tri->_InvW[0]; // W0 / -z0
-          W.y *= tri->_InvW[1]; // W1 / -z1
-          W.z *= tri->_InvW[2]; // W2 / -z2
+          // Perspective correction
+          W.x *= tri -> _InvW[0]; // W0 / -z0
+          W.y *= tri -> _InvW[1]; // W1 / -z1
+          W.z *= tri -> _InvW[2]; // W2 / -z2
 
           float Z = 1.f / (W.x + W.y + W.z);
+
           W *= Z;
+          coord.z = W.x * tri->_V[0].z + W.y * tri->_V[1].z + W.z * tri->_V[2].z; // depth in screen space
 
-          coord.z = W.x * tri->_V[0].z + W.y * tri->_V[1].z + W.z * tri->_V[2].z;
-
-
+          // Depth test
           int localX = x - ioTile._X;
           int localY = y - ioTile._Y;
           int localPixelIndex = localY * ioTile._Width + localX;
-
-          if (_Settings._WBuffer)
+          if ( _Settings._WBuffer )
           {
-            if (Z > ioTile._LocalFB._DepthBuffer[localPixelIndex] || (Z < zNear))
+            if ( ( Z > ioTile._LocalFB._DepthBuffer[localPixelIndex] ) || ( Z < zNear ) )
               continue;
           }
           else
           {
-            if (coord.z > ioTile._LocalFB._DepthBuffer[localPixelIndex] || (coord.z < -1.f))
+            if ( ( coord.z > ioTile._LocalFB._DepthBuffer[localPixelIndex] ) || ( coord.z < -1.f ) )
               continue;
           }
 
+          // Setup fragment
           rd::Varying Attrib[3];
           Attrib[0] = _ProjVerticesBuf[tri->_Indices[0]]._Attrib;
           Attrib[1] = _ProjVerticesBuf[tri->_Indices[1]]._Attrib;
@@ -1321,6 +1317,7 @@ void SoftwareRasterizer::ProcessFragments( RasterData::Tile & ioTile )
           else
             frag._Attrib._Normal = tri->_Normal;
 
+          // Shade fragment
           Vec4 fragColor(1.f);
 
           if (_DebugMode & (int)RasterDebugModes::DepthBuffer)

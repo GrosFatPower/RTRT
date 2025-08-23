@@ -108,7 +108,6 @@ protected:
   int ProcessFragments();
   void ProcessFragments( int iStartY, int iEndY );
 
-  void BinTrianglesToTiles();
   void BinTrianglesToTiles( unsigned int iBufferIndex );
   void ProcessFragments( RasterData::Tile & ioTile );
 
