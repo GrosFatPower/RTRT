@@ -72,7 +72,7 @@ public:
   double GetDenoiseTime()             const { return _DenoiseTime; }
   double GetRenderToScreenTime()      const { return _RenderToScreenTime; }
 
-  virtual PathTracer * AsPathTracer() { return this; }
+  virtual PathTracer * AsPathTracer() override { return this; }
 
 protected:
 

@@ -600,7 +600,26 @@ void SoftwareRasterizer::ResetTiles()
 //-----------------------------------------------------------------------------
 // CopyTileToMainBuffer
 //-----------------------------------------------------------------------------
-void SoftwareRasterizer::CopyTileToMainBuffer( const RasterData::Tile & iTile )
+void SoftwareRasterizer::CopyTileToMainBuffer(const RasterData::Tile& iTile)
+{
+  if (_EnableSIMD)
+  {
+#ifdef SIMD_AVX2
+    CopyTileToMainBuffer8x(iTile);
+#else
+    CopyTileToMainBuffer1x(iTile);
+#endif
+  }
+  else
+  {
+    CopyTileToMainBuffer1x(iTile);
+  }
+}
+
+//-----------------------------------------------------------------------------
+// CopyTileToMainBuffer1x
+//-----------------------------------------------------------------------------
+void SoftwareRasterizer::CopyTileToMainBuffer1x( const RasterData::Tile & iTile )
 {
   for ( int y = 0; y < iTile._Height; ++y )
   {
@@ -615,6 +634,37 @@ void SoftwareRasterizer::CopyTileToMainBuffer( const RasterData::Tile & iTile )
     );
   }
 }
+
+#ifdef SIMD_AVX2
+//-----------------------------------------------------------------------------
+// CopyTileToMainBuffer8x
+//-----------------------------------------------------------------------------
+void SoftwareRasterizer::CopyTileToMainBuffer8x(const RasterData::Tile& iTile)
+{
+  for (int y = 0; y < iTile._Height; ++y)
+  {
+    const int globalY = iTile._Y + y;
+    const int localRowStart = y * iTile._Width;
+    const int globalRowStart = globalY * RenderWidth() + iTile._X;
+
+    int x = 0;
+    for (; x + 8 <= iTile._Width; x += 8)
+    {
+      __m256i colors = _mm256_load_si256((__m256i*) & iTile._LocalFB._ColorBuffer[localRowStart + x]);
+      //__m256 depths = _mm256_load_ps(&iTile._LocalFB._DepthBuffer[localRowStart + x]);
+
+      _mm256_storeu_si256((__m256i*) & _ImageBuffer._ColorBuffer[globalRowStart + x], colors);
+      //_mm256_storeu_ps(&_ImageBuffer._DepthBuffer[globalRowStart + x], depths);
+    }
+
+    for (; x < iTile._Width; ++x)
+    {
+      _ImageBuffer._ColorBuffer[globalRowStart + x] = iTile._LocalFB._ColorBuffer[localRowStart + x];
+      //_ImageBuffer._DepthBuffer[globalRowStart + x] = iTile._LocalFB._DepthBuffer[localRowStart + x];
+    }
+  }
+}
+#endif
 
 // ----------------------------------------------------------------------------
 // ReloadEnvMap
@@ -670,6 +720,33 @@ void SoftwareRasterizer::VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV
   oProjectedVertex._Attrib._UV       = iUV;
   oProjectedVertex._Attrib._Normal   = iNormal;
 }
+
+#ifdef SIMD_AVX2
+// ----------------------------------------------------------------------------
+// VertexShaderAVX2
+// ----------------------------------------------------------------------------
+void SoftwareRasterizer::VertexShaderAVX2(const Vec4& iVertexPos, const Vec2& iUV, const Vec3 iNormal, const __m256 iMVP[4], RasterData::ProjectedVertex& oProjectedVertex)
+{
+  const __m256 pos = _mm256_set_ps(0, 0, 0, 0, iVertexPos.w, iVertexPos.z, iVertexPos.y, iVertexPos.x);
+
+  __m256 result0 = _mm256_mul_ps(pos, iMVP[0]);
+  __m256 result1 = _mm256_mul_ps(pos, iMVP[1]);
+  __m256 result2 = _mm256_mul_ps(pos, iMVP[2]);
+  __m256 result3 = _mm256_mul_ps(pos, iMVP[3]);
+
+  result0 = _mm256_hadd_ps(result0, result1);
+  result2 = _mm256_hadd_ps(result2, result3);
+  result0 = _mm256_hadd_ps(result0, result2);
+
+  SIMD_ALIGN32 float results[8];
+  _mm256_store_ps(results, result0);
+
+  oProjectedVertex._ProjPos          = glm::vec4(results[0] + results[4], results[1] + results[5], results[2] + results[6], results[3] + results[7]);
+  oProjectedVertex._Attrib._WorldPos = iVertexPos;
+  oProjectedVertex._Attrib._UV       = iUV;
+  oProjectedVertex._Attrib._Normal   = iNormal;
+}
+#endif
 
 // ----------------------------------------------------------------------------
 // FragmentShader_Color
@@ -853,7 +930,16 @@ int SoftwareRasterizer::ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP )
   {
     int nextInd = std::min(curInd + chunkSize, nbVertices);
 
-    JobSystem::Get().Execute([this, MVP, curInd, nextInd](){ this -> ProcessVertices(MVP, curInd, nextInd); });
+    if ( _EnableSIMD )
+    {
+#ifdef SIMD_AVX2
+      JobSystem::Get().Execute([this, MVP, curInd, nextInd]() { this->ProcessVerticesAVX2(MVP, curInd, nextInd); });
+#else
+      JobSystem::Get().Execute([this, MVP, curInd, nextInd]() { this->ProcessVertices(MVP, curInd, nextInd); });
+#endif
+    }
+    else
+      JobSystem::Get().Execute([this, MVP, curInd, nextInd]() { this->ProcessVertices(MVP, curInd, nextInd); });
 
     curInd = nextInd;
 
@@ -875,6 +961,35 @@ void SoftwareRasterizer::ProcessVertices( const Mat4x4 & iMVP, int iStartInd, in
     VertexShader(Vec4(vert._WorldPos ,1.f), vert._UV, vert._Normal, iMVP, _ProjVerticesBuf[i]);
   }
 }
+
+#ifdef SIMD_AVX2
+// ----------------------------------------------------------------------------
+// ProcessVertices
+// ----------------------------------------------------------------------------
+void SoftwareRasterizer::ProcessVerticesAVX2(const Mat4x4& iMVP, int iStartInd, int iEndInd)
+{
+  SIMD_ALIGN32 float MVPTransposed[16];
+  for (int i = 0; i < 4; ++i)
+  {
+    for (int j = 0; j < 4; ++j)
+    {
+      MVPTransposed[i * 4 + j] = iMVP[j][i];
+    }
+  }
+
+  __m256 MVP[4];
+  MVP[0] = _mm256_load_ps(&MVPTransposed[0]);
+  MVP[1] = _mm256_load_ps(&MVPTransposed[4]);
+  MVP[2] = _mm256_load_ps(&MVPTransposed[8]);
+  MVP[3] = _mm256_load_ps(&MVPTransposed[12]);
+
+  for (int i = iStartInd; i < iEndInd; ++i)
+  {
+    rd::Vertex& vert = _Vertices[i];
+    VertexShaderAVX2(Vec4(vert._WorldPos, 1.f), vert._UV, vert._Normal, MVP, _ProjVerticesBuf[i]);
+  }
+}
+#endif
 
 // ----------------------------------------------------------------------------
 // ClipTriangles

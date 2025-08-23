@@ -330,6 +330,20 @@ int Test5::DrawUI()
         {
           _Renderer->Notify(DirtyState::RenderSettings);
         }
+
+        SoftwareRasterizer * softwareRasterizer = _Renderer -> AsSoftwareRasterizer();
+        if ( softwareRasterizer )
+        {
+          if (_Settings._TiledRendering)
+          {
+            bool enableSIMD = softwareRasterizer -> GetEnableSIMD();
+            if (ImGui::Checkbox("Enable SIMD", &enableSIMD))
+            {
+              softwareRasterizer->SetEnableSIMD(enableSIMD);
+              _Renderer->Notify(DirtyState::RenderSettings);
+            }
+          }
+        }
       }
 
       int scale = _Settings._RenderScale;

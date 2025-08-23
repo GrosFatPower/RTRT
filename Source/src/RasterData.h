@@ -6,6 +6,7 @@
 #include "Light.h"
 #include "Material.h"
 #include "Texture.h"
+#include "SIMDUtils.h"
 #include <vector>
 
 namespace RTRT
@@ -13,10 +14,10 @@ namespace RTRT
 
 namespace RasterData
 {
-  struct FrameBuffer
+  struct SIMD_ALIGN64 FrameBuffer
   {
-    std::vector<RGBA8> _ColorBuffer;
-    std::vector<float> _DepthBuffer;
+    SIMD_ALIGN32 std::vector<RGBA8> _ColorBuffer;
+    SIMD_ALIGN32 std::vector<float> _DepthBuffer;
   };
 
   struct Varying
@@ -82,7 +83,7 @@ namespace RasterData
     Varying _Attrib;
   };
 
-  struct RasterTriangle
+  struct SIMD_ALIGN64 RasterTriangle
   {
     int        _Indices[3];
     Vec3       _V[3];
@@ -103,7 +104,7 @@ namespace RasterData
     Varying _Attrib;
   };
 
-  struct Tile
+  struct SIMD_ALIGN64 Tile
   {
     int         _X;
     int         _Y;

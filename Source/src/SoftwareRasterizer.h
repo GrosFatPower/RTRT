@@ -7,6 +7,7 @@
 #include "GLUtil.h"
 #include "RGBA8.h"
 #include "RasterData.h"
+#include "SIMDUtils.h"
 
 #include "GL/glew.h"
 
@@ -53,7 +54,10 @@ public:
   virtual int RenderToScreen();
   virtual int RenderToFile( const std::filesystem::path & iFilePath );
 
-  virtual SoftwareRasterizer * AsSoftwareRasterizer() { return this; }
+  virtual SoftwareRasterizer * AsSoftwareRasterizer() override { return this; }
+
+  bool GetEnableSIMD() const { return _EnableSIMD; }
+  void SetEnableSIMD(bool enabled) { _EnableSIMD = enabled; }
 
 protected:
 
@@ -83,6 +87,7 @@ protected:
 
   void ResetTiles();
   void CopyTileToMainBuffer( const RasterData::Tile & iTile );
+  void CopyTileToMainBuffer1x( const RasterData::Tile& iTile );
   bool TiledRendering()     const { return _Settings._TiledRendering; }
   int TileWidth()           const { return ( _Settings._TileResolution.x > 0 ) ? ( _Settings._TileResolution.x ) : ( 64 ); }
   int TileHeight()          const { return ( _Settings._TileResolution.y > 0 ) ? ( _Settings._TileResolution.y ) : ( 64 ); }
@@ -111,6 +116,12 @@ protected:
   void BinTrianglesToTiles( unsigned int iBufferIndex );
   void ProcessFragments( RasterData::Tile & ioTile );
 
+#ifdef SIMD_AVX2
+  void CopyTileToMainBuffer8x(const RasterData::Tile& iTile);
+  void ProcessVerticesAVX2(const Mat4x4& iMVP, int iStartInd, int iEndInd);
+  static void VertexShaderAVX2(const Vec4& iVertexPos, const Vec2& iUV, const Vec3 iNormal, const __m256 iMVP[4], RasterData::ProjectedVertex& oProjectedVertex);
+#endif
+
 protected:
 
   QuadMesh _Quad;
@@ -128,6 +139,9 @@ protected:
 
   // Multi-threading
   unsigned int _NbJobs = 1;
+
+  // SIMD
+  bool _EnableSIMD = false;
 
   // Tile rendering
   int _TileCountX, _TileCountY;
