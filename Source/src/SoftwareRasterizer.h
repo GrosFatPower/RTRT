@@ -122,6 +122,11 @@ protected:
   static void VertexShaderAVX2(const Vec4& iVertexPos, const Vec2& iUV, const Vec3 iNormal, const __m256 iMVP[4], RasterData::ProjectedVertex& oProjectedVertex);
 #endif
 
+#ifdef SIMD_ARM_NEON
+  void ProcessVerticesARM(const Mat4x4& iMVP, int iStartInd, int iEndInd);
+  static void VertexShaderARM(const Vec4& iVertexPos, const Vec2& iUV, const Vec3 iNormal, const float32x4_t iMVP[4], RasterData::ProjectedVertex& oProjectedVertex);
+#endif
+
 protected:
 
   QuadMesh _Quad;

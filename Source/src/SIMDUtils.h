@@ -51,6 +51,9 @@ namespace SIMDUtils
   uint32_t GetVectorElement(uint32x4_t& iVector, int iIndex);
   float32x4_t SetVectorElement(float iValue, float32x4_t& iVector, int iIndex);
   uint32x4_t  SetVectorElement(uint32_t iValue, uint32x4_t& iVector, int iIndex);
+
+  void LoadMatrixARM(const Mat4x4& iMat, float32x4_t oMat[4]);
+  Vec4 ApplyTransformARM(const float32x4_t iTransfo[4], const Vec4& iVec);
 #endif
 
 #ifdef SIMD_AVX2

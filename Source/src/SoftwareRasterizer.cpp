@@ -734,6 +734,19 @@ void SoftwareRasterizer::VertexShaderAVX2(const Vec4 & iVertexPos, const Vec2& i
 }
 #endif
 
+#ifdef SIMD_ARM_NEON
+// ----------------------------------------------------------------------------
+// VertexShaderARM
+// ----------------------------------------------------------------------------
+void SoftwareRasterizer::VertexShaderARM(const Vec4& iVertexPos, const Vec2& iUV, const Vec3 iNormal, const float32x4_t iMVP[4], RasterData::ProjectedVertex& oProjectedVertex)
+{
+  oProjectedVertex._ProjPos          = SIMDUtils::ApplyTransformARM(iMVP, iVertexPos); // in clip space
+  oProjectedVertex._Attrib._WorldPos = iVertexPos;
+  oProjectedVertex._Attrib._UV       = iUV;
+  oProjectedVertex._Attrib._Normal   = iNormal;
+}
+#endif
+
 // ----------------------------------------------------------------------------
 // FragmentShader_Color
 // ----------------------------------------------------------------------------
@@ -961,6 +974,23 @@ void SoftwareRasterizer::ProcessVerticesAVX2(const Mat4x4& iMVP, int iStartInd, 
   {
     rd::Vertex& vert = _Vertices[i];
     VertexShaderAVX2(Vec4(vert._WorldPos, 1.f), vert._UV, vert._Normal, MVP, _ProjVerticesBuf[i]);
+  }
+}
+#endif
+
+#ifdef SIMD_ARM_NEON
+// ----------------------------------------------------------------------------
+// ProcessVerticesARM
+// ----------------------------------------------------------------------------
+void SoftwareRasterizer::ProcessVerticesARM(const Mat4x4& iMVP, int iStartInd, int iEndInd)
+{
+  float32x4_t MVP[4];
+  SIMDUtils::LoadMatrixARM(iMVP, MVP);
+
+  for (int i = iStartInd; i < iEndInd; ++i)
+  {
+    rd::Vertex& vert = _Vertices[i];
+    VertexShaderARM(Vec4(vert._WorldPos, 1.f), vert._UV, vert._Normal, MVP, _ProjVerticesBuf[i]);
   }
 }
 #endif

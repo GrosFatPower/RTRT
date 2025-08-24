@@ -92,6 +92,40 @@ inline uint32x4_t SetVectorElement(uint32_t iValue, uint32x4_t& iVector, int iIn
 
   return iVector; // Should never reach here
 }
+
+inline void LoadMatrixARM(const Mat4x4& iMat, float32x4_t oMat[4])
+{
+  SIMD_ALIGN32 float matTransposed[16];
+  for (int i = 0; i < 4; ++i)
+  {
+    for (int j = 0; j < 4; ++j)
+    {
+      matTransposed[i * 4 + j] = iMat[j][i];
+    }
+  }
+  oMat[0] = vld1q_f32(&matTransposed[0]);
+  oMat[1] = vld1q_f32(&matTransposed[4]);
+  oMat[2] = vld1q_f32(&matTransposed[8]);
+  oMat[3] = vld1q_f32(&matTransposed[12]);
+}
+
+inline Vec4 ApplyTransformARM(const float32x4_t iTransfo[4], const Vec4& iVec)
+{
+  const float32x4_t vec = { iVec.x, iVec.y, iVec.z, iVec.w };
+  float32x4_t result0 = vmulq_f32(vec, iTransfo[0]);
+  float32x4_t result1 = vmulq_f32(vec, iTransfo[1]);
+  float32x4_t result2 = vmulq_f32(vec, iTransfo[2]);
+  float32x4_t result3 = vmulq_f32(vec, iTransfo[3]);
+  
+  result0 = vpaddq_f32(result0, result1);
+  result2 = vpaddq_f32(result2, result3);
+  result0 = vpaddq_f32(result0, result2);
+
+  SIMD_ALIGN32 float results[4];
+  vst1q_f32(results, result0);
+
+  return Vec4(results[0], results[1], results[2], results[3]);
+}
 #endif // SIMD_ARM_NEON
 
 
