@@ -1,6 +1,8 @@
 #ifndef _SIMDUtils_
 #define _SIMDUtils_
 
+#include "MATHUtil.h"
+
 #include <iostream>
 #include <iomanip>
 
@@ -41,96 +43,24 @@ namespace RTRT
 
 namespace SIMDUtils
 {
-
-inline bool HasAVX2Support()
-{
-#if defined(__x86_64__) || defined(_M_X64) || defined(i386) || defined(_M_IX86)
-#if defined(_MSC_VER)
-  int cpuInfo[4];
-  __cpuid(cpuInfo, 1);
-  return (cpuInfo[2] & (1 << 5)) != 0;
-#else
-  unsigned int eax, ebx, ecx, edx;
-  __asm__("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(1));
-return (ecx & (1 << 5)) != 0;
-#endif
-#else
-  return false; // ARM platforms don't support AVX2
-#endif
-}
-
-inline bool HasAVX512Support()
-{
-#if defined(__x86_64__) || defined(_M_X64) || defined(i386) || defined(_M_IX86)
-#if defined(_MSC_VER)
-  int cpuInfo[4];
-  __cpuid(cpuInfo, 7);
-  return (cpuInfo[1] & (1 << 16)) != 0;
-#else
-  unsigned int eax, ebx, ecx, edx;
-  __asm__("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(7), "c"(0));
-  return (ebx & (1 << 16)) != 0;
-#endif
-#else
-  return false; // ARM platforms don't support AVX512
-#endif
-}
+  bool HasAVX2Support();
+  bool HasAVX512Support();
 
 #ifdef SIMD_ARM_NEON
-inline float GetVectorElement(float32x4_t & iVector, int iIndex)
-{
-  switch (iIndex)
-  {
-  case 0: return vgetq_lane_f32(iVector, 0);
-  case 1: return vgetq_lane_f32(iVector, 1);
-  case 2: return vgetq_lane_f32(iVector, 2);
-  case 3: return vgetq_lane_f32(iVector, 3);
-  default: throw std::out_of_range("Invalid vector index");
-  }
-}
+  float    GetVectorElement(float32x4_t& iVector, int iIndex);
+  uint32_t GetVectorElement(uint32x4_t& iVector, int iIndex);
+  float32x4_t SetVectorElement(float iValue, float32x4_t& iVector, int iIndex);
+  uint32x4_t  SetVectorElement(uint32_t iValue, uint32x4_t& iVector, int iIndex);
+#endif
 
-inline uint32_t GetVectorElement(uint32x4_t & iVector, int iIndex)
-{
-  switch (iIndex)
-  {
-  case 0: return vgetq_lane_u32(iVector, 0);
-  case 1: return vgetq_lane_u32(iVector, 1);
-  case 2: return vgetq_lane_u32(iVector, 2);
-  case 3: return vgetq_lane_u32(iVector, 3);
-  default: throw std::out_of_range("Invalid vector index");
-  }
-}
-
-inline float32x4_t SetVectorElement(float iValue, float32x4_t & iVector, int iIndex)
-{
-  switch (iIndex)
-  {
-  case 0: return vsetq_lane_f32(iValue, iVector, 0);
-  case 1: return vsetq_lane_f32(iValue, iVector, 1);
-  case 2: return vsetq_lane_f32(iValue, iVector, 2);
-  case 3: return vsetq_lane_f32(iValue, iVector, 3);
-  default: throw std::out_of_range("Invalid vector index");
-  }
-
-  return iVector; // Should never reach here
-}
-
-inline uint32x4_t SetVectorElement(uint32_t iValue, uint32x4_t& iVector, int iIndex)
-{
-  switch (iIndex)
-  {
-  case 0: return vsetq_lane_u32(iValue, iVector, 0);
-  case 1: return vsetq_lane_u32(iValue, iVector, 1);
-  case 2: return vsetq_lane_u32(iValue, iVector, 2);
-  case 3: return vsetq_lane_u32(iValue, iVector, 3);
-  default: throw std::out_of_range("Invalid vector index");
-  }
-
-  return iVector; // Should never reach here
-}
-#endif // SIMD_ARM_NEON
+#ifdef SIMD_AVX2
+  void LoadMatrixAVX2(const Mat4x4& iMat, __m256 oMat[4]);
+  Vec4 ApplyTransformAVX2(const __m256 iTransfo[4], const Vec4& iVec);
+#endif
 }
 
 }
+
+#include "SIMDUtils.hxx"
 
 #endif /* _SIMDUtils_ */

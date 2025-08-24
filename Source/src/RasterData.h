@@ -52,7 +52,7 @@ namespace RasterData
     const std::vector<Material>* _Materials = nullptr;
     const std::vector<Texture*>* _Textures = nullptr;
     std::vector<Light>           _Lights;
-    Vec3                         _CameraPos;
+    Vec3                         _CameraPos = { 0.f, 0.f, 0.f };
     bool                         _BilinearSampling = true;
   };
 

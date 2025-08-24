@@ -73,7 +73,7 @@ add_subdirectory(Dependencies)
 add_subdirectory(Shaders)
 
 file(GLOB_RECURSE CORE_SOURCE ./Source/src/*.cpp)
-file(GLOB_RECURSE CORE_HEADER ./Source/src/*.h)
+file(GLOB_RECURSE CORE_HEADER ./Source/src/*.h ./Source/src/*.hxx)
 file(GLOB_RECURSE EXT_SOURCE ./Dependencies/RadeonRays/*.cpp)
 file(GLOB_RECURSE EXT_HEADER ./Dependencies/RadeonRays/*.h)
 file(GLOB_RECURSE SHADERS ./Shaders/*.glsl)

@@ -54,8 +54,8 @@ protected:
   std::mutex                        _WakeMutex;
   bool                              _Stop = false;
 
-  unsigned long long                _NbJobs;
-  std::atomic<unsigned long long>   _NbFinishedJobs;
+  unsigned long long                _NbJobs = 0;
+  std::atomic<unsigned long long>   _NbFinishedJobs{ 0 };
 };
 
 inline bool JobSystem::IsBusy() {

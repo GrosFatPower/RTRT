@@ -725,23 +725,9 @@ void SoftwareRasterizer::VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV
 // ----------------------------------------------------------------------------
 // VertexShaderAVX2
 // ----------------------------------------------------------------------------
-void SoftwareRasterizer::VertexShaderAVX2(const Vec4& iVertexPos, const Vec2& iUV, const Vec3 iNormal, const __m256 iMVP[4], RasterData::ProjectedVertex& oProjectedVertex)
+void SoftwareRasterizer::VertexShaderAVX2(const Vec4 & iVertexPos, const Vec2& iUV, const Vec3 iNormal, const __m256 iMVP[4], RasterData::ProjectedVertex& oProjectedVertex)
 {
-  const __m256 pos = _mm256_set_ps(0, 0, 0, 0, iVertexPos.w, iVertexPos.z, iVertexPos.y, iVertexPos.x);
-
-  __m256 result0 = _mm256_mul_ps(pos, iMVP[0]);
-  __m256 result1 = _mm256_mul_ps(pos, iMVP[1]);
-  __m256 result2 = _mm256_mul_ps(pos, iMVP[2]);
-  __m256 result3 = _mm256_mul_ps(pos, iMVP[3]);
-
-  result0 = _mm256_hadd_ps(result0, result1);
-  result2 = _mm256_hadd_ps(result2, result3);
-  result0 = _mm256_hadd_ps(result0, result2);
-
-  SIMD_ALIGN32 float results[8];
-  _mm256_store_ps(results, result0);
-
-  oProjectedVertex._ProjPos          = glm::vec4(results[0] + results[4], results[1] + results[5], results[2] + results[6], results[3] + results[7]);
+  oProjectedVertex._ProjPos          = SIMDUtils::ApplyTransformAVX2(iMVP, iVertexPos); // in clip space
   oProjectedVertex._Attrib._WorldPos = iVertexPos;
   oProjectedVertex._Attrib._UV       = iUV;
   oProjectedVertex._Attrib._Normal   = iNormal;
@@ -968,20 +954,8 @@ void SoftwareRasterizer::ProcessVertices( const Mat4x4 & iMVP, int iStartInd, in
 // ----------------------------------------------------------------------------
 void SoftwareRasterizer::ProcessVerticesAVX2(const Mat4x4& iMVP, int iStartInd, int iEndInd)
 {
-  SIMD_ALIGN32 float MVPTransposed[16];
-  for (int i = 0; i < 4; ++i)
-  {
-    for (int j = 0; j < 4; ++j)
-    {
-      MVPTransposed[i * 4 + j] = iMVP[j][i];
-    }
-  }
-
   __m256 MVP[4];
-  MVP[0] = _mm256_load_ps(&MVPTransposed[0]);
-  MVP[1] = _mm256_load_ps(&MVPTransposed[4]);
-  MVP[2] = _mm256_load_ps(&MVPTransposed[8]);
-  MVP[3] = _mm256_load_ps(&MVPTransposed[12]);
+  SIMDUtils::LoadMatrixAVX2(iMVP, MVP);
 
   for (int i = iStartInd; i < iEndInd; ++i)
   {
