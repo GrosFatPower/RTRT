@@ -1,7 +1,7 @@
 #ifndef _SIMDUtils_
 #define _SIMDUtils_
 
-#include "MATHUtil.h"
+#include "MathUtil.h"
 
 #include <iostream>
 #include <iomanip>
