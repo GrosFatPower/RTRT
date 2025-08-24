@@ -931,8 +931,10 @@ int SoftwareRasterizer::ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP )
 
     if ( _EnableSIMD )
     {
-#ifdef SIMD_AVX2
+#if defined(SIMD_AVX2)
       JobSystem::Get().Execute([this, MVP, curInd, nextInd]() { this->ProcessVerticesAVX2(MVP, curInd, nextInd); });
+#elif defined(SIMD_ARM_NEON)
+      JobSystem::Get().Execute([this, MVP, curInd, nextInd]() { this->ProcessVerticesARM(MVP, curInd, nextInd); });
 #else
       JobSystem::Get().Execute([this, MVP, curInd, nextInd]() { this->ProcessVertices(MVP, curInd, nextInd); });
 #endif
