@@ -6,6 +6,7 @@
 #include "EnvMap.h"
 #include "ShaderProgram.h"
 #include "SoftwareVertexShader.h"
+#include "SoftwareFragmentShader.h"
 #include "SutherlandHodgman.h"
 #include "JobSystem.h"
 #include "PathUtils.h"
@@ -396,6 +397,9 @@ int SoftwareRasterizer::UpdateRenderResolution()
       curTile._LocalFB._ColorBuffer.resize(curTile._Width * curTile._Height);
       curTile._LocalFB._DepthBuffer.resize(curTile._Width * curTile._Height);
 
+      curTile._Fragments.clear();
+      curTile._Fragments.reserve(curTile._Width * curTile._Height);
+
       if (_NbJobs)
         curTile._RasterTrisBins.resize(_NbJobs);
     }
@@ -583,8 +587,12 @@ void SoftwareRasterizer::ResetTiles()
     for (auto& bin : tile._RasterTrisBins)
     {
       bin.clear();
-      bin.reserve(100);
+      //bin.reserve(100);
     }
+
+    tile._Fragments.clear();
+    //tile._Fragments.reserve(tile._Width * tile._Height);
+
     std::fill(policy, tile._LocalFB._ColorBuffer.begin(), tile._LocalFB._ColorBuffer.end(), S_DefaultColor);
     std::fill(policy, tile._LocalFB._DepthBuffer.begin(), tile._LocalFB._DepthBuffer.end(), std::numeric_limits<float>::max());
   }
@@ -1263,6 +1271,7 @@ void SoftwareRasterizer::ProcessFragments(int iStartY, int iEndY)
           // Setup fragment
           rd::Fragment frag;
           frag._FragCoords = coord;
+          frag._PixelCoords = Vec2(x, y);
           frag._MatID = tri._MatID;
           frag._Attrib = _ProjVerticesBuf[tri._Indices[0]]._Attrib * W[0] +
             _ProjVerticesBuf[tri._Indices[1]]._Attrib * W[1] +
@@ -1410,6 +1419,7 @@ void SoftwareRasterizer::ProcessFragments(RasterData::Tile& ioTile)
           // Setup fragment
           rd::Fragment frag;
           frag._FragCoords = coord;
+          frag._PixelCoords = Vec2(x, y);
           frag._MatID = tri->_MatID;
           frag._Attrib = _ProjVerticesBuf[tri->_Indices[0]]._Attrib * W[0] +
             _ProjVerticesBuf[tri->_Indices[1]]._Attrib * W[1] +

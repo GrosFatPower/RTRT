@@ -56,6 +56,15 @@ namespace RasterData
     bool                         _BilinearSampling = true;
   };
 
+  struct DefaultUniform
+  {
+    const std::vector<Material>* _Materials = nullptr;
+    const std::vector<Texture*>* _Textures = nullptr;
+    std::vector<Light>           _Lights;
+    Vec3                         _CameraPos = { 0.f, 0.f, 0.f };
+    bool                         _BilinearSampling = true;
+  };
+
   struct Vertex
   {
     Vec3 _WorldPos;
@@ -100,6 +109,7 @@ namespace RasterData
   struct Fragment
   {
     Vec3    _FragCoords;
+    Vec2    _PixelCoords;
     int     _MatID;
     Varying _Attrib;
   };
@@ -112,6 +122,7 @@ namespace RasterData
     int         _Height;
     FrameBuffer _LocalFB;
     std::vector<std::vector<RasterTriangle*>> _RasterTrisBins;
+    std::vector<Fragment> _Fragments;
   };
 
 }
