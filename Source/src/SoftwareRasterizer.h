@@ -123,7 +123,7 @@ protected:
 #endif
 
 #ifdef SIMD_ARM_NEON
-  void ProcessVerticesARM(cconst Mat4x4& iM, const Mat4x4& iV, const Mat4x4& iP, int iStartInd, int iEndInd);
+  void ProcessVerticesARM(const Mat4x4& iM, const Mat4x4& iV, const Mat4x4& iP, int iStartInd, int iEndInd);
   static void VertexShaderARM(const Vec4& iVertexPos, const Vec2& iUV, const Vec3 iNormal, const float32x4_t iMVP[4], RasterData::ProjectedVertex& oProjectedVertex);
 #endif
 
