@@ -1,5 +1,5 @@
-#ifndef _ShaderSource_
-#define _ShaderSource_
+#ifndef _Shader_
+#define _Shader_
 
 #include <string>
 #include <GL/glew.h>
@@ -37,4 +37,4 @@ private:
 
 }
 
-#endif /* _ShaderSource_ */
+#endif /* _Shader_ */

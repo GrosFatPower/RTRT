@@ -19,10 +19,10 @@ namespace RTRT
 
 struct RasterTexSlot
 {
-  static const TextureSlot _RenderTarget       = 0;
-  static const TextureSlot _ColorBuffer        = 1;
-  static const TextureSlot _EnvMap             = 3;
-  static const TextureSlot _Temporary          = 4;
+  static const TextureSlot _RenderTarget = 0;
+  static const TextureSlot _ColorBuffer  = 1;
+  static const TextureSlot _EnvMap       = 3;
+  static const TextureSlot _Temporary    = 4;
 };
 
 enum class RasterDebugModes
@@ -43,7 +43,7 @@ struct Light;
 class SoftwareRasterizer : public Renderer
 {
 public:
-  SoftwareRasterizer( Scene & iScene, RenderSettings & iSettings );
+  SoftwareRasterizer(Scene& iScene, RenderSettings& iSettings);
   virtual ~SoftwareRasterizer();
 
   virtual int Initialize() override;
@@ -52,9 +52,9 @@ public:
 
   virtual int RenderToTexture() override;
   virtual int RenderToScreen() override;
-  virtual int RenderToFile( const std::filesystem::path & iFilePath ) override;
+  virtual int RenderToFile(const std::filesystem::path& iFilePath) override;
 
-  virtual SoftwareRasterizer * AsSoftwareRasterizer() override { return this; }
+  virtual SoftwareRasterizer* AsSoftwareRasterizer() override { return this; }
 
   bool GetEnableSIMD() const { return _EnableSIMD; }
   void SetEnableSIMD(bool enabled) { _EnableSIMD = enabled; }
@@ -67,7 +67,7 @@ protected:
   int InitializeFrameBuffers();
   int RecompileShaders();
 
-  int UpdateNumberOfWorkers( bool iForce = false );
+  int UpdateNumberOfWorkers(bool iForce = false);
 
   int UnloadScene();
   int ReloadScene();
@@ -81,49 +81,49 @@ protected:
   int BindRenderToTextureTextures();
   int BindRenderToScreenTextures();
 
-  float RenderScale()       const { return ( _Settings._RenderScale * 0.01f ); }
+  float RenderScale()       const { return (_Settings._RenderScale * 0.01f); }
   int RenderWidth()         const { return _Settings._RenderResolution.x; }
   int RenderHeight()        const { return _Settings._RenderResolution.y; }
 
   void ResetTiles();
-  void CopyTileToMainBuffer( const RasterData::Tile & iTile );
-  void CopyTileToMainBuffer1x( const RasterData::Tile& iTile );
+  void CopyTileToMainBuffer(const RasterData::Tile& iTile);
+  void CopyTileToMainBuffer1x(const RasterData::Tile& iTile);
   bool TiledRendering()     const { return _Settings._TiledRendering; }
-  int TileWidth()           const { return ( _Settings._TileResolution.x > 0 ) ? ( _Settings._TileResolution.x ) : ( 64 ); }
-  int TileHeight()          const { return ( _Settings._TileResolution.y > 0 ) ? ( _Settings._TileResolution.y ) : ( 64 ); }
-  Vec2i NbTiles()           const { return Vec2i(std::ceil(((float)RenderWidth())/_Settings._TileResolution.x), std::ceil(((float)RenderHeight())/_Settings._TileResolution.y)); }
+  int TileWidth()           const { return (_Settings._TileResolution.x > 0) ? (_Settings._TileResolution.x) : (64); }
+  int TileHeight()          const { return (_Settings._TileResolution.y > 0) ? (_Settings._TileResolution.y) : (64); }
+  Vec2i NbTiles()           const { return Vec2i(std::ceil(((float)RenderWidth()) / _Settings._TileResolution.x), std::ceil(((float)RenderHeight()) / _Settings._TileResolution.y)); }
 
-  Vec4 SampleEnvMap( const Vec3 & iDir );
+  Vec4 SampleEnvMap(const Vec3& iDir);
 
-  static void VertexShader( const Vec4 & iVertexPos, const Vec2 & iUV, const Vec3 iNormal, const Mat4x4 iMVP, RasterData::ProjectedVertex & oProjectedVertex );
-  static void FragmentShader_Color( const RasterData::Fragment & iFrag, RasterData::Uniform & iUniforms, Vec4 & oColor );
-  static void FragmentShader_Depth( const RasterData::Fragment & iFrag, RasterData::Uniform & iUniforms, Vec4 & oColor );
-  static void FragmentShader_Normal( const RasterData::Fragment & iFrag, RasterData::Uniform & iUniforms, Vec4 & oColor );
-  static void FragmentShader_Wires( const RasterData::Fragment & iFrag, const Vec3 iVertCoord[3], RasterData::Uniform & iUniforms, Vec4 & oColor );
+  static void VertexShader(const Vec4& iVertexPos, const Vec2& iUV, const Vec3 iNormal, const Mat4x4 iMVP, RasterData::ProjectedVertex& oProjectedVertex);
+  static void FragmentShader_Color(const RasterData::Fragment& iFrag, RasterData::Uniform& iUniforms, Vec4& oColor);
+  static void FragmentShader_Depth(const RasterData::Fragment& iFrag, RasterData::Uniform& iUniforms, Vec4& oColor);
+  static void FragmentShader_Normal(const RasterData::Fragment& iFrag, RasterData::Uniform& iUniforms, Vec4& oColor);
+  static void FragmentShader_Wires(const RasterData::Fragment& iFrag, const Vec3 iVertCoord[3], RasterData::Uniform& iUniforms, Vec4& oColor);
 
-  int RenderBackground( float iTop, float iRight );
-  void RenderBackgroundRows( int iStartY, int iEndY, Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY );
-  void RenderBackground( Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY, RasterData::Tile& ioTile );
+  int RenderBackground(float iTop, float iRight);
+  void RenderBackgroundRows(int iStartY, int iEndY, Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY);
+  void RenderBackground(Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY, RasterData::Tile& ioTile);
 
-  int RenderScene( const Mat4x4 & iMV, const Mat4x4 & iP, const Mat4x4 & iRasterM );
-  int ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP );
-  void ProcessVertices( const Mat4x4 & iMVP, int iStartInd, int iEndInd );
-  int ClipTriangles( const Mat4x4 & iRasterM );
-  void ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin, int iStartInd, int iEndInd );
+  int RenderScene();
+  int ProcessVertices();
+  void ProcessVertices(const Mat4x4& iM, const Mat4x4& iV, const Mat4x4& iP, int iStartInd, int iEndInd);
+  int ClipTriangles(const Mat4x4& iRasterM);
+  void ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, int iStartInd, int iEndInd);
   int ProcessFragments();
-  void ProcessFragments( int iStartY, int iEndY );
+  void ProcessFragments(int iStartY, int iEndY);
 
-  void BinTrianglesToTiles( unsigned int iBufferIndex );
-  void ProcessFragments( RasterData::Tile & ioTile );
+  void BinTrianglesToTiles(unsigned int iBufferIndex);
+  void ProcessFragments(RasterData::Tile& ioTile);
 
 #ifdef SIMD_AVX2
   void CopyTileToMainBuffer8x(const RasterData::Tile& iTile);
-  void ProcessVerticesAVX2(const Mat4x4& iMVP, int iStartInd, int iEndInd);
+  void ProcessVerticesAVX2(const Mat4x4& iM, const Mat4x4& iV, const Mat4x4& iP, int iStartInd, int iEndInd);
   static void VertexShaderAVX2(const Vec4& iVertexPos, const Vec2& iUV, const Vec3 iNormal, const __m256 iMVP[4], RasterData::ProjectedVertex& oProjectedVertex);
 #endif
 
 #ifdef SIMD_ARM_NEON
-  void ProcessVerticesARM(const Mat4x4& iMVP, int iStartInd, int iEndInd);
+  void ProcessVerticesARM(cconst Mat4x4& iM, const Mat4x4& iV, const Mat4x4& iP, int iStartInd, int iEndInd);
   static void VertexShaderARM(const Vec4& iVertexPos, const Vec2& iUV, const Vec3 iNormal, const float32x4_t iMVP[4], RasterData::ProjectedVertex& oProjectedVertex);
 #endif
 
