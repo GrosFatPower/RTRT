@@ -53,3 +53,4 @@ Assets/*.bin
 *.vcxproj.user
 *.vcxproj.filters
 *.sln
+*.ods\#
