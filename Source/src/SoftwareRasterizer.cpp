@@ -492,7 +492,7 @@ int SoftwareRasterizer::UnloadScene()
 
   _FrameNum = 0;
 
-  _Vertices.clear();
+  _VertexBuffer.clear();
   _Triangles.clear();
   _ProjVerticesBuf.clear();
 
@@ -563,9 +563,9 @@ int SoftwareRasterizer::ReloadScene()
       int idx = 0;
       if ( 0 == VertexIDs.count(Vert[j]) )
       {
-        idx = (int)_Vertices.size();
+        idx = (int)_VertexBuffer.size();
         VertexIDs[Vert[j]] = idx;
-        _Vertices.push_back(Vert[j]);
+        _VertexBuffer.push_back(Vert[j]);
       }
       else
         idx = VertexIDs[Vert[j]];
@@ -919,7 +919,7 @@ int SoftwareRasterizer::ProcessVertices( const Mat4x4 & iMV, const Mat4x4 & iP )
 {
   Mat4x4 MVP = iP * iMV;
 
-  int nbVertices = static_cast<int>(_Vertices.size());
+  int nbVertices = static_cast<int>(_VertexBuffer.size());
   _ProjVerticesBuf.resize(nbVertices);
   _ProjVerticesBuf.reserve(nbVertices*2);
 
@@ -958,7 +958,7 @@ void SoftwareRasterizer::ProcessVertices( const Mat4x4 & iMVP, int iStartInd, in
 {
   for ( int i = iStartInd; i < iEndInd; ++i )
   {
-    rd::Vertex & vert = _Vertices[i];
+    rd::Vertex & vert = _VertexBuffer[i];
     VertexShader(Vec4(vert._WorldPos ,1.f), vert._UV, vert._Normal, iMVP, _ProjVerticesBuf[i]);
   }
 }
@@ -974,7 +974,7 @@ void SoftwareRasterizer::ProcessVerticesAVX2(const Mat4x4& iMVP, int iStartInd, 
 
   for (int i = iStartInd; i < iEndInd; ++i)
   {
-    rd::Vertex& vert = _Vertices[i];
+    rd::Vertex& vert = _VertexBuffer[i];
     VertexShaderAVX2(Vec4(vert._WorldPos, 1.f), vert._UV, vert._Normal, MVP, _ProjVerticesBuf[i]);
   }
 }
@@ -991,7 +991,7 @@ void SoftwareRasterizer::ProcessVerticesARM(const Mat4x4& iMVP, int iStartInd, i
 
   for (int i = iStartInd; i < iEndInd; ++i)
   {
-    rd::Vertex& vert = _Vertices[i];
+    rd::Vertex& vert = _VertexBuffer[i];
     VertexShaderARM(Vec4(vert._WorldPos, 1.f), vert._UV, vert._Normal, MVP, _ProjVerticesBuf[i]);
   }
 }
@@ -1228,15 +1228,22 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
           Vec3 coord(x + .5f, y + .5f, 0.f);
 
           // Barycentric coordinates
-          Vec3 W;
-          bool isIn = MathUtil::EvalBarycentricCoordinates(coord, tri._EdgeA, tri._EdgeB, tri._EdgeC, tri._InvW, W);
+          float W[3] = { 0.f };
+          bool isIn = MathUtil::EvalBarycentricCoordinates(coord, tri._EdgeA, tri._EdgeB, tri._EdgeC, W);
           if (!isIn)
             continue;
 
-          // Perspective correction
-          float Z = 1.f / (W.x + W.y + W.z);
-          W *= Z;
-          coord.z = W.x * tri._V[0].z + W.y * tri._V[1].z + W.z * tri._V[2].z;
+          // Perspective correct Z
+          W[0] *= tri._InvW[0];
+          W[1] *= tri._InvW[1];
+          W[2] *= tri._InvW[2];
+          float Z = 1.f / (W[0] + W[1] + W[2]);
+
+          // Interpolate depth in screen space
+          W[0] *= Z;
+          W[1] *= Z;
+          W[2] *= Z;
+          coord.z = W[0] * tri._V[0].z + W[1] * tri._V[1].z + W[2] * tri._V[2].z;
 
           // Depth test
           if ( _Settings._WBuffer )
@@ -1251,15 +1258,12 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
           }
 
           // Setup fragment
-          rd::Varying Attrib[3];
-          Attrib[0] = _ProjVerticesBuf[tri._Indices[0]]._Attrib;
-          Attrib[1] = _ProjVerticesBuf[tri._Indices[1]]._Attrib;
-          Attrib[2] = _ProjVerticesBuf[tri._Indices[2]]._Attrib;
-
           rd::Fragment frag;
           frag._FragCoords = coord;
           frag._MatID      = tri._MatID;
-          frag._Attrib     = Attrib[0] * W.x + Attrib[1] * W.y + Attrib[2] * W.z;
+          frag._Attrib = _ProjVerticesBuf[tri._Indices[0]]._Attrib * W[0] +
+                         _ProjVerticesBuf[tri._Indices[1]]._Attrib * W[1] +
+                         _ProjVerticesBuf[tri._Indices[2]]._Attrib * W[2];
 
          if ( ShadingType::Phong == _Settings._ShadingType )
             frag._Attrib._Normal = glm::normalize(frag._Attrib._Normal);
@@ -1335,9 +1339,6 @@ void SoftwareRasterizer::BinTrianglesToTiles( unsigned int iBufferIndex )
   }
 }
 
-// ----------------------------------------------------------------------------
-// ProcessFragments
-// ----------------------------------------------------------------------------
 void SoftwareRasterizer::ProcessFragments( RasterData::Tile & ioTile )
 {
   float zNear, zFar;
@@ -1371,15 +1372,22 @@ void SoftwareRasterizer::ProcessFragments( RasterData::Tile & ioTile )
           Vec3 coord(x + .5f, y + .5f, 0.f);
 
           // Barycentric coordinates
-          Vec3 W;
-          bool isIn = MathUtil::EvalBarycentricCoordinates(coord, tri->_EdgeA, tri->_EdgeB, tri->_EdgeC, tri->_InvW, W);
+          float W[3] = { 0.f };
+          bool isIn = MathUtil::EvalBarycentricCoordinates(coord, tri->_EdgeA, tri->_EdgeB, tri->_EdgeC, W);
           if ( !isIn )
             continue;
 
-          // Perspective correction
-          float Z = 1.f / (W.x + W.y + W.z);
-          W *= Z;
-          coord.z = W.x * tri->_V[0].z + W.y * tri->_V[1].z + W.z * tri->_V[2].z; // depth in screen space
+          // Perspective correct Z
+          W[0] *= tri -> _InvW[0];
+          W[1] *= tri -> _InvW[1];
+          W[2] *= tri -> _InvW[2];
+          float Z = 1.f / (W[0] + W[1] + W[2]);
+
+          // Interpolate depth in screen space
+          W[0] *= Z;
+          W[1] *= Z;
+          W[2] *= Z;
+          coord.z = W[0] * tri -> _V[0].z + W[1] * tri -> _V[1].z + W[2] * tri -> _V[2].z;
 
           // Depth test
           int localX = x - ioTile._X;
@@ -1397,15 +1405,12 @@ void SoftwareRasterizer::ProcessFragments( RasterData::Tile & ioTile )
           }
 
           // Setup fragment
-          rd::Varying Attrib[3];
-          Attrib[0] = _ProjVerticesBuf[tri->_Indices[0]]._Attrib;
-          Attrib[1] = _ProjVerticesBuf[tri->_Indices[1]]._Attrib;
-          Attrib[2] = _ProjVerticesBuf[tri->_Indices[2]]._Attrib;
-
           rd::Fragment frag;
           frag._FragCoords = coord;
           frag._MatID = tri->_MatID;
-          frag._Attrib = Attrib[0] * W.x + Attrib[1] * W.y + Attrib[2] * W.z;
+          frag._Attrib = _ProjVerticesBuf[tri->_Indices[0]]._Attrib * W[0] +
+                         _ProjVerticesBuf[tri->_Indices[1]]._Attrib * W[1] +
+                         _ProjVerticesBuf[tri->_Indices[2]]._Attrib * W[2];
 
           if (ShadingType::Phong == _Settings._ShadingType)
             frag._Attrib._Normal = glm::normalize(frag._Attrib._Normal);
@@ -1443,5 +1448,6 @@ void SoftwareRasterizer::ProcessFragments( RasterData::Tile & ioTile )
 
   this -> CopyTileToMainBuffer(ioTile);
 }
+
 
 }

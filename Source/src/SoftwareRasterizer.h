@@ -159,7 +159,7 @@ protected:
   RasterData::FrameBuffer _ImageBuffer;
 
   // Scene data
-  std::vector<RasterData::Vertex>                      _Vertices;
+  std::vector<RasterData::Vertex>                      _VertexBuffer;
   std::vector<RasterData::Triangle>                    _Triangles;
   std::vector<RasterData::ProjectedVertex>             _ProjVerticesBuf;
   std::mutex                                           _ProjVerticesMutex;

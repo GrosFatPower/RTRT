@@ -308,20 +308,15 @@ public:
     return true;
   }
 
-  static bool EvalBarycentricCoordinates( const Vec3 & iFragCoord, const float iEdgeA[3], const float iEdgeB[3], const float iEdgeC[3], const float iInvZ[3], Vec3& oBaryCoord)
+  static bool EvalBarycentricCoordinates( const Vec3 & iFragCoord, const float iEdgeA[3], const float iEdgeB[3], const float iEdgeC[3], float oBaryCoord[3])
   {
-    oBaryCoord.x = iEdgeA[0] * iFragCoord.x + iEdgeB[0] * iFragCoord.y + iEdgeC[0];
-    oBaryCoord.y = iEdgeA[1] * iFragCoord.x + iEdgeB[1] * iFragCoord.y + iEdgeC[1];
-    oBaryCoord.z = iEdgeA[2] * iFragCoord.x + iEdgeB[2] * iFragCoord.y + iEdgeC[2];
-    if ( (oBaryCoord.x < 0.f)
-      || (oBaryCoord.y < 0.f)
-      || (oBaryCoord.z < 0.f))
+    oBaryCoord[0] = iEdgeA[0] * iFragCoord.x + iEdgeB[0] * iFragCoord.y + iEdgeC[0];
+    oBaryCoord[1] = iEdgeA[1] * iFragCoord.x + iEdgeB[1] * iFragCoord.y + iEdgeC[1];
+    oBaryCoord[2] = iEdgeA[2] * iFragCoord.x + iEdgeB[2] * iFragCoord.y + iEdgeC[2];
+    if ( (oBaryCoord[0] < 0.f)
+      || (oBaryCoord[1] < 0.f)
+      || (oBaryCoord[2] < 0.f))
       return false;
-
-    // Perspective correction
-    oBaryCoord.x *= iInvZ[0];
-    oBaryCoord.y *= iInvZ[1];
-    oBaryCoord.z *= iInvZ[2];
 
     return true;
   }
