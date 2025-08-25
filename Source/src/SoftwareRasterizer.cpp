@@ -1090,12 +1090,10 @@ void SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin,
             rasterTri._BBox.Insert(rasterTri._V[k]);
           }
 
-          MathUtil::EdgeFunctionCoefficients(rasterTri._V[0], rasterTri._V[1], rasterTri._V[2], rasterTri._EdgeA, rasterTri._EdgeB, rasterTri._EdgeC);
+          if ( !MathUtil::EdgeFunctionCoefficients(rasterTri._V[0], rasterTri._V[1], rasterTri._V[2], rasterTri._EdgeA, rasterTri._EdgeB, rasterTri._EdgeC, rasterTri._InvArea) )
+            continue;
 
-          float area = rasterTri._EdgeC[0] + rasterTri._EdgeC[1] + rasterTri._EdgeC[2];
-          if ( area > 0.f )
-            rasterTri._InvArea = 1.f / area;
-          else
+          if ( rasterTri._InvArea < 0.f )
             continue;
 
           rasterTri._MatID  = tri._MatID;
@@ -1126,12 +1124,10 @@ void SoftwareRasterizer::ClipTriangles( const Mat4x4 & iRasterM, int iThreadBin,
         rasterTri._BBox.Insert(rasterTri._V[j]);
       }
 
-      MathUtil::EdgeFunctionCoefficients(rasterTri._V[0], rasterTri._V[1], rasterTri._V[2], rasterTri._EdgeA, rasterTri._EdgeB, rasterTri._EdgeC);
+      if (!MathUtil::EdgeFunctionCoefficients(rasterTri._V[0], rasterTri._V[1], rasterTri._V[2], rasterTri._EdgeA, rasterTri._EdgeB, rasterTri._EdgeC, rasterTri._InvArea))
+        continue;
 
-      float area = rasterTri._EdgeC[0] + rasterTri._EdgeC[1] + rasterTri._EdgeC[2];
-      if (area > 0.f)
-        rasterTri._InvArea = 1.f / area;
-      else
+      if (rasterTri._InvArea < 0.f)
         continue;
 
       rasterTri._MatID  = tri._MatID;
@@ -1233,23 +1229,12 @@ void SoftwareRasterizer::ProcessFragments( int iStartY, int iEndY )
 
           // Barycentric coordinates
           Vec3 W;
-          W.x = tri._EdgeA[0] * x + tri._EdgeB[0] * y + tri._EdgeC[0];
-          W.y = tri._EdgeA[1] * x + tri._EdgeB[1] * y + tri._EdgeC[1];
-          W.z = tri._EdgeA[2] * x + tri._EdgeB[2] * y + tri._EdgeC[2];
-          if ( ( W.x < 0.f )
-            || ( W.y < 0.f )
-            || ( W.z < 0.f ) )
+          bool isIn = MathUtil::EvalBarycentricCoordinates(coord, tri._EdgeA, tri._EdgeB, tri._EdgeC, tri._InvW, W);
+          if (!isIn)
             continue;
 
-          W *= tri._InvArea;
-
           // Perspective correction
-          W.x *= tri._InvW[0]; // W0 / -z0
-          W.y *= tri._InvW[1]; // W1 / -z1
-          W.z *= tri._InvW[2]; // W2 / -z2
-
           float Z = 1.f / (W.x + W.y + W.z);
-
           W *= Z;
           coord.z = W.x * tri._V[0].z + W.y * tri._V[1].z + W.z * tri._V[2].z;
 
@@ -1387,23 +1372,12 @@ void SoftwareRasterizer::ProcessFragments( RasterData::Tile & ioTile )
 
           // Barycentric coordinates
           Vec3 W;
-          W.x = tri->_EdgeA[0] * x + tri->_EdgeB[0] * y + tri->_EdgeC[0];
-          W.y = tri->_EdgeA[1] * x + tri->_EdgeB[1] * y + tri->_EdgeC[1];
-          W.z = tri->_EdgeA[2] * x + tri->_EdgeB[2] * y + tri->_EdgeC[2];
-          if ( (W.x < 0.f)
-            || (W.y < 0.f)
-            || (W.z < 0.f) )
+          bool isIn = MathUtil::EvalBarycentricCoordinates(coord, tri->_EdgeA, tri->_EdgeB, tri->_EdgeC, tri->_InvW, W);
+          if ( !isIn )
             continue;
 
-          W *= tri->_InvArea;
-
           // Perspective correction
-          W.x *= tri -> _InvW[0]; // W0 / -z0
-          W.y *= tri -> _InvW[1]; // W1 / -z1
-          W.z *= tri -> _InvW[2]; // W2 / -z2
-
           float Z = 1.f / (W.x + W.y + W.z);
-
           W *= Z;
           coord.z = W.x * tri->_V[0].z + W.y * tri->_V[1].z + W.z * tri->_V[2].z; // depth in screen space
 

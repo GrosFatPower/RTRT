@@ -274,7 +274,7 @@ public:
     //  return (iV2.x - iV0.x) * (iV1.y - iV0.y) - (iV2.y - iV0.y) * (iV1.x - iV0.x); // Clockwise edge function
   }
 
-  static void EdgeFunctionCoefficients(const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2, float oEdgeA[3], float oEdgeB[3], float oEdgeC[3])
+  static bool EdgeFunctionCoefficients(const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2, float oEdgeA[3], float oEdgeB[3], float oEdgeC[3], float & oInvArea)
   {
     oEdgeA[0] = iV1.y - iV2.y;
     oEdgeA[1] = iV2.y - iV0.y;
@@ -287,6 +287,43 @@ public:
     oEdgeC[0] = iV1.x * iV2.y - iV2.x * iV1.y;
     oEdgeC[1] = iV2.x * iV0.y - iV0.x * iV2.y;
     oEdgeC[2] = iV0.x * iV1.y - iV1.x * iV0.y;
+
+    float area = oEdgeC[0] + oEdgeC[1] + oEdgeC[2];
+
+    if ( 0.f == area )
+    {
+      oInvArea = 0.f;
+      return false;
+    }
+
+    oInvArea = 1.f / area;
+
+    for (int i = 0; i < 3; ++i)
+    {
+      oEdgeA[i] *= oInvArea;
+      oEdgeB[i] *= oInvArea;
+      oEdgeC[i] *= oInvArea;
+    }
+
+    return true;
+  }
+
+  static bool EvalBarycentricCoordinates( const Vec3 & iFragCoord, const float iEdgeA[3], const float iEdgeB[3], const float iEdgeC[3], const float iInvZ[3], Vec3& oBaryCoord)
+  {
+    oBaryCoord.x = iEdgeA[0] * iFragCoord.x + iEdgeB[0] * iFragCoord.y + iEdgeC[0];
+    oBaryCoord.y = iEdgeA[1] * iFragCoord.x + iEdgeB[1] * iFragCoord.y + iEdgeC[1];
+    oBaryCoord.z = iEdgeA[2] * iFragCoord.x + iEdgeB[2] * iFragCoord.y + iEdgeC[2];
+    if ( (oBaryCoord.x < 0.f)
+      || (oBaryCoord.y < 0.f)
+      || (oBaryCoord.z < 0.f))
+      return false;
+
+    // Perspective correction
+    oBaryCoord.x *= iInvZ[0];
+    oBaryCoord.y *= iInvZ[1];
+    oBaryCoord.z *= iInvZ[2];
+
+    return true;
   }
 
   static float Luminance( const Vec3 iRGBColor )

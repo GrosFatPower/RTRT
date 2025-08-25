@@ -36,6 +36,7 @@ public:
   const std::string & Filename() const { return _Filename; }
 
   Vec4 Sample( int iX, int iY ) const;
+  void Sample(int iX, int iY, int iSpan, Vec4 * oSamples) const;
   Vec4 Sample( Vec2 iUV ) const;
   Vec4 BiLinearSample( Vec2 iUV ) const;
 

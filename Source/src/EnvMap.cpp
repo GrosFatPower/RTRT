@@ -86,9 +86,10 @@ Vec4 EnvMap::Sample( int iX, int iY ) const
   if ( _RawData )
   {
     int index = ( iX + iY * _Width ) * 3;
-    sample.x = _RawData[ index ];
-    sample.y = _RawData[ index + 1 ];
-    sample.z = _RawData[ index + 2 ];
+    memcpy(&sample.x, &_RawData[index], 3 * sizeof(float));
+    //sample.x = _RawData[ index ];
+    //sample.y = _RawData[ index + 1 ];
+    //sample.z = _RawData[ index + 2 ];
   }
 
   return sample;
