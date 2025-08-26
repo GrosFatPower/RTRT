@@ -1058,8 +1058,19 @@ int SoftwareRasterizer::Rasterize()
       for (auto& bin : tile._RasterTrisBins)
         totalTris += static_cast<int>(bin.size());
 
-      if ( totalTris )
-        JobSystem::Get().Execute([this, &tile]() { this->Rasterize(tile); });
+      if (totalTris)
+      {
+        if (_EnableSIMD)
+        {
+#ifdef SIMD_AVX2
+          JobSystem::Get().Execute([this, &tile]() { this->RasterizeAVX2(tile); });
+#else
+          JobSystem::Get().Execute([this, &tile]() { this->Rasterize(tile); });
+#endif
+        }
+        else
+          JobSystem::Get().Execute([this, &tile]() { this->Rasterize(tile); });
+      }
     }
     JobSystem::Get().Wait();
   }
@@ -1265,6 +1276,114 @@ int SoftwareRasterizer::Rasterize(rd::Tile& ioTile)
 
   return 0;
 }
+
+#ifdef SIMD_AVX2
+// ----------------------------------------------------------------------------
+// RasterizeAVX2
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::RasterizeAVX2(rd::Tile& ioTile)
+{
+  float zNear, zFar;
+  _Scene.GetCamera().GetZNearFar(zNear, zFar);
+
+  for (auto& bin : ioTile._RasterTrisBins)
+  {
+    for (const rd::RasterTriangle* tri : bin)
+    {
+      if (!tri)
+        continue;
+
+      int startX = std::max(ioTile._X, static_cast<int>(std::floor(tri->_BBox._Low.x)));
+      int endX = std::min(ioTile._X + ioTile._Width - 1, static_cast<int>(std::ceil(tri->_BBox._High.x)));
+      int startY = std::max(ioTile._Y, static_cast<int>(std::floor(tri->_BBox._Low.y)));
+      int endY = std::min(ioTile._Y + ioTile._Height - 1, static_cast<int>(std::ceil(tri->_BBox._High.y)));
+
+      for (int y = startY; y <= endY; ++y)
+      {
+        for (int x = startX; x <= endX; x += 8)
+        {
+          // Frag coord
+          __m256 x_coords = _mm256_set_ps(x + 7.5f, x + 6.5f, x + 5.5f, x + 4.5f, x + 3.5f, x + 2.5f, x + 1.5f, x + 0.5f);
+          __m256 y_coord = _mm256_set1_ps(y + 0.5f);
+
+          // Barycentric coordinates
+          __m256 Weights[3];
+          __m256i mask = MathUtil::EvalBarycentricCoordinatesAVX2(x_coords, y_coord, tri->_EdgeA, tri->_EdgeB, tri->_EdgeC, Weights);
+
+          // Perspective correct Z
+          __m256 invZ0 = _mm256_set1_ps(tri->_InvW[0]);
+          __m256 invZ1 = _mm256_set1_ps(tri->_InvW[1]);
+          __m256 invZ2 = _mm256_set1_ps(tri->_InvW[2]);
+
+          Weights[0] = _mm256_mul_ps(Weights[0], invZ0);
+          Weights[1] = _mm256_mul_ps(Weights[1], invZ1);
+          Weights[2] = _mm256_mul_ps(Weights[2], invZ2);
+
+          __m256 invDepths = _mm256_add_ps(_mm256_add_ps(Weights[0], Weights[1]), Weights[2]);
+          __m256 depths = _mm256_div_ps(_mm256_set1_ps(1.0f), invDepths);
+
+          // Interpolate depth in screen space
+          Weights[0] = _mm256_mul_ps(Weights[0], depths);
+          Weights[1] = _mm256_mul_ps(Weights[1], depths);
+          Weights[2] = _mm256_mul_ps(Weights[2], depths);
+
+          __m256 v0z = _mm256_set1_ps(tri->_V[0].z);
+          __m256 v1z = _mm256_set1_ps(tri->_V[1].z);
+          __m256 v2z = _mm256_set1_ps(tri->_V[2].z);
+          __m256 z_coord = _mm256_add_ps(_mm256_add_ps(_mm256_mul_ps(Weights[0], v0z), _mm256_mul_ps(Weights[1], v1z)), _mm256_mul_ps(Weights[2], v2z));
+
+          for (int i = 0; ( i < 8 ) && ( (x + i) <= endX ); ++i)
+          {
+            if (mask.m256i_u32[i] == 0)
+              continue;
+
+            // Depth test
+            float depth = depths.m256_f32[i];
+            float z = z_coord.m256_f32[i];
+
+            unsigned int localX = (x + i) - ioTile._X;
+            unsigned int localY = y - ioTile._Y;
+            unsigned int localPixelIndex = localY * ioTile._Width + localX;
+
+            if (_Settings._WBuffer)
+            {
+              if ((depth > ioTile._LocalFB._DepthBuffer[localPixelIndex]) || (depth < zNear))
+                continue;
+              ioTile._LocalFB._DepthBuffer[localPixelIndex] = depth;
+            }
+            else
+            {
+              if ((z > ioTile._LocalFB._DepthBuffer[localPixelIndex]) || (z < -1.f))
+                continue;
+              ioTile._LocalFB._DepthBuffer[localPixelIndex] = z;
+            }
+
+            // Setup fragment
+            rd::Fragment frag;
+            frag._FragCoords = Vec3(x + i + .5f, y + .5f, z);
+            frag._PixelCoords = Vec2i(x + i, y);
+            frag._V[0] = tri->_V[0];
+            frag._V[1] = tri->_V[1];
+            frag._V[2] = tri->_V[2];
+            frag._MatID = tri->_MatID;
+            frag._Attrib = _ProjVerticesBuf[tri->_Indices[0]]._Attrib * Weights[0].m256_f32[i] +
+                           _ProjVerticesBuf[tri->_Indices[1]]._Attrib * Weights[1].m256_f32[i] +
+                           _ProjVerticesBuf[tri->_Indices[2]]._Attrib * Weights[2].m256_f32[i];
+            if (ShadingType::Phong == _Settings._ShadingType)
+              frag._Attrib._Normal = glm::normalize(frag._Attrib._Normal);
+            else
+              frag._Attrib._Normal = tri->_Normal;
+
+            ioTile._Fragments.push_back(frag);
+          }
+        }
+      }
+    }
+  }
+
+  return 0;
+}
+#endif // SIMD_AVX2
 
 // ----------------------------------------------------------------------------
 // ProcessFragments

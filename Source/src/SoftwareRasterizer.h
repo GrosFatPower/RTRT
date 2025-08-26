@@ -121,6 +121,7 @@ protected:
   void CopyTileToMainBuffer8x(const RasterData::Tile& iTile);
   void ProcessVerticesAVX2(const Mat4x4& iM, const Mat4x4& iV, const Mat4x4& iP, int iStartInd, int iEndInd);
   static void VertexShaderAVX2(const Vec4& iVertexPos, const Vec2& iUV, const Vec3 iNormal, const __m256 iMVP[4], RasterData::ProjectedVertex& oProjectedVertex);
+  int RasterizeAVX2(RasterData::Tile& ioTile);
 #endif
 
 #ifdef SIMD_ARM_NEON

@@ -322,6 +322,37 @@ public:
     return true;
   }
 
+#ifdef SIMD_AVX2
+  static __m256i EvalBarycentricCoordinatesAVX2(const __m256 & iFragCoordX, const __m256 & iFragCoordY, const float iEdgeA[3], const float iEdgeB[3], const float iEdgeC[3], __m256 oBaryCoord[3])
+  {
+    __m256i mask = _mm256_setzero_si256();
+
+    //oBaryCoord[0] = _mm256_setzero_ps(), oBaryCoord[1] = _mm256_setzero_ps(), oBaryCoord[2] = _mm256_setzero_ps();
+
+    for (int i = 0; i < 3; ++i)
+    {
+      __m256 edgeA = _mm256_set1_ps(iEdgeA[i]);
+      __m256 edgeB = _mm256_set1_ps(iEdgeB[i]);
+      __m256 edgeC = _mm256_set1_ps(iEdgeC[i]);
+
+      __m256 ax = _mm256_mul_ps(edgeA, iFragCoordX);
+      __m256 by = _mm256_mul_ps(edgeB, iFragCoordY);
+      oBaryCoord[i] = _mm256_add_ps(_mm256_add_ps(ax, by), edgeC);
+
+      // Test >= 0
+      __m256 ge_zero = _mm256_cmp_ps(oBaryCoord[i], _mm256_setzero_ps(), _CMP_GE_OQ);
+      __m256i ge_zero_int = _mm256_castps_si256(ge_zero);
+
+      if (i == 0)
+        mask = ge_zero_int;
+      else
+        mask = _mm256_and_si256(mask, ge_zero_int);
+    }
+
+    return mask;
+  }
+#endif // SIMD_AVX2
+
   static float Luminance( const Vec3 iRGBColor )
   {
     const Vec3 Luma = Vec3( 0.299, 0.587, 0.114 ); // UIT-R BT 601
