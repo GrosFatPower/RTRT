@@ -100,15 +100,22 @@ protected:
   void RenderBackground(Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY, RasterData::Tile& ioTile);
 
   int RenderScene();
+
   int ProcessVertices();
   void ProcessVertices(const Mat4x4& iM, const Mat4x4& iV, const Mat4x4& iP, int iStartInd, int iEndInd);
+
   int ClipTriangles(const Mat4x4& iRasterM);
   void ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, int iStartInd, int iEndInd);
+
+  int Rasterize();
+  int Rasterize(int iThreadBin, int iStartY, int iEndY);
+  int Rasterize(RasterData::Tile& ioTile);
+
   int ProcessFragments();
-  void ProcessFragments(int iStartY, int iEndY);
+  void ProcessFragments(int iThreadBin, const RasterData::DefaultUniform & iUniforms);
 
   void BinTrianglesToTiles(unsigned int iBufferIndex);
-  void ProcessFragments(RasterData::Tile& ioTile);
+  void ProcessFragments(RasterData::Tile& ioTile, const RasterData::DefaultUniform& iUniforms);
 
 #ifdef SIMD_AVX2
   void CopyTileToMainBuffer8x(const RasterData::Tile& iTile);
@@ -158,6 +165,7 @@ protected:
   std::vector<RasterData::ProjectedVertex>             _ProjVerticesBuf;
   std::mutex                                           _ProjVerticesMutex;
   std::vector<std::vector<RasterData::RasterTriangle>> _RasterTrianglesBuf;
+  std::vector< std::vector<RasterData::Fragment>>      _Fragments;
 };
 
 }

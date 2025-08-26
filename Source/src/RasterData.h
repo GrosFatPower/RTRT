@@ -109,7 +109,8 @@ namespace RasterData
   struct Fragment
   {
     Vec3    _FragCoords;
-    Vec2    _PixelCoords;
+    Vec2i   _PixelCoords;
+    Vec3    _V[3];
     int     _MatID;
     Varying _Attrib;
   };

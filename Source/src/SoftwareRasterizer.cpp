@@ -128,6 +128,8 @@ int SoftwareRasterizer::UpdateNumberOfWorkers(bool iForce)
     for (unsigned int i = 0; i < _NbJobs; ++i)
       _RasterTrianglesBuf[i].reserve(std::max(_Triangles.size() / _NbJobs, (size_t)1));
 
+    _Fragments.resize(_NbJobs);
+
     for (auto& tile : _Tiles)
     {
       tile._RasterTrisBins.resize(_NbJobs);
@@ -798,6 +800,9 @@ int SoftwareRasterizer::RenderScene()
   }
 
   if (!ko)
+    ko = Rasterize();
+
+  if (!ko)
     ko = ProcessFragments();
 
   return ko;
@@ -1035,9 +1040,9 @@ void SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, i
 }
 
 // ----------------------------------------------------------------------------
-// ProcessFragments
+// Rasterize
 // ----------------------------------------------------------------------------
-int SoftwareRasterizer::ProcessFragments()
+int SoftwareRasterizer::Rasterize()
 {
   if (TiledRendering())
   {
@@ -1053,15 +1058,16 @@ int SoftwareRasterizer::ProcessFragments()
       for (auto& bin : tile._RasterTrisBins)
         totalTris += static_cast<int>(bin.size());
 
-      if (0 == totalTris)
-        JobSystem::Get().Execute([this, &tile]() { this->CopyTileToMainBuffer(tile); });
-      else
-        JobSystem::Get().Execute([this, &tile]() { this->ProcessFragments(tile); });
+      if ( totalTris )
+        JobSystem::Get().Execute([this, &tile]() { this->Rasterize(tile); });
     }
     JobSystem::Get().Wait();
   }
   else
   {
+    for (unsigned int i = 0; i < _NbJobs; ++i)
+      _Fragments[i].clear();
+
     int height = _Settings._RenderResolution.y;
 
     for (unsigned int i = 0; i < _NbJobs; ++i)
@@ -1069,7 +1075,7 @@ int SoftwareRasterizer::ProcessFragments()
       int startY = (height / _NbJobs) * i;
       int endY = (i == _NbJobs - 1) ? (height) : (startY + (height / _NbJobs));
 
-      JobSystem::Get().Execute([this, startY, endY]() { this->ProcessFragments(startY, endY); });
+      JobSystem::Get().Execute([this, i, startY, endY]() { this->Rasterize(i, startY, endY); });
     }
     JobSystem::Get().Wait();
   }
@@ -1078,36 +1084,12 @@ int SoftwareRasterizer::ProcessFragments()
 }
 
 // ----------------------------------------------------------------------------
-// ProcessFragments
+// Rasterize
 // ----------------------------------------------------------------------------
-void SoftwareRasterizer::ProcessFragments(int iStartY, int iEndY)
+int SoftwareRasterizer::Rasterize(int iThreadBin, int iStartY, int iEndY)
 {
-  int width = _Settings._RenderResolution.x;
-
   float zNear, zFar;
   _Scene.GetCamera().GetZNearFar(zNear, zFar);
-
-  rd::DefaultUniform uniforms;
-  uniforms._CameraPos = _Scene.GetCamera().GetPos();
-  uniforms._BilinearSampling = _Settings._BilinearSampling;
-  uniforms._Materials = &_Scene.GetMaterials();
-  uniforms._Textures = &_Scene.GetTextures();
-  for (int i = 0; i < _Scene.GetNbLights(); ++i)
-    uniforms._Lights.push_back(*_Scene.GetLight(i));
-
-  std::unique_ptr<SoftwareFragmentShader> fragmentShader = nullptr;
-  if (_DebugMode & (int)RasterDebugModes::DepthBuffer)
-    fragmentShader = std::make_unique<DepthFragmentShader>(uniforms);
-  else if (_DebugMode & (int)RasterDebugModes::Normals)
-    fragmentShader = std::make_unique<NormalFragmentShader>(uniforms);
-  else
-    fragmentShader = std::make_unique<BlinnPhongFragmentShader>(uniforms);
-  if (!fragmentShader)
-    return;
-
-  std::unique_ptr<SoftwareFragmentShader> wireShader = nullptr;
-  if (_DebugMode & (int)RasterDebugModes::Wires)
-    wireShader = std::make_unique<WireFrameFragmentShader>(uniforms);
 
   for (unsigned int i = 0; i < _NbJobs; ++i)
   {
@@ -1125,9 +1107,9 @@ void SoftwareRasterizer::ProcessFragments(int iStartY, int iEndY)
           continue;
       }
 
-      int xMin = std::max(0, std::min(static_cast<int>(std::floorf(tri._BBox._Low.x)), width - 1));
+      int xMin = std::max(0, std::min(static_cast<int>(std::floorf(tri._BBox._Low.x)), RenderWidth() - 1));
       int yMin = std::max(iStartY, std::min(static_cast<int>(std::floorf(tri._BBox._Low.y)), iEndY - 1));
-      int xMax = std::max(0, std::min(static_cast<int>(std::floorf(tri._BBox._High.x)), width - 1));
+      int xMax = std::max(0, std::min(static_cast<int>(std::floorf(tri._BBox._High.x)), RenderWidth() - 1));
       int yMax = std::max(iStartY, std::min(static_cast<int>(std::floorf(tri._BBox._High.y)), iEndY - 1));
 
       for (int y = yMin; y <= yMax; ++y)
@@ -1156,21 +1138,27 @@ void SoftwareRasterizer::ProcessFragments(int iStartY, int iEndY)
           coord.z = W[0] * tri._V[0].z + W[1] * tri._V[1].z + W[2] * tri._V[2].z;
 
           // Depth test
+          unsigned int pixelIndex = x + RenderWidth() * y;
           if (_Settings._WBuffer)
           {
-            if (Z > _ImageBuffer._DepthBuffer[x + width * y] || (Z < zNear))
+            if (Z > _ImageBuffer._DepthBuffer[x + RenderWidth() * y] || (Z < zNear))
               continue;
+            _ImageBuffer._DepthBuffer[pixelIndex] = Z;
           }
           else
           {
-            if (coord.z > _ImageBuffer._DepthBuffer[x + width * y] || (coord.z < -1.f))
+            if (coord.z > _ImageBuffer._DepthBuffer[x + RenderWidth() * y] || (coord.z < -1.f))
               continue;
+            _ImageBuffer._DepthBuffer[pixelIndex] = coord.z;
           }
 
           // Setup fragment
           rd::Fragment frag;
           frag._FragCoords = coord;
-          frag._PixelCoords = Vec2(x, y);
+          frag._PixelCoords = Vec2i(x, y);
+          frag._V[0] = tri._V[0];
+          frag._V[1] = tri._V[1];
+          frag._V[2] = tri._V[2];
           frag._MatID = tri._MatID;
           frag._Attrib = _ProjVerticesBuf[tri._Indices[0]]._Attrib * W[0] +
             _ProjVerticesBuf[tri._Indices[1]]._Attrib * W[1] +
@@ -1181,26 +1169,174 @@ void SoftwareRasterizer::ProcessFragments(int iStartY, int iEndY)
           else
             frag._Attrib._Normal = tri._Normal;
 
-          // Shade fragment
-          Vec4 fragColor = fragmentShader->Process(frag, tri);
-
-          if (wireShader)
-          {
-            Vec4 wireColor = wireShader->Process(frag, tri);
-            fragColor.x = glm::mix(fragColor.x, wireColor.x, wireColor.w);
-            fragColor.y = glm::mix(fragColor.y, wireColor.y, wireColor.w);
-            fragColor.z = glm::mix(fragColor.z, wireColor.z, wireColor.w);
-          }
-
-          _ImageBuffer._ColorBuffer[x + width * y] = fragColor;
-          if (_Settings._WBuffer)
-            _ImageBuffer._DepthBuffer[x + width * y] = Z;
-          else
-            _ImageBuffer._DepthBuffer[x + width * y] = coord.z;
-
+          _Fragments[iThreadBin].push_back(frag);
         }
       }
     }
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// Rasterize
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::Rasterize(rd::Tile& ioTile)
+{
+  float zNear, zFar;
+  _Scene.GetCamera().GetZNearFar(zNear, zFar);
+
+  for (auto& bin : ioTile._RasterTrisBins)
+  {
+    for (const rd::RasterTriangle* tri : bin)
+    {
+      if (!tri)
+        continue;
+
+      int startX = std::max(ioTile._X, static_cast<int>(std::floor(tri->_BBox._Low.x)));
+      int endX = std::min(ioTile._X + ioTile._Width - 1, static_cast<int>(std::ceil(tri->_BBox._High.x)));
+      int startY = std::max(ioTile._Y, static_cast<int>(std::floor(tri->_BBox._Low.y)));
+      int endY = std::min(ioTile._Y + ioTile._Height - 1, static_cast<int>(std::ceil(tri->_BBox._High.y)));
+
+      for (int y = startY; y <= endY; ++y)
+      {
+        for (int x = startX; x <= endX; ++x)
+        {
+          // Frag coord
+          Vec3 coord(x + .5f, y + .5f, 0.f);
+
+          // Barycentric coordinates
+          float W[3] = { 0.f };
+          bool isIn = MathUtil::EvalBarycentricCoordinates(coord, tri->_EdgeA, tri->_EdgeB, tri->_EdgeC, W);
+          if (!isIn)
+            continue;
+
+          // Perspective correct Z
+          W[0] *= tri->_InvW[0];
+          W[1] *= tri->_InvW[1];
+          W[2] *= tri->_InvW[2];
+          float Z = 1.f / (W[0] + W[1] + W[2]);
+
+          // Interpolate depth in screen space
+          W[0] *= Z;
+          W[1] *= Z;
+          W[2] *= Z;
+          coord.z = W[0] * tri->_V[0].z + W[1] * tri->_V[1].z + W[2] * tri->_V[2].z;
+
+          // Depth test
+          unsigned int localX = x - ioTile._X;
+          unsigned int localY = y - ioTile._Y;
+          unsigned int localPixelIndex = localY * ioTile._Width + localX;
+          if (_Settings._WBuffer)
+          {
+            if ((Z > ioTile._LocalFB._DepthBuffer[localPixelIndex]) || (Z < zNear))
+              continue;
+            ioTile._LocalFB._DepthBuffer[localPixelIndex] = Z;
+          }
+          else
+          {
+            if ((coord.z > ioTile._LocalFB._DepthBuffer[localPixelIndex]) || (coord.z < -1.f))
+              continue;
+            ioTile._LocalFB._DepthBuffer[localPixelIndex] = coord.z;
+          }        
+
+          // Setup fragment
+          rd::Fragment frag;
+          frag._FragCoords = coord;
+          frag._PixelCoords = Vec2i(x, y);
+          frag._V[0] = tri->_V[0];
+          frag._V[1] = tri->_V[1];
+          frag._V[2] = tri->_V[2];
+          frag._MatID = tri->_MatID;
+          frag._Attrib = _ProjVerticesBuf[tri->_Indices[0]]._Attrib * W[0] +
+                         _ProjVerticesBuf[tri->_Indices[1]]._Attrib * W[1] +
+                         _ProjVerticesBuf[tri->_Indices[2]]._Attrib * W[2];
+
+          if (ShadingType::Phong == _Settings._ShadingType)
+            frag._Attrib._Normal = glm::normalize(frag._Attrib._Normal);
+          else
+            frag._Attrib._Normal = tri->_Normal;
+
+          ioTile._Fragments.push_back(frag);
+        }
+      }
+    }
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ProcessFragments
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::ProcessFragments()
+{
+  rd::DefaultUniform uniforms;
+  uniforms._CameraPos = _Scene.GetCamera().GetPos();
+  uniforms._BilinearSampling = _Settings._BilinearSampling;
+  uniforms._Materials = &_Scene.GetMaterials();
+  uniforms._Textures = &_Scene.GetTextures();
+  for (int i = 0; i < _Scene.GetNbLights(); ++i)
+    uniforms._Lights.push_back(*_Scene.GetLight(i));
+
+  if (TiledRendering())
+  {
+    for (auto& tile : _Tiles)
+    {
+      if ( tile._Fragments.size() )
+        JobSystem::Get().Execute([this, &tile, uniforms]() { this->ProcessFragments(tile, uniforms); });
+      else
+        JobSystem::Get().Execute([this, &tile, uniforms]() { this->CopyTileToMainBuffer(tile); });
+    }
+    JobSystem::Get().Wait();
+  }
+  else
+  {
+    for (unsigned int i = 0; i < _NbJobs; ++i)
+    {
+      if ( _Fragments[i].size() )
+        JobSystem::Get().Execute([this, i, uniforms]() { this->ProcessFragments(i, uniforms); });
+    }
+    JobSystem::Get().Wait();
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ProcessFragments
+// ----------------------------------------------------------------------------
+void SoftwareRasterizer::ProcessFragments(int iThreadBin, const RasterData::DefaultUniform& iUniforms)
+{
+  std::unique_ptr<SoftwareFragmentShader> fragmentShader = nullptr;
+  if (_DebugMode & (int)RasterDebugModes::DepthBuffer)
+    fragmentShader = std::make_unique<DepthFragmentShader>(iUniforms);
+  else if (_DebugMode & (int)RasterDebugModes::Normals)
+    fragmentShader = std::make_unique<NormalFragmentShader>(iUniforms);
+  else
+    fragmentShader = std::make_unique<BlinnPhongFragmentShader>(iUniforms);
+  if (!fragmentShader)
+    return;
+
+  std::unique_ptr<SoftwareFragmentShader> wireShader = nullptr;
+  if (_DebugMode & (int)RasterDebugModes::Wires)
+    wireShader = std::make_unique<WireFrameFragmentShader>(iUniforms);
+
+  for ( auto & frag : _Fragments[iThreadBin] ) // From back to front
+  {
+    // Shade fragment
+    Vec4 fragColor = fragmentShader->Process(frag);
+
+    if (wireShader)
+    {
+      Vec4 wireColor = wireShader->Process(frag);
+      fragColor.x = glm::mix(fragColor.x, wireColor.x, wireColor.w);
+      fragColor.y = glm::mix(fragColor.y, wireColor.y, wireColor.w);
+      fragColor.z = glm::mix(fragColor.z, wireColor.z, wireColor.w);
+    }
+
+    unsigned int pixelIndex = frag._PixelCoords.x + RenderWidth() * frag._PixelCoords.y;
+    _ImageBuffer._ColorBuffer[pixelIndex] = fragColor;
   }
 }
 
@@ -1242,122 +1378,55 @@ void SoftwareRasterizer::BinTrianglesToTiles(unsigned int iBufferIndex)
   }
 }
 
-void SoftwareRasterizer::ProcessFragments(RasterData::Tile& ioTile)
+// ----------------------------------------------------------------------------
+// ProcessFragments
+// ----------------------------------------------------------------------------
+void SoftwareRasterizer::ProcessFragments(RasterData::Tile& ioTile, const RasterData::DefaultUniform& iUniforms)
 {
-  float zNear, zFar;
-  _Scene.GetCamera().GetZNearFar(zNear, zFar);
-
-  rd::DefaultUniform uniforms;
-  uniforms._CameraPos = _Scene.GetCamera().GetPos();
-  uniforms._BilinearSampling = _Settings._BilinearSampling;
-  uniforms._Materials = &_Scene.GetMaterials();
-  uniforms._Textures = &_Scene.GetTextures();
-  for (int i = 0; i < _Scene.GetNbLights(); ++i)
-    uniforms._Lights.push_back(*_Scene.GetLight(i));
-
   std::unique_ptr<SoftwareFragmentShader> fragmentShader = nullptr;
   if (_DebugMode & (int)RasterDebugModes::DepthBuffer)
-    fragmentShader = std::make_unique<DepthFragmentShader>(uniforms);
+    fragmentShader = std::make_unique<DepthFragmentShader>(iUniforms);
   else if (_DebugMode & (int)RasterDebugModes::Normals)
-    fragmentShader = std::make_unique<NormalFragmentShader>(uniforms);
+    fragmentShader = std::make_unique<NormalFragmentShader>(iUniforms);
   else
-    fragmentShader = std::make_unique<BlinnPhongFragmentShader>(uniforms);
-  if ( !fragmentShader )
+    fragmentShader = std::make_unique<BlinnPhongFragmentShader>(iUniforms);
+  if (!fragmentShader)
     return;
 
   std::unique_ptr<SoftwareFragmentShader> wireShader = nullptr;
   if (_DebugMode & (int)RasterDebugModes::Wires)
-    wireShader = std::make_unique<WireFrameFragmentShader>(uniforms);
+    wireShader = std::make_unique<WireFrameFragmentShader>(iUniforms);
 
-  for (auto& bin : ioTile._RasterTrisBins)
+  std::vector<bool> coveredPixels(ioTile._Width * ioTile._Height, false);
+
+  for (auto it = ioTile._Fragments.rbegin(); it != ioTile._Fragments.rend(); ++it) // Front to back
   {
-    for (const rd::RasterTriangle* tri : bin)
+    const rd::Fragment & frag = *it;
+
+    unsigned int pixelIndex = (frag._PixelCoords.x - ioTile._X) + (frag._PixelCoords.y - ioTile._Y) * ioTile._Width;
+    if ( coveredPixels[pixelIndex] )
+      continue;
+
+    // Shade fragment
+    Vec4 fragColor = fragmentShader->Process(frag);
+
+    if (wireShader)
     {
-      if (!tri)
-        continue;
-
-      int startX = std::max(ioTile._X, static_cast<int>(std::floor(tri->_BBox._Low.x)));
-      int endX = std::min(ioTile._X + ioTile._Width - 1, static_cast<int>(std::ceil(tri->_BBox._High.x)));
-      int startY = std::max(ioTile._Y, static_cast<int>(std::floor(tri->_BBox._Low.y)));
-      int endY = std::min(ioTile._Y + ioTile._Height - 1, static_cast<int>(std::ceil(tri->_BBox._High.y)));
-
-      for (int y = startY; y <= endY; ++y)
-      {
-        for (int x = startX; x <= endX; ++x)
-        {
-          // Frag coord
-          Vec3 coord(x + .5f, y + .5f, 0.f);
-
-          // Barycentric coordinates
-          float W[3] = { 0.f };
-          bool isIn = MathUtil::EvalBarycentricCoordinates(coord, tri->_EdgeA, tri->_EdgeB, tri->_EdgeC, W);
-          if (!isIn)
-            continue;
-
-          // Perspective correct Z
-          W[0] *= tri->_InvW[0];
-          W[1] *= tri->_InvW[1];
-          W[2] *= tri->_InvW[2];
-          float Z = 1.f / (W[0] + W[1] + W[2]);
-
-          // Interpolate depth in screen space
-          W[0] *= Z;
-          W[1] *= Z;
-          W[2] *= Z;
-          coord.z = W[0] * tri->_V[0].z + W[1] * tri->_V[1].z + W[2] * tri->_V[2].z;
-
-          // Depth test
-          int localX = x - ioTile._X;
-          int localY = y - ioTile._Y;
-          int localPixelIndex = localY * ioTile._Width + localX;
-          if (_Settings._WBuffer)
-          {
-            if ((Z > ioTile._LocalFB._DepthBuffer[localPixelIndex]) || (Z < zNear))
-              continue;
-          }
-          else
-          {
-            if ((coord.z > ioTile._LocalFB._DepthBuffer[localPixelIndex]) || (coord.z < -1.f))
-              continue;
-          }
-
-          // Setup fragment
-          rd::Fragment frag;
-          frag._FragCoords = coord;
-          frag._PixelCoords = Vec2(x, y);
-          frag._MatID = tri->_MatID;
-          frag._Attrib = _ProjVerticesBuf[tri->_Indices[0]]._Attrib * W[0] +
-            _ProjVerticesBuf[tri->_Indices[1]]._Attrib * W[1] +
-            _ProjVerticesBuf[tri->_Indices[2]]._Attrib * W[2];
-
-          if (ShadingType::Phong == _Settings._ShadingType)
-            frag._Attrib._Normal = glm::normalize(frag._Attrib._Normal);
-          else
-            frag._Attrib._Normal = tri->_Normal;
-
-          // Shade fragment
-          Vec4 fragColor = fragmentShader -> Process(frag, *tri);
-
-          if ( wireShader )
-          {
-            Vec4 wireColor = wireShader->Process(frag, *tri);
-            fragColor.x = glm::mix(fragColor.x, wireColor.x, wireColor.w);
-            fragColor.y = glm::mix(fragColor.y, wireColor.y, wireColor.w);
-            fragColor.z = glm::mix(fragColor.z, wireColor.z, wireColor.w);
-          }
-
-          ioTile._LocalFB._ColorBuffer[localPixelIndex] = fragColor;
-          if (_Settings._WBuffer)
-            ioTile._LocalFB._DepthBuffer[localPixelIndex] = Z;
-          else
-            ioTile._LocalFB._DepthBuffer[localPixelIndex] = coord.z;
-        }
-      }
+      Vec4 wireColor = wireShader->Process(frag);
+      fragColor.x = glm::mix(fragColor.x, wireColor.x, wireColor.w);
+      fragColor.y = glm::mix(fragColor.y, wireColor.y, wireColor.w);
+      fragColor.z = glm::mix(fragColor.z, wireColor.z, wireColor.w);
     }
+
+    unsigned int localX = frag._PixelCoords.x - ioTile._X;
+    unsigned int localY = frag._PixelCoords.y - ioTile._Y;
+    unsigned int localPixelIndex = localY * ioTile._Width + localX;
+    ioTile._LocalFB._ColorBuffer[localPixelIndex] = fragColor;
+
+    coveredPixels[pixelIndex] = true;
   }
 
   this->CopyTileToMainBuffer(ioTile);
 }
-
 
 }
