@@ -712,121 +712,6 @@ Vec4 SoftwareRasterizer::SampleEnvMap(const Vec3& iDir)
 }
 
 // ----------------------------------------------------------------------------
-// VertexShader
-// ----------------------------------------------------------------------------
-void SoftwareRasterizer::VertexShader(const Vec4& iVertexPos, const Vec2& iUV, const Vec3 iNormal, const Mat4x4 iMVP, rd::ProjectedVertex& oProjectedVertex)
-{
-  oProjectedVertex._ProjPos = iMVP * iVertexPos; // in clip space
-  oProjectedVertex._Attrib._WorldPos = iVertexPos;
-  oProjectedVertex._Attrib._UV = iUV;
-  oProjectedVertex._Attrib._Normal = iNormal;
-}
-
-#ifdef SIMD_AVX2
-// ----------------------------------------------------------------------------
-// VertexShaderAVX2
-// ----------------------------------------------------------------------------
-void SoftwareRasterizer::VertexShaderAVX2(const Vec4& iVertexPos, const Vec2& iUV, const Vec3 iNormal, const __m256 iMVP[4], RasterData::ProjectedVertex& oProjectedVertex)
-{
-  oProjectedVertex._ProjPos = SIMDUtils::ApplyTransformAVX2(iMVP, iVertexPos); // in clip space
-  oProjectedVertex._Attrib._WorldPos = iVertexPos;
-  oProjectedVertex._Attrib._UV = iUV;
-  oProjectedVertex._Attrib._Normal = iNormal;
-}
-#endif
-
-#ifdef SIMD_ARM_NEON
-// ----------------------------------------------------------------------------
-// VertexShaderARM
-// ----------------------------------------------------------------------------
-void SoftwareRasterizer::VertexShaderARM(const Vec4& iVertexPos, const Vec2& iUV, const Vec3 iNormal, const float32x4_t iMVP[4], RasterData::ProjectedVertex& oProjectedVertex)
-{
-  oProjectedVertex._ProjPos = SIMDUtils::ApplyTransformARM(iMVP, iVertexPos); // in clip space
-  oProjectedVertex._Attrib._WorldPos = iVertexPos;
-  oProjectedVertex._Attrib._UV = iUV;
-  oProjectedVertex._Attrib._Normal = iNormal;
-}
-#endif
-
-// ----------------------------------------------------------------------------
-// FragmentShader_Color
-// ----------------------------------------------------------------------------
-void SoftwareRasterizer::FragmentShader_Color(const rd::Fragment& iFrag, rd::Uniform& iUniforms, Vec4& oColor)
-{
-  Vec4 albedo;
-  if (iFrag._MatID >= 0)
-  {
-    const Material& mat = (*iUniforms._Materials)[iFrag._MatID];
-    if (mat._BaseColorTexId >= 0)
-    {
-      const Texture* tex = (*iUniforms._Textures)[static_cast<int>(mat._BaseColorTexId)];
-      if (iUniforms._BilinearSampling)
-        albedo = tex->BiLinearSample(iFrag._Attrib._UV);
-      else
-        albedo = tex->Sample(iFrag._Attrib._UV);
-    }
-    else
-      albedo = Vec4(mat._Albedo, 1.f);
-  }
-
-  // Shading
-  Vec4 alpha(0.f, 0.f, 0.f, 0.f);
-  for (const auto& light : iUniforms._Lights)
-  {
-    float ambientStrength = .1f;
-    float diffuse = 0.f;
-    float specular = 0.f;
-
-    Vec3 dirToLight = glm::normalize(light._Pos - iFrag._Attrib._WorldPos);
-    diffuse = std::max(0.f, glm::dot(iFrag._Attrib._Normal, dirToLight));
-
-    Vec3 viewDir = glm::normalize(iUniforms._CameraPos - iFrag._Attrib._WorldPos);
-    Vec3 reflectDir = glm::reflect(-dirToLight, iFrag._Attrib._Normal);
-
-    static float specularStrength = 0.5f;
-    specular = static_cast<float>(pow(std::max(glm::dot(viewDir, reflectDir), 0.f), 32)) * specularStrength;
-
-    alpha += std::min(diffuse + ambientStrength + specular, 1.f) * Vec4(glm::normalize(light._Emission), 1.f);
-  }
-
-  oColor = MathUtil::Min(albedo * alpha, Vec4(1.f));
-}
-
-// ----------------------------------------------------------------------------
-// FragmentShader_Depth
-// ----------------------------------------------------------------------------
-void SoftwareRasterizer::FragmentShader_Depth(const rd::Fragment& iFrag, rd::Uniform& iUniforms, Vec4& oColor)
-{
-  oColor = Vec4(Vec3(iFrag._FragCoords.z + 1.f) * .5f, 1.f);
-  return;
-}
-
-// ----------------------------------------------------------------------------
-// FragmentShader_Normal
-// ----------------------------------------------------------------------------
-void SoftwareRasterizer::FragmentShader_Normal(const rd::Fragment& iFrag, rd::Uniform& iUniforms, Vec4& oColor)
-{
-  oColor = Vec4(glm::abs(iFrag._Attrib._Normal), 1.f);
-  return;
-}
-
-// ----------------------------------------------------------------------------
-// FragmentShader_Wires
-// ----------------------------------------------------------------------------
-void SoftwareRasterizer::FragmentShader_Wires(const rd::Fragment& iFrag, const Vec3 iVertCoord[3], rd::Uniform& iUniforms, Vec4& oColor)
-{
-  Vec2 P(iFrag._FragCoords);
-  if ((MathUtil::DistanceToSegment(iVertCoord[0], iVertCoord[1], P) <= 1.f)
-    || (MathUtil::DistanceToSegment(iVertCoord[1], iVertCoord[2], P) <= 1.f)
-    || (MathUtil::DistanceToSegment(iVertCoord[2], iVertCoord[0], P) <= 1.f))
-  {
-    oColor = Vec4(1.f, 0.f, 0.f, 1.f);
-  }
-  else
-    oColor = Vec4(0.f, 0.f, 0.f, 0.f);
-}
-
-// ----------------------------------------------------------------------------
 // RenderBackground
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::RenderBackground(float iTop, float iRight)
@@ -1202,13 +1087,27 @@ void SoftwareRasterizer::ProcessFragments(int iStartY, int iEndY)
   float zNear, zFar;
   _Scene.GetCamera().GetZNearFar(zNear, zFar);
 
-  rd::Uniform uniforms;
+  rd::DefaultUniform uniforms;
   uniforms._CameraPos = _Scene.GetCamera().GetPos();
   uniforms._BilinearSampling = _Settings._BilinearSampling;
   uniforms._Materials = &_Scene.GetMaterials();
   uniforms._Textures = &_Scene.GetTextures();
   for (int i = 0; i < _Scene.GetNbLights(); ++i)
     uniforms._Lights.push_back(*_Scene.GetLight(i));
+
+  std::unique_ptr<SoftwareFragmentShader> fragmentShader = nullptr;
+  if (_DebugMode & (int)RasterDebugModes::DepthBuffer)
+    fragmentShader = std::make_unique<DepthFragmentShader>(uniforms);
+  else if (_DebugMode & (int)RasterDebugModes::Normals)
+    fragmentShader = std::make_unique<NormalFragmentShader>(uniforms);
+  else
+    fragmentShader = std::make_unique<BlinnPhongFragmentShader>(uniforms);
+  if (!fragmentShader)
+    return;
+
+  std::unique_ptr<SoftwareFragmentShader> wireShader = nullptr;
+  if (_DebugMode & (int)RasterDebugModes::Wires)
+    wireShader = std::make_unique<WireFrameFragmentShader>(uniforms);
 
   for (unsigned int i = 0; i < _NbJobs; ++i)
   {
@@ -1283,19 +1182,11 @@ void SoftwareRasterizer::ProcessFragments(int iStartY, int iEndY)
             frag._Attrib._Normal = tri._Normal;
 
           // Shade fragment
-          Vec4 fragColor(1.f);
+          Vec4 fragColor = fragmentShader->Process(frag, tri);
 
-          if (_DebugMode & (int)RasterDebugModes::DepthBuffer)
-            FragmentShader_Depth(frag, uniforms, fragColor);
-          else if (_DebugMode & (int)RasterDebugModes::Normals)
-            FragmentShader_Normal(frag, uniforms, fragColor);
-          else
-            FragmentShader_Color(frag, uniforms, fragColor);
-
-          if (_DebugMode & (int)RasterDebugModes::Wires)
+          if (wireShader)
           {
-            Vec4 wireColor(1.f);
-            FragmentShader_Wires(frag, tri._V, uniforms, wireColor);
+            Vec4 wireColor = wireShader->Process(frag, tri);
             fragColor.x = glm::mix(fragColor.x, wireColor.x, wireColor.w);
             fragColor.y = glm::mix(fragColor.y, wireColor.y, wireColor.w);
             fragColor.z = glm::mix(fragColor.z, wireColor.z, wireColor.w);
@@ -1356,13 +1247,27 @@ void SoftwareRasterizer::ProcessFragments(RasterData::Tile& ioTile)
   float zNear, zFar;
   _Scene.GetCamera().GetZNearFar(zNear, zFar);
 
-  rd::Uniform uniforms;
+  rd::DefaultUniform uniforms;
   uniforms._CameraPos = _Scene.GetCamera().GetPos();
   uniforms._BilinearSampling = _Settings._BilinearSampling;
   uniforms._Materials = &_Scene.GetMaterials();
   uniforms._Textures = &_Scene.GetTextures();
   for (int i = 0; i < _Scene.GetNbLights(); ++i)
     uniforms._Lights.push_back(*_Scene.GetLight(i));
+
+  std::unique_ptr<SoftwareFragmentShader> fragmentShader = nullptr;
+  if (_DebugMode & (int)RasterDebugModes::DepthBuffer)
+    fragmentShader = std::make_unique<DepthFragmentShader>(uniforms);
+  else if (_DebugMode & (int)RasterDebugModes::Normals)
+    fragmentShader = std::make_unique<NormalFragmentShader>(uniforms);
+  else
+    fragmentShader = std::make_unique<BlinnPhongFragmentShader>(uniforms);
+  if ( !fragmentShader )
+    return;
+
+  std::unique_ptr<SoftwareFragmentShader> wireShader = nullptr;
+  if (_DebugMode & (int)RasterDebugModes::Wires)
+    wireShader = std::make_unique<WireFrameFragmentShader>(uniforms);
 
   for (auto& bin : ioTile._RasterTrisBins)
   {
@@ -1431,19 +1336,11 @@ void SoftwareRasterizer::ProcessFragments(RasterData::Tile& ioTile)
             frag._Attrib._Normal = tri->_Normal;
 
           // Shade fragment
-          Vec4 fragColor(1.f);
+          Vec4 fragColor = fragmentShader -> Process(frag, *tri);
 
-          if (_DebugMode & (int)RasterDebugModes::DepthBuffer)
-            FragmentShader_Depth(frag, uniforms, fragColor);
-          else if (_DebugMode & (int)RasterDebugModes::Normals)
-            FragmentShader_Normal(frag, uniforms, fragColor);
-          else
-            FragmentShader_Color(frag, uniforms, fragColor);
-
-          if (_DebugMode & (int)RasterDebugModes::Wires)
+          if ( wireShader )
           {
-            Vec4 wireColor(1.f);
-            FragmentShader_Wires(frag, tri->_V, uniforms, wireColor);
+            Vec4 wireColor = wireShader->Process(frag, *tri);
             fragColor.x = glm::mix(fragColor.x, wireColor.x, wireColor.w);
             fragColor.y = glm::mix(fragColor.y, wireColor.y, wireColor.w);
             fragColor.z = glm::mix(fragColor.z, wireColor.z, wireColor.w);

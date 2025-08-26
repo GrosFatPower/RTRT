@@ -95,12 +95,6 @@ protected:
 
   Vec4 SampleEnvMap(const Vec3& iDir);
 
-  static void VertexShader(const Vec4& iVertexPos, const Vec2& iUV, const Vec3 iNormal, const Mat4x4 iMVP, RasterData::ProjectedVertex& oProjectedVertex);
-  static void FragmentShader_Color(const RasterData::Fragment& iFrag, RasterData::Uniform& iUniforms, Vec4& oColor);
-  static void FragmentShader_Depth(const RasterData::Fragment& iFrag, RasterData::Uniform& iUniforms, Vec4& oColor);
-  static void FragmentShader_Normal(const RasterData::Fragment& iFrag, RasterData::Uniform& iUniforms, Vec4& oColor);
-  static void FragmentShader_Wires(const RasterData::Fragment& iFrag, const Vec3 iVertCoord[3], RasterData::Uniform& iUniforms, Vec4& oColor);
-
   int RenderBackground(float iTop, float iRight);
   void RenderBackgroundRows(int iStartY, int iEndY, Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY);
   void RenderBackground(Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY, RasterData::Tile& ioTile);
