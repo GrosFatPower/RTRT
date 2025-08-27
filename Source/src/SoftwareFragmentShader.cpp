@@ -25,6 +25,8 @@ Vec4 BlinnPhongFragmentShader::Process(const RasterData::Fragment& iFrag)
   }
 
   // Shading
+  Vec3 normal = glm::normalize(iFrag._Attrib._Normal);
+
   Vec4 alpha(0.f, 0.f, 0.f, 0.f);
   for (const auto& light : _Uniforms._Lights)
   {
@@ -33,10 +35,10 @@ Vec4 BlinnPhongFragmentShader::Process(const RasterData::Fragment& iFrag)
     float specular = 0.f;
 
     Vec3 dirToLight = glm::normalize(light._Pos - iFrag._Attrib._WorldPos);
-    diffuse = std::max(0.f, glm::dot(iFrag._Attrib._Normal, dirToLight));
+    diffuse = std::max(0.f, glm::dot(normal, dirToLight));
 
     Vec3 viewDir = glm::normalize(_Uniforms._CameraPos - iFrag._Attrib._WorldPos);
-    Vec3 reflectDir = glm::reflect(-dirToLight, iFrag._Attrib._Normal);
+    Vec3 reflectDir = glm::reflect(-dirToLight, normal);
 
     static float specularStrength = 0.5f;
     specular = static_cast<float>(pow(std::max(glm::dot(viewDir, reflectDir), 0.f), 32)) * specularStrength;
@@ -60,7 +62,8 @@ Vec4 DepthFragmentShader::Process(const RasterData::Fragment& iFrag)
 // ----------------------------------------------------------------------------
 Vec4 NormalFragmentShader::Process(const RasterData::Fragment& iFrag)
 {
-  return Vec4(glm::abs(iFrag._Attrib._Normal), 1.f);
+  Vec3 normal = glm::abs(iFrag._Attrib._Normal);
+  return Vec4(normal, 1.f);
 }
 
 // ----------------------------------------------------------------------------

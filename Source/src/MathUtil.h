@@ -84,6 +84,66 @@ public:
                 std::max(a.w, b.w));
   };
 
+  static void Minimize(Vec2 & a, const Vec2 & b)
+  {
+    if ( b.x < a.x )
+      a.x = b.x;
+    if (b.y < a.y)
+      a.y = b.y;
+  };
+
+  static void Minimize(Vec3 & a, const Vec3 & b)
+  {
+    if (b.x < a.x)
+      a.x = b.x;
+    if (b.y < a.y)
+      a.y = b.y;
+    if (b.z < a.z)
+      a.z = b.z;
+  };
+
+  static void Minimize(Vec4 & a, const Vec4 & b)
+  {
+    if (b.x < a.x)
+      a.x = b.x;
+    if (b.y < a.y)
+      a.y = b.y;
+    if (b.z < a.z)
+      a.z = b.z;
+    if (b.w < a.w)
+      a.w = b.w;
+  };
+
+  static void Maximize(Vec2 & a, const Vec2 & b)
+  {
+    if (b.x > a.x)
+      a.x = b.x;
+    if (b.y > a.y)
+      a.y = b.y;
+  };
+
+  static void Maximize(Vec3 & a, const Vec3 & b)
+  {
+    if (b.x > a.x)
+      a.x = b.x;
+    if (b.y > a.y)
+      a.y = b.y;
+    if (b.z > a.z)
+      a.z = b.z;
+  };
+
+  static void Maximize(Vec4 & a, const Vec4 & b)
+  {
+    if (b.x > a.x)
+      a.x = b.x;
+    if (b.y > a.y)
+      a.y = b.y;
+    if (b.z > a.z)
+      a.z = b.z;
+    if (b.w > a.w)
+      a.w = b.w;
+  };
+
   static float Dot(const Vec3 & a, const Vec3 & b)
   {
     return (a.x * b.x + a.y * b.y + a.z * b.z);
@@ -369,8 +429,8 @@ struct AABB
 
   void Insert(T iP)
   {
-    _Low  = MathUtil::Min(_Low, iP);
-    _High = MathUtil::Max(_High, iP);
+    MathUtil::Minimize(_Low, iP);
+    MathUtil::Maximize(_High, iP);
   }
 };
 
