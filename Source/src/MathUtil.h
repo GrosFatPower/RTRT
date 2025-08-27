@@ -383,11 +383,23 @@ public:
   }
 
 #ifdef SIMD_AVX2
-  static __m256i EvalBarycentricCoordinatesAVX2(const __m256 & iFragCoordX, const __m256 & iFragCoordY, const float iEdgeA[3], const float iEdgeB[3], const float iEdgeC[3], __m256 oBaryCoord[3])
+  static void Interpolate( const __m256 & iVal1, const __m256 & iVal2, const __m256 & iVal3, const __m256 iWeights[3], __m256 & oResult )
   {
-    __m256i mask = _mm256_setzero_si256();
+    oResult = _mm256_add_ps(_mm256_add_ps(_mm256_mul_ps(iWeights[0], iVal1), _mm256_mul_ps(iWeights[1], iVal2)), _mm256_mul_ps(iWeights[2], iVal3));
+  }
 
-    //oBaryCoord[0] = _mm256_setzero_ps(), oBaryCoord[1] = _mm256_setzero_ps(), oBaryCoord[2] = _mm256_setzero_ps();
+  static __m256 Interpolate( const __m256 & iVal1, const __m256 & iVal2, const __m256 & iVal3, const __m256 iWeights[3] )
+  {
+    __m256 result;
+    Interpolate(iVal1, iVal2, iVal3, iWeights, result);
+    return result;
+  }
+#endif
+
+#ifdef SIMD_AVX2
+  static __m256 EvalBarycentricCoordinatesAVX2(const __m256 & iFragCoordX, const __m256 & iFragCoordY, const float iEdgeA[3], const float iEdgeB[3], const float iEdgeC[3], __m256 oBaryCoord[3])
+  {
+    __m256 mask = _mm256_setzero_ps();
 
     for (int i = 0; i < 3; ++i)
     {
@@ -401,12 +413,11 @@ public:
 
       // Test >= 0
       __m256 ge_zero = _mm256_cmp_ps(oBaryCoord[i], _mm256_setzero_ps(), _CMP_GE_OQ);
-      __m256i ge_zero_int = _mm256_castps_si256(ge_zero);
 
       if (i == 0)
-        mask = ge_zero_int;
+        mask = ge_zero;
       else
-        mask = _mm256_and_si256(mask, ge_zero_int);
+        mask = _mm256_and_ps(mask, ge_zero);
     }
 
     return mask;

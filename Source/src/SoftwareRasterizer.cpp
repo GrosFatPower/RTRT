@@ -1339,13 +1339,19 @@ int SoftwareRasterizer::RasterizeAVX2(rd::Tile& ioTile)
       {
         __m256 y_coord = _mm256_set1_ps(y + 0.5f);
 
+        unsigned int localY = y - ioTile._Y;
+
         for (int x = startX; x <= endX; x += 8)
         {
+          unsigned int localX = x - ioTile._X;
+          unsigned int localPixelIndex = localY * ioTile._Width + localX;
+
           // Use aligned load for x_coords
           __m256 x_coords = _mm256_add_ps(_mm256_set1_ps((float)x), _mm256_load_ps(x_offsets));
 
+          // Compute barycentric coordinates
           __m256 Weights[3];
-          __m256i mask = MathUtil::EvalBarycentricCoordinatesAVX2(x_coords, y_coord, tri->_EdgeA, tri->_EdgeB, tri->_EdgeC, Weights);
+          __m256 mask = MathUtil::EvalBarycentricCoordinatesAVX2(x_coords, y_coord, tri->_EdgeA, tri->_EdgeB, tri->_EdgeC, Weights);
 
           // Perspective correct Z
           Weights[0] = _mm256_mul_ps(Weights[0], invZ0);
@@ -1356,44 +1362,41 @@ int SoftwareRasterizer::RasterizeAVX2(rd::Tile& ioTile)
           __m256 depths = _mm256_div_ps(_mm256_set1_ps(1.0f), invDepths);
 
           // Interpolate depth in screen space
-          __m256 depths_masked = depths; // For possible masking optimization
-          Weights[0] = _mm256_mul_ps(Weights[0], depths_masked);
-          Weights[1] = _mm256_mul_ps(Weights[1], depths_masked);
-          Weights[2] = _mm256_mul_ps(Weights[2], depths_masked);
+          Weights[0] = _mm256_mul_ps(Weights[0], depths);
+          Weights[1] = _mm256_mul_ps(Weights[1], depths);
+          Weights[2] = _mm256_mul_ps(Weights[2], depths);
 
-          __m256 z_coord = _mm256_add_ps(_mm256_add_ps(_mm256_mul_ps(Weights[0], v0z), _mm256_mul_ps(Weights[1], v1z)), _mm256_mul_ps(Weights[2], v2z));
+          __m256 z_coord;
+          MathUtil::Interpolate(v0z, v1z, v2z, Weights, z_coord);
+
+          // Depth test
+          SIMD_ALIGN64 float DepthBuffer[8] = { 0. };
+          memcpy(DepthBuffer, &ioTile._LocalFB._DepthBuffer[localPixelIndex], std::min(8, endX - x + 1) * sizeof(float));
+
+          __m256 depthBuf = _mm256_load_ps(DepthBuffer);
+          __m256 depthmask1 = ( _Settings._WBuffer ) ? ( _mm256_cmp_ps(depths, depthBuf, _CMP_LE_OQ) ) : ( _mm256_cmp_ps(z_coord, depthBuf, _CMP_LE_OQ) );
+          __m256 depthmask2 = ( _Settings._WBuffer ) ? ( _mm256_cmp_ps(depths, _mm256_set1_ps(zNear), _CMP_GE_OQ) ) : ( _mm256_cmp_ps(z_coord, _mm256_set1_ps(-1.f), _CMP_GE_OQ) );
+          mask = _mm256_and_ps(_mm256_and_ps(mask, depthmask1), depthmask2);
 
           for (int i = 0; (i < 8) && ((x + i) <= endX); ++i)
           {
-            if (mask.m256i_u32[i] == 0)
+            if ( !mask.m256_f32[i] )
               continue;
 
             float depth = depths.m256_f32[i];
             float z = z_coord.m256_f32[i];
 
-            unsigned int localX = (x + i) - ioTile._X;
-            unsigned int localY = y - ioTile._Y;
-            unsigned int localPixelIndex = localY * ioTile._Width + localX;
+            ioTile._LocalFB._DepthBuffer[localPixelIndex + i] = ( _Settings._WBuffer ) ? ( depth ) : ( z );
+            ioTile._CoveredPixels[localPixelIndex + i] = true;
 
-            // Branchless depth test (optional, may help with SIMD)
-            bool pass = ( _Settings._WBuffer )
-              ? ( (depth <= ioTile._LocalFB._DepthBuffer[localPixelIndex]) && (depth >= zNear) )
-              : ( (z <= ioTile._LocalFB._DepthBuffer[localPixelIndex]) && (z >= -1.f) );
-            if (!pass)
-              continue;
-
-            ioTile._LocalFB._DepthBuffer[localPixelIndex] = _Settings._WBuffer ? depth : z;
-            ioTile._CoveredPixels[localPixelIndex] = true;
-
-            float W[3] = { Weights[0].m256_f32[i], Weights[1].m256_f32[i], Weights[2].m256_f32[i] };
-
-            rd::Fragment & frag = ioTile._Fragments[localPixelIndex];
+            rd::Fragment & frag = ioTile._Fragments[localPixelIndex + i];
             frag._FragCoords = Vec3(x + i + .5f, y + .5f, z);
             frag._V[0] = tri->_V[0];
             frag._V[1] = tri->_V[1];
             frag._V[2] = tri->_V[2];
             frag._MatID = tri->_MatID;
 
+            float W[3] = { Weights[0].m256_f32[i], Weights[1].m256_f32[i], Weights[2].m256_f32[i] };
             rd::Varying::InterpolateAVX2(v0_Attribs, v1_Attribs, v2_Attribs, W, frag._Attrib);
 
             if (ShadingType::Flat == _Settings._ShadingType)
