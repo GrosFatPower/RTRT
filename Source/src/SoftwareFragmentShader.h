@@ -15,7 +15,7 @@ public:
   SoftwareFragmentShader() {}
   virtual ~SoftwareFragmentShader() {}
 
-  virtual Vec4 Process(const RasterData::Fragment& iFrag) = 0;
+  virtual Vec4 Process(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri) = 0;
 
 protected:
 
@@ -29,7 +29,7 @@ public:
 
   virtual ~BlinnPhongFragmentShader(){}
 
-  virtual Vec4 Process(const RasterData::Fragment& iFrag);
+  virtual Vec4 Process(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri);
 
 protected:
 
@@ -44,7 +44,7 @@ public:
 
   virtual ~DepthFragmentShader() {}
 
-  virtual Vec4 Process(const RasterData::Fragment& iFrag);
+  virtual Vec4 Process(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri);
 
 protected:
 
@@ -59,7 +59,7 @@ public:
 
   virtual ~NormalFragmentShader() {}
 
-  virtual Vec4 Process(const RasterData::Fragment& iFrag);
+  virtual Vec4 Process(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri);
 
 protected:
 
@@ -74,7 +74,7 @@ public:
 
   virtual ~WireFrameFragmentShader() {}
 
-  virtual Vec4 Process(const RasterData::Fragment& iFrag);
+  virtual Vec4 Process(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri);
 
 protected:
 

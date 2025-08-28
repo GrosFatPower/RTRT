@@ -403,13 +403,18 @@ public:
 
     for (int i = 0; i < 3; ++i)
     {
-      __m256 edgeA = _mm256_set1_ps(iEdgeA[i]);
-      __m256 edgeB = _mm256_set1_ps(iEdgeB[i]);
-      __m256 edgeC = _mm256_set1_ps(iEdgeC[i]);
+      //if ( i < 2 )
+      //{
+        __m256 edgeA = _mm256_set1_ps(iEdgeA[i]);
+        __m256 edgeB = _mm256_set1_ps(iEdgeB[i]);
+        __m256 edgeC = _mm256_set1_ps(iEdgeC[i]);
 
-      __m256 ax = _mm256_mul_ps(edgeA, iFragCoordX);
-      __m256 by = _mm256_mul_ps(edgeB, iFragCoordY);
-      oBaryCoord[i] = _mm256_add_ps(_mm256_add_ps(ax, by), edgeC);
+        __m256 ax = _mm256_mul_ps(edgeA, iFragCoordX);
+        __m256 by = _mm256_mul_ps(edgeB, iFragCoordY);
+        oBaryCoord[i] = _mm256_add_ps(_mm256_add_ps(ax, by), edgeC);
+      //}
+      //else
+      //  oBaryCoord[2] = _mm256_sub_ps(_mm256_sub_ps(_mm256_set1_ps(1.0f), oBaryCoord[0]), oBaryCoord[1]);
 
       // Test >= 0
       __m256 ge_zero = _mm256_cmp_ps(oBaryCoord[i], _mm256_setzero_ps(), _CMP_GE_OQ);

@@ -1,3 +1,5 @@
+#pragma warning(disable : 4100) // unreferenced formal parameter
+
 #include "SoftwareFragmentShader.h"
 
 namespace RTRT
@@ -6,12 +8,12 @@ namespace RTRT
 // ----------------------------------------------------------------------------
 // Process
 // ----------------------------------------------------------------------------
-Vec4 BlinnPhongFragmentShader::Process(const RasterData::Fragment& iFrag)
+Vec4 BlinnPhongFragmentShader::Process(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri)
 {
   Vec4 albedo;
-  if (iFrag._MatID >= 0)
+  if (iTri._MatID >= 0)
   {
-    const Material& mat = (*_Uniforms._Materials)[iFrag._MatID];
+    const Material& mat = (*_Uniforms._Materials)[iTri._MatID];
     if (mat._BaseColorTexId >= 0)
     {
       const Texture* tex = (*_Uniforms._Textures)[static_cast<int>(mat._BaseColorTexId)];
@@ -52,7 +54,7 @@ Vec4 BlinnPhongFragmentShader::Process(const RasterData::Fragment& iFrag)
 // ----------------------------------------------------------------------------
 // Process
 // ----------------------------------------------------------------------------
-Vec4 DepthFragmentShader::Process(const RasterData::Fragment& iFrag)
+Vec4 DepthFragmentShader::Process(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri)
 {
   return Vec4(Vec3(iFrag._FragCoords.z + 1.f) * .5f, 1.f);
 }
@@ -60,7 +62,7 @@ Vec4 DepthFragmentShader::Process(const RasterData::Fragment& iFrag)
 // ----------------------------------------------------------------------------
 // Process
 // ----------------------------------------------------------------------------
-Vec4 NormalFragmentShader::Process(const RasterData::Fragment& iFrag)
+Vec4 NormalFragmentShader::Process(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri)
 {
   Vec3 normal = glm::abs(iFrag._Attrib._Normal);
   return Vec4(normal, 1.f);
@@ -69,12 +71,12 @@ Vec4 NormalFragmentShader::Process(const RasterData::Fragment& iFrag)
 // ----------------------------------------------------------------------------
 // Process
 // ----------------------------------------------------------------------------
-Vec4 WireFrameFragmentShader::Process(const RasterData::Fragment& iFrag)
+Vec4 WireFrameFragmentShader::Process(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri)
 {
   Vec2 P(iFrag._FragCoords);
-  if ( (MathUtil::DistanceToSegment(iFrag._V[0], iFrag._V[1], P) <= 1.f)
-    || (MathUtil::DistanceToSegment(iFrag._V[1], iFrag._V[2], P) <= 1.f)
-    || (MathUtil::DistanceToSegment(iFrag._V[2], iFrag._V[0], P) <= 1.f))
+  if ( (MathUtil::DistanceToSegment(iTri._V[0], iTri._V[1], P) <= 1.f)
+    || (MathUtil::DistanceToSegment(iTri._V[1], iTri._V[2], P) <= 1.f)
+    || (MathUtil::DistanceToSegment(iTri._V[2], iTri._V[0], P) <= 1.f))
   {
     return Vec4(1.f, 0.f, 0.f, 1.f);
   }

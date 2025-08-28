@@ -1191,16 +1191,13 @@ int SoftwareRasterizer::Rasterize(int iThreadBin, int iStartY, int iEndY)
           // Setup fragment
           rd::Fragment frag;
           frag._FragCoords = coord;
-          frag._PixelCoords = Vec2i(x, y);
-          frag._V[0] = tri._V[0];
-          frag._V[1] = tri._V[1];
-          frag._V[2] = tri._V[2];
-          frag._MatID = tri._MatID;
-
-          rd::Varying::Interpolate(_ProjVerticesBuf[tri._Indices[0]]._Attrib, _ProjVerticesBuf[tri._Indices[1]]._Attrib, _ProjVerticesBuf[tri._Indices[2]]._Attrib, W, frag._Attrib);
-          
-          if (ShadingType::Flat == _Settings._ShadingType)
-            frag._Attrib._Normal = tri._Normal;
+          frag._PixelCoords.x = x;
+          frag._PixelCoords.y = y;
+          frag._RasterTriIdx.x = i;
+          frag._RasterTriIdx.y = j,
+          frag._Weights[0] = W[0];
+          frag._Weights[1] = W[1];
+          frag._Weights[2] = W[2];
 
           _Fragments[iThreadBin].push_back(frag);
         }
@@ -1219,10 +1216,11 @@ int SoftwareRasterizer::Rasterize(rd::Tile& ioTile)
   float zNear, zFar;
   _Scene.GetCamera().GetZNearFar(zNear, zFar);
 
-  for (auto& bin : ioTile._RasterTrisBins)
+  for (unsigned int i = 0; i < _NbJobs; ++i)
   {
-    for (const rd::RasterTriangle* tri : bin)
+    for (int j = 0; j < ioTile._RasterTrisBins[i].size(); ++j)
     {
+      const rd::RasterTriangle * tri = ioTile._RasterTrisBins[i][j];
       if (!tri)
         continue;
 
@@ -1278,15 +1276,11 @@ int SoftwareRasterizer::Rasterize(rd::Tile& ioTile)
           // Setup fragment
           rd::Fragment & frag = ioTile._Fragments[localPixelIndex];
           frag._FragCoords = coord;
-          frag._V[0] = tri->_V[0];
-          frag._V[1] = tri->_V[1];
-          frag._V[2] = tri->_V[2];
-          frag._MatID = tri->_MatID;
-
-          rd::Varying::Interpolate(_ProjVerticesBuf[tri -> _Indices[0]]._Attrib, _ProjVerticesBuf[tri -> _Indices[1]]._Attrib, _ProjVerticesBuf[tri -> _Indices[2]]._Attrib, W, frag._Attrib);
-          
-          if (ShadingType::Flat == _Settings._ShadingType)
-            frag._Attrib._Normal = tri->_Normal;
+          frag._RasterTriIdx.x = i;
+          frag._RasterTriIdx.y = j,
+          frag._Weights[0] = W[0];
+          frag._Weights[1] = W[1];
+          frag._Weights[2] = W[2];
         }
       }
     }
@@ -1304,10 +1298,11 @@ int SoftwareRasterizer::RasterizeAVX2(rd::Tile& ioTile)
   float zNear, zFar;
   _Scene.GetCamera().GetZNearFar(zNear, zFar);
 
-  for (auto& bin : ioTile._RasterTrisBins)
+  for (unsigned int i = 0; i < _NbJobs; ++i)
   {
-    for (const rd::RasterTriangle* tri : bin)
+    for (int j = 0; j < ioTile._RasterTrisBins[i].size(); ++j)
     {
+      const rd::RasterTriangle * tri = ioTile._RasterTrisBins[i][j];
       if (!tri)
         continue;
 
@@ -1371,36 +1366,40 @@ int SoftwareRasterizer::RasterizeAVX2(rd::Tile& ioTile)
 
           // Depth test
           SIMD_ALIGN64 float DepthBuffer[8] = { 0. };
-          memcpy(DepthBuffer, &ioTile._LocalFB._DepthBuffer[localPixelIndex], std::min(8, endX - x + 1) * sizeof(float));
+          if ( (endX - x + 1) >= 8 )
+            _mm256_store_ps(DepthBuffer, _mm256_loadu_ps(&ioTile._LocalFB._DepthBuffer[localPixelIndex])); // Use aligned AVX load directly
+          else
+            memcpy(DepthBuffer, &ioTile._LocalFB._DepthBuffer[localPixelIndex], (endX - x + 1) * sizeof(float)); // Fallback for partial tiles
 
           __m256 depthBuf = _mm256_load_ps(DepthBuffer);
-          __m256 depthmask1 = ( _Settings._WBuffer ) ? ( _mm256_cmp_ps(depths, depthBuf, _CMP_LE_OQ) ) : ( _mm256_cmp_ps(z_coord, depthBuf, _CMP_LE_OQ) );
-          __m256 depthmask2 = ( _Settings._WBuffer ) ? ( _mm256_cmp_ps(depths, _mm256_set1_ps(zNear), _CMP_GE_OQ) ) : ( _mm256_cmp_ps(z_coord, _mm256_set1_ps(-1.f), _CMP_GE_OQ) );
-          mask = _mm256_and_ps(_mm256_and_ps(mask, depthmask1), depthmask2);
+          __m256 depthmask;
+          if ( _Settings._WBuffer )
+            depthmask = _mm256_cmp_ps(depths, depthBuf, _CMP_LE_OQ);
+          else
+            depthmask = _mm256_cmp_ps(z_coord, depthBuf, _CMP_LE_OQ);
+          mask = _mm256_and_ps(mask, depthmask);
 
-          for (int i = 0; (i < 8) && ((x + i) <= endX); ++i)
+          int activeMask = _mm256_movemask_ps(mask);
+          for (int k = 0; (k < 8) && ((x + k) <= endX); ++k)
           {
-            if ( !mask.m256_f32[i] )
+            if ( !(activeMask & (1 << k)) )
               continue;
 
-            float depth = depths.m256_f32[i];
-            float z = z_coord.m256_f32[i];
+            float depth = depths.m256_f32[k];
+            float z = z_coord.m256_f32[k];
 
-            ioTile._LocalFB._DepthBuffer[localPixelIndex + i] = ( _Settings._WBuffer ) ? ( depth ) : ( z );
-            ioTile._CoveredPixels[localPixelIndex + i] = true;
+            ioTile._LocalFB._DepthBuffer[localPixelIndex + k] = ( _Settings._WBuffer ) ? ( depth ) : ( z );
+            ioTile._CoveredPixels[localPixelIndex + k] = true;
 
-            rd::Fragment & frag = ioTile._Fragments[localPixelIndex + i];
-            frag._FragCoords = Vec3(x + i + .5f, y + .5f, z);
-            frag._V[0] = tri->_V[0];
-            frag._V[1] = tri->_V[1];
-            frag._V[2] = tri->_V[2];
-            frag._MatID = tri->_MatID;
-
-            float W[3] = { Weights[0].m256_f32[i], Weights[1].m256_f32[i], Weights[2].m256_f32[i] };
-            rd::Varying::InterpolateAVX2(v0_Attribs, v1_Attribs, v2_Attribs, W, frag._Attrib);
-
-            if (ShadingType::Flat == _Settings._ShadingType)
-              frag._Attrib._Normal = tri->_Normal;
+            rd::Fragment & frag = ioTile._Fragments[localPixelIndex + k];
+            frag._FragCoords.x = x + k + .5f;
+            frag._FragCoords.y = y + .5f;
+            frag._FragCoords.z = z;
+            frag._RasterTriIdx.x = i;
+            frag._RasterTriIdx.y = j,
+            frag._Weights[0] = Weights[0].m256_f32[k];
+            frag._Weights[1] = Weights[1].m256_f32[k];
+            frag._Weights[2] = Weights[2].m256_f32[k];
           }
         }
       }
@@ -1469,12 +1468,19 @@ void SoftwareRasterizer::ProcessFragments(int iThreadBin, const RasterData::Defa
 
   for ( auto & frag : _Fragments[iThreadBin] ) // From back to front
   {
+    // Finalize fragment
+    const rd::RasterTriangle & tri = _RasterTrianglesBuf[frag._RasterTriIdx.x][frag._RasterTriIdx.y];
+
+    rd::Varying::Interpolate(_ProjVerticesBuf[tri._Indices[0]]._Attrib, _ProjVerticesBuf[tri._Indices[1]]._Attrib, _ProjVerticesBuf[tri._Indices[2]]._Attrib, frag._Weights, frag._Attrib);
+    if (ShadingType::Flat == _Settings._ShadingType)
+      frag._Attrib._Normal = tri._Normal;
+
     // Shade fragment
-    Vec4 fragColor = fragmentShader->Process(frag);
+    Vec4 fragColor = fragmentShader->Process(frag, tri);
 
     if (wireShader)
     {
-      Vec4 wireColor = wireShader->Process(frag);
+      Vec4 wireColor = wireShader->Process(frag, tri);
       fragColor.x = glm::mix(fragColor.x, wireColor.x, wireColor.w);
       fragColor.y = glm::mix(fragColor.y, wireColor.y, wireColor.w);
       fragColor.z = glm::mix(fragColor.z, wireColor.z, wireColor.w);
@@ -1544,18 +1550,37 @@ void SoftwareRasterizer::ProcessFragments(RasterData::Tile& ioTile, const Raster
 
   for (auto it = ioTile._Fragments.rbegin(); it != ioTile._Fragments.rend(); ++it)
   {
-    const rd::Fragment & frag = *it;
+    rd::Fragment & frag = *it;
 
     unsigned int pixelIndex = (frag._PixelCoords.x - ioTile._X) + (frag._PixelCoords.y - ioTile._Y) * ioTile._Width;
     if ( !ioTile._CoveredPixels[pixelIndex] )
       continue;
 
+    // Finalize fragment
+    const rd::RasterTriangle * tri = ioTile._RasterTrisBins[frag._RasterTriIdx.x][frag._RasterTriIdx.y];
+    if ( !tri )
+      continue;
+
+    if ( _EnableSIMD )
+    {
+#ifdef SIMD_AVX2
+      rd::Varying::InterpolateAVX2(_ProjVerticesBuf[tri -> _Indices[0]]._Attrib, _ProjVerticesBuf[tri -> _Indices[1]]._Attrib, _ProjVerticesBuf[tri -> _Indices[2]]._Attrib, frag._Weights, frag._Attrib);
+#else
+      rd::Varying::Interpolate(_ProjVerticesBuf[tri -> _Indices[0]]._Attrib, _ProjVerticesBuf[tri -> _Indices[1]]._Attrib, _ProjVerticesBuf[tri -> _Indices[2]]._Attrib, frag._Weights, frag._Attrib);
+#endif
+    }
+    else
+      rd::Varying::Interpolate(_ProjVerticesBuf[tri -> _Indices[0]]._Attrib, _ProjVerticesBuf[tri -> _Indices[1]]._Attrib, _ProjVerticesBuf[tri -> _Indices[2]]._Attrib, frag._Weights, frag._Attrib);
+
+    if (ShadingType::Flat == _Settings._ShadingType)
+      frag._Attrib._Normal = tri -> _Normal;
+
     // Shade fragment
-    Vec4 fragColor = fragmentShader->Process(frag);
+    Vec4 fragColor = fragmentShader->Process(frag, *tri);
 
     if (wireShader)
     {
-      Vec4 wireColor = wireShader->Process(frag);
+      Vec4 wireColor = wireShader->Process(frag, *tri);
       fragColor.x = glm::mix(fragColor.x, wireColor.x, wireColor.w);
       fragColor.y = glm::mix(fragColor.y, wireColor.y, wireColor.w);
       fragColor.z = glm::mix(fragColor.z, wireColor.z, wireColor.w);
