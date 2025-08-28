@@ -198,7 +198,7 @@ inline void InterpolateARM( const float32x4_t & iVal1, const float32x4_t & iVal2
   oResult = vmlaq_f32(vmlaq_f32(vmulq_f32(iWeights[0], iVal1), iWeights[1], iVal2) ,iWeights[2], iVal3);
 }
 
-float32x4_t InterpolateARM( const float32x4_t & iVal1, const float32x4_t & iVal2, const float32x4_t & iVal3, const float32x4_t iWeights[3] )
+inline float32x4_t InterpolateARM( const float32x4_t & iVal1, const float32x4_t & iVal2, const float32x4_t & iVal3, const float32x4_t iWeights[3] )
 {
   float32x4_t result;
   InterpolateARM(iVal1, iVal2, iVal3, iWeights, result);
@@ -226,16 +226,18 @@ inline uint32x4_t EvalBarycentricCoordinatesARM(const float32x4_t & iFragCoordX,
 {
   uint32x4_t mask = { 0, 0, 0, 0 };
 
+  float32x4_t zeros = { 0.f, 0.f, 0.f, 0.f };
+
   for (int i = 0; i < 3; ++i)
   {
-    __m256 edgeA = vld1_f32(iEdgeA[i]);
-    __m256 edgeB = vld1_f32(iEdgeB[i]);
-    __m256 edgeC = vld1_f32(iEdgeC[i]);
+    float32x4_t edgeA = {iEdgeA[i], iEdgeA[i], iEdgeA[i], iEdgeA[i]};
+    float32x4_t edgeB = {iEdgeB[i], iEdgeB[i], iEdgeB[i], iEdgeB[i]};
+    float32x4_t edgeC = {iEdgeC[i], iEdgeC[i], iEdgeC[i], iEdgeC[i]};
 
     oBaryCoord[i] = vmlaq_f32(vmlaq_f32(edgeC, edgeB, iFragCoordY), edgeA, iFragCoordX);
 
     // Test >= 0
-    uint32x4_t ge_zero = vcgeq_u32(oBaryCoord[i], vld1_f32(0.f));
+    uint32x4_t ge_zero = vcgeq_f32(oBaryCoord[i], zeros);
 
     if (i == 0)
       mask = ge_zero;
