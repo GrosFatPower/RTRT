@@ -55,12 +55,23 @@ namespace SIMDUtils
 
   void LoadMatrixARM(const Mat4x4& iMat, float32x4_t oMat[4]);
   Vec4 ApplyTransformARM(const float32x4_t iTransfo[4], const Vec4& iVec);
+
+  void InterpolateARM( const float32x4_t & iVal1, const float32x4_t & iVal2, const float32x4_t & iVal3, const float32x4_t iWeights[3], float32x4_t & oResult )
+  float32x4_t InterpolateARM( const float32x4_t & iVal1, const float32x4_t & iVal2, const float32x4_t & iVal3, const float32x4_t iWeights[3] )
+
+  uint32x4_t EvalBarycentricCoordinatesARM(const float32x4_t & iFragCoordX, const float32x4_t & iFragCoordY, const float iEdgeA[3], const float iEdgeB[3], const float iEdgeC[3], float32x4_t oBaryCoord[3])
 #endif
 
 #ifdef SIMD_AVX2
   void LoadMatrixAVX2(const Mat4x4& iMat, __m256 oMat[4]);
   Vec4 ApplyTransformAVX2(const __m256 iTransfo[4], const Vec4& iVec);
+
+  void InterpolateAVX2( const __m256 & iVal1, const __m256 & iVal2, const __m256 & iVal3, const __m256 iWeights[3], __m256 & oResult );
+  __m256 InterpolateAVX2( const __m256 & iVal1, const __m256 & iVal2, const __m256 & iVal3, const __m256 iWeights[3] );
+
+  __m256 EvalBarycentricCoordinatesAVX2(const __m256 & iFragCoordX, const __m256 & iFragCoordY, const float iEdgeA[3], const float iEdgeB[3], const float iEdgeC[3], __m256 oBaryCoord[3]);
 #endif
+
 }
 
 }

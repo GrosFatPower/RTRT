@@ -64,7 +64,7 @@ namespace RasterData
       __m256 Weights[3] = { _mm256_set1_ps(iWeights[0]), _mm256_set1_ps(iWeights[1]), _mm256_set1_ps(iWeights[2]) };
 
       __m256 interpolResult;
-      MathUtil::InterpolateAVX2(iAttrib1, iAttrib2, iAttrib3, Weights, interpolResult);
+      SIMDUtils::InterpolateAVX2(iAttrib1, iAttrib2, iAttrib3, Weights, interpolResult);
 
       oResult._WorldPos.x = interpolResult.m256_f32[7];
       oResult._WorldPos.y = interpolResult.m256_f32[6];

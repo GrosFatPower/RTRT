@@ -1368,7 +1368,7 @@ int SoftwareRasterizer::RasterizeAVX2(rd::Tile& ioTile)
 
           // Compute barycentric coordinates
           __m256 Weights[3];
-          __m256 mask = MathUtil::EvalBarycentricCoordinatesAVX2(x_coords, y_coord, tri->_EdgeA, tri->_EdgeB, tri->_EdgeC, Weights);
+          __m256 mask = SIMDUtils::EvalBarycentricCoordinatesAVX2(x_coords, y_coord, tri->_EdgeA, tri->_EdgeB, tri->_EdgeC, Weights);
 
           // Perspective correct Z
           Weights[0] = _mm256_mul_ps(Weights[0], invZ0);
@@ -1384,7 +1384,7 @@ int SoftwareRasterizer::RasterizeAVX2(rd::Tile& ioTile)
           Weights[2] = _mm256_mul_ps(Weights[2], depths);
 
           __m256 z_coord;
-          MathUtil::InterpolateAVX2(v0z, v1z, v2z, Weights, z_coord);
+          SIMDUtils::InterpolateAVX2(v0z, v1z, v2z, Weights, z_coord);
 
           // Depth test
           SIMD_ALIGN64 float DepthBuffer[8] = { 0. };
