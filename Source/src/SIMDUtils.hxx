@@ -6,39 +6,64 @@ namespace RTRT
 
 namespace SIMDUtils
 {
-inline bool HasAVX2Support()
+inline bool HasSIMDSupport()
 {
-#if defined(__x86_64__) || defined(_M_X64) || defined(i386) || defined(_M_IX86)
-#if defined(_MSC_VER)
-  int cpuInfo[4];
-  __cpuid(cpuInfo, 1);
-  return (cpuInfo[2] & (1 << 5)) != 0;
+#if defined (SIMD_AVX2)
+  return true;
+#elif defined(SIMD_ARM_NEON)
+  return true;
 #else
-  unsigned int eax, ebx, ecx, edx;
-  __asm__("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(1));
-  return (ecx & (1 << 5)) != 0;
-#endif
-#else
-  return false; // ARM platforms don't support AVX2
+  return false;
 #endif
 }
 
-inline bool HasAVX512Support()
-{
-#if defined(__x86_64__) || defined(_M_X64) || defined(i386) || defined(_M_IX86)
-#if defined(_MSC_VER)
-  int cpuInfo[4];
-  __cpuid(cpuInfo, 7);
-  return (cpuInfo[1] & (1 << 16)) != 0;
-#else
-  unsigned int eax, ebx, ecx, edx;
-  __asm__("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(7), "c"(0));
-  return (ebx & (1 << 16)) != 0;
-#endif
-#else
-  return false; // ARM platforms don't support AVX512
-#endif
-}
+//inline bool HasAVX2Support()
+//{
+//  static short S_HasAVX2Support = -1;
+//
+//  if ( S_HasAVX2Support < 0 )
+//  {
+//#if defined(__x86_64__) || defined(_M_X64) || defined(i386) || defined(_M_IX86)
+//#if defined(_MSC_VER)
+//    int cpuInfo[4];
+//    __cpuid(cpuInfo, 1);
+//    S_HasAVX2Support = ( (cpuInfo[2] & (1 << 5)) != 0 ) ? ( 1 ) : ( 0 );
+//#else
+//    unsigned int eax, ebx, ecx, edx;
+//    __asm__("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(1));
+//    S_HasAVX2Support = ( (ecx & (1 << 5)) != 0 ) ? ( 1 ) : ( 0 );
+//#endif
+//#else
+//    S_HasAVX2Support = 0;
+//#endif
+//  }
+//
+//  return ( S_HasAVX2Support > 0 );
+//}
+
+//inline bool HasAVX512Support()
+//{
+//  static short S_HasAVX512Support = -1;
+//
+//  if ( S_HasAVX512Support < 0 )
+//  {
+//#if defined(__x86_64__) || defined(_M_X64) || defined(i386) || defined(_M_IX86)
+//#if defined(_MSC_VER)
+//  int cpuInfo[4];
+//  __cpuid(cpuInfo, 7);
+//  S_HasAVX512Support = ( (cpuInfo[1] & (1 << 16)) != 0 ) ? ( 1 ) : ( 0 );
+//#else
+//    unsigned int eax, ebx, ecx, edx;
+//    __asm__("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(7), "c"(0));
+//    S_HasAVX512Support = ( (ebx & (1 << 16)) != 0 ) ? ( 1 ) : ( 0 );
+//#endif
+//#else
+//    S_HasAVX512Support = 0;
+//#endif
+//  }
+//
+//  return ( S_HasAVX512Support > 0 );
+//}
 
 #ifdef SIMD_ARM_NEON
 inline float GetVectorElement(float32x4_t& iVector, int iIndex)

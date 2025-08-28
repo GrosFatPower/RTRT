@@ -43,8 +43,9 @@ namespace RTRT
 
 namespace SIMDUtils
 {
-  bool HasAVX2Support();
-  bool HasAVX512Support();
+  bool HasSIMDSupport();
+  //bool HasAVX2Support();
+  //bool HasAVX512Support();
 
 #ifdef SIMD_ARM_NEON
   float    GetVectorElement(float32x4_t& iVector, int iIndex);

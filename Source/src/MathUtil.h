@@ -382,17 +382,59 @@ public:
     return true;
   }
 
-#ifdef SIMD_AVX2
-  static void Interpolate( const __m256 & iVal1, const __m256 & iVal2, const __m256 & iVal3, const __m256 iWeights[3], __m256 & oResult )
+#ifdef SIMD_ARM_NEON
+  static void InterpolateARM( const float32x4_t & iVal1, const float32x4_t & iVal2, const float32x4_t & iVal3, const float32x4_t iWeights[3], float32x4_t & oResult )
   {
-    oResult = _mm256_add_ps(_mm256_add_ps(_mm256_mul_ps(iWeights[0], iVal1), _mm256_mul_ps(iWeights[1], iVal2)), _mm256_mul_ps(iWeights[2], iVal3));
+    //oResult = _mm256_add_ps(_mm256_add_ps(_mm256_mul_ps(iWeights[0], iVal1), _mm256_mul_ps(iWeights[1], iVal2)), _mm256_mul_ps(iWeights[2], iVal3));
+    oResult = vmlaq_f32(vmlaq_f32(vmulq_f32(iWeights[0], iVal1), iWeights[1], iVal2) ,iWeights[2], iVal3);
   }
 
-  static __m256 Interpolate( const __m256 & iVal1, const __m256 & iVal2, const __m256 & iVal3, const __m256 iWeights[3] )
+  static float32x4_t InterpolateARM( const float32x4_t & iVal1, const float32x4_t & iVal2, const float32x4_t & iVal3, const float32x4_t iWeights[3] )
+  {
+    float32x4_t result;
+    InterpolateARM(iVal1, iVal2, iVal3, iWeights, result);
+    return result;
+  }
+#endif
+
+#ifdef SIMD_AVX2
+  static void InterpolateAVX2( const __m256 & iVal1, const __m256 & iVal2, const __m256 & iVal3, const __m256 iWeights[3], __m256 & oResult )
+  {
+    //oResult = _mm256_add_ps(_mm256_add_ps(_mm256_mul_ps(iWeights[0], iVal1), _mm256_mul_ps(iWeights[1], iVal2)), _mm256_mul_ps(iWeights[2], iVal3));
+    oResult = _mm256_fmadd_ps(iWeights[2], iVal3, _mm256_fmadd_ps(iWeights[1], iVal2, _mm256_mul_ps(iWeights[0], iVal1)));
+  }
+
+  static __m256 InterpolateAVX2( const __m256 & iVal1, const __m256 & iVal2, const __m256 & iVal3, const __m256 iWeights[3] )
   {
     __m256 result;
-    Interpolate(iVal1, iVal2, iVal3, iWeights, result);
+    InterpolateAVX2(iVal1, iVal2, iVal3, iWeights, result);
     return result;
+  }
+#endif
+
+#ifdef SIMD_ARM_NEON
+  static uint32x4_t EvalBarycentricCoordinatesARM(const float32x4_t & iFragCoordX, const float32x4_t & iFragCoordY, const float iEdgeA[3], const float iEdgeB[3], const float iEdgeC[3], float32x4_t oBaryCoord[3])
+  {
+    uint32x4_t mask = { 0, 0, 0, 0 };
+
+    for (int i = 0; i < 3; ++i)
+    {
+      __m256 edgeA = vld1_f32(iEdgeA[i]);
+      __m256 edgeB = vld1_f32(iEdgeB[i]);
+      __m256 edgeC = vld1_f32(iEdgeC[i]);
+
+      oBaryCoord[i] = vmlaq_f32(vmlaq_f32(edgeC, edgeB, iFragCoordY), edgeA, iFragCoordX);
+
+      // Test >= 0
+      uint32x4_t ge_zero = vcgeq_u32(oBaryCoord[i], vld1_f32(0.f));
+
+      if (i == 0)
+        mask = ge_zero;
+      else
+        mask = vandq_u32(mask, ge_zero);
+    }
+
+    return mask;
   }
 #endif
 
@@ -403,15 +445,17 @@ public:
 
     for (int i = 0; i < 3; ++i)
     {
+      // bary = A * x + B * y + C
       //if ( i < 2 )
       //{
         __m256 edgeA = _mm256_set1_ps(iEdgeA[i]);
         __m256 edgeB = _mm256_set1_ps(iEdgeB[i]);
         __m256 edgeC = _mm256_set1_ps(iEdgeC[i]);
 
-        __m256 ax = _mm256_mul_ps(edgeA, iFragCoordX);
-        __m256 by = _mm256_mul_ps(edgeB, iFragCoordY);
-        oBaryCoord[i] = _mm256_add_ps(_mm256_add_ps(ax, by), edgeC);
+        //__m256 ax = _mm256_mul_ps(edgeA, iFragCoordX);
+        //__m256 by = _mm256_mul_ps(edgeB, iFragCoordY);
+        //oBaryCoord[i] = _mm256_add_ps(_mm256_add_ps(ax, by), edgeC);
+        oBaryCoord[i] = _mm256_fmadd_ps(edgeA, iFragCoordX, _mm256_fmadd_ps(edgeB, iFragCoordY, edgeC));
       //}
       //else
       //  oBaryCoord[2] = _mm256_sub_ps(_mm256_sub_ps(_mm256_set1_ps(1.0f), oBaryCoord[0]), oBaryCoord[1]);

@@ -1384,7 +1384,7 @@ int SoftwareRasterizer::RasterizeAVX2(rd::Tile& ioTile)
           Weights[2] = _mm256_mul_ps(Weights[2], depths);
 
           __m256 z_coord;
-          MathUtil::Interpolate(v0z, v1z, v2z, Weights, z_coord);
+          MathUtil::InterpolateAVX2(v0z, v1z, v2z, Weights, z_coord);
 
           // Depth test
           SIMD_ALIGN64 float DepthBuffer[8] = { 0. };

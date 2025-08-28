@@ -353,11 +353,14 @@ int Test5::DrawUI()
               _Renderer -> Notify(DirtyState::RenderSettings);
             }
 
-            bool enableSIMD = softwareRasterizer -> GetEnableSIMD();
-            if (ImGui::Checkbox("Enable SIMD", &enableSIMD))
+            if ( SIMDUtils::HasSIMDSupport() )
             {
-              softwareRasterizer->SetEnableSIMD(enableSIMD);
-              _Renderer->Notify(DirtyState::RenderSettings);
+              bool enableSIMD = softwareRasterizer -> GetEnableSIMD();
+              if (ImGui::Checkbox("Enable SIMD", &enableSIMD))
+              {
+                softwareRasterizer->SetEnableSIMD(enableSIMD);
+                _Renderer->Notify(DirtyState::RenderSettings);
+              }
             }
           }
         }
