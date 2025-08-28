@@ -379,45 +379,7 @@ int SoftwareRasterizer::UpdateRenderResolution()
   _ImageBuffer._ColorBuffer.resize(RenderWidth() * RenderHeight());
   _ImageBuffer._DepthBuffer.resize(RenderWidth() * RenderHeight());
 
-
-  _TileCountX = (RenderWidth() + TILE_SIZE - 1) / TILE_SIZE;
-  _TileCountY = (RenderHeight() + TILE_SIZE - 1) / TILE_SIZE;
-  _Tiles.resize(_TileCountX * _TileCountY);
-
-  for (int ty = 0; ty < _TileCountY; ++ty)
-  {
-    for (int tx = 0; tx < _TileCountX; ++tx)
-    {
-      int tileIndex = ty * _TileCountX + tx;
-      rd::Tile& curTile = _Tiles[tileIndex];
-
-      curTile._X = tx * TILE_SIZE;
-      curTile._Y = ty * TILE_SIZE;
-      curTile._Width = std::min(TILE_SIZE, RenderWidth() - curTile._X);
-      curTile._Height = std::min(TILE_SIZE, RenderHeight() - curTile._Y);
-
-      curTile._LocalFB._ColorBuffer.resize(curTile._Width * curTile._Height);
-      curTile._LocalFB._DepthBuffer.resize(curTile._Width * curTile._Height);
-
-      curTile._Fragments.clear();
-      curTile._Fragments.resize(curTile._Width * curTile._Height);
-      for ( int y = 0; y < curTile._Height; ++y )
-      {
-        for ( int x = 0; x < curTile._Width; ++x )
-        {
-          int pixelIndex = y * curTile._Width + x;
-          curTile._Fragments[pixelIndex]._PixelCoords = Vec2i(curTile._X + x, curTile._Y + y);
-        }
-      }
-
-      curTile._CoveredPixels.clear();
-      curTile._CoveredPixels.resize(curTile._Width * curTile._Height);
-      std::fill(policy, curTile._CoveredPixels.begin(), curTile._CoveredPixels.end(), false);
-
-      if (_NbJobs)
-        curTile._RasterTrisBins.resize(_NbJobs);
-    }
-  }
+  ResizeTileMap();
 
   return 0;
 }
@@ -584,6 +546,66 @@ int SoftwareRasterizer::ReloadScene()
       tri._Indices[j] = idx;
     }
   }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ResizeTileMap
+// ----------------------------------------------------------------------------
+void SoftwareRasterizer::ResizeTileMap()
+{
+  _TileCountX = (RenderWidth() + _TileSize - 1) / _TileSize;
+  _TileCountY = (RenderHeight() + _TileSize - 1) / _TileSize;
+  _Tiles.resize(_TileCountX * _TileCountY);
+
+  for (int ty = 0; ty < _TileCountY; ++ty)
+  {
+    for (int tx = 0; tx < _TileCountX; ++tx)
+    {
+      int tileIndex = ty * _TileCountX + tx;
+      rd::Tile& curTile = _Tiles[tileIndex];
+
+      curTile._X = tx * _TileSize;
+      curTile._Y = ty * _TileSize;
+      curTile._Width = std::min(static_cast<int>(_TileSize), RenderWidth() - curTile._X);
+      curTile._Height = std::min(static_cast<int>(_TileSize), RenderHeight() - curTile._Y);
+
+      curTile._LocalFB._ColorBuffer.resize(curTile._Width * curTile._Height);
+      curTile._LocalFB._DepthBuffer.resize(curTile._Width * curTile._Height);
+
+      curTile._Fragments.clear();
+      curTile._Fragments.resize(curTile._Width * curTile._Height);
+      for ( int y = 0; y < curTile._Height; ++y )
+      {
+        for ( int x = 0; x < curTile._Width; ++x )
+        {
+          int pixelIndex = y * curTile._Width + x;
+          curTile._Fragments[pixelIndex]._PixelCoords = Vec2i(curTile._X + x, curTile._Y + y);
+        }
+      }
+
+      curTile._CoveredPixels.clear();
+      curTile._CoveredPixels.resize(curTile._Width * curTile._Height);
+      std::fill(policy, curTile._CoveredPixels.begin(), curTile._CoveredPixels.end(), false);
+
+      if (_NbJobs)
+        curTile._RasterTrisBins.resize(_NbJobs);
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
+// SetTileSize
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::SetTileSize( unsigned int iTileSize )
+{
+  if ( !iTileSize || ( iTileSize % 8 ) != 0 ) // Must be a multiple of 8
+    return 1;
+
+  _TileSize = iTileSize;
+
+  ResizeTileMap();
 
   return 0;
 }
@@ -1509,10 +1531,10 @@ void SoftwareRasterizer::BinTrianglesToTiles(unsigned int iBufferIndex)
     float xMax = std::max(0.f, std::min(tri._BBox._High.x, static_cast<float>(RenderWidth() - 1.f)));
     float yMax = std::max(0.f, std::min(tri._BBox._High.y, static_cast<float>(RenderHeight() - 1.f)));
 
-    int tileXMin = std::max(0, static_cast<int>(xMin / TILE_SIZE));
-    int tileYMin = std::max(0, static_cast<int>(yMin / TILE_SIZE));
-    int tileXMax = std::min(_TileCountX - 1, static_cast<int>(xMax / TILE_SIZE));
-    int tileYMax = std::min(_TileCountY - 1, static_cast<int>(yMax / TILE_SIZE));
+    int tileXMin = std::max(0, static_cast<int>(xMin / _TileSize));
+    int tileYMin = std::max(0, static_cast<int>(yMin / _TileSize));
+    int tileXMax = std::min(_TileCountX - 1, static_cast<int>(xMax / _TileSize));
+    int tileYMax = std::min(_TileCountY - 1, static_cast<int>(yMax / _TileSize));
 
     for (int ty = tileYMin; ty <= tileYMax; ++ty)
     {

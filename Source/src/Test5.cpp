@@ -336,6 +336,23 @@ int Test5::DrawUI()
         {
           if (_Settings._TiledRendering)
           {
+            static const char * TILE_SIZE[] = { "16", "32", "64", "128", "256", "512" };
+
+            unsigned int tileSize = softwareRasterizer -> GetTileSize();
+            tileSize = tileSize >> 4;
+            int curIndex = 0;
+            while ( !(tileSize & 1) && ( curIndex < 5 ) )
+            {
+              tileSize = tileSize >> 1;
+              curIndex++;
+            }
+
+            if ( ImGui::Combo( "Tile Size", &curIndex, TILE_SIZE, 6 ) )
+            {
+              softwareRasterizer -> SetTileSize(atoi(TILE_SIZE[curIndex]));
+              _Renderer -> Notify(DirtyState::RenderSettings);
+            }
+
             bool enableSIMD = softwareRasterizer -> GetEnableSIMD();
             if (ImGui::Checkbox("Enable SIMD", &enableSIMD))
             {

@@ -59,6 +59,9 @@ public:
   bool GetEnableSIMD() const { return _EnableSIMD; }
   void SetEnableSIMD(bool enabled) { _EnableSIMD = enabled; }
 
+  unsigned int GetTileSize() const { return _TileSize; }
+  int SetTileSize( unsigned int iTileSize );
+
 protected:
 
   int UpdateRenderResolution();
@@ -85,6 +88,7 @@ protected:
   int RenderWidth()         const { return _Settings._RenderResolution.x; }
   int RenderHeight()        const { return _Settings._RenderResolution.y; }
 
+  void ResizeTileMap();
   void ResetTiles();
   void CopyTileToMainBuffer(const RasterData::Tile& iTile);
   void CopyTileToMainBuffer1x(const RasterData::Tile& iTile);
@@ -153,7 +157,7 @@ protected:
   // Tile rendering
   int _TileCountX, _TileCountY;
   std::vector<RasterData::Tile> _Tiles;
-  static constexpr int TILE_SIZE = 64;
+  unsigned int _TileSize = 64;
 
   // Frame data
   unsigned int _FrameNum = 1;
