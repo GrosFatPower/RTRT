@@ -1468,8 +1468,6 @@ int SoftwareRasterizer::RasterizeAVX2(rd::Tile& ioTile)
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::RasterizeARM(rd::Tile& ioTile)
 {
-  return Rasterize(ioTile);
-/*
   float zNear, zFar;
   _Scene.GetCamera().GetZNearFar(zNear, zFar);
 
@@ -1535,7 +1533,7 @@ int SoftwareRasterizer::RasterizeARM(rd::Tile& ioTile)
 
           // Depth test
           float32x4_t depthBuf;
-          if ( (endX - x + 1) < 4 )
+          if ( (endX - x + 1) >= 4 )
             depthBuf = vld1q_f32(&ioTile._LocalFB._DepthBuffer[localPixelIndex]); // Use aligned SIMD load directly
           else
           {
@@ -1578,7 +1576,6 @@ int SoftwareRasterizer::RasterizeARM(rd::Tile& ioTile)
   }
 
   return 0;
-*/
 }
 #endif // SIMD_ARM_NEON
 
