@@ -54,6 +54,10 @@ Test5 : GPU Path tracer / CPU Rasterizer
 
 ![Sponza_PT](./Captures/PathTracer_Sponza_120633frames.png)
 
+![Teapot_Rast](./Captures/Rasterizer_renderman_teapot_all.png)
+
+![Bedroom_Rast](./Captures/Rasterizer_Bedroom.png)
+
 
 References/Credits
 --------
