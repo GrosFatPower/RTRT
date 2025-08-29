@@ -1626,6 +1626,8 @@ void SoftwareRasterizer::ProcessFragments(int iThreadBin, const RasterData::Defa
     fragmentShader = std::make_unique<DepthFragmentShader>(iUniforms);
   else if (_DebugMode & (int)RasterDebugModes::Normals)
     fragmentShader = std::make_unique<NormalFragmentShader>(iUniforms);
+  else if (ShadingType::PBR == _Settings._ShadingType)
+    fragmentShader = std::make_unique<PBRFragmentShader>(iUniforms);
   else
     fragmentShader = std::make_unique<BlinnPhongFragmentShader>(iUniforms);
   if (!fragmentShader)
@@ -1708,6 +1710,8 @@ void SoftwareRasterizer::ProcessFragments(RasterData::Tile& ioTile, const Raster
     fragmentShader = std::make_unique<DepthFragmentShader>(iUniforms);
   else if (_DebugMode & (int)RasterDebugModes::Normals)
     fragmentShader = std::make_unique<NormalFragmentShader>(iUniforms);
+  else if (ShadingType::PBR == _Settings._ShadingType)
+    fragmentShader = std::make_unique<PBRFragmentShader>(iUniforms);
   else
     fragmentShader = std::make_unique<BlinnPhongFragmentShader>(iUniforms);
   if (!fragmentShader)

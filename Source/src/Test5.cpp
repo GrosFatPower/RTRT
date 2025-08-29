@@ -453,7 +453,7 @@ int Test5::DrawUI()
       else if ( RendererType::SoftwareRasterizer == _RendererType )
       {
         static const char * NEARESTorBILNEAR[] = { "Nearest", "Bilinear" };
-        static const char * PHONGorFLAT[]      = { "Flat", "Phong" };
+        static const char * PHONGorFLATorPBR[]      = { "Flat", "Phong", "PBR" };
 
         int sampling = (int)_Settings._BilinearSampling;
         if ( ImGui::Combo("Texture sampling", &sampling, NEARESTorBILNEAR, 2) )
@@ -461,7 +461,7 @@ int Test5::DrawUI()
         _Settings._BilinearSampling = !!sampling;
 
         int shadingType = (int)_Settings._ShadingType;
-        if ( ImGui::Combo("Shading", &shadingType, PHONGorFLAT, 2) )
+        if ( ImGui::Combo("Shading", &shadingType, PHONGorFLATorPBR, 3) )
           _Renderer -> Notify(DirtyState::RenderSettings);
         _Settings._ShadingType = (ShadingType)shadingType;
 

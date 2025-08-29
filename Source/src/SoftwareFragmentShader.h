@@ -36,6 +36,21 @@ protected:
   RasterData::DefaultUniform _Uniforms;
 };
 
+class PBRFragmentShader : public SoftwareFragmentShader
+{
+public:
+
+  PBRFragmentShader(const RasterData::DefaultUniform & iUniforms) : SoftwareFragmentShader(), _Uniforms(iUniforms) { }
+
+  virtual ~PBRFragmentShader(){}
+
+  virtual Vec4 Process(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri);
+
+protected:
+
+  RasterData::DefaultUniform _Uniforms;
+};
+
 class DepthFragmentShader : public SoftwareFragmentShader
 {
 public:

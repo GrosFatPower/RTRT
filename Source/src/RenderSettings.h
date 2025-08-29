@@ -9,7 +9,8 @@ namespace RTRT
 enum class ShadingType
 {
   Flat = 0,
-  Phong
+  Phong,
+  PBR
 };
 
 struct RenderSettings
