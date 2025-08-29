@@ -107,7 +107,7 @@ inline float SutherlandHodgman::Dot( uint32_t iClipPlane, const Vec4 & iV )
   if (iClipPlane & NEAR_BIT  ) return iV.z + iV.w; /* iV * ( 0  0  1  1) */
   if (iClipPlane & FAR_BIT   ) return iV.z - iV.w; /* iV * ( 0  0 -1  1) */
 
-  return INFINITY;
+  return std::numeric_limits<float>::infinity();
 }
 
 inline uint32_t SutherlandHodgman::ComputeClipCode(const Vec4 & iV)
