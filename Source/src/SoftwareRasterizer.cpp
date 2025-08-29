@@ -1142,8 +1142,10 @@ int SoftwareRasterizer::Rasterize()
       {
         if (_EnableSIMD)
         {
-#ifdef SIMD_AVX2
+#if defined(SIMD_AVX2)
           JobSystem::Get().Execute([this, &tile]() { this->RasterizeAVX2(tile); });
+#elif defined (SIMD_ARM_NEON)
+          JobSystem::Get().Execute([this, &tile]() { this->RasterizeARM(tile); });
 #else
           JobSystem::Get().Execute([this, &tile]() { this->Rasterize(tile); });
 #endif
@@ -1374,14 +1376,6 @@ int SoftwareRasterizer::RasterizeAVX2(rd::Tile& ioTile)
       __m256 v1z = _mm256_set1_ps(tri->_V[1].z);
       __m256 v2z = _mm256_set1_ps(tri->_V[2].z);
 
-      const auto & v0Attrib = _ProjVerticesBuf[tri->_Indices[0]]._Attrib;
-      const auto & v1Attrib = _ProjVerticesBuf[tri->_Indices[1]]._Attrib;
-      const auto & v2Attrib = _ProjVerticesBuf[tri->_Indices[2]]._Attrib;
-
-      __m256 v0_Attribs = _mm256_set_ps(v0Attrib._WorldPos.x, v0Attrib._WorldPos.y, v0Attrib._WorldPos.z, v0Attrib._UV.x, v0Attrib._UV.y, v0Attrib._Normal.x, v0Attrib._Normal.y, v0Attrib._Normal.z);
-      __m256 v1_Attribs = _mm256_set_ps(v1Attrib._WorldPos.x, v1Attrib._WorldPos.y, v1Attrib._WorldPos.z, v1Attrib._UV.x, v1Attrib._UV.y, v1Attrib._Normal.x, v1Attrib._Normal.y, v1Attrib._Normal.z);
-      __m256 v2_Attribs = _mm256_set_ps(v2Attrib._WorldPos.x, v2Attrib._WorldPos.y, v2Attrib._WorldPos.z, v2Attrib._UV.x, v2Attrib._UV.y, v2Attrib._Normal.x, v2Attrib._Normal.y, v2Attrib._Normal.z);
-
       // Precompute x_coords for all possible x offsets (0..7)
       alignas(32) float x_offsets[8] = {0.5f, 1.5f, 2.5f, 3.5f, 4.5f, 5.5f, 6.5f, 7.5f};
 
@@ -1420,13 +1414,16 @@ int SoftwareRasterizer::RasterizeAVX2(rd::Tile& ioTile)
           SIMDUtils::InterpolateAVX2(v0z, v1z, v2z, Weights, z_coord);
 
           // Depth test
-          SIMD_ALIGN64 float DepthBuffer[8] = { 0. };
+          __m256 depthBuf;
           if ( (endX - x + 1) >= 8 )
-            _mm256_store_ps(DepthBuffer, _mm256_loadu_ps(&ioTile._LocalFB._DepthBuffer[localPixelIndex])); // Use aligned AVX load directly
+            depthBuf = _mm256_loadu_ps(&ioTile._LocalFB._DepthBuffer[localPixelIndex]); // Use aligned AVX load directly
           else
+          {
+            SIMD_ALIGN64 float DepthBuffer[8] = { 0. };
             memcpy(DepthBuffer, &ioTile._LocalFB._DepthBuffer[localPixelIndex], (endX - x + 1) * sizeof(float)); // Fallback for partial tiles
+            depthBuf = _mm256_load_ps(DepthBuffer);
+          }
 
-          __m256 depthBuf = _mm256_load_ps(DepthBuffer);
           __m256 depthmask;
           if ( _Settings._WBuffer )
             depthmask = _mm256_cmp_ps(depths, depthBuf, _CMP_LE_OQ);
@@ -1464,6 +1461,126 @@ int SoftwareRasterizer::RasterizeAVX2(rd::Tile& ioTile)
   return 0;
 }
 #endif // SIMD_AVX2
+
+#ifdef SIMD_ARM_NEON
+// ----------------------------------------------------------------------------
+// RasterizeARM
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::RasterizeARM(rd::Tile& ioTile)
+{
+  return Rasterize(ioTile);
+/*
+  float zNear, zFar;
+  _Scene.GetCamera().GetZNearFar(zNear, zFar);
+
+  const float32x4_t ones = { 1.f, 1.f, 1.f, 1.f };
+
+  for (unsigned int i = 0; i < _NbJobs; ++i)
+  {
+    for (int j = 0; j < ioTile._RasterTrisBins[i].size(); ++j)
+    {
+      const rd::RasterTriangle * tri = ioTile._RasterTrisBins[i][j];
+      if (!tri)
+        continue;
+
+      int startX = std::max(ioTile._X, static_cast<int>(std::floor(tri->_BBox._Low.x)));
+      int endX = std::min(ioTile._X + ioTile._Width - 1, static_cast<int>(std::ceil(tri->_BBox._High.x)));
+      int startY = std::max(ioTile._Y, static_cast<int>(std::floor(tri->_BBox._Low.y)));
+      int endY = std::min(ioTile._Y + ioTile._Height - 1, static_cast<int>(std::ceil(tri->_BBox._High.y)));
+
+      float32x4_t invZ0 = vdupq_n_f32(tri->_InvW[0]);
+      float32x4_t invZ1 = vdupq_n_f32(tri->_InvW[1]);
+      float32x4_t invZ2 = vdupq_n_f32(tri->_InvW[2]);
+
+      float32x4_t v0z = vdupq_n_f32(tri->_V[0].z);
+      float32x4_t v1z = vdupq_n_f32(tri->_V[1].z);
+      float32x4_t v2z = vdupq_n_f32(tri->_V[2].z);
+
+      // Precompute x_coords for all possible x offsets (0..7)
+      float32x4_t x_offsets = { 0.5f, 1.5f, 2.5f, 3.5f };
+
+      for (int y = startY; y <= endY; ++y)
+      {
+        float32x4_t y_coord = vdupq_n_f32(y + 0.5f);
+
+        unsigned int localY = y - ioTile._Y;
+
+        for (int x = startX; x <= endX; x += 4)
+        {
+          unsigned int localX = x - ioTile._X;
+          unsigned int localPixelIndex = localY * ioTile._Width + localX;
+
+          // Use aligned load for x_coords
+          float32x4_t x_coords = vaddq_f32(vdupq_n_f32((float)x), x_offsets);
+
+          // Compute barycentric coordinates
+          float32x4_t Weights[3];
+          uint32x4_t mask = SIMDUtils::EvalBarycentricCoordinatesARM(x_coords, y_coord, tri->_EdgeA, tri->_EdgeB, tri->_EdgeC, Weights);
+
+          // Perspective correct Z
+          Weights[0] = vmulq_f32(Weights[0], invZ0);
+          Weights[1] = vmulq_f32(Weights[1], invZ1);
+          Weights[2] = vmulq_f32(Weights[2], invZ2);
+
+          float32x4_t invDepths = vaddq_f32(vaddq_f32(Weights[0], Weights[1]), Weights[2]);
+          float32x4_t depths = vdivq_f32(ones, invDepths);
+
+          // Interpolate depth in screen space
+          Weights[0] = vmulq_f32(Weights[0], depths);
+          Weights[1] = vmulq_f32(Weights[1], depths);
+          Weights[2] = vmulq_f32(Weights[2], depths);
+
+          float32x4_t z_coord;
+          SIMDUtils::InterpolateARM(v0z, v1z, v2z, Weights, z_coord);
+
+          // Depth test
+          float32x4_t depthBuf;
+          if ( (endX - x + 1) < 4 )
+            depthBuf = vld1q_f32(&ioTile._LocalFB._DepthBuffer[localPixelIndex]); // Use aligned SIMD load directly
+          else
+          {
+            SIMD_ALIGN64 float DepthBuffer[4] = { 0. };
+            memcpy(DepthBuffer, &ioTile._LocalFB._DepthBuffer[localPixelIndex], (endX - x + 1) * sizeof(float)); // Fallback for partial tiles
+            depthBuf = vld1q_f32(DepthBuffer);
+          }
+
+          uint32x4_t depthmask;
+          if ( _Settings._WBuffer )
+            depthmask = vcleq_f32(depths, depthBuf);
+          else
+            depthmask = vcleq_f32(z_coord, depthBuf);
+          mask = vandq_u32(mask, depthmask);
+
+          for (int k = 0; (k < 4) && ((x + k) <= endX); ++k)
+          {
+            if ( !SIMDUtils::GetVectorElement(mask, k) )
+              continue;
+
+            float depth = SIMDUtils::GetVectorElement(depths, k);
+            float z = SIMDUtils::GetVectorElement(z_coord, k);
+
+            ioTile._LocalFB._DepthBuffer[localPixelIndex + k] = ( _Settings._WBuffer ) ? ( depth ) : ( z );
+            ioTile._CoveredPixels[localPixelIndex + k] = true;
+
+            rd::Fragment & frag = ioTile._Fragments[localPixelIndex + k];
+            frag._FragCoords.x = x + k + .5f;
+            frag._FragCoords.y = y + .5f;
+            frag._FragCoords.z = z;
+            frag._RasterTriIdx.x = i;
+            frag._RasterTriIdx.y = j,
+            frag._Weights[0] = SIMDUtils::GetVectorElement(Weights[0], k);
+            frag._Weights[1] = SIMDUtils::GetVectorElement(Weights[1], k);
+            frag._Weights[2] = SIMDUtils::GetVectorElement(Weights[2], k);
+          }
+        }
+      }
+    }
+  }
+
+  return 0;
+*/
+}
+#endif // SIMD_ARM_NEON
 
 // ----------------------------------------------------------------------------
 // ProcessFragments
