@@ -643,8 +643,10 @@ void SoftwareRasterizer::CopyTileToMainBuffer(const RasterData::Tile& iTile)
 {
   if (_EnableSIMD)
   {
-#ifdef SIMD_AVX2
+#if defined(SIMD_AVX2)
     CopyTileToMainBuffer8x(iTile);
+#elif defined(SIMD_ARM_NEON)
+    CopyTileToMainBuffer4x(iTile);
 #else
     CopyTileToMainBuffer1x(iTile);
 #endif
@@ -673,6 +675,37 @@ void SoftwareRasterizer::CopyTileToMainBuffer1x(const RasterData::Tile& iTile)
     );
   }
 }
+
+#ifdef SIMD_ARM_NEON
+//-----------------------------------------------------------------------------
+// CopyTileToMainBuffer4x
+//-----------------------------------------------------------------------------
+void SoftwareRasterizer::CopyTileToMainBuffer4x(const RasterData::Tile& iTile)
+{
+  for (int y = 0; y < iTile._Height; ++y)
+  {
+    const int globalY = iTile._Y + y;
+    const int localRowStart = y * iTile._Width;
+    const int globalRowStart = globalY * RenderWidth() + iTile._X;
+
+    int x = 0;
+    for (; x + 4 <= iTile._Width; x += 4)
+    {
+      uint32x4_t colors = vld1q_u32((uint32_t*)&iTile._LocalFB._ColorBuffer[localRowStart + x]);
+      //float32x4_t depths = vld1q_dup_f32(&iTile._LocalFB._DepthBuffer[localRowStart + x]);
+
+      vst1q_u32((uint32_t*)&_ImageBuffer._ColorBuffer[globalRowStart + x], colors);
+      //vst1q_f32(&_ImageBuffer._DepthBuffer[globalRowStart + x], depths);
+    }
+
+    for (; x < iTile._Width; ++x)
+    {
+      _ImageBuffer._ColorBuffer[globalRowStart + x] = iTile._LocalFB._ColorBuffer[localRowStart + x];
+      //_ImageBuffer._DepthBuffer[globalRowStart + x] = iTile._LocalFB._DepthBuffer[localRowStart + x];
+    }
+  }
+}
+#endif
 
 #ifdef SIMD_AVX2
 //-----------------------------------------------------------------------------
@@ -1585,8 +1618,10 @@ void SoftwareRasterizer::ProcessFragments(RasterData::Tile& ioTile, const Raster
 
     if ( _EnableSIMD )
     {
-#ifdef SIMD_AVX2
+#if defined(SIMD_AVX2)
       rd::Varying::InterpolateAVX2(_ProjVerticesBuf[tri -> _Indices[0]]._Attrib, _ProjVerticesBuf[tri -> _Indices[1]]._Attrib, _ProjVerticesBuf[tri -> _Indices[2]]._Attrib, frag._Weights, frag._Attrib);
+#elif defined (SIMD_ARM_NEON)
+      rd::Varying::InterpolateARM(_ProjVerticesBuf[tri -> _Indices[0]]._Attrib, _ProjVerticesBuf[tri -> _Indices[1]]._Attrib, _ProjVerticesBuf[tri -> _Indices[2]]._Attrib, frag._Weights, frag._Attrib);
 #else
       rd::Varying::Interpolate(_ProjVerticesBuf[tri -> _Indices[0]]._Attrib, _ProjVerticesBuf[tri -> _Indices[1]]._Attrib, _ProjVerticesBuf[tri -> _Indices[2]]._Attrib, frag._Weights, frag._Attrib);
 #endif

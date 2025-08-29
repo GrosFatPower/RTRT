@@ -224,9 +224,9 @@ inline __m256 InterpolateAVX2( const __m256 & iVal1, const __m256 & iVal2, const
 #ifdef SIMD_ARM_NEON
 inline uint32x4_t EvalBarycentricCoordinatesARM(const float32x4_t & iFragCoordX, const float32x4_t & iFragCoordY, const float iEdgeA[3], const float iEdgeB[3], const float iEdgeC[3], float32x4_t oBaryCoord[3])
 {
-  uint32x4_t mask = { 0, 0, 0, 0 };
+  uint32x4_t mask = vdupq_n_f32(0);
 
-  float32x4_t zeros = { 0.f, 0.f, 0.f, 0.f };
+  float32x4_t zeros = vdupq_n_f32(0.f);
 
   for (int i = 0; i < 3; ++i)
   {
