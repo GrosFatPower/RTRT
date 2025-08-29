@@ -121,6 +121,15 @@ option(RTRT_IMGUI_IMGUI_SHARED "Use imgui as a shared library" OFF)
 option(RTRT_BUILD_IMGUI "Build imgui using sources provided in external/imgui" ON)
 set(RTRT_IMGUI_SOURCE_DIR ${CMAKE_SOURCE_DIR}/Dependencies/imgui CACHE STRING "Source dir of imgui")
 
+# GLM
+if(ARCH_ARM64)
+  message("GLM_ENABLE_SIMD_NEON ON")
+  set(GLM_ENABLE_SIMD_NEON ON)
+elseif(ARCH_X64)
+  message("GLM_ENABLE_SIMD_AVX2 ON")
+  set(GLM_ENABLE_SIMD_AVX2 ON)
+endif()
+
 target_include_directories(${EXE_NAME}
   PUBLIC ${CMAKE_SOURCE_DIR}/Source/src
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glfw/include
