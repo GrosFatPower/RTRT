@@ -169,7 +169,7 @@ endif()
 
 if(WIN32)
   set_target_properties(${EXE_NAME} PROPERTIES
-  	VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+  	VS_DEBUGGER_WORKING_DIRECTORY "$(Project)$(Configuration)"
   )
 endif()
 
