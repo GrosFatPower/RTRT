@@ -22,7 +22,7 @@ if (RTRT_BUILD_IMGUI)
     add_library(imgui SHARED ${imgui_sources})
     install(TARGETS imgui DESTINATION ./lib/)
   else()
-    add_library(imgui ${imgui_sources})
+    add_library(imgui STATIC ${imgui_sources})
   endif()
   
   target_include_directories(imgui
