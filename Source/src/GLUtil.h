@@ -2,6 +2,9 @@
 #define _GLUtil_
 
 #include <string>
+#include <vector>
+#include <tuple>
+#include <cstddef>
 
 #include <GL/glew.h>
 
@@ -135,6 +138,126 @@ static void GenTexture( GLenum iTarget, GLint iInternalformat, GLsizei iWidth, G
 static std::string UniformArrayElementName( const char * iUniformArrayName, int iIndex, const char * iAttributeName )
 {
   return std::string(iUniformArrayName).append("[").append(std::to_string(iIndex)).append("].").append(iAttributeName);
+}
+
+// -----------------------------------------------------------------------------
+// Vertex Array / Buffer helpers
+// -----------------------------------------------------------------------------
+// Attribute tuple layout:
+//   (index, size, type, normalized, stride, offset)
+// where index is the attribute location, size is number of components (1..4),
+// type is GL_FLOAT/GL_INT/etc, normalized is GLboolean, stride is in bytes,
+// offset is the byte offset into the vertex struct.
+//
+// These helpers are convenient wrappers for creating VAO/VBO/EBO and setting
+// up attribute pointers. They do not modify ownership semantics of the caller.
+// -----------------------------------------------------------------------------
+
+// Generate / delete VAO
+static GLuint GenVertexArray()
+{
+  GLuint vao = 0;
+  glGenVertexArrays(1, &vao);
+  return vao;
+}
+
+static void DeleteVertexArray(GLuint & ioVAO)
+{
+  if (ioVAO)
+    glDeleteVertexArrays(1, &ioVAO);
+  ioVAO = 0;
+}
+
+// Generate / delete generic buffer
+static GLuint GenBuffer()
+{
+  GLuint buf = 0;
+  glGenBuffers(1, &buf);
+  return buf;
+}
+
+static void DeleteBuffer(GLuint & ioBuf)
+{
+  if (ioBuf)
+    glDeleteBuffers(1, &ioBuf);
+  ioBuf = 0;
+}
+
+// Upload data to an ARRAY_BUFFER (vertex buffer)
+static void UploadArrayBuffer(GLuint iVBO, GLsizeiptr iSize, const void* iData, GLenum iUsage = GL_STATIC_DRAW)
+{
+  glBindBuffer(GL_ARRAY_BUFFER, iVBO);
+  glBufferData(GL_ARRAY_BUFFER, iSize, iData, iUsage);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+// Upload data to an ELEMENT_ARRAY_BUFFER (index buffer)
+static void UploadElementArrayBuffer(GLuint iEBO, GLsizeiptr iSize, const void* iData, GLenum iUsage = GL_STATIC_DRAW)
+{
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iEBO);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, iSize, iData, iUsage);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+}
+
+// Setup attribute pointers for a VAO given a bound VBO/EBO
+static void SetupVertexAttribPointers(GLuint iVAO, GLuint iVBO, GLuint iEBO,
+  const std::vector<std::tuple<GLuint, GLint, GLenum, GLboolean, GLsizei, std::size_t>>& iAttributes)
+{
+  glBindVertexArray(iVAO);
+  glBindBuffer(GL_ARRAY_BUFFER, iVBO);
+  if (iEBO)
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iEBO);
+
+  for (const auto & attr : iAttributes)
+  {
+    GLuint index = std::get<0>(attr);
+    GLint size = std::get<1>(attr);
+    GLenum type = std::get<2>(attr);
+    GLboolean normalized = std::get<3>(attr);
+    GLsizei stride = std::get<4>(attr);
+    std::size_t offset = std::get<5>(attr);
+
+    glEnableVertexAttribArray(index);
+    glVertexAttribPointer(index, size, type, normalized, stride, reinterpret_cast<const void*>(offset));
+  }
+
+  // Unbind in safe order
+  glBindVertexArray(0);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  if (iEBO)
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+}
+
+// Convenience: create VAO/VBO/EBO and upload data, then setup attributes.
+// Attributes vector uses the tuple layout described above.
+static void CreateMeshBuffers(GLuint & oVAO, GLuint & oVBO, GLuint & oEBO,
+  GLsizeiptr iVertexSize, const void* iVertexData, GLsizei iVertexStride,
+  GLsizeiptr iIndexSize,  const void* iIndexData,
+  const std::vector<std::tuple<GLuint, GLint, GLenum, GLboolean, GLsizei, std::size_t>>& iAttributes)
+{
+  // Generate objects
+  oVAO = GenVertexArray();
+  oVBO = GenBuffer();
+  oEBO = (iIndexData != nullptr && iIndexSize > 0) ? GenBuffer() : 0;
+
+  // Upload buffers
+  if (oVBO)
+    UploadArrayBuffer(oVBO, iVertexSize, iVertexData);
+
+  if (oEBO)
+    UploadElementArrayBuffer(oEBO, iIndexSize, iIndexData);
+
+  // Setup VAO attribute pointers
+  SetupVertexAttribPointers(oVAO, oVBO, oEBO, iAttributes);
+}
+
+// Convenience: delete mesh buffers
+static void DeleteMeshBuffers(GLuint & ioVAO, GLuint & ioVBO, GLuint & ioEBO)
+{
+  DeleteVertexArray(ioVAO);
+  DeleteBuffer(ioVBO);
+  DeleteBuffer(ioEBO);
+  ioVAO = ioVBO = ioEBO = 0;
 }
 
 };

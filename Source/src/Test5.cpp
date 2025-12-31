@@ -5,6 +5,7 @@
 #include "Loader.h"
 #include "PathTracer.h"
 #include "SoftwareRasterizer.h"
+#include "DeferredRenderer.h"
 #include "Util.h"
 #include "PathUtils.h"
 
@@ -255,10 +256,10 @@ int Test5::DrawUI()
 
     // Renderer selection
     {
-      static const char * Renderers[] = {"PathTracer", "SoftwareRasterizer"};
+      static const char * Renderers[] = {"PathTracer", "SoftwareRasterizer", "OpenGLRasterizer"};
       //_RendererType
       int selectedRenderer = (int)_RendererType;
-      if ( ImGui::Combo( "Renderer", &selectedRenderer, Renderers, 2 ) )
+      if ( ImGui::Combo( "Renderer", &selectedRenderer, Renderers, 3 ) )
       {
         _RendererType = (RendererType) selectedRenderer;
         _ReloadRenderer = true;
@@ -1140,6 +1141,8 @@ int Test5::InitializeRenderer()
     newRenderer = new PathTracer(*_Scene, _Settings);
   else if ( RendererType::SoftwareRasterizer == _RendererType )
     newRenderer = new SoftwareRasterizer(*_Scene, _Settings);
+  else if ( RendererType::OpenGLRasterizer == _RendererType )
+    newRenderer = new DeferredRenderer(*_Scene, _Settings);
 
   if ( !newRenderer )
   {

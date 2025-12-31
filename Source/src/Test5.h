@@ -35,7 +35,8 @@ public:
   enum class RendererType
   {
     PathTracer = 0,
-    SoftwareRasterizer
+    SoftwareRasterizer,
+    OpenGLRasterizer
   };
 
 protected:

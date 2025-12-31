@@ -1,0 +1,37 @@
+renderer
+{
+	resolution 800 800
+	bounces 3
+	tilewidth 256
+	tileheight 144
+	envmapfile HDR/konzerthaus_4k.hdr
+	envmapintensity 2.0
+}
+
+camera
+{
+	position 5.0 2.0 8.0
+	lookat 0.0 0.0 0.0
+	fov 80
+}
+
+light
+{
+	type sphere
+	position 2 3 3
+	emission 4. 4. 4.
+	radius .2
+}
+
+material Blue
+{
+	color .4 .4 .8
+	metallic 0.3
+	roughness 0.1
+}
+
+mesh
+{
+	file utah_teapot.obj
+	material Blue
+}
