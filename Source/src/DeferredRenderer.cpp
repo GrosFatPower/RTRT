@@ -329,23 +329,24 @@ int DeferredRenderer::ResizeGBuffer()
 int DeferredRenderer::RecompileShaders()
 {
   // Geometry pass shader (standard vertex + fragment that writes G-buffer)
-  ShaderSource vert = Shader::LoadShader(PathUtils::GetShaderPath("vertex_Default.glsl"));
+  ShaderSource geomVert = Shader::LoadShader(PathUtils::GetShaderPath("vertex_DeferredGeometry.glsl"));
   ShaderSource geomFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_DeferredGeometry.glsl"));
-  ShaderProgram* geomProg = ShaderProgram::LoadShaders(vert, geomFrag);
+  ShaderProgram* geomProg = ShaderProgram::LoadShaders(geomVert, geomFrag);
   if (!geomProg)
     return 1;
   _GeometryShader.reset(geomProg);
 
   // Lighting/composite pass: fullscreen quad sampling G-buffer
+  ShaderSource defaultVert = Shader::LoadShader(PathUtils::GetShaderPath("vertex_Default.glsl"));
   ShaderSource lightFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_DeferredLighting.glsl"));
-  ShaderProgram* lightProg = ShaderProgram::LoadShaders(vert, lightFrag);
+  ShaderProgram* lightProg = ShaderProgram::LoadShaders(defaultVert, lightFrag);
   if (!lightProg)
     return 1;
   _LightingShader.reset(lightProg);
 
   // Optional post-process/composite (reuse existing postprocess if desired)
   ShaderSource postFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Postprocess.glsl"));
-  ShaderProgram* postProg = ShaderProgram::LoadShaders(vert, postFrag);
+  ShaderProgram* postProg = ShaderProgram::LoadShaders(defaultVert, postFrag);
   if (!postProg)
     return 1;
   _CompositeShader.reset(postProg);
@@ -427,6 +428,15 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> SetUniform("u_CameraForward", camForward);
     _LightingShader -> SetUniform("u_ZNearFar", zNear, zFar);
     _LightingShader -> SetUniform("u_InvScreen", 1.0f / _Settings._RenderResolution.x, 1.0f / _Settings._RenderResolution.y);
+
+    // The lighting shader expects samplers named u_GAlbedo, u_GNormal, u_GPosition, u_GDepth
+    _LightingShader -> SetUniform("u_GAlbedo",   0);
+    _LightingShader -> SetUniform("u_GNormal",   1);
+    _LightingShader -> SetUniform("u_GPosition", 2);
+    _LightingShader -> SetUniform("u_GDepth",    3);
+
+    // ToDo : set light parameters uniforms
+
     _LightingShader -> StopUsing();
   }
 
@@ -451,6 +461,14 @@ int DeferredRenderer::RenderToTexture()
   {
     _GeometryShader -> Use();
 
+    // Enable depth testing, depth writes and back-face culling for geometry pass
+    // Ensure depth writes are enabled for the geometry pass
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+
     const auto & instances = _Scene.GetMeshInstances();
     for ( const MeshInstance& inst : instances )
     {
@@ -473,6 +491,11 @@ int DeferredRenderer::RenderToTexture()
 
     glBindVertexArray(0);
     _GeometryShader -> StopUsing();
+
+    // Disable depth writes and depth test for subsequent fullscreen passes.
+    glDepthMask(GL_FALSE);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
   }
 
   // Lighting pass: sample G-buffer and compute shading into lighting FBO
@@ -486,16 +509,19 @@ int DeferredRenderer::RenderToTexture()
     _LightingShader -> Use();
     BindGBufferTextures();
 
-    // The lighting shader expects samplers named u_GAlbedo, u_GNormal, u_GPosition, u_GDepth
-    _LightingShader -> SetUniform("u_GAlbedo",   0);
-    _LightingShader -> SetUniform("u_GNormal",   1);
-    _LightingShader -> SetUniform("u_GPosition", 2);
-    _LightingShader -> SetUniform("u_GDepth",    3);
-
     // Render fullscreen quad to produce lit image
     _Quad.Render(*_LightingShader);
     _LightingShader -> StopUsing();
   }
+
+  // Restore depth writes/state so future frames/passes are correct.
+  // The next RenderToTexture() call will re-enable depth test/writes explicitly,
+  // but restoring here avoids leaving GL in a surprising state for other code.
+  //glDepthMask(GL_TRUE);
+  //glEnable(GL_DEPTH_TEST);
+  //glDepthFunc(GL_LESS);
+  //glEnable(GL_CULL_FACE);
+  //glCullFace(GL_BACK);
 
   // At this point _LightingTEX contains the shaded image
   glBindFramebuffer(GL_FRAMEBUFFER, 0);

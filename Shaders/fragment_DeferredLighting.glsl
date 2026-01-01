@@ -17,12 +17,10 @@ uniform vec3 u_CameraPos;
 
 void main()
 {
-  vec2 uv = fragUV;
-
   // Read G-buffer
-  vec3 albedo = texture(u_GAlbedo, uv).rgb;
-  vec3 encN   = texture(u_GNormal, uv).rgb;
-  vec3 pos    = texture(u_GPosition, uv).rgb;
+  vec3 albedo = texture(u_GAlbedo, fragUV).rgb;
+  vec3 encN   = texture(u_GNormal, fragUV).rgb;
+  vec3 pos    = texture(u_GPosition, fragUV).rgb;
 
   // Reconstruct normal from encoded [0,1] -> [-1,1]
   vec3 N = normalize(encN * 2.0 - 1.0);
