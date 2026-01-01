@@ -1,6 +1,7 @@
 #ifndef _Renderer_
 #define _Renderer_
 
+#include "RenderSettings.h"
 #include <filesystem> // C++17
 
 namespace RTRT
@@ -9,7 +10,6 @@ namespace RTRT
 class Scene;
 class PathTracer;
 class SoftwareRasterizer;
-struct RenderSettings;
 
 enum class DirtyState
 {
@@ -47,6 +47,10 @@ protected:
 
   bool Dirty() const { return ( _DirtyStates != (unsigned long)DirtyState::Clean ); }
   void CleanStates() { _DirtyStates = (unsigned long)DirtyState::Clean; }
+
+  float RenderScale()       const { return ( _Settings._RenderScale * 0.01f ); }
+  int RenderWidth()         const { return _Settings._RenderResolution.x; }
+  int RenderHeight()        const { return _Settings._RenderResolution.y; }
   
   Scene          & _Scene;
   RenderSettings & _Settings;

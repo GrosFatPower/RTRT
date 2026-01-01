@@ -113,17 +113,17 @@ static void ActivateTextures( GLFrameBuffer & ioFBO )
 }
 
 // LoadTexture
-static void LoadTexture( GLsizei iWidth, GLsizei iHeight, const void * iData, GLTexture & ioTex )
+static void LoadTexture( GLsizei iWidth, GLsizei iHeight, const void * iData, GLTexture & ioTex, GLint iTexMinFilter, GLint iTexMagFilter )
 {
   glBindTexture(ioTex._Target, ioTex._Handle);
   glTexImage2D(ioTex._Target, 0, ioTex._InternalFormat, iWidth, iHeight, 0, ioTex._DataFormat, ioTex._DataType, iData);
-  glTexParameteri(ioTex._Target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(ioTex._Target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(ioTex._Target, GL_TEXTURE_MIN_FILTER, iTexMinFilter);
+  glTexParameteri(ioTex._Target, GL_TEXTURE_MAG_FILTER, iTexMagFilter);
   glBindTexture(ioTex._Target, 0);
 }
 
 // GenTexture
-static void GenTexture( GLenum iTarget, GLint iInternalformat, GLsizei iWidth, GLsizei iHeight, GLenum iFormat, GLenum iType, const void * iData, GLTexture & ioTex )
+static void GenTexture( GLenum iTarget, GLint iInternalformat, GLsizei iWidth, GLsizei iHeight, GLenum iFormat, GLenum iType, const void * iData, GLTexture & ioTex, GLint iTexMinFilter = GL_LINEAR, GLint iTexMagFilter = GL_LINEAR )
 {
   ioTex._Target         = iTarget;
   ioTex._InternalFormat = iInternalformat;
@@ -131,7 +131,7 @@ static void GenTexture( GLenum iTarget, GLint iInternalformat, GLsizei iWidth, G
   ioTex._DataType       = iType;
   glGenTextures(1, &ioTex._Handle);
 
-  LoadTexture(iWidth, iHeight, iData, ioTex);
+  LoadTexture(iWidth, iHeight, iData, ioTex, iTexMinFilter, iTexMagFilter);
 }
 
 // UniformArrayElementName
@@ -201,7 +201,7 @@ static void UploadElementArrayBuffer(GLuint iEBO, GLsizeiptr iSize, const void* 
 
 // Setup attribute pointers for a VAO given a bound VBO/EBO
 static void SetupVertexAttribPointers(GLuint iVAO, GLuint iVBO, GLuint iEBO,
-  const std::vector<std::tuple<GLuint, GLint, GLenum, GLboolean, GLsizei, std::size_t>>& iAttributes)
+                                      const std::vector<std::tuple<GLuint, GLint, GLenum, GLboolean, GLsizei, std::size_t>> & iAttributes)
 {
   glBindVertexArray(iVAO);
   glBindBuffer(GL_ARRAY_BUFFER, iVBO);
@@ -210,12 +210,12 @@ static void SetupVertexAttribPointers(GLuint iVAO, GLuint iVBO, GLuint iEBO,
 
   for (const auto & attr : iAttributes)
   {
-    GLuint index = std::get<0>(attr);
-    GLint size = std::get<1>(attr);
-    GLenum type = std::get<2>(attr);
-    GLboolean normalized = std::get<3>(attr);
-    GLsizei stride = std::get<4>(attr);
-    std::size_t offset = std::get<5>(attr);
+    GLuint      index      = std::get<0>(attr);
+    GLint       size       = std::get<1>(attr);
+    GLenum      type       = std::get<2>(attr);
+    GLboolean   normalized = std::get<3>(attr);
+    GLsizei     stride     = std::get<4>(attr);
+    std::size_t offset     = std::get<5>(attr);
 
     glEnableVertexAttribArray(index);
     glVertexAttribPointer(index, size, type, normalized, stride, reinterpret_cast<const void*>(offset));
@@ -230,15 +230,15 @@ static void SetupVertexAttribPointers(GLuint iVAO, GLuint iVBO, GLuint iEBO,
 
 // Convenience: create VAO/VBO/EBO and upload data, then setup attributes.
 // Attributes vector uses the tuple layout described above.
-static void CreateMeshBuffers(GLuint & oVAO, GLuint & oVBO, GLuint & oEBO,
-  GLsizeiptr iVertexSize, const void* iVertexData, GLsizei iVertexStride,
-  GLsizeiptr iIndexSize,  const void* iIndexData,
-  const std::vector<std::tuple<GLuint, GLint, GLenum, GLboolean, GLsizei, std::size_t>>& iAttributes)
+static void CreateMeshBuffers( GLsizeiptr iVertexSize, const void * iVertexData,
+                               GLsizeiptr iIndexSize,  const void * iIndexData,
+                               const std::vector<std::tuple<GLuint, GLint, GLenum, GLboolean, GLsizei, std::size_t>> & iAttributes,
+                               GLuint & oVAO, GLuint & oVBO, GLuint & oEBO )
 {
   // Generate objects
   oVAO = GenVertexArray();
   oVBO = GenBuffer();
-  oEBO = (iIndexData != nullptr && iIndexSize > 0) ? GenBuffer() : 0;
+  oEBO = ( ( iIndexData != nullptr ) && iIndexSize > 0 ) ? GenBuffer() : 0;
 
   // Upload buffers
   if (oVBO)

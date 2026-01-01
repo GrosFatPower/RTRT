@@ -99,10 +99,7 @@ protected:
   int InitializeStats();
   int UpdateStats();
 
-  float RenderScale()       const { return ( _Settings._RenderScale * 0.01f ); }
   float LowResRenderScale() const { return ( RenderScale() * _Settings._LowResRatio ); }
-  int RenderWidth()         const { return _Settings._RenderResolution.x; }
-  int RenderHeight()        const { return _Settings._RenderResolution.y; }
 
   bool LowResPass()         const { return ( Dirty() && !_Settings._AutoScale ); }
   int LowResRenderWidth()   const { return std::max(int( _Settings._RenderResolution.x * LowResRenderScale() ), 32); }

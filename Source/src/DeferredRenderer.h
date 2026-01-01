@@ -14,6 +14,15 @@
 namespace RTRT
 {
 
+struct DeferredTexSlot
+{
+  static const TextureSlot _GAlbedo   = 0;
+  static const TextureSlot _GNormal   = 1;
+  static const TextureSlot _GPosition = 2;
+  static const TextureSlot _GDepth    = 3;
+  static const TextureSlot _Lighting  = 4;
+};
+
 class DeferredRenderer : public Renderer
 {
 public:
@@ -33,13 +42,15 @@ protected:
   int UnloadScene();
   int ReloadScene();
 
-  int InitializeGBuffer();
+  int InitializeFrameBuffers();
+  int ResizeRenderTarget();
 
   int ResizeGBuffer();
   int RecompileShaders();
 
   int BindGBufferTextures();
   int BindLightingTextures();
+  int BindRenderToScreenTextures();
 
   int UpdateUniforms();
 
@@ -47,14 +58,14 @@ protected:
 
   // G-buffer FBO and attachments
   GLFrameBuffer _GBufferFBO;
-  GLTexture     _GAlbedoTEX   = { 0, GL_TEXTURE_2D, 0, GL_RGBA8,  GL_RGBA, GL_UNSIGNED_BYTE };
-  GLTexture     _GNormalTEX   = { 0, GL_TEXTURE_2D, 1, GL_RGBA16F, GL_RGBA, GL_FLOAT };
-  GLTexture     _GPositionTEX = { 0, GL_TEXTURE_2D, 2, GL_RGBA16F, GL_RGBA, GL_FLOAT };
-  GLTexture     _GDepthTEX    = { 0, GL_TEXTURE_2D, 3, GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT };
+  GLTexture     _GAlbedoTEX   = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GAlbedo, GL_RGBA8,  GL_RGBA, GL_UNSIGNED_BYTE };
+  GLTexture     _GNormalTEX   = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GNormal, GL_RGBA16F, GL_RGBA, GL_FLOAT };
+  GLTexture     _GPositionTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GPosition, GL_RGBA16F, GL_RGBA, GL_FLOAT };
+  GLTexture     _GDepthTEX    = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GDepth, GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT };
 
   // Lighting target (single texture)
   GLFrameBuffer  _LightingFBO;
-  GLTexture      _LightingTEX  = { 0, GL_TEXTURE_2D, 4, GL_RGBA32F, GL_RGBA, GL_FLOAT };
+  GLTexture      _LightingTEX  = { 0, GL_TEXTURE_2D, DeferredTexSlot::_Lighting, GL_RGBA32F, GL_RGBA, GL_FLOAT };
 
   // Shaders
   std::unique_ptr<ShaderProgram> _GeometryShader;

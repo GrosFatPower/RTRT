@@ -84,10 +84,6 @@ protected:
   int BindRenderToTextureTextures();
   int BindRenderToScreenTextures();
 
-  float RenderScale()       const { return (_Settings._RenderScale * 0.01f); }
-  int RenderWidth()         const { return _Settings._RenderResolution.x; }
-  int RenderHeight()        const { return _Settings._RenderResolution.y; }
-
   void ResizeTileMap();
   void ResetTiles();
   void CopyTileToMainBuffer(const RasterData::Tile& iTile);

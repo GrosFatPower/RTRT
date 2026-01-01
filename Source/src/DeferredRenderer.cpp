@@ -96,7 +96,7 @@ int DeferredRenderer::Initialize()
     return 1;
   }
 
-  if ( 0 != InitializeGBuffer() )
+  if ( 0 != InitializeFrameBuffers() )
   {
     std::cout << "DeferredRenderer : Failed to initialize G-buffer !" << std::endl;
     return 1;
@@ -110,8 +110,11 @@ int DeferredRenderer::Initialize()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::Update()
 {
-  // Update per-frame uniforms
+  if (_DirtyStates & (unsigned long)DirtyState::RenderSettings)
+    this -> ResizeRenderTarget();
+
   UpdateUniforms();
+ 
   return 0;
 }
 
@@ -121,6 +124,7 @@ int DeferredRenderer::Update()
 int DeferredRenderer::Done()
 {
   _FrameNum++;
+
   return 0;
 }
 
@@ -171,10 +175,10 @@ int DeferredRenderer::ReloadScene()
     if ( !mesh )
       continue;
 
-    const std::vector<Vec3> & srcPos = mesh -> GetVertices();
-    const std::vector<Vec3> & srcNorm = mesh -> GetNormals();
-    const std::vector<Vec2> & srcUV = mesh -> GetUVs();
-    const std::vector<Vec3i> & srcIdx = mesh -> GetIndices();
+    const std::vector<Vec3>  & srcPos  = mesh -> GetVertices();
+    const std::vector<Vec3>  & srcNorm = mesh -> GetNormals();
+    const std::vector<Vec2>  & srcUV   = mesh -> GetUVs();
+    const std::vector<Vec3i> & srcIdx  = mesh -> GetIndices();
 
     // Map each (posIdx, normIdx, uvIdx) triplet to a unique GPU vertex
     std::unordered_map<IndexTriplet, uint32_t, IndexTripletHash> indexMap;
@@ -189,27 +193,27 @@ int DeferredRenderer::ReloadScene()
 
       IndexTriplet key{ triIdx.x, triIdx.y, triIdx.z };
       auto it = indexMap.find(key);
-      if (it != indexMap.end())
+      if ( it != indexMap.end() )
       {
-        outIndices.push_back(static_cast<uint32_t>(it->second));
+        outIndices.push_back(static_cast<uint32_t>(it -> second));
       }
       else
       {
         GPUMeshVertex v{};
         // position
-        if ( key.v >= 0 && static_cast<size_t>(key.v) < srcPos.size() )
+        if ( ( key.v >= 0 ) && ( static_cast<size_t>(key.v) < srcPos.size() ) )
           v._Pos = srcPos[key.v];
         else
           v._Pos = Vec3(0.f);
 
         // normal (fallback to zero if missing)
-        if ( key.n >= 0 && static_cast<size_t>(key.n) < srcNorm.size() )
+        if ( ( key.n >= 0 ) && ( static_cast<size_t>(key.n) < srcNorm.size() ) )
           v._Normal = srcNorm[key.n];
         else
           v._Normal = Vec3(0.f);
 
         // uv
-        if ( key.u >= 0 && static_cast<size_t>(key.u) < srcUV.size() )
+        if ( ( key.u >= 0 ) && ( static_cast<size_t>(key.u) < srcUV.size() ) )
           v._UV = srcUV[key.u];
         else
           v._UV = Vec2(0.f);
@@ -234,10 +238,10 @@ int DeferredRenderer::ReloadScene()
     attrs.emplace_back(1u, 3, GL_FLOAT, GL_FALSE, stride, offsetof(GPUMeshVertex, _Normal));
     attrs.emplace_back(2u, 2, GL_FLOAT, GL_FALSE, stride, offsetof(GPUMeshVertex, _UV));
 
-    GLUtil::CreateMeshBuffers(vao, vbo, ebo,
-      static_cast<GLsizeiptr>(outVertices.size() * sizeof(GPUMeshVertex)), outVertices.data(), stride,
-      static_cast<GLsizeiptr>(outIndices.size() * sizeof(uint32_t)), outIndices.data(),
-      attrs);
+    GLUtil::CreateMeshBuffers( static_cast<GLsizeiptr>(outVertices.size() * sizeof(GPUMeshVertex)), outVertices.data(),
+                               static_cast<GLsizeiptr>(outIndices.size() * sizeof(uint32_t)), outIndices.data(),
+                               attrs,
+                               vao, vbo, ebo);
 
     _MeshVAOs[mi] = vao;
     _MeshVBOs[mi] = vbo;
@@ -249,76 +253,80 @@ int DeferredRenderer::ReloadScene()
 }
 
 // ----------------------------------------------------------------------------
-// InitializeGBuffer
+// InitializeFrameBuffers
 // ----------------------------------------------------------------------------
-int DeferredRenderer::InitializeGBuffer()
+int DeferredRenderer::InitializeFrameBuffers()
 {
-  // Create G-buffer textures sized to render resolution
-  ResizeGBuffer();
-
-  return 0;
-}
-
-// ----------------------------------------------------------------------------
-// ResizeGBuffer
-// ----------------------------------------------------------------------------
-int DeferredRenderer::ResizeGBuffer()
-{
-  int w = _Settings._RenderResolution.x;
-  int h = _Settings._RenderResolution.y;
+  _Settings._RenderResolution.x = int(_Settings._WindowResolution.x * RenderScale());
+  _Settings._RenderResolution.y = int(_Settings._WindowResolution.y * RenderScale());
 
   // Albedo (8-bit RGBA)
-  GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, w, h, GL_RGBA, GL_UNSIGNED_BYTE, nullptr, _GAlbedoTEX);
+  GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, RenderWidth(), RenderHeight(), GL_RGBA, GL_UNSIGNED_BYTE, nullptr, _GAlbedoTEX);
 
   // Normals (high precision)
-  GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA16F, w, h, GL_RGBA, GL_FLOAT, nullptr, _GNormalTEX);
+  GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA16F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _GNormalTEX);
 
   // World positions (high precision)
-  GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA16F, w, h, GL_RGBA, GL_FLOAT, nullptr, _GPositionTEX);
+  GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA16F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _GPositionTEX);
 
   // Depth
-  glGenTextures(1, &_GDepthTEX._Handle);
-  glBindTexture(GL_TEXTURE_2D, _GDepthTEX._Handle);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glBindTexture(GL_TEXTURE_2D, 0);
+  GLUtil::GenTexture(GL_TEXTURE_2D, GL_DEPTH_COMPONENT24, RenderWidth(), RenderHeight(), GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr, _GDepthTEX, GL_NEAREST, GL_NEAREST);
 
   // Create / configure G-buffer FBO
   glGenFramebuffers(1, &_GBufferFBO._Handle);
   glBindFramebuffer(GL_FRAMEBUFFER, _GBufferFBO._Handle);
 
+  _GBufferFBO._Tex.clear();
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _GAlbedoTEX._Handle, 0);
+  _GBufferFBO._Tex.push_back(_GAlbedoTEX);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, _GNormalTEX._Handle, 0);
+  _GBufferFBO._Tex.push_back(_GNormalTEX);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, _GPositionTEX._Handle, 0);
+  _GBufferFBO._Tex.push_back(_GPositionTEX);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,  GL_TEXTURE_2D, _GDepthTEX._Handle, 0);
+  _GBufferFBO._Tex.push_back(_GDepthTEX);
 
   GLenum DrawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
   glDrawBuffers(3, DrawBuffers);
-
   if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
   {
     std::cout << "DeferredRenderer : G-buffer framebuffer not complete !" << std::endl;
     return 1;
   }
-
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   // Lighting target (single HDR target)
-  GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, w, h, GL_RGBA, GL_FLOAT, nullptr, _LightingTEX);
+  GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _LightingTEX);
 
   glGenFramebuffers(1, &_LightingFBO._Handle);
   glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
+
+  _LightingFBO._Tex.clear();
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _LightingTEX._Handle, 0);
+  _LightingFBO._Tex.push_back(_LightingTEX);
+
   GLenum LightDrawBuffers[] = { GL_COLOR_ATTACHMENT0 };
   glDrawBuffers(1, LightDrawBuffers);
-
   if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
   {
     std::cout << "DeferredRenderer : Lighting framebuffer not complete !" << std::endl;
     return 1;
   }
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ResizeRenderTarget
+// ----------------------------------------------------------------------------
+int DeferredRenderer::ResizeRenderTarget()
+{
+  _Settings._RenderResolution.x = int(_Settings._WindowResolution.x * RenderScale());
+  _Settings._RenderResolution.y = int(_Settings._WindowResolution.y * RenderScale());
+
+  GLUtil::ResizeFBO(_GBufferFBO, RenderWidth(), RenderHeight());
+  GLUtil::ResizeFBO(_LightingFBO, RenderWidth(), RenderHeight());
 
   return 0;
 }
@@ -359,8 +367,7 @@ int DeferredRenderer::RecompileShaders()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::BindGBufferTextures()
 {
-  // Make G-buffer textures available to the lighting shader in fixed slots
-  GLUtil::ActivateTexture(_GAlbedoTEX);   // binds to assigned unit
+  GLUtil::ActivateTexture(_GAlbedoTEX); 
   GLUtil::ActivateTexture(_GNormalTEX);
   GLUtil::ActivateTexture(_GPositionTEX);
   GLUtil::ActivateTexture(_GDepthTEX);
@@ -386,13 +393,10 @@ int DeferredRenderer::UpdateUniforms()
   Mat4x4 V;
   _Scene.GetCamera().ComputeLookAtMatrix(V);
 
-  float aspect = 1.0f;
-  if (_Settings._RenderResolution.y > 0)
-    aspect = static_cast<float>(_Settings._RenderResolution.x) / static_cast<float>(_Settings._RenderResolution.y);
-
-  float top = 0.0f, right = 0.0f;
+  float ratio = RenderWidth() / float(RenderHeight());
+  float top, right;
   Mat4x4 P;
-  _Scene.GetCamera().ComputePerspectiveProjMatrix(aspect, P, &top, &right);
+  _Scene.GetCamera().ComputePerspectiveProjMatrix(ratio, P, &top, &right);
 
   float zNear = 0.0f, zFar = 0.0f;
   _Scene.GetCamera().GetZNearFar(zNear, zFar);
@@ -403,7 +407,7 @@ int DeferredRenderer::UpdateUniforms()
   Vec3 camForward = _Scene.GetCamera().GetForward();
 
   // Geometry shader
-  if (_GeometryShader)
+  if ( _GeometryShader )
   {
     _GeometryShader -> Use();
     _GeometryShader -> SetUniform("u_View", V);
@@ -417,7 +421,7 @@ int DeferredRenderer::UpdateUniforms()
   }
 
   // Lighting shader
-  if (_LightingShader)
+  if ( _LightingShader )
   {
     _LightingShader -> Use();
     _LightingShader -> SetUniform("u_View", V);
@@ -430,14 +434,29 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> SetUniform("u_InvScreen", 1.0f / _Settings._RenderResolution.x, 1.0f / _Settings._RenderResolution.y);
 
     // The lighting shader expects samplers named u_GAlbedo, u_GNormal, u_GPosition, u_GDepth
-    _LightingShader -> SetUniform("u_GAlbedo",   0);
-    _LightingShader -> SetUniform("u_GNormal",   1);
-    _LightingShader -> SetUniform("u_GPosition", 2);
-    _LightingShader -> SetUniform("u_GDepth",    3);
+    _LightingShader -> SetUniform("u_GAlbedo",   (int)DeferredTexSlot::_GAlbedo);
+    _LightingShader -> SetUniform("u_GNormal",   (int)DeferredTexSlot::_GNormal);
+    _LightingShader -> SetUniform("u_GPosition", (int)DeferredTexSlot::_GPosition);
+    _LightingShader -> SetUniform("u_GDepth",    (int)DeferredTexSlot::_GDepth);
 
     // ToDo : set light parameters uniforms
 
     _LightingShader -> StopUsing();
+  }
+
+  // LComposite shader
+  if ( _CompositeShader )
+  {
+    _CompositeShader -> Use();
+
+    _CompositeShader -> SetUniform("u_ScreenTexture", (int)DeferredTexSlot::_Lighting); // the slot assigned to _LightingTEX in this file
+    _CompositeShader -> SetUniform("u_RenderRes", static_cast<float>(_Settings._RenderResolution.x), static_cast<float>(_Settings._RenderResolution.y));
+    _CompositeShader -> SetUniform("u_Gamma", _Settings._Gamma);
+    _CompositeShader -> SetUniform("u_Exposure", _Settings._Exposure);
+    _CompositeShader -> SetUniform("u_ToneMapping", ( _Settings._ToneMapping ? 1 : 0 ));
+    _CompositeShader -> SetUniform("u_FXAA", (_Settings._FXAA ?  1 : 0 ));
+
+    _CompositeShader -> StopUsing();
   }
 
   return 0;
@@ -448,12 +467,9 @@ int DeferredRenderer::UpdateUniforms()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::RenderToTexture()
 {
-  int w = _Settings._RenderResolution.x;
-  int h = _Settings._RenderResolution.y;
-
   // Geometry pass: render scene into G-buffer
   glBindFramebuffer(GL_FRAMEBUFFER, _GBufferFBO._Handle);
-  glViewport(0, 0, w, h);
+  glViewport(0, 0, RenderWidth(), RenderHeight());
   glClearColor(0.f, 0.f, 0.f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -500,7 +516,7 @@ int DeferredRenderer::RenderToTexture()
 
   // Lighting pass: sample G-buffer and compute shading into lighting FBO
   glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
-  glViewport(0, 0, w, h);
+  glViewport(0, 0, RenderWidth(), RenderHeight());
   glClearColor(0.f, 0.f, 0.f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT);
 
@@ -531,6 +547,16 @@ int DeferredRenderer::RenderToTexture()
 }
 
 // ----------------------------------------------------------------------------
+// BindRenderToScreenTextures
+// ----------------------------------------------------------------------------
+int DeferredRenderer::BindRenderToScreenTextures()
+{
+  GLUtil::ActivateTextures(_LightingFBO);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // RenderToScreen
 // ----------------------------------------------------------------------------
 int DeferredRenderer::RenderToScreen()
@@ -539,18 +565,16 @@ int DeferredRenderer::RenderToScreen()
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
   glClearColor(0.f, 0.f, 0.f, 1.f);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  glClear(GL_COLOR_BUFFER_BIT);
 
-  if (_CompositeShader)
+  if ( _CompositeShader )
   {
     _CompositeShader -> Use();
-    // Bind the lighting texture to the composite shader
+
     BindLightingTextures();
-    _CompositeShader -> SetUniform("u_ScreenTexture", 4); // the slot assigned to _LightingTEX in this file
-    _CompositeShader -> SetUniform("u_RenderRes", static_cast<float>(_Settings._RenderResolution.x), static_cast<float>(_Settings._RenderResolution.y));
-    _CompositeShader -> SetUniform("u_FXAA", 0);
-    _CompositeShader -> SetUniform("u_ToneMapping", 0);
+
     _Quad.Render(*_CompositeShader);
+
     _CompositeShader -> StopUsing();
   }
 
@@ -595,9 +619,11 @@ int DeferredRenderer::RenderToFile(const std::filesystem::path& iFilePath)
   if (_CompositeShader)
   {
     _CompositeShader -> Use();
+
     BindLightingTextures();
-    _CompositeShader -> SetUniform("u_ScreenTexture", 4);
+
     _Quad.Render(*_CompositeShader);
+
     _CompositeShader -> StopUsing();
   }
 
