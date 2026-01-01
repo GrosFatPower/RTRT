@@ -501,6 +501,7 @@ int DeferredRenderer::RenderToTexture()
   // Lighting pass: sample G-buffer and compute shading into lighting FBO
   glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
   glViewport(0, 0, w, h);
+  glClearColor(0.f, 0.f, 0.f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT);
 
   if (_LightingShader)
@@ -537,6 +538,7 @@ int DeferredRenderer::RenderToScreen()
   // Composite / postprocess and render to default framebuffer
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+  glClearColor(0.f, 0.f, 0.f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   if (_CompositeShader)
@@ -545,6 +547,9 @@ int DeferredRenderer::RenderToScreen()
     // Bind the lighting texture to the composite shader
     BindLightingTextures();
     _CompositeShader -> SetUniform("u_ScreenTexture", 4); // the slot assigned to _LightingTEX in this file
+    _CompositeShader -> SetUniform("u_RenderRes", static_cast<float>(_Settings._RenderResolution.x), static_cast<float>(_Settings._RenderResolution.y));
+    _CompositeShader -> SetUniform("u_FXAA", 0);
+    _CompositeShader -> SetUniform("u_ToneMapping", 0);
     _Quad.Render(*_CompositeShader);
     _CompositeShader -> StopUsing();
   }
