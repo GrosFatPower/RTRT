@@ -50,7 +50,6 @@ protected:
   int InitializeFrameBuffers();
   int ResizeRenderTarget();
 
-  int ResizeGBuffer();
   int RecompileShaders();
 
   int BindGBufferTextures();

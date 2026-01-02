@@ -425,10 +425,17 @@ int DeferredRenderer::RecompileShaders()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::BindGBufferTextures()
 {
-  GLUtil::ActivateTexture(_GAlbedoTEX); 
-  GLUtil::ActivateTexture(_GNormalTEX);
-  GLUtil::ActivateTexture(_GPositionTEX);
-  GLUtil::ActivateTexture(_GDepthTEX);
+  GLUtil::ActivateTextures(_GBufferFBO); 
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// BindLightingTextures
+// ----------------------------------------------------------------------------
+int DeferredRenderer::BindLightingTextures()
+{
+  GLUtil::ActivateTextures(_GBufferFBO); 
 
   GLUtil::ActivateTexture(_TexIndTBO._Tex);
   GLUtil::ActivateTexture(_TexArrayTEX);
@@ -440,11 +447,11 @@ int DeferredRenderer::BindGBufferTextures()
 }
 
 // ----------------------------------------------------------------------------
-// BindLightingTextures
+// BindRenderToScreenTextures
 // ----------------------------------------------------------------------------
-int DeferredRenderer::BindLightingTextures()
+int DeferredRenderer::BindRenderToScreenTextures()
 {
-  GLUtil::ActivateTexture(_LightingTEX);
+  GLUtil::ActivateTextures(_LightingFBO);
   GLUtil::ActivateTexture(_EnvMapTEX);
 
   return 0;
@@ -552,12 +559,12 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> StopUsing();
   }
 
-  // LComposite shader
+  // Composite shader
   if ( _CompositeShader )
   {
     _CompositeShader -> Use();
 
-    _CompositeShader -> SetUniform("u_ScreenTexture", (int)DeferredTexSlot::_Lighting); // the slot assigned to _LightingTEX in this file
+    _CompositeShader -> SetUniform("u_ScreenTexture", (int)DeferredTexSlot::_Lighting);
     _CompositeShader -> SetUniform("u_RenderRes", static_cast<float>(_Settings._RenderResolution.x), static_cast<float>(_Settings._RenderResolution.y));
     _CompositeShader -> SetUniform("u_Gamma", _Settings._Gamma);
     _CompositeShader -> SetUniform("u_Exposure", _Settings._Exposure);
@@ -592,6 +599,8 @@ int DeferredRenderer::RenderToTexture()
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // now actually clears depth
 
     _GeometryShader -> Use();
+
+    this -> BindGBufferTextures();
 
     const auto & instances = _Scene.GetMeshInstances();
     for ( const MeshInstance& inst : instances )
@@ -635,7 +644,8 @@ int DeferredRenderer::RenderToTexture()
 
     // Bind G-buffer textures to shader
     _LightingShader -> Use();
-    BindGBufferTextures();
+
+    this -> BindLightingTextures();
 
     // Render fullscreen quad to produce lit image
     _Quad.Render(*_LightingShader);
@@ -644,16 +654,6 @@ int DeferredRenderer::RenderToTexture()
     // At this point _LightingTEX contains the shaded image
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
   }
-
-  return 0;
-}
-
-// ----------------------------------------------------------------------------
-// BindRenderToScreenTextures
-// ----------------------------------------------------------------------------
-int DeferredRenderer::BindRenderToScreenTextures()
-{
-  GLUtil::ActivateTextures(_LightingFBO);
 
   return 0;
 }
@@ -673,7 +673,7 @@ int DeferredRenderer::RenderToScreen()
   {
     _CompositeShader -> Use();
 
-    BindLightingTextures();
+    this -> BindRenderToScreenTextures();
 
     _Quad.Render(*_CompositeShader);
 
@@ -722,7 +722,7 @@ int DeferredRenderer::RenderToFile(const std::filesystem::path& iFilePath)
   {
     _CompositeShader -> Use();
 
-    BindLightingTextures();
+    BindRenderToScreenTextures();
 
     _Quad.Render(*_CompositeShader);
 
