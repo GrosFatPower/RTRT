@@ -438,6 +438,14 @@ int DeferredRenderer::UpdateUniforms()
   Vec3 camRight = _Scene.GetCamera().GetRight();
   Vec3 camForward = _Scene.GetCamera().GetForward();
 
+  // Update Scene data
+  if ( _DirtyStates & (unsigned long)DirtyState::SceneMaterials )
+  {
+    glBindTexture(GL_TEXTURE_2D, _MaterialsTEX._Handle);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>((sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size()), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetMaterials()[0]);
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
+
   // Geometry shader
   if ( _GeometryShader )
   {
@@ -466,7 +474,32 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> SetUniform("u_GPosition", (int)DeferredTexSlot::_GPosition);
     _LightingShader -> SetUniform("u_GDepth",    (int)DeferredTexSlot::_GDepth);
 
-    // ToDo : set light parameters uniforms
+    if ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
+    {
+      int nbLights = 0;
+
+      for ( int i = 0; i < _Scene.GetNbLights(); ++i )
+      {
+        Light * curLight = _Scene.GetLight(i);
+        if ( !curLight )
+          continue;
+
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Pos"     ), curLight -> _Pos);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Emission"), curLight -> _Emission * curLight -> _Intensity);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_DirU"    ), curLight -> _DirU);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_DirV"    ), curLight -> _DirV);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Radius"  ), curLight -> _Radius);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Area"    ), curLight -> _Area);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Type"    ), curLight -> _Type);
+
+        nbLights++;
+        if ( nbLights >= 32 )
+          break;
+      }
+
+      _LightingShader -> SetUniform("u_NbLights", nbLights);
+      _LightingShader -> SetUniform("u_ShowLights", (int)_Settings._ShowLights);
+    }
 
     // Scene data
     _LightingShader -> SetUniform("u_BackgroundColor", _Settings._BackgroundColor);
@@ -490,14 +523,6 @@ int DeferredRenderer::UpdateUniforms()
     _CompositeShader -> SetUniform("u_FXAA", (_Settings._FXAA ?  1 : 0 ));
 
     _CompositeShader -> StopUsing();
-  }
-
-  // Scene data
-  if ( _DirtyStates & (unsigned long)DirtyState::SceneMaterials )
-  {
-    glBindTexture(GL_TEXTURE_2D, _MaterialsTEX._Handle);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>((sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size()), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetMaterials()[0]);
-    glBindTexture(GL_TEXTURE_2D, 0);
   }
 
   return 0;

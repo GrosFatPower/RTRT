@@ -532,7 +532,7 @@ int Test5::DrawUI()
         _Renderer -> Notify(DirtyState::SceneCamera);
       }
 
-      if ( RendererType::SoftwareRasterizer == _RendererType )
+      if ((RendererType::SoftwareRasterizer == _RendererType) || ( RendererType::OpenGLRasterizer == _RendererType ) )
       {
         float zNear = 0.f, zFar = 0.f;
         _Scene -> GetCamera().GetZNearFar(zNear, zFar);

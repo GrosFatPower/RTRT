@@ -1,5 +1,7 @@
 #version 410 core
 
+#include Lights.glsl
+
 in vec2 fragUV; // from fullscreen quad vertex shader
 out vec4 fragColor;
 
@@ -10,19 +12,17 @@ uniform sampler2D u_GPosition;
 uniform sampler2D u_GDepth;
 
 // Simple lighting parameters (tweak in C++ or expose more uniforms)
-uniform vec3 u_LightDir    = normalize(vec3(-0.5, -1.0, -0.3)); // direction TO light
-uniform vec3 u_LightColor  = vec3(1.0, 1.0, 1.0);
-uniform vec3 u_Ambient     = vec3(0.08, 0.08, 0.08);
+uniform vec3 u_Ambient = vec3(0.001, 0.001, 0.001);
 uniform vec3 u_BackgroundColor = vec3(1.0, 1.0, 1.0);
 uniform vec3 u_CameraPos;
 
 void main()
 {
   // Read G-buffer
-  vec3 albedo = texture(u_GAlbedo, fragUV).rgb;
-  vec3 encN   = texture(u_GNormal, fragUV).rgb;
-  vec3 pos    = texture(u_GPosition, fragUV).rgb;
-  float depth  = texture(u_GDepth, fragUV).r;
+  vec3 albedo  = texture(u_GAlbedo, fragUV).rgb;
+  vec3 N       = normalize(texture(u_GNormal, fragUV).xyz * 2.0 - 1.0); // [0,1] -> [-1,1]
+  vec3 pos     = texture(u_GPosition, fragUV).xyz;
+  float depth  = texture(u_GDepth, fragUV).x;
 
   if ( depth >= 1.0 ) // far plane, no geometry
   {
@@ -30,23 +30,31 @@ void main()
 	return;
   }
 
-  // Reconstruct normal from encoded [0,1] -> [-1,1]
-  vec3 N = normalize(encN * 2.0 - 1.0);
+  // Shading
+  vec4 alpha = vec4(0.);
+  for ( int i = 0; i < u_NbLights; ++i )
+  {
+    float ambientStrength = .1;
+    float diffuse = 0.;
+    float specular = 0.;
 
-  // Simple Blinn-Phong with a single distant light
-  vec3 L = normalize(u_LightDir); // direction to light (assumed normalized)
-  float NdotL = max(dot(N, L), 0.0);
+    vec3 L;
+    if ( u_Lights[i]._Type == DISTANT_LIGHT )
+	  L = u_Lights[i]._Pos;
+	else
+	  L = normalize(u_Lights[i]._Pos - pos);
 
-  // Diffuse
-  vec3 diffuse = albedo * NdotL;
+    diffuse = max(0., dot(N, L));
 
-  // Specular (simple power)
-  vec3 V = normalize(u_CameraPos - pos);
-  vec3 H = normalize(V + L);
-  float specPow = 32.0;
-  float spec = pow(max(dot(N, H), 0.0), specPow);
+    vec3 V = normalize(u_CameraPos - pos);
+    vec3 H = reflect(-L, N);
 
-  vec3 final = u_Ambient * albedo + u_LightColor * (diffuse + vec3(spec) * 0.2);
+	float specPow = 32.0;
+    float specularStrength = 0.5f;
+    specular = pow(max(dot(V, H), 0.), specPow) * specularStrength;
 
-  fragColor = vec4(final, 1.0);
+    alpha += min(diffuse + ambientStrength + specular, 1.) * vec4(normalize(u_Lights[i]._Emission), 1.);
+  }
+
+  fragColor = min(vec4(albedo, 1.) * alpha, vec4(1.));
 }

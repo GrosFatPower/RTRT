@@ -27,7 +27,6 @@ void main()
   hitPoint._Normal     = normalize(fragNormal);
   hitPoint._UV         = fragUV;
   hitPoint._MaterialID = v_MaterialID;
-  //TriangleTangents(v0, v1, v2, uvMatID0.xy, uvMatID1.xy, uvMatID2.xy, oClosestHit._Tangent, oClosestHit._Bitangent); ToDo
 
   // Simple albedo output: shader can be extended to sample material/texture arrays.
   vec3 albedo = u_DefaultAlbedo;
@@ -38,6 +37,7 @@ void main()
     
     albedo = mat._Albedo;
   }
+  //ComputeOnB(hitPoint._Normal, hitPoint._Tangent, hitPoint._Bitangent);
 
   // Pack outputs
   gAlbedo = vec4(albedo, 1.0);
