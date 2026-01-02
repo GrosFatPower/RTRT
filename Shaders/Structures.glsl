@@ -5,11 +5,6 @@
 #ifndef _STRUCTURES_GLSL_
 #define _STRUCTURES_GLSL_
 
-// LIGHT_TYPE
-#define QUAD_LIGHT    0
-#define SPHERE_LIGHT  1
-#define DISTANT_LIGHT 2
-
 // SCATTER_TYPE
 #define SCATTER_NONE     0 // No scattering, the path stops here
 #define SCATTER_EXPLICIT 1 // Explicit scatter direction
@@ -19,17 +14,6 @@ struct Ray
 {
   vec3 _Orig;
   vec3 _Dir;
-};
-
-struct Light
-{
-  vec3  _Pos;
-  vec3  _Emission;
-  vec3  _DirU;
-  vec3  _DirV;
-  float _Radius;
-  float _Area;
-  float _Type;
 };
 
 struct HitPoint

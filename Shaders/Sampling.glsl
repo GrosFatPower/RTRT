@@ -7,6 +7,7 @@
 
 #include Constants.glsl
 #include Structures.glsl
+#include Intersections.glsl
 #include RNG.glsl
 #include ToneMapping.glsl
 

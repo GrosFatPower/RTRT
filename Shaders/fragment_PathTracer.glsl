@@ -147,7 +147,7 @@ vec3 DirectLight( in Ray iRay, in HitPoint iClosestHit, in Material iMat, float 
         //float pdf = cosTheta / PI;
         //vec3 f = BRDF(iClosestHit._Normal, -iRay._Dir, lightDir, iMat) * cosTheta;
         float pdf = 0.f;
-        vec3 f = DisneyEval( iClosestHit, iMat, iEta, -iRay._Dir, lightDir, pdf );
+        vec3 f =  DisneyEval( iClosestHit, iMat, iEta, -iRay._Dir, lightDir, pdf );
     
         float misWeight = PowerHeuristic(lightPdf, pdf);
         if ( misWeight > 0. )

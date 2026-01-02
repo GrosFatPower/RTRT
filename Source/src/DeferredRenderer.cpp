@@ -1,6 +1,7 @@
 #include "DeferredRenderer.h"
 
 #include "Scene.h"
+#include "EnvMap.h"
 #include "PathUtils.h"
 #include "Mesh.h"
 
@@ -79,6 +80,7 @@ DeferredRenderer::~DeferredRenderer()
   GLUtil::DeleteTBO(_TexIndTBO);
   GLUtil::DeleteTEX(_TexArrayTEX);
   GLUtil::DeleteTEX(_MaterialsTEX);
+  GLUtil::DeleteTEX(_EnvMapTEX);
 
   UnloadScene();
 }
@@ -117,6 +119,9 @@ int DeferredRenderer::Update()
   if (_DirtyStates & (unsigned long)DirtyState::RenderSettings)
     this -> ResizeRenderTarget();
 
+  if ( _DirtyStates & (unsigned long)DirtyState::SceneEnvMap )
+    this -> ReloadEnvMap();
+
   UpdateUniforms();
  
   return 0;
@@ -128,6 +133,8 @@ int DeferredRenderer::Update()
 int DeferredRenderer::Done()
 {
   _FrameNum++;
+
+  CleanStates();
 
   return 0;
 }
@@ -280,6 +287,30 @@ int DeferredRenderer::ReloadScene()
 }
 
 // ----------------------------------------------------------------------------
+// ReloadEnvMap
+// ----------------------------------------------------------------------------
+int DeferredRenderer::ReloadEnvMap()
+{
+  GLUtil::DeleteTEX(_EnvMapTEX);
+
+  if ( _Scene.GetEnvMap().IsInitialized() )
+  {
+    glGenTextures(1, &_EnvMapTEX._Handle);
+    glBindTexture(GL_TEXTURE_2D, _EnvMapTEX._Handle);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, _Scene.GetEnvMap().GetWidth(), _Scene.GetEnvMap().GetHeight(), 0, GL_RGB, GL_FLOAT, _Scene.GetEnvMap().GetRawData());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    _Scene.GetEnvMap().SetHandle(_EnvMapTEX._Handle);
+  }
+  else
+    _Settings._EnableSkybox = false;
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // InitializeFrameBuffers
 // ----------------------------------------------------------------------------
 int DeferredRenderer::InitializeFrameBuffers()
@@ -403,6 +434,8 @@ int DeferredRenderer::BindGBufferTextures()
   GLUtil::ActivateTexture(_TexArrayTEX);
   GLUtil::ActivateTexture(_MaterialsTEX);
 
+  GLUtil::ActivateTexture(_EnvMapTEX);
+
   return 0;
 }
 
@@ -412,6 +445,7 @@ int DeferredRenderer::BindGBufferTextures()
 int DeferredRenderer::BindLightingTextures()
 {
   GLUtil::ActivateTexture(_LightingTEX);
+  GLUtil::ActivateTexture(_EnvMapTEX);
 
   return 0;
 }
@@ -437,6 +471,7 @@ int DeferredRenderer::UpdateUniforms()
   Vec3 camUp = _Scene.GetCamera().GetUp();
   Vec3 camRight = _Scene.GetCamera().GetRight();
   Vec3 camForward = _Scene.GetCamera().GetForward();
+  float camFov = _Scene.GetCamera().GetFOV();
 
   // Update Scene data
   if ( _DirtyStates & (unsigned long)DirtyState::SceneMaterials )
@@ -466,13 +501,18 @@ int DeferredRenderer::UpdateUniforms()
   if ( _LightingShader )
   {
     _LightingShader -> Use();
-    _LightingShader -> SetUniform("u_CameraPos", camPos);
+    _LightingShader -> SetUniform("u_Camera._Pos", camPos);
+    _LightingShader -> SetUniform("u_Camera._Up", camUp);
+    _LightingShader -> SetUniform("u_Camera._Right", camRight);
+    _LightingShader -> SetUniform("u_Camera._Forward", camForward);
+    _LightingShader -> SetUniform("u_Camera._FOV", camFov);
 
     // The lighting shader expects samplers named u_GAlbedo, u_GNormal, u_GPosition, u_GDepth
     _LightingShader -> SetUniform("u_GAlbedo",   (int)DeferredTexSlot::_GAlbedo);
     _LightingShader -> SetUniform("u_GNormal",   (int)DeferredTexSlot::_GNormal);
     _LightingShader -> SetUniform("u_GPosition", (int)DeferredTexSlot::_GPosition);
     _LightingShader -> SetUniform("u_GDepth",    (int)DeferredTexSlot::_GDepth);
+    _LightingShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
 
     if ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
     {
@@ -503,9 +543,11 @@ int DeferredRenderer::UpdateUniforms()
 
     // Scene data
     _LightingShader -> SetUniform("u_BackgroundColor", _Settings._BackgroundColor);
-    //_LightingShader -> SetUniform("u_TexIndTexture",    (int)DeferredTexSlot::_TexInd);
-    //_LightingShader -> SetUniform("u_TexArrayTexture",  (int)DeferredTexSlot::_TexArray);
-    //_LightingShader -> SetUniform("u_MaterialsTexture", (int)DeferredTexSlot::_Materials);
+    _LightingShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
+    _LightingShader -> SetUniform("u_EnableBackground" , (int)_Settings._EnableBackGround);
+    _LightingShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
+    _LightingShader -> SetUniform("u_EnvMapRes", (float)_Scene.GetEnvMap().GetWidth(), (float)_Scene.GetEnvMap().GetHeight());
+    _LightingShader -> SetUniform("u_EnvMap", (int)DeferredTexSlot::_EnvMap);
 
     _LightingShader -> StopUsing();
   }

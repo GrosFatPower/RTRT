@@ -1,6 +1,7 @@
 #version 410 core
 
 #include Lights.glsl
+#include Sampling.glsl
 
 in vec2 fragUV; // from fullscreen quad vertex shader
 out vec4 fragColor;
@@ -14,7 +15,15 @@ uniform sampler2D u_GDepth;
 // Simple lighting parameters (tweak in C++ or expose more uniforms)
 uniform vec3 u_Ambient = vec3(0.001, 0.001, 0.001);
 uniform vec3 u_BackgroundColor = vec3(1.0, 1.0, 1.0);
-uniform vec3 u_CameraPos;
+uniform vec2 u_Resolution;
+uniform Camera u_Camera;
+
+// EnvMap
+uniform int       u_EnableBackground  = 0;
+uniform int       u_EnableEnvMap      = 0;
+uniform float     u_EnvMapRotation    = 0.f;
+uniform vec2      u_EnvMapRes;
+uniform sampler2D u_EnvMap;
 
 void main()
 {
@@ -26,7 +35,25 @@ void main()
 
   if ( depth >= 1.0 ) // far plane, no geometry
   {
-	fragColor = vec4(u_BackgroundColor, 1.);
+    if ( u_EnableEnvMap > 0 )
+    {
+      // Compute view direction
+      vec2 centeredUV = fragUV * 2.0 - 1.0;
+
+      float scale = tan(u_Camera._FOV * .5);
+      centeredUV.x *= scale;
+      centeredUV.y *= ( u_Resolution.y / u_Resolution.x ) * scale;
+
+      vec3 V = normalize(u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward);
+
+      fragColor = vec4(SampleSkybox(V, u_EnvMap, u_EnvMapRotation), 1.);
+    }
+    else if ( u_EnableBackground > 0 )
+    {
+	  fragColor = vec4(u_BackgroundColor, 1.);
+    }
+    else
+      fragColor = vec4(0., 0., 0., 1.);
 	return;
   }
 
@@ -46,7 +73,7 @@ void main()
 
     diffuse = max(0., dot(N, L));
 
-    vec3 V = normalize(u_CameraPos - pos);
+    vec3 V = normalize(u_Camera._Pos - pos);
     vec3 H = reflect(-L, N);
 
 	float specPow = 32.0;

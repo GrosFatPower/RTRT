@@ -24,6 +24,7 @@ struct DeferredTexSlot
   static const TextureSlot _TexInd    = 5;
   static const TextureSlot _TexArray  = 6;
   static const TextureSlot _Materials = 7;
+  static const TextureSlot _EnvMap    = 8;
 };
 
 class DeferredRenderer : public Renderer
@@ -44,6 +45,7 @@ protected:
 
   int UnloadScene();
   int ReloadScene();
+  int ReloadEnvMap();
 
   int InitializeFrameBuffers();
   int ResizeRenderTarget();
@@ -71,9 +73,10 @@ protected:
   GLTexture     _LightingTEX  = { 0, GL_TEXTURE_2D, DeferredTexSlot::_Lighting, GL_RGBA32F, GL_RGBA, GL_FLOAT };
 
   // Scene data
-  GLTextureBuffer _TexIndTBO  = { 0, { 0, GL_TEXTURE_BUFFER, DeferredTexSlot::_TexInd } };
-  GLTexture       _TexArrayTEX  = { 0, GL_TEXTURE_2D_ARRAY, DeferredTexSlot::_TexArray, GL_RGBA8,   GL_RGBA, GL_UNSIGNED_BYTE };
-  GLTexture       _MaterialsTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_Materials, GL_RGBA32F, GL_RGBA, GL_FLOAT };
+  GLTextureBuffer _TexIndTBO     = { 0, { 0, GL_TEXTURE_BUFFER, DeferredTexSlot::_TexInd } };
+  GLTexture       _TexArrayTEX   = { 0, GL_TEXTURE_2D_ARRAY, DeferredTexSlot::_TexArray, GL_RGBA8,   GL_RGBA, GL_UNSIGNED_BYTE };
+  GLTexture       _MaterialsTEX  = { 0, GL_TEXTURE_2D, DeferredTexSlot::_Materials, GL_RGBA32F, GL_RGBA, GL_FLOAT };
+  GLTexture       _EnvMapTEX     = { 0, GL_TEXTURE_2D, DeferredTexSlot::_EnvMap, GL_RGB32F,  GL_RGB,  GL_FLOAT };
 
   // Shaders
   std::unique_ptr<ShaderProgram> _GeometryShader;
