@@ -467,23 +467,23 @@ int DeferredRenderer::UpdateUniforms()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::RenderToTexture()
 {
-  // Geometry pass: render scene into G-buffer
-  glBindFramebuffer(GL_FRAMEBUFFER, _GBufferFBO._Handle);
-  glViewport(0, 0, RenderWidth(), RenderHeight());
-  glClearColor(0.f, 0.f, 0.f, 1.f);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
   if (_GeometryShader)
   {
-    _GeometryShader -> Use();
+    // Geometry pass: render scene into G-buffer
+    glBindFramebuffer(GL_FRAMEBUFFER, _GBufferFBO._Handle);
+    glViewport(0, 0, RenderWidth(), RenderHeight());
 
-    // Enable depth testing, depth writes and back-face culling for geometry pass
-    // Ensure depth writes are enabled for the geometry pass
+    // Ensure a well-defined GL state: enable depth writes before clearing so the depth
+    // attachment is actually cleared each frame (previous code could leave depth mask false).
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
     glDepthMask(GL_TRUE);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
+    glClearColor(0.f, 0.f, 0.f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // now actually clears depth
+
+    _GeometryShader -> Use();
 
     const auto & instances = _Scene.GetMeshInstances();
     for ( const MeshInstance& inst : instances )
@@ -509,19 +509,22 @@ int DeferredRenderer::RenderToTexture()
     _GeometryShader -> StopUsing();
 
     // Disable depth writes and depth test for subsequent fullscreen passes.
-    glDepthMask(GL_FALSE);
+    glDepthMask(GL_FALSE);   // stop writing depth for fullscreen passes
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
-  }
 
-  // Lighting pass: sample G-buffer and compute shading into lighting FBO
-  glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
-  glViewport(0, 0, RenderWidth(), RenderHeight());
-  glClearColor(0.f, 0.f, 0.f, 1.f);
-  glClear(GL_COLOR_BUFFER_BIT);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  }
 
   if (_LightingShader)
   {
+    // Lighting pass: sample G-buffer and compute shading into lighting FBO
+    glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
+    glViewport(0, 0, RenderWidth(), RenderHeight());
+
+    glClearColor(0.f, 0.f, 0.f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
     // Bind G-buffer textures to shader
     _LightingShader -> Use();
     BindGBufferTextures();
@@ -529,19 +532,10 @@ int DeferredRenderer::RenderToTexture()
     // Render fullscreen quad to produce lit image
     _Quad.Render(*_LightingShader);
     _LightingShader -> StopUsing();
+
+    // At this point _LightingTEX contains the shaded image
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
   }
-
-  // Restore depth writes/state so future frames/passes are correct.
-  // The next RenderToTexture() call will re-enable depth test/writes explicitly,
-  // but restoring here avoids leaving GL in a surprising state for other code.
-  //glDepthMask(GL_TRUE);
-  //glEnable(GL_DEPTH_TEST);
-  //glDepthFunc(GL_LESS);
-  //glEnable(GL_CULL_FACE);
-  //glCullFace(GL_BACK);
-
-  // At this point _LightingTEX contains the shaded image
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   return 0;
 }

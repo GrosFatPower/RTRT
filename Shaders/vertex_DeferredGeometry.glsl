@@ -10,6 +10,11 @@ uniform mat4 u_Model;
 uniform mat4 u_View;
 uniform mat4 u_Proj;
 uniform int  u_MaterialID;
+uniform vec3 u_CameraPos;
+uniform vec3 u_CameraUp;
+uniform vec3 u_CameraRight;
+uniform vec3 u_CameraForward;
+uniform vec2 u_ZNearFar;
 
 // Outputs to fragment shader
 out vec3 fragWorldPos;
