@@ -412,11 +412,6 @@ int DeferredRenderer::UpdateUniforms()
     _GeometryShader -> Use();
     _GeometryShader -> SetUniform("u_View", V);
     _GeometryShader -> SetUniform("u_Proj", P);
-    _GeometryShader -> SetUniform("u_CameraPos", camPos);
-    _GeometryShader -> SetUniform("u_CameraUp", camUp);
-    _GeometryShader -> SetUniform("u_CameraRight", camRight);
-    _GeometryShader -> SetUniform("u_CameraForward", camForward);
-    _GeometryShader -> SetUniform("u_ZNearFar", zNear, zFar);
     _GeometryShader -> StopUsing();
   }
 
@@ -424,14 +419,7 @@ int DeferredRenderer::UpdateUniforms()
   if ( _LightingShader )
   {
     _LightingShader -> Use();
-    _LightingShader -> SetUniform("u_View", V);
-    _LightingShader -> SetUniform("u_Proj", P);
     _LightingShader -> SetUniform("u_CameraPos", camPos);
-    _LightingShader -> SetUniform("u_CameraUp", camUp);
-    _LightingShader -> SetUniform("u_CameraRight", camRight);
-    _LightingShader -> SetUniform("u_CameraForward", camForward);
-    _LightingShader -> SetUniform("u_ZNearFar", zNear, zFar);
-    _LightingShader -> SetUniform("u_InvScreen", 1.0f / _Settings._RenderResolution.x, 1.0f / _Settings._RenderResolution.y);
 
     // The lighting shader expects samplers named u_GAlbedo, u_GNormal, u_GPosition, u_GDepth
     _LightingShader -> SetUniform("u_GAlbedo",   (int)DeferredTexSlot::_GAlbedo);
