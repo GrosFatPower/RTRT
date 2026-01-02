@@ -76,6 +76,10 @@ DeferredRenderer::~DeferredRenderer()
   GLUtil::DeleteTEX(_GDepthTEX);
   GLUtil::DeleteTEX(_LightingTEX);
 
+  GLUtil::DeleteTBO(_TexIndTBO);
+  GLUtil::DeleteTEX(_TexArrayTEX);
+  GLUtil::DeleteTEX(_MaterialsTEX);
+
   UnloadScene();
 }
 
@@ -160,6 +164,9 @@ int DeferredRenderer::UnloadScene()
 int DeferredRenderer::ReloadScene()
 {
   UnloadScene();
+
+  if ( ( _Settings._TextureSize.x > 0 ) && ( _Settings._TextureSize.y > 0 ) )
+    _Scene.CompileMeshData( _Settings._TextureSize, true, false );
 
   const std::vector<Mesh*> & meshes = _Scene.GetMeshes();
   const size_t meshCount = meshes.size();
@@ -248,6 +255,26 @@ int DeferredRenderer::ReloadScene()
     _MeshEBOs[mi] = ebo;
     _MeshIndexCount[mi] = static_cast<int>(outIndices.size());
   }
+
+  // Materials
+  if ( _Scene.GetTextureArrayIDs().size() )
+  {
+    GLUtil::InitializeTBO(_TexIndTBO, sizeof(int) * _Scene.GetTextureArrayIDs().size(), &_Scene.GetTextureArrayIDs()[0], GL_R32I);
+
+    glGenTextures(1, &_TexArrayTEX._Handle);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTEX._Handle);
+    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, _Settings._TextureSize.x, _Settings._TextureSize.y, _Scene.GetNbCompiledTex(), 0, GL_RGBA, GL_UNSIGNED_BYTE, &_Scene.GetTextureArray()[0]);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+  }
+
+  glGenTextures(1, &_MaterialsTEX._Handle);
+  glBindTexture(GL_TEXTURE_2D, _MaterialsTEX._Handle);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>((sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size()), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetMaterials()[0]);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glBindTexture(GL_TEXTURE_2D, 0);
 
   return 0;
 }
@@ -372,6 +399,10 @@ int DeferredRenderer::BindGBufferTextures()
   GLUtil::ActivateTexture(_GPositionTEX);
   GLUtil::ActivateTexture(_GDepthTEX);
 
+  GLUtil::ActivateTexture(_TexIndTBO._Tex);
+  GLUtil::ActivateTexture(_TexArrayTEX);
+  GLUtil::ActivateTexture(_MaterialsTEX);
+
   return 0;
 }
 
@@ -381,6 +412,7 @@ int DeferredRenderer::BindGBufferTextures()
 int DeferredRenderer::BindLightingTextures()
 {
   GLUtil::ActivateTexture(_LightingTEX);
+
   return 0;
 }
 
@@ -410,8 +442,15 @@ int DeferredRenderer::UpdateUniforms()
   if ( _GeometryShader )
   {
     _GeometryShader -> Use();
+    _GeometryShader -> SetUniform("u_CameraPos", camPos);
     _GeometryShader -> SetUniform("u_View", V);
     _GeometryShader -> SetUniform("u_Proj", P);
+
+    // Scene data
+    _GeometryShader -> SetUniform("u_TexIndTexture",    (int)DeferredTexSlot::_TexInd);
+    _GeometryShader -> SetUniform("u_TexArrayTexture",  (int)DeferredTexSlot::_TexArray);
+    _GeometryShader -> SetUniform("u_MaterialsTexture", (int)DeferredTexSlot::_Materials);
+
     _GeometryShader -> StopUsing();
   }
 
@@ -429,6 +468,12 @@ int DeferredRenderer::UpdateUniforms()
 
     // ToDo : set light parameters uniforms
 
+    // Scene data
+    _LightingShader -> SetUniform("u_BackgroundColor", _Settings._BackgroundColor);
+    //_LightingShader -> SetUniform("u_TexIndTexture",    (int)DeferredTexSlot::_TexInd);
+    //_LightingShader -> SetUniform("u_TexArrayTexture",  (int)DeferredTexSlot::_TexArray);
+    //_LightingShader -> SetUniform("u_MaterialsTexture", (int)DeferredTexSlot::_Materials);
+
     _LightingShader -> StopUsing();
   }
 
@@ -445,6 +490,14 @@ int DeferredRenderer::UpdateUniforms()
     _CompositeShader -> SetUniform("u_FXAA", (_Settings._FXAA ?  1 : 0 ));
 
     _CompositeShader -> StopUsing();
+  }
+
+  // Scene data
+  if ( _DirtyStates & (unsigned long)DirtyState::SceneMaterials )
+  {
+    glBindTexture(GL_TEXTURE_2D, _MaterialsTEX._Handle);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>((sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size()), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetMaterials()[0]);
+    glBindTexture(GL_TEXTURE_2D, 0);
   }
 
   return 0;

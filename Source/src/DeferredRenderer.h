@@ -21,6 +21,9 @@ struct DeferredTexSlot
   static const TextureSlot _GPosition = 2;
   static const TextureSlot _GDepth    = 3;
   static const TextureSlot _Lighting  = 4;
+  static const TextureSlot _TexInd    = 5;
+  static const TextureSlot _TexArray  = 6;
+  static const TextureSlot _Materials = 7;
 };
 
 class DeferredRenderer : public Renderer
@@ -64,8 +67,13 @@ protected:
   GLTexture     _GDepthTEX    = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GDepth, GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT };
 
   // Lighting target (single texture)
-  GLFrameBuffer  _LightingFBO;
-  GLTexture      _LightingTEX  = { 0, GL_TEXTURE_2D, DeferredTexSlot::_Lighting, GL_RGBA32F, GL_RGBA, GL_FLOAT };
+  GLFrameBuffer _LightingFBO;
+  GLTexture     _LightingTEX  = { 0, GL_TEXTURE_2D, DeferredTexSlot::_Lighting, GL_RGBA32F, GL_RGBA, GL_FLOAT };
+
+  // Scene data
+  GLTextureBuffer _TexIndTBO  = { 0, { 0, GL_TEXTURE_BUFFER, DeferredTexSlot::_TexInd } };
+  GLTexture       _TexArrayTEX  = { 0, GL_TEXTURE_2D_ARRAY, DeferredTexSlot::_TexArray, GL_RGBA8,   GL_RGBA, GL_UNSIGNED_BYTE };
+  GLTexture       _MaterialsTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_Materials, GL_RGBA32F, GL_RGBA, GL_FLOAT };
 
   // Shaders
   std::unique_ptr<ShaderProgram> _GeometryShader;

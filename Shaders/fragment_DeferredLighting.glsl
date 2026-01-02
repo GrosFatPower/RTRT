@@ -13,6 +13,7 @@ uniform sampler2D u_GDepth;
 uniform vec3 u_LightDir    = normalize(vec3(-0.5, -1.0, -0.3)); // direction TO light
 uniform vec3 u_LightColor  = vec3(1.0, 1.0, 1.0);
 uniform vec3 u_Ambient     = vec3(0.08, 0.08, 0.08);
+uniform vec3 u_BackgroundColor = vec3(1.0, 1.0, 1.0);
 uniform vec3 u_CameraPos;
 
 void main()
@@ -22,6 +23,12 @@ void main()
   vec3 encN   = texture(u_GNormal, fragUV).rgb;
   vec3 pos    = texture(u_GPosition, fragUV).rgb;
   float depth  = texture(u_GDepth, fragUV).r;
+
+  if ( depth >= 1.0 ) // far plane, no geometry
+  {
+	fragColor = vec4(u_BackgroundColor, 1.);
+	return;
+  }
 
   // Reconstruct normal from encoded [0,1] -> [-1,1]
   vec3 N = normalize(encN * 2.0 - 1.0);
