@@ -294,15 +294,21 @@ int Test5::DrawUI()
 
       if ( RendererType::PathTracer == _RendererType )
       {
-        ImGui::Text( "Path trace time       : %.3f ms", _Renderer -> AsPathTracer() -> GetPathTraceTime() * 1000. );
-        ImGui::Text( "Accumulate time       : %.3f ms", _Renderer -> AsPathTracer() -> GetAccumulateTime() * 1000. );
-        ImGui::Text( "Denoise time          : %.3f ms", _Renderer -> AsPathTracer() -> GetDenoiseTime() * 1000. );
-        ImGui::Text( "Render to screen time : %.3f ms", _Renderer -> AsPathTracer() -> GetRenderToScreenTime() * 1000. );
+        ImGui::Text("Path trace time       : %.3f ms", _Renderer -> AsPathTracer() -> GetPathTraceTime() * 1000.);
+        ImGui::Text("Accumulate time       : %.3f ms", _Renderer -> AsPathTracer() -> GetAccumulateTime() * 1000.);
+        ImGui::Text("Denoise time          : %.3f ms", _Renderer -> AsPathTracer() -> GetDenoiseTime() * 1000.);
+        ImGui::Text("Render to screen time : %.3f ms", _Renderer -> AsPathTracer() -> GetRenderToScreenTime() * 1000.);
 
-        ImGui::Text( "Frame number          : %d", _Renderer -> AsPathTracer() -> GetFrameNum() );
-        ImGui::Text( "Nb complete frames    : %d", _Renderer -> AsPathTracer() -> GetNbCompleteFrames() );
+        ImGui::Text("Frame number          : %d", _Renderer -> AsPathTracer() -> GetFrameNum());
+        ImGui::Text("Nb complete frames    : %d", _Renderer -> AsPathTracer() -> GetNbCompleteFrames());
       }
 
+      if ( _Scene )
+      {
+        ImGui::Text("Nb vertices           : %d", (int)_Scene -> GetVertices().size());
+        ImGui::Text("Nb triangles          : %d", (int)_Scene -> GetIndices().size()/3);
+        ImGui::Text("Nb meshes instances   : %d", _Scene -> GetNbMeshInstances());
+      }
     }
 
     if (ImGui::CollapsingHeader("Settings"))
