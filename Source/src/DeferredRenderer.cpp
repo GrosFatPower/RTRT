@@ -566,6 +566,9 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> SetUniform("u_EnvMapRes", (float)_Scene.GetEnvMap().GetWidth(), (float)_Scene.GetEnvMap().GetHeight());
     _LightingShader -> SetUniform("u_EnvMap", (int)DeferredTexSlot::_EnvMap);
 
+    // Debug
+    _LightingShader -> SetUniform("u_DebugMode" , _DebugMode);
+
     _LightingShader -> StopUsing();
   }
 

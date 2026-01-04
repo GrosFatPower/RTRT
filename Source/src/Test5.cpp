@@ -499,7 +499,7 @@ int Test5::DrawUI()
         if ( ImGui::Combo( "Debug view", &g_DebugMode, PATH_TRACE_DEBUG_MODES, 8 ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
       }
-      else if ( RendererType::SoftwareRasterizer == _RendererType )
+      else if ( ( RendererType::SoftwareRasterizer == _RendererType ) || ( RendererType::OpenGLRasterizer == _RendererType ) )
       {
         g_DebugMode = 0;
 
@@ -513,26 +513,30 @@ int Test5::DrawUI()
         if ( ImGui::Combo("Show wires", &showWires, YESorNO, 2) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
-        if ( 0 == bufferChoice )
-          g_DebugMode |= (int)RasterDebugModes::ColorBuffer;
-        else if ( 1 == bufferChoice )
-          g_DebugMode |= (int)RasterDebugModes::DepthBuffer;
-        else if ( 2 == bufferChoice )
-          g_DebugMode |= (int)RasterDebugModes::Normals;
+        if ( RendererType::SoftwareRasterizer == _RendererType )
+        {
+          if ( 0 == bufferChoice )
+            g_DebugMode |= (int)RasterDebugModes::ColorBuffer;
+          else if ( 1 == bufferChoice )
+            g_DebugMode |= (int)RasterDebugModes::DepthBuffer;
+          else if ( 2 == bufferChoice )
+            g_DebugMode |= (int)RasterDebugModes::Normals;
 
-        if ( showWires )
-          g_DebugMode |= (int)RasterDebugModes::Wires;
-      }
-      else if ( RendererType::OpenGLRasterizer == _RendererType )
-      {
-        g_DebugMode = 0;
+          if ( showWires )
+            g_DebugMode |= (int)RasterDebugModes::Wires;
+        }
+        else if ( RendererType::OpenGLRasterizer == _RendererType )
+        {
+          if ( 0 == bufferChoice )
+            g_DebugMode |= (int)DeferredDebugModes::ColorBuffer;
+          else if ( 1 == bufferChoice )
+            g_DebugMode |= (int)DeferredDebugModes::DepthBuffer;
+          else if ( 2 == bufferChoice )
+            g_DebugMode |= (int)DeferredDebugModes::Normals;
 
-        static int showWires = 0;
-        if ( ImGui::Combo("Show wires", &showWires, YESorNO, 2) )
-          _Renderer -> Notify(DirtyState::RenderSettings);
-
-        if ( showWires )
-          g_DebugMode |= (int)DeferredDebugModes::Wires;
+          if ( showWires )
+            g_DebugMode |= (int)DeferredDebugModes::Wires;
+        }
       }
 
       _Renderer -> SetDebugMode(g_DebugMode);

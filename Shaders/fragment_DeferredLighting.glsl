@@ -1,5 +1,6 @@
 #version 410 core
 
+#include Globals.glsl
 #include Lights.glsl
 #include Sampling.glsl
 
@@ -55,6 +56,18 @@ void main()
     else
       fragColor = vec4(0., 0., 0., 1.);
 	return;
+  }
+
+  // Debug
+  if ( ( u_DebugMode & 0x01 ) != 0 )
+  {
+    fragColor = vec4(vec3(depth), 1.);
+    return;
+  }
+  else if ( ( u_DebugMode & 0x02 ) != 0 )
+  {
+    fragColor = vec4(abs(N), 1.);
+    return;
   }
 
   // Shading
