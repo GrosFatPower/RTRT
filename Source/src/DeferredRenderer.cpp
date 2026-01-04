@@ -21,7 +21,7 @@ namespace RTRT
 {
 
 static Vec3 S_WireColor = Vec3(1.f, 0.f, 0.f);
-static float S_WireWidth = 2.0f;
+static float S_WireWidth = 3.0f;
 
 // ----------------------------------------------------------------------------
 // HELPER TYPES
@@ -685,6 +685,8 @@ int DeferredRenderer::RenderToTexture()
     glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
     glViewport(0, 0, RenderWidth(), RenderHeight());
 
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, _GDepthTEX._Handle, 0);
+
     // Use depth test so lines occlude correctly, but do not write depth
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
@@ -726,6 +728,7 @@ int DeferredRenderer::RenderToTexture()
     glDepthMask(GL_TRUE);
     glDisable(GL_DEPTH_TEST);
 
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
   }
 
