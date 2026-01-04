@@ -27,6 +27,14 @@ struct DeferredTexSlot
   static const TextureSlot _EnvMap    = 8;
 };
 
+enum class DeferredDebugModes
+{
+  ColorBuffer = 0x00,
+  DepthBuffer = 0x01,
+  Normals     = 0x02,
+  Wires       = 0x04
+};
+
 class DeferredRenderer : public Renderer
 {
 public:
@@ -81,6 +89,7 @@ protected:
   std::unique_ptr<ShaderProgram> _GeometryShader;
   std::unique_ptr<ShaderProgram> _LightingShader;
   std::unique_ptr<ShaderProgram> _CompositeShader;
+  std::unique_ptr<ShaderProgram> _WireframeShader;
 
   // Frame counters
   unsigned int _FrameNum = 1;

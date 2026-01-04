@@ -20,6 +20,9 @@
 namespace RTRT
 {
 
+static Vec3 S_WireColor = Vec3(1.f, 0.f, 0.f);
+static float S_WireWidth = 2.0f;
+
 // ----------------------------------------------------------------------------
 // HELPER TYPES
 // ----------------------------------------------------------------------------
@@ -417,6 +420,13 @@ int DeferredRenderer::RecompileShaders()
     return 1;
   _CompositeShader.reset(postProg);
 
+  // DEBUG : Wireframe shader
+  ShaderSource wireFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Wireframe.glsl"));
+  ShaderProgram* wireProg = ShaderProgram::LoadShaders(geomVert, wireFrag); // reuse geometry vertex shader
+  if (!wireProg)
+    return 1;
+  _WireframeShader.reset(wireProg);
+ 
   return 0;
 }
 
@@ -559,6 +569,17 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> StopUsing();
   }
 
+  // DEBUG : Wireframe shader
+  if ( _WireframeShader )
+  {
+    _WireframeShader -> Use();
+    _WireframeShader -> SetUniform("u_CameraPos", camPos);
+    _WireframeShader -> SetUniform("u_View", V);
+    _WireframeShader -> SetUniform("u_Proj", P);
+    _WireframeShader -> SetUniform("u_WireColor", S_WireColor);
+    _WireframeShader -> StopUsing();
+  }
+
   // Composite shader
   if ( _CompositeShader )
   {
@@ -652,6 +673,56 @@ int DeferredRenderer::RenderToTexture()
     _LightingShader -> StopUsing();
 
     // At this point _LightingTEX contains the shaded image
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  }
+
+  // DEBUG : Wireframe overlay. Render lines into lighting target on top of shaded image
+  if ( ( _DebugMode & (int)DeferredDebugModes::Wires ) && _WireframeShader )
+  { 
+    glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
+    glViewport(0, 0, RenderWidth(), RenderHeight());
+
+    // Use depth test so lines occlude correctly, but do not write depth
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glDepthMask(GL_FALSE);
+
+    // Render only lines
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    glLineWidth(S_WireWidth);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    _WireframeShader -> Use();
+
+    this -> BindLightingTextures();
+
+    const auto & instances2 = _Scene.GetMeshInstances();
+    for ( const MeshInstance& inst : instances2 )
+    {
+      int meshID = inst._MeshID;
+      if ( ( meshID < 0 ) || ( static_cast<size_t>(meshID) >= _MeshVAOs.size() ) )
+        continue;
+
+      _WireframeShader -> SetUniform("u_Model", inst._Transform);
+
+      GLuint vao = _MeshVAOs[meshID];
+      int idxCount = _MeshIndexCount[meshID];
+      if ( vao && ( idxCount > 0 ) )
+      {
+        glBindVertexArray(vao);
+        glDrawElements(GL_TRIANGLES, idxCount, GL_UNSIGNED_INT, 0);
+      }
+    }
+
+    _WireframeShader -> StopUsing();
+
+    // Restore state
+    glDisable(GL_BLEND);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_DEPTH_TEST);
+
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
   }
 

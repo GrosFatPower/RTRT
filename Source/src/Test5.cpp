@@ -501,9 +501,10 @@ int Test5::DrawUI()
       }
       else if ( RendererType::SoftwareRasterizer == _RendererType )
       {
+        g_DebugMode = 0;
+
         static const char * COLORorDEPTHorNORMALS[] = { "Color", "Depth", "Normals" };
 
-        g_DebugMode = 0;
         static int bufferChoice = 0;
         if ( ImGui::Combo("Buffer", &bufferChoice, COLORorDEPTHorNORMALS, 3) )
           _Renderer -> Notify(DirtyState::RenderSettings);
@@ -513,15 +514,27 @@ int Test5::DrawUI()
           _Renderer -> Notify(DirtyState::RenderSettings);
 
         if ( 0 == bufferChoice )
-          g_DebugMode += (int)RasterDebugModes::ColorBuffer;
+          g_DebugMode |= (int)RasterDebugModes::ColorBuffer;
         else if ( 1 == bufferChoice )
-          g_DebugMode += (int)RasterDebugModes::DepthBuffer;
+          g_DebugMode |= (int)RasterDebugModes::DepthBuffer;
         else if ( 2 == bufferChoice )
-          g_DebugMode += (int)RasterDebugModes::Normals;
+          g_DebugMode |= (int)RasterDebugModes::Normals;
 
         if ( showWires )
-          g_DebugMode += (int)RasterDebugModes::Wires;
+          g_DebugMode |= (int)RasterDebugModes::Wires;
       }
+      else if ( RendererType::OpenGLRasterizer == _RendererType )
+      {
+        g_DebugMode = 0;
+
+        static int showWires = 0;
+        if ( ImGui::Combo("Show wires", &showWires, YESorNO, 2) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( showWires )
+          g_DebugMode |= (int)DeferredDebugModes::Wires;
+      }
+
       _Renderer -> SetDebugMode(g_DebugMode);
     }
 
