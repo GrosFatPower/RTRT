@@ -39,7 +39,7 @@ Basic phong reflecton model.
 ![Sponza_Rast](./Captures/Rasterizer_Sponza.png)
 
 
-Test5 : GPU Path tracer / CPU Rasterizer
+Test5 : GPU Path tracer / CPU Rasterizer / GPU Deferred renderer
 --------
 
 ![mustang_white_PT](./Captures/PathTracer_mustang_31776frames.png)
@@ -57,6 +57,8 @@ Test5 : GPU Path tracer / CPU Rasterizer
 ![Teapot_Rast](./Captures/Rasterizer_renderman_teapot_all.png)
 
 ![Bedroom_Rast](./Captures/Rasterizer_Bedroom.png)
+
+![Sponza_Comparison](./Captures/Sponza_Renderer_Comparison.png)
 
 
 References/Credits
