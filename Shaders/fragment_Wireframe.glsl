@@ -2,7 +2,7 @@
 
 out vec4 fragColor;
 
-uniform vec3 u_WireColor = vec3(1., 0., 0.);;
+uniform vec3 u_WireColor = vec3(1., 0., 0.);
 
 void main()
 {
