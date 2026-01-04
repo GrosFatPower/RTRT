@@ -58,6 +58,8 @@ Test5 : GPU Path tracer / CPU Rasterizer / GPU Deferred renderer
 
 ![Bedroom_Rast](./Captures/Rasterizer_Bedroom.png)
 
+![Jinx_GPU](./Captures/Deferred_Jinx.png)
+
 ![Sponza_Comparison](./Captures/Sponza_Renderer_Comparison.png)
 
 
