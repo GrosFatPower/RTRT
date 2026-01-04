@@ -134,6 +134,33 @@ static void GenTexture( GLenum iTarget, GLint iInternalformat, GLsizei iWidth, G
   LoadTexture(iWidth, iHeight, iData, ioTex, iTexMinFilter, iTexMagFilter);
 }
 
+// EnableAnisotropyIfAvailable
+static void EnableAnisotropyIfAvailable(GLTexture & iTex, float iRequestedAniso = 16.0f)
+{
+  if ( 0 == iTex._Handle )
+    return;
+
+  // Check extension (GLEW provides macro/func)
+  if ( glewIsSupported("GL_EXT_texture_filter_anisotropic") || GLEW_EXT_texture_filter_anisotropic )
+  {
+    GLfloat maxAniso = 0.0f;
+    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &maxAniso);
+    GLfloat aniso = std::min<GLfloat>(iRequestedAniso, maxAniso);
+
+    glBindTexture(iTex._Target, iTex._Handle);
+    glTexParameterf(iTex._Target, GL_TEXTURE_MAX_ANISOTROPY_EXT, aniso);
+    glBindTexture(iTex._Target, 0);
+  }
+}
+
+// SetMinFilter
+static void SetMinFilter(GLTexture iTex, GLint iTexMinFilter)
+{
+  glBindTexture(GL_TEXTURE_2D_ARRAY, iTex._Handle);
+  glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, iTexMinFilter);
+  glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+}
+
 // UniformArrayElementName
 static std::string UniformArrayElementName( const char * iUniformArrayName, int iIndex, const char * iAttributeName )
 {

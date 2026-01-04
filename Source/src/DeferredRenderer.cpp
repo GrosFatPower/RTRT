@@ -119,8 +119,19 @@ int DeferredRenderer::Initialize()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::Update()
 {
-  if (_DirtyStates & (unsigned long)DirtyState::RenderSettings)
+  if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
     this -> ResizeRenderTarget();
+
+  if ( _DirtyStates & (unsigned long)DirtyState::Textures )
+  {
+    if ( _GenerateMipMaps )
+      GLUtil::SetMinFilter(_TexArrayTEX, GL_LINEAR_MIPMAP_LINEAR);
+    else
+      GLUtil::SetMinFilter(_TexArrayTEX, GL_LINEAR);
+
+    if ( _GenerateMipMaps && _AnisotropicLevel )
+      GLUtil::EnableAnisotropyIfAvailable(_TexArrayTEX, (float)_AnisotropicLevel);
+  }
 
   if ( _DirtyStates & (unsigned long)DirtyState::SceneEnvMap )
     this -> ReloadEnvMap();
@@ -275,8 +286,15 @@ int DeferredRenderer::ReloadScene()
     glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTEX._Handle);
     glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, _Settings._TextureSize.x, _Settings._TextureSize.y, _Scene.GetNbCompiledTex(), 0, GL_RGBA, GL_UNSIGNED_BYTE, &_Scene.GetTextureArray()[0]);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    if ( _GenerateMipMaps )
+      glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    else
+      glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+
+    if ( _GenerateMipMaps && _AnisotropicLevel )
+      GLUtil::EnableAnisotropyIfAvailable(_TexArrayTEX, (float)_AnisotropicLevel);
   }
 
   glGenTextures(1, &_MaterialsTEX._Handle);
@@ -287,6 +305,24 @@ int DeferredRenderer::ReloadScene()
   glBindTexture(GL_TEXTURE_2D, 0);
 
   return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ReloadEnvMap
+// ----------------------------------------------------------------------------
+void DeferredRenderer::SetGenerateMipMaps(bool iGenerate)
+{
+  _GenerateMipMaps = iGenerate;
+  _DirtyStates |= (unsigned long)DirtyState::Textures;
+}
+
+// ----------------------------------------------------------------------------
+// ReloadEnvMap
+// ----------------------------------------------------------------------------
+void DeferredRenderer::SetAnisotropicLevel(int iLevel)
+{
+  _AnisotropicLevel = iLevel;
+  _DirtyStates |= (unsigned long)DirtyState::Textures;
 }
 
 // ----------------------------------------------------------------------------

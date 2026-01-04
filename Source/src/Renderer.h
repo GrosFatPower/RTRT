@@ -10,6 +10,7 @@ namespace RTRT
 class Scene;
 class PathTracer;
 class SoftwareRasterizer;
+class DeferredRenderer;
 
 enum class DirtyState
 {
@@ -19,7 +20,8 @@ enum class DirtyState
   SceneMaterials = 0x04,
   SceneInstances = 0x08,
   SceneEnvMap    = 0x10,
-  RenderSettings = 0x20
+  RenderSettings = 0x20,
+  Textures       = 0x40
 };
 
 class Renderer
@@ -42,6 +44,7 @@ public:
 
   virtual PathTracer * AsPathTracer() { return nullptr; }
   virtual SoftwareRasterizer * AsSoftwareRasterizer() { return nullptr; }
+  virtual DeferredRenderer * AsDeferredRenderer() { return nullptr; }
 
 protected:
 

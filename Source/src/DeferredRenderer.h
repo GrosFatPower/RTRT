@@ -49,6 +49,13 @@ public:
   virtual int RenderToScreen() override;
   virtual int RenderToFile(const std::filesystem::path& iFilePath) override;
 
+  void SetGenerateMipMaps(bool iGenerate);
+  bool GetGenerateMipMaps() const { return _GenerateMipMaps; }
+  void SetAnisotropicLevel(int iLevel);
+  int GetAnisotropicLevel() const { return _AnisotropicLevel; }
+
+  virtual DeferredRenderer * AsDeferredRenderer() { return this; }
+
 protected:
 
   int UnloadScene();
@@ -99,6 +106,10 @@ protected:
   std::vector<GLuint> _MeshVBOs;
   std::vector<GLuint> _MeshEBOs;
   std::vector<int>    _MeshIndexCount;
+
+  // Textures filtering
+  bool _GenerateMipMaps = true;
+  int  _AnisotropicLevel = 16;
 };
 
 } // namespace RTRT

@@ -477,6 +477,20 @@ int Test5::DrawUI()
           _Renderer -> Notify(DirtyState::RenderSettings);
         _Settings._WBuffer = !!useWBuffer;
       }
+      else if ( RendererType::OpenGLRasterizer == _RendererType )
+      {
+        DeferredRenderer * deferredRenderer = _Renderer -> AsDeferredRenderer();
+        if ( deferredRenderer )
+        {
+          bool generateMips = deferredRenderer ->  GetGenerateMipMaps();
+          if ( ImGui::Checkbox( "Generate mip maps", &generateMips ) )
+            deferredRenderer -> SetGenerateMipMaps(generateMips);
+
+          int anisoLevel = deferredRenderer -> GetAnisotropicLevel();
+          if ( ImGui::SliderInt( "Anisotropic level", &anisoLevel, 1, 16 ) )
+            deferredRenderer -> SetAnisotropicLevel(anisoLevel);
+        }
+      }
 
       if ( ImGui::Checkbox( "FXAA", &_Settings._FXAA ) )
       {}
