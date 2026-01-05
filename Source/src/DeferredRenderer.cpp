@@ -308,7 +308,7 @@ int DeferredRenderer::ReloadScene()
 }
 
 // ----------------------------------------------------------------------------
-// ReloadEnvMap
+// SetGenerateMipMaps
 // ----------------------------------------------------------------------------
 void DeferredRenderer::SetGenerateMipMaps(bool iGenerate)
 {

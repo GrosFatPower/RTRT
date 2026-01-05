@@ -476,6 +476,14 @@ int Test5::DrawUI()
         if ( ImGui::Combo("W-Buffer", &useWBuffer, YESorNO, 2) )
           _Renderer -> Notify(DirtyState::RenderSettings);
         _Settings._WBuffer = !!useWBuffer;
+
+        SoftwareRasterizer * softwareRasterizer = _Renderer -> AsSoftwareRasterizer();
+        if ( softwareRasterizer )
+        {
+          bool generateMips = softwareRasterizer ->  GetGenerateMipMaps();
+          if ( ImGui::Checkbox( "Generate mip maps", &generateMips ) )
+            softwareRasterizer -> SetGenerateMipMaps(generateMips);
+        }
       }
       else if ( RendererType::OpenGLRasterizer == _RendererType )
       {

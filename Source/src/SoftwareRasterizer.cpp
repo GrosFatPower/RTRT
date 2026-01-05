@@ -581,15 +581,40 @@ int SoftwareRasterizer::ReloadScene()
     }
   }
 
-  // Generate mip maps for all textures
-  const auto & textures = _Scene.GetTextures();
-  for (auto * tex : textures)
+  if ( _GenerateMipMaps )
   {
-    //if (tex)
-    //  tex->GenerateMipMaps(); // builds CPU mip chain you added
+    const auto & textures = _Scene.GetTextures();
+    for (auto * tex : textures)
+    {
+      if ( tex )
+        tex -> GenerateMipMaps();
+    }
   }
 
   return 0;
+}
+
+// ----------------------------------------------------------------------------
+// SetGenerateMipMaps
+// ----------------------------------------------------------------------------
+void SoftwareRasterizer::SetGenerateMipMaps(bool iGenerate)
+{
+  if (_GenerateMipMaps == iGenerate)
+    return;
+
+  _GenerateMipMaps = iGenerate;
+
+  const auto & textures = _Scene.GetTextures();
+  for (auto * tex : textures)
+  {
+    if ( tex )
+    {
+      if ( _GenerateMipMaps )
+        tex -> GenerateMipMaps();
+      else
+        tex -> ClearMipMaps();
+    }
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -1855,6 +1880,8 @@ void SoftwareRasterizer::ProcessFragments(RasterData::Tile& ioTile, const Raster
 
     if (ShadingType::Flat == _Settings._ShadingType)
       frag._Attrib._Normal = tri -> _Normal;
+
+    frag._Attrib._LOD = tri -> _LOD;
 
     // Shade fragment
     Vec4 fragColor = fragmentShader->Process(frag, *tri);

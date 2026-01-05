@@ -86,6 +86,8 @@ namespace RasterData
       __m256 attrib3 = _mm256_set_ps(iAttrib3._WorldPos.x, iAttrib3._WorldPos.y, iAttrib3._WorldPos.z, iAttrib3._UV.x, iAttrib3._UV.y, iAttrib3._Normal.x, iAttrib3._Normal.y, iAttrib3._Normal.z);
 
       InterpolateAVX2(attrib1, attrib2, attrib3, iWeights, oResult);
+
+      oResult._LOD = iAttrib1._LOD * iWeights[0] + iAttrib2._LOD * iWeights[1] + iAttrib3._LOD * iWeights[2];
     }
 
     static Varying InterpolateAVX2(const RasterData::Varying & iAttrib1, const RasterData::Varying & iAttrib2, const RasterData::Varying & iAttrib3, const float iWeights[3])
@@ -122,6 +124,8 @@ namespace RasterData
       float32x4_t attrib3[2] = { { iAttrib3._WorldPos.x, iAttrib3._WorldPos.y, iAttrib3._WorldPos.z, iAttrib3._UV.x } , { iAttrib3._UV.y, iAttrib3._Normal.x, iAttrib3._Normal.y, iAttrib3._Normal.z } };
 
       Varying::InterpolateARM(attrib1, attrib2, attrib3, iWeights, oResult);
+
+      oResult._LOD = iAttrib1._LOD * iWeights[0] + iAttrib2._LOD * iWeights[1] + iAttrib3._LOD * iWeights[2];
     }
 
     static RasterData::Varying InterpolateARM(const RasterData::Varying & iAttrib1, const RasterData::Varying & iAttrib2, const RasterData::Varying & iAttrib3, const float iWeights[3])

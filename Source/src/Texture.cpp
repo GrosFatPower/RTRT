@@ -391,4 +391,12 @@ void Texture::GenerateMipMaps()
   _MipLevels = static_cast<int>(_MipData.size());
 }
 
+void Texture::ClearMipMaps()
+{
+  FreeMipData(_MipData);
+  _MipWidths.clear();
+  _MipHeights.clear();
+  _MipLevels = 0;
+}
+
 }

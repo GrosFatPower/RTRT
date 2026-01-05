@@ -62,6 +62,9 @@ public:
   unsigned int GetTileSize() const { return _TileSize; }
   int SetTileSize( unsigned int iTileSize );
 
+  void SetGenerateMipMaps(bool iGenerate);
+  bool GetGenerateMipMaps() const { return _GenerateMipMaps; }
+
 protected:
 
   int UpdateRenderResolution();
@@ -156,6 +159,9 @@ protected:
   int _TileCountX, _TileCountY;
   std::vector<RasterData::Tile> _Tiles;
   unsigned int _TileSize = 64;
+
+  // Textures filtering
+  bool _GenerateMipMaps = false;
 
   // Frame data
   unsigned int _FrameNum = 1;

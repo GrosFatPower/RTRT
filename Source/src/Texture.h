@@ -42,6 +42,7 @@ public:
   Vec4 BiLinearSample( Vec2 iUV, float iLOD ) const;
 
   void GenerateMipMaps();
+  void ClearMipMaps();
 
 private:
   int             _TexID        = -1;
