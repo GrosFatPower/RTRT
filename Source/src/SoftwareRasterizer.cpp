@@ -60,6 +60,40 @@ namespace RTRT
 
 static constexpr RGBA8 S_DefaultColor(0, 0, 0, (uint8_t)255);
 
+// compute UV partials for a triangle (v0,v1,v2 screen coords and uvs)
+auto computeTriangleUVPartials = [](const Vec2 & p0, const Vec2 & p1, const Vec2 & p2,
+                                    const Vec2 & uv0, const Vec2 & uv1, const Vec2 & uv2,
+                                    float & out_dUdx, float & out_dUdy, float & out_dVdx, float & out_dVdy)
+{
+  float x1 = p1.x - p0.x, y1 = p1.y - p0.y;
+  float x2 = p2.x - p0.x, y2 = p2.y - p0.y;
+  float du1 = uv1.x - uv0.x, dv1 = uv1.y - uv0.y;
+  float du2 = uv2.x - uv0.x, dv2 = uv2.y - uv0.y;
+
+  float denom = x1 * y2 - x2 * y1;
+  if (fabs(denom) < 1e-8f)
+  {
+    out_dUdx = out_dUdy = out_dVdx = out_dVdy = 0.f;
+    return;
+  }
+  float inv = 1.0f / denom;
+  out_dUdx = (du1 * y2 - du2 * y1) * inv;
+  out_dUdy = (-du1 * x2 + du2 * x1) * inv;
+  out_dVdx = (dv1 * y2 - dv2 * y1) * inv;
+  out_dVdy = (-dv1 * x2 + dv2 * x1) * inv;
+};
+
+float computeLOD(float dUdx, float dVdx, float dUdy, float dVdy, int texW, int texH)
+{
+  float rho_x = sqrtf(dUdx * dUdx + dVdx * dVdx);
+  float rho_y = sqrtf(dUdy * dUdy + dVdy * dVdy);
+  float rho = std::max(rho_x, rho_y);
+  float maxDim = static_cast<float>(std::max(texW, texH));
+  float lambda = rho * maxDim;
+  if (lambda <= 1e-8f) return 0.f;
+  return std::max(0.f, log2f(lambda));
+}
+
 // ----------------------------------------------------------------------------
 // METHODS
 // ----------------------------------------------------------------------------
@@ -545,6 +579,14 @@ int SoftwareRasterizer::ReloadScene()
 
       tri._Indices[j] = idx;
     }
+  }
+
+  // Generate mip maps for all textures
+  const auto & textures = _Scene.GetTextures();
+  for (auto * tex : textures)
+  {
+    //if (tex)
+    //  tex->GenerateMipMaps(); // builds CPU mip chain you added
   }
 
   return 0;
@@ -1080,6 +1122,37 @@ void SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, i
           rasterTri._MatID = tri._MatID;
           rasterTri._Normal = tri._Normal;
 
+          // compute LOD for this rasterTri (insert before emplace_back)
+          {
+            // get UVs for the three vertices (works for both original or newly created proj verts)
+            Vec2 uv0 = _ProjVerticesBuf[rasterTri._Indices[0]]._Attrib._UV;
+            Vec2 uv1 = _ProjVerticesBuf[rasterTri._Indices[1]]._Attrib._UV;
+            Vec2 uv2 = _ProjVerticesBuf[rasterTri._Indices[2]]._Attrib._UV;
+
+            // screen-space positions
+            Vec2 p0 = Vec2(rasterTri._V[0].x, rasterTri._V[0].y);
+            Vec2 p1 = Vec2(rasterTri._V[1].x, rasterTri._V[1].y);
+            Vec2 p2 = Vec2(rasterTri._V[2].x, rasterTri._V[2].y);
+
+            float dUdx = 0.f, dUdy = 0.f, dVdx = 0.f, dVdy = 0.f;
+            computeTriangleUVPartials(p0, p1, p2, uv0, uv1, uv2, dUdx, dUdy, dVdx, dVdy);
+
+            // find texture size — prefer base-color texture of material if available
+            int texW = 1, texH = 1;
+            int matId = rasterTri._MatID;
+            if ((matId >= 0) && (matId < (int)_Scene.GetMaterials().size()))
+            {
+              const auto & mat = _Scene.GetMaterials()[matId];
+              if (mat._BaseColorTexId >= 0)
+              {
+                const Texture* t = _Scene.GetTextures()[(unsigned int)mat._BaseColorTexId];
+                if (t) { texW = t->GetWidth(); texH = t->GetHeight(); }
+              }
+            }
+            // fallback: use 1x1 -> LOD 0
+            rasterTri._LOD = computeLOD(dUdx, dVdx, dUdy, dVdy, texW, texH);
+          }
+
           _RasterTrianglesBuf[iThreadBin].emplace_back(std::move(rasterTri));
         }
       }
@@ -1113,6 +1186,37 @@ void SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, i
 
       rasterTri._MatID = tri._MatID;
       rasterTri._Normal = tri._Normal;
+
+      // compute LOD for this rasterTri (insert before emplace_back)
+      {
+        // get UVs for the three vertices (works for both original or newly created proj verts)
+        Vec2 uv0 = _ProjVerticesBuf[rasterTri._Indices[0]]._Attrib._UV;
+        Vec2 uv1 = _ProjVerticesBuf[rasterTri._Indices[1]]._Attrib._UV;
+        Vec2 uv2 = _ProjVerticesBuf[rasterTri._Indices[2]]._Attrib._UV;
+
+        // screen-space positions
+        Vec2 p0 = Vec2(rasterTri._V[0].x, rasterTri._V[0].y);
+        Vec2 p1 = Vec2(rasterTri._V[1].x, rasterTri._V[1].y);
+        Vec2 p2 = Vec2(rasterTri._V[2].x, rasterTri._V[2].y);
+
+        float dUdx = 0.f, dUdy = 0.f, dVdx = 0.f, dVdy = 0.f;
+        computeTriangleUVPartials(p0, p1, p2, uv0, uv1, uv2, dUdx, dUdy, dVdx, dVdy);
+
+        // find texture size — prefer base-color texture of material if available
+        int texW = 1, texH = 1;
+        int matId = rasterTri._MatID;
+        if ((matId >= 0) && (matId < (int)_Scene.GetMaterials().size()))
+        {
+          const auto & mat = _Scene.GetMaterials()[matId];
+          if (mat._BaseColorTexId >= 0)
+          {
+            const Texture* t = _Scene.GetTextures()[(unsigned int)mat._BaseColorTexId];
+            if (t) { texW = t->GetWidth(); texH = t->GetHeight(); }
+          }
+        }
+        // fallback: use 1x1 -> LOD 0
+        rasterTri._LOD = computeLOD(dUdx, dVdx, dUdy, dVdy, texW, texH);
+      }
 
       _RasterTrianglesBuf[iThreadBin].emplace_back(std::move(rasterTri));
     }
@@ -1645,6 +1749,8 @@ void SoftwareRasterizer::ProcessFragments(int iThreadBin, const RasterData::Defa
     rd::Varying::Interpolate(_ProjVerticesBuf[tri._Indices[0]]._Attrib, _ProjVerticesBuf[tri._Indices[1]]._Attrib, _ProjVerticesBuf[tri._Indices[2]]._Attrib, frag._Weights, frag._Attrib);
     if (ShadingType::Flat == _Settings._ShadingType)
       frag._Attrib._Normal = tri._Normal;
+
+    frag._Attrib._LOD = tri._LOD;
 
     // Shade fragment
     Vec4 fragColor = fragmentShader->Process(frag, tri);

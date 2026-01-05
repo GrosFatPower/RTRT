@@ -25,6 +25,7 @@ namespace RasterData
     Vec3 _WorldPos;
     Vec2 _UV;
     Vec3 _Normal;
+    float _LOD = 0.f; 
 
     Varying operator*(float t) const
     {
@@ -32,6 +33,7 @@ namespace RasterData
       copy._WorldPos *= t;
       copy._Normal *= t;
       copy._UV *= t;
+      copy._LOD *= t;
       return copy;
     }
 
@@ -42,6 +44,7 @@ namespace RasterData
       copy._WorldPos += iRhs._WorldPos;
       copy._Normal += iRhs._Normal;
       copy._UV += iRhs._UV;
+      copy._LOD += iRhs._LOD;
 
       return copy;
     }
@@ -187,6 +190,7 @@ namespace RasterData
     AABB<Vec2> _BBox;
     Vec3       _Normal;
     int        _MatID;
+    float      _LOD = 0.f;
   };
 
   struct Fragment

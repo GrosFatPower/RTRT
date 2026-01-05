@@ -126,7 +126,7 @@ void SetupMaterial(const RasterData::Fragment& iFrag, const RasterData::DefaultU
     if ( tex )
     {
       if (iUniforms._BilinearSampling)
-        oMat._Albedo = Vec3(tex->BiLinearSample(iFrag._Attrib._UV));
+        oMat._Albedo = Vec3(tex->BiLinearSample(iFrag._Attrib._UV, iFrag._Attrib._LOD));
       else
         oMat._Albedo = Vec3(tex->Sample(iFrag._Attrib._UV));
     }
@@ -204,7 +204,7 @@ Vec4 BlinnPhongFragmentShader::Process(const RasterData::Fragment& iFrag, const 
     {
       const Texture* tex = (*_Uniforms._Textures)[static_cast<int>(mat._BaseColorTexId)];
       if (_Uniforms._BilinearSampling)
-        albedo = tex->BiLinearSample(iFrag._Attrib._UV);
+        albedo = tex->BiLinearSample(iFrag._Attrib._UV, iFrag._Attrib._LOD);
       else
         albedo = tex->Sample(iFrag._Attrib._UV);
     }

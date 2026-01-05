@@ -39,6 +39,9 @@ public:
   void Sample(int iX, int iY, int iSpan, Vec4 * oSamples) const;
   Vec4 Sample( Vec2 iUV ) const;
   Vec4 BiLinearSample( Vec2 iUV ) const;
+  Vec4 BiLinearSample( Vec2 iUV, float iLOD ) const;
+
+  void GenerateMipMaps();
 
 private:
   int             _TexID        = -1;
@@ -49,6 +52,11 @@ private:
 
   std::string     _Filename = "";
   void          * _TexData = nullptr;
+
+  mutable std::vector<void*> _MipData;
+  std::vector<int>           _MipWidths;
+  std::vector<int>           _MipHeights;
+  int                        _MipLevels = 0;
 
   Texture( const Texture & ); // not implemented
   Texture & operator=( const Texture & ); // not implemented
