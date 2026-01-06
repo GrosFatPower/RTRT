@@ -581,17 +581,27 @@ int SoftwareRasterizer::ReloadScene()
     }
   }
 
-  if ( _GenerateMipMaps )
-  {
-    const auto & textures = _Scene.GetTextures();
-    for (auto * tex : textures)
-    {
-      if ( tex )
-        tex -> GenerateMipMaps();
-    }
-  }
+  this -> UpdateMipMaps();
 
   return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateMipMaps
+// ----------------------------------------------------------------------------
+void SoftwareRasterizer::UpdateMipMaps()
+{
+  const auto & textures = _Scene.GetTextures();
+  for (auto * tex : textures)
+  {
+    if ( tex )
+    {
+      if ( _GenerateMipMaps )
+        tex -> GenerateMipMaps();
+      else
+        tex -> ClearMipMaps();
+    }
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -604,17 +614,7 @@ void SoftwareRasterizer::SetGenerateMipMaps(bool iGenerate)
 
   _GenerateMipMaps = iGenerate;
 
-  const auto & textures = _Scene.GetTextures();
-  for (auto * tex : textures)
-  {
-    if ( tex )
-    {
-      if ( _GenerateMipMaps )
-        tex -> GenerateMipMaps();
-      else
-        tex -> ClearMipMaps();
-    }
-  }
+  this -> UpdateMipMaps();
 }
 
 // ----------------------------------------------------------------------------

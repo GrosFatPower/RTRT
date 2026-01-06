@@ -98,6 +98,8 @@ protected:
 
   Vec4 SampleEnvMap(const Vec3& iDir);
 
+  void UpdateMipMaps();
+
   int RenderBackground(float iTop, float iRight);
   void RenderBackgroundRows(int iStartY, int iEndY, Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY);
   void RenderBackground(Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY, RasterData::Tile& ioTile);
