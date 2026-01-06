@@ -840,7 +840,7 @@ Vec4 SoftwareRasterizer::SampleEnvMap(const Vec3& iDir)
     float phi = std::atan2(iDir.z, iDir.x);
     Vec2 uv = Vec2(.5f + phi * M_1_PI * .5f, .5f - theta * M_1_PI) + Vec2(_Settings._SkyBoxRotation, 0.0);
 
-    if (_Settings._BilinearSampling)
+    if (_Settings._Sampling >= SamplingMode::Bilinear)
       return _Scene.GetEnvMap().BiLinearSample(uv);
     else
       return _Scene.GetEnvMap().Sample(uv);
@@ -1715,7 +1715,7 @@ int SoftwareRasterizer::ProcessFragments()
 {
   rd::DefaultUniform uniforms;
   uniforms._CameraPos = _Scene.GetCamera().GetPos();
-  uniforms._BilinearSampling = _Settings._BilinearSampling;
+  uniforms._Sampling = _Settings._Sampling;
   uniforms._Materials = &_Scene.GetMaterials();
   uniforms._Textures = &_Scene.GetTextures();
   for (int i = 0; i < _Scene.GetNbLights(); ++i)

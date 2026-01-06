@@ -322,6 +322,16 @@ Vec4 Texture::BiLinearSample( Vec2 iUV, float iLOD ) const
   return glm::mix(c0, c1, frac);
 }
 
+Vec4 Texture::BiLinearSample(Vec2 iUV, float iLOD, bool iTrilinear) const
+{
+  if (!iTrilinear)
+  {
+    int nearest = static_cast<int>(std::clamp(std::floor(iLOD + 0.5f), 0.0f, static_cast<float>(_MipLevels-1)));
+    return BiLinearSample(iUV, static_cast<float>(nearest)); // existing logic with integer LOD -> single level bilinear
+  }
+  return BiLinearSample(iUV, iLOD); // existing trilinear behavior
+}
+
 void Texture::GenerateMipMaps()
 {
   // free existing mip data first (except level 0 which is in _TexData)

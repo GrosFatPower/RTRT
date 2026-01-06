@@ -2,6 +2,8 @@
 
 #include "SoftwareFragmentShader.h"
 
+namespace rd = RTRT::RasterData;
+
 namespace RTRT
 {
 
@@ -125,8 +127,8 @@ void SetupMaterial(const RasterData::Fragment& iFrag, const RasterData::DefaultU
     const Texture* tex = (*iUniforms._Textures)[static_cast<int>(oMat._BaseColorTexId)];
     if ( tex )
     {
-      if (iUniforms._BilinearSampling)
-        oMat._Albedo = Vec3(tex->BiLinearSample(iFrag._Attrib._UV, iFrag._Attrib._LOD));
+      if (iUniforms._Sampling >= SamplingMode::Bilinear)
+        oMat._Albedo = Vec3(tex->BiLinearSample(iFrag._Attrib._UV, iFrag._Attrib._LOD, (iUniforms._Sampling == SamplingMode::Trilinear)));
       else
         oMat._Albedo = Vec3(tex->Sample(iFrag._Attrib._UV));
     }
@@ -139,7 +141,7 @@ void SetupMaterial(const RasterData::Fragment& iFrag, const RasterData::DefaultU
     if ( tex )
     {
       Vec3 texNormal;
-      //if (iUniforms._BilinearSampling)
+      //if (iUniforms._Sampling >= SamplingMode::Bilinear)
       //  texNormal = Vec3(tex->BiLinearSample(iFrag._Attrib._UV));
       //else
         texNormal = Vec3(tex->Sample(iFrag._Attrib._UV));
@@ -159,7 +161,7 @@ void SetupMaterial(const RasterData::Fragment& iFrag, const RasterData::DefaultU
     if ( tex )
     {
       Vec3 metallicRoughness;
-      //if (iUniforms._BilinearSampling)
+      //if (iUniforms._Sampling >= SamplingMode::Bilinear)
       //  metallicRoughness = Vec3(tex->BiLinearSample(iFrag._Attrib._UV));
       //else
         metallicRoughness = Vec3(tex->Sample(iFrag._Attrib._UV));
@@ -175,7 +177,7 @@ void SetupMaterial(const RasterData::Fragment& iFrag, const RasterData::DefaultU
     const Texture* tex = (*iUniforms._Textures)[static_cast<int>(oMat._EmissionMapTexID)];
     if ( tex )
     {
-      //if (iUniforms._BilinearSampling)
+      //if (iUniforms._Sampling >= SamplingMode::Bilinear)
       //  metallicRoughness = Vec3(tex->BiLinearSample(iFrag._Attrib._UV));
       //else
         oMat._Emission = Vec3(tex->Sample(iFrag._Attrib._UV));
@@ -203,8 +205,8 @@ Vec4 BlinnPhongFragmentShader::Process(const RasterData::Fragment& iFrag, const 
     if (mat._BaseColorTexId >= 0)
     {
       const Texture* tex = (*_Uniforms._Textures)[static_cast<int>(mat._BaseColorTexId)];
-      if (_Uniforms._BilinearSampling)
-        albedo = tex->BiLinearSample(iFrag._Attrib._UV, iFrag._Attrib._LOD);
+      if (_Uniforms._Sampling >= SamplingMode::Bilinear)
+        albedo = tex->BiLinearSample(iFrag._Attrib._UV, iFrag._Attrib._LOD, (_Uniforms._Sampling == SamplingMode::Trilinear));
       else
         albedo = tex->Sample(iFrag._Attrib._UV);
     }

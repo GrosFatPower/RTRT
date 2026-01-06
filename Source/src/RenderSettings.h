@@ -13,6 +13,13 @@ enum class ShadingType
   PBR
 };
 
+enum class SamplingMode
+{
+  Nearest = 0,
+  Bilinear,
+  Trilinear
+};
+
 struct RenderSettings
 {
   Vec2i        _RenderResolution      = { 0, 0 };
@@ -32,7 +39,7 @@ struct RenderSettings
   bool         _Accumulate            = true;               // PathTracer
   bool         _Denoise               = false;              // PathTracer
   bool         _TiledRendering        = false;
-  bool         _BilinearSampling      = true;               // Raster
+  SamplingMode _Sampling              = SamplingMode::Bilinear; // Raster
   bool         _WBuffer               = true;               // Raster
   ShadingType  _ShadingType           = ShadingType::Phong; // Raster
   int          _Bounces               = 1;                  // PathTracer

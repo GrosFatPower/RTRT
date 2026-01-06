@@ -40,6 +40,7 @@ public:
   Vec4 Sample( Vec2 iUV ) const;
   Vec4 BiLinearSample( Vec2 iUV ) const;
   Vec4 BiLinearSample( Vec2 iUV, float iLOD ) const;
+  Vec4 BiLinearSample(Vec2 iUV, float iLOD, bool iTrilinear) const;
 
   void GenerateMipMaps();
   void ClearMipMaps();
