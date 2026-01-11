@@ -54,7 +54,7 @@ public:
   void SetAnisotropicLevel(int iLevel);
   int GetAnisotropicLevel() const { return _AnisotropicLevel; }
 
-  virtual DeferredRenderer * AsDeferredRenderer() { return this; }
+  virtual DeferredRenderer * AsDeferredRenderer() override { return this; }
 
 protected:
 
