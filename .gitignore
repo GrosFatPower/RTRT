@@ -44,9 +44,14 @@ Assets/rank3police/
 Assets/tungsten-material-testball/
 Assets/textures
 Assets/Sponza
+Assets/Pumpkin
+Assets/Turkey
 Assets/*.gltf
 Assets/*.glb
 Assets/*.bin
+Assets/ball*
+Assets/helmet*
+
 
 # Files
 *.vcxproj

@@ -282,16 +282,16 @@ Vec4 Texture::Sample( Vec2 iUV ) const
 Vec4 Texture::BiLinearSample( Vec2 iUV ) const
 {
   // default behavior: base-level bilinear
-  return BiLinearSample(iUV, 0.f);
+  return TrilinearSample(iUV, 0.f);
 }
 
 // ----------------------------------------------------------------------------
-// BiLinearSample
+// TrilinearSample
 // ----------------------------------------------------------------------------
-Vec4 Texture::BiLinearSample( Vec2 iUV, float iLOD ) const
+Vec4 Texture::TrilinearSample( Vec2 iUV, float iLOD ) const
 {
   // if no mipmaps available, fall back to classic implementation
-  if (_MipLevels <= 0)
+  if ( _MipLevels <= 0 )
   {
     // existing code
     iUV.x = ( iUV.x - std::floor(iUV.x) ) * ( _Width - 1 );
@@ -308,6 +308,7 @@ Vec4 Texture::BiLinearSample( Vec2 iUV, float iLOD ) const
     Samples[1] = Sample(std::min(x+1,_Width-1), y);
     Samples[2] = Sample(x, std::min(y+1,_Height-1));
     Samples[3] = Sample(std::min(x+1,_Width-1), std::min(y+1,_Height-1));
+
     return glm::mix( glm::mix(Samples[0], Samples[1], uf), glm::mix(Samples[2], Samples[3], uf), vf );
   }
 
@@ -318,7 +319,7 @@ Vec4 Texture::BiLinearSample( Vec2 iUV, float iLOD ) const
   float frac = clampedLOD - level0;
   const bool isFloat = ( _Format == TexFormat::TEX_FLOAT );
 
-  auto sampleAtLevel = [&](int level)->Vec4
+  auto SampleAtLevel = [&](int level)->Vec4
   {
     int lw = _MipWidths[level];
     int lh = _MipHeights[level];
@@ -339,10 +340,11 @@ Vec4 Texture::BiLinearSample( Vec2 iUV, float iLOD ) const
     return glm::mix(glm::mix(s00, s10, uf), glm::mix(s01, s11, uf), vf);
   };
 
-  Vec4 c0 = sampleAtLevel(level0);
-  if (level0 == level1 || frac <= 0.0001f)
+  Vec4 c0 = SampleAtLevel(level0);
+  if ( ( level0 == level1 ) || ( frac <= 0.0001f ) )
     return c0;
-  Vec4 c1 = sampleAtLevel(level1);
+
+  Vec4 c1 = SampleAtLevel(level1);
   return glm::mix(c0, c1, frac);
 }
 
@@ -351,12 +353,12 @@ Vec4 Texture::BiLinearSample( Vec2 iUV, float iLOD ) const
 // ----------------------------------------------------------------------------
 Vec4 Texture::BiLinearSample(Vec2 iUV, float iLOD, bool iTrilinear) const
 {
-  if (!iTrilinear)
+  if ( !iTrilinear )
   {
     int nearest = static_cast<int>(std::clamp(std::floor(iLOD + 0.5f), 0.0f, static_cast<float>(_MipLevels-1)));
-    return BiLinearSample(iUV, static_cast<float>(nearest)); // existing logic with integer LOD -> single level bilinear
+    return TrilinearSample(iUV, static_cast<float>(nearest)); // existing logic with integer LOD -> single level bilinear
   }
-  return BiLinearSample(iUV, iLOD); // existing trilinear behavior
+  return TrilinearSample(iUV, iLOD); // existing trilinear behavior
 }
 
 // ----------------------------------------------------------------------------
