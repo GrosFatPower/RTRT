@@ -19,8 +19,12 @@
 #pragma warning(pop)
 #endif
 
+#define MIN_MIP_SIZE 1
+
 namespace RTRT
 {
+
+constexpr float INV255 = 1.0f / 255.0f;
 
 // ----------------------------------------------------------------------------
 // FreeMipData
@@ -36,27 +40,28 @@ static void FreeMipData(std::vector<void*>& mipData)
 // SampleTexelFromLevel
 // helper to sample a single texel from a given mip level; returns vec4
 // ----------------------------------------------------------------------------
-static Vec4 SampleTexelFromLevel(const void* levelPtr, int levelWidth, int levelHeight, int nbComponents, bool isFloat, int x, int y)
+static Vec4 SampleTexelFromLevel(const void * levelPtr, int levelWidth, int levelHeight, int nbComponents, bool isFloat, int x, int y)
 {
   Vec4 sample(1.f);
   x = std::clamp(x, 0, levelWidth - 1);
   y = std::clamp(y, 0, levelHeight - 1);
+
   size_t idx = (static_cast<size_t>(x) + static_cast<size_t>(y) * levelWidth) * nbComponents;
   if (isFloat)
   {
     const float* src = static_cast<const float*>(levelPtr);
-    if (nbComponents >= 1) sample.x = src[idx + 0];
-    if (nbComponents >= 2) sample.y = src[idx + 1];
-    if (nbComponents >= 3) sample.z = src[idx + 2];
-    if (nbComponents >= 4) sample.w = src[idx + 3]; else sample.w = 1.f;
+    memcpy(&sample.x, &src[idx], nbComponents * sizeof(float));
   }
   else
   {
     const unsigned char* src = static_cast<const unsigned char*>(levelPtr);
-    sample.x = (nbComponents >= 1) ? (src[idx + 0] / 255.0f) : 0.f;
-    sample.y = (nbComponents >= 2) ? (src[idx + 1] / 255.0f) : 0.f;
-    sample.z = (nbComponents >= 3) ? (src[idx + 2] / 255.0f) : 0.f;
-    sample.w = (nbComponents >= 4) ? (src[idx + 3] / 255.0f) : 1.f;
+
+    unsigned char SampleUC[4] = { 255, 255, 255, 255 };
+    memcpy(&SampleUC, &src[idx], nbComponents * sizeof(unsigned char));
+    sample.x = SampleUC[0] * INV255;
+    sample.y = SampleUC[1] * INV255;
+    sample.z = SampleUC[2] * INV255;
+    sample.w = SampleUC[3] * INV255;
   }
   return sample;
 }
@@ -152,6 +157,9 @@ bool Texture::Resize( int iWidth, int iHeight )
       return true;
     }
   }
+
+  if ( _MipLevels > 0 )
+    GenerateMipMaps();
   
   return false;
 }
@@ -161,33 +169,15 @@ bool Texture::Resize( int iWidth, int iHeight )
 // ----------------------------------------------------------------------------
 Vec4 Texture::Sample(int iX, int iY) const
 {
-  Vec4 sample(1.f);
-
-  if (_TexData)
-  {
-    int index = (iX + iY * _Width) * _NbComponents;
-
-    if (_Format == TexFormat::TEX_FLOAT)
-    {
-      memcpy(&sample.x, &((float*)_TexData)[index], _NbComponents * sizeof(float));
-    }
-    else if (_Format == TexFormat::TEX_UNSIGNED_BYTE)
-    {
-      unsigned char SampleUC[4] = { 255, 255, 255, 255 };
-      memcpy(&SampleUC, &((unsigned char*)_TexData)[index], _NbComponents * sizeof(unsigned char));
-      sample.x = SampleUC[0] / 255.f;
-      sample.y = SampleUC[1] / 255.f;
-      sample.z = SampleUC[2] / 255.f;
-      sample.w = SampleUC[3] / 255.f;
-    }
-  }
-
-  return sample;
+  if ( _TexData )
+    return SampleTexelFromLevel(_TexData, _Width, _Height, _NbComponents, _Format == TexFormat::TEX_FLOAT, iX, iY);
+  return Vec4(1.f);
 }
 
 // ----------------------------------------------------------------------------
 // Sample
 // ----------------------------------------------------------------------------
+/*
 void Texture::Sample(int iX, int iY, int iSpan, Vec4* oSamples) const
 {
   if (_TexData)
@@ -217,17 +207,18 @@ void Texture::Sample(int iX, int iY, int iSpan, Vec4* oSamples) const
 
       for (int i = 0; i < iSpan; ++i)
       {
-        oSamples[i].x = SampleUC[i * _NbComponents + 0] / 255.f;
+        oSamples[i].x = SampleUC[i * _NbComponents + 0] * INV255;
         if (_NbComponents >= 2)
-          oSamples[i].y = SampleUC[i * _NbComponents + 1] / 255.f;
+          oSamples[i].y = SampleUC[i * _NbComponents + 1] * INV255;
         if (_NbComponents >= 3)
-          oSamples[i].z = SampleUC[i * _NbComponents + 2] / 255.f;
+          oSamples[i].z = SampleUC[i * _NbComponents + 2] * INV255;
         if (_NbComponents >= 4)
-          oSamples[i].w = SampleUC[i * _NbComponents + 3] / 255.f;
+          oSamples[i].w = SampleUC[i * _NbComponents + 3] * INV255;
       }
     }
   }
 }
+*/
 
 /*
 Vec4 Texture::Sample(int iX, int iY) const
@@ -242,28 +233,28 @@ Vec4 Texture::Sample(int iX, int iY) const
       if (_Format == TexFormat::TEX_FLOAT)
         sample.x = ((float*)_TexData)[index];
       else if (_Format == TexFormat::TEX_UNSIGNED_BYTE)
-        sample.x = ((unsigned char*)_TexData)[index] / 255.f;
+        sample.x = ((unsigned char*)_TexData)[index] * INV255;
     }
     if (_NbComponents >= 2)
     {
       if (_Format == TexFormat::TEX_FLOAT)
         sample.y = ((float*)_TexData)[index + 1];
       else if (_Format == TexFormat::TEX_UNSIGNED_BYTE)
-        sample.y = ((unsigned char*)_TexData)[index + 1] / 255.f;
+        sample.y = ((unsigned char*)_TexData)[index + 1] * INV255;
     }
     if (_NbComponents >= 3)
     {
       if (_Format == TexFormat::TEX_FLOAT)
         sample.z = ((float*)_TexData)[index + 2];
       else if (_Format == TexFormat::TEX_UNSIGNED_BYTE)
-        sample.z = ((unsigned char*)_TexData)[index + 2] / 255.f;
+        sample.z = ((unsigned char*)_TexData)[index + 2] * INV255;
     }
     if (_NbComponents >= 4)
     {
       if (_Format == TexFormat::TEX_FLOAT)
         sample.w = ((float*)_TexData)[index + 3];
       else if (_Format == TexFormat::TEX_UNSIGNED_BYTE)
-        sample.w = ((unsigned char*)_TexData)[index + 3] / 255.f;
+        sample.w = ((unsigned char*)_TexData)[index + 3] * INV255;
     }
   }
 
@@ -325,6 +316,7 @@ Vec4 Texture::BiLinearSample( Vec2 iUV, float iLOD ) const
   int level0 = static_cast<int>(std::floor(clampedLOD));
   int level1 = std::min(level0 + 1, _MipLevels - 1);
   float frac = clampedLOD - level0;
+  const bool isFloat = ( _Format == TexFormat::TEX_FLOAT );
 
   auto sampleAtLevel = [&](int level)->Vec4
   {
@@ -339,10 +331,10 @@ Vec4 Texture::BiLinearSample( Vec2 iUV, float iLOD ) const
     float vf = v - y;
 
     const void* levelPtr = _MipData[level];
-    Vec4 s00 = SampleTexelFromLevel(levelPtr, lw, lh, _NbComponents, _Format == TexFormat::TEX_FLOAT, x, y);
-    Vec4 s10 = SampleTexelFromLevel(levelPtr, lw, lh, _NbComponents, _Format == TexFormat::TEX_FLOAT, x+1, y);
-    Vec4 s01 = SampleTexelFromLevel(levelPtr, lw, lh, _NbComponents, _Format == TexFormat::TEX_FLOAT, x, y+1);
-    Vec4 s11 = SampleTexelFromLevel(levelPtr, lw, lh, _NbComponents, _Format == TexFormat::TEX_FLOAT, x+1, y+1);
+    Vec4 s00 = SampleTexelFromLevel(levelPtr, lw, lh, _NbComponents, isFloat, x, y);
+    Vec4 s10 = SampleTexelFromLevel(levelPtr, lw, lh, _NbComponents, isFloat, x+1, y);
+    Vec4 s01 = SampleTexelFromLevel(levelPtr, lw, lh, _NbComponents, isFloat, x, y+1);
+    Vec4 s11 = SampleTexelFromLevel(levelPtr, lw, lh, _NbComponents, isFloat, x+1, y+1);
 
     return glm::mix(glm::mix(s00, s10, uf), glm::mix(s01, s11, uf), vf);
   };
@@ -372,11 +364,7 @@ Vec4 Texture::BiLinearSample(Vec2 iUV, float iLOD, bool iTrilinear) const
 // ----------------------------------------------------------------------------
 void Texture::GenerateMipMaps()
 {
-  // free existing mip data first (except level 0 which is in _TexData)
-  FreeMipData(_MipData);
-  _MipWidths.clear();
-  _MipHeights.clear();
-  _MipLevels = 0;
+  ClearMipMaps();
 
   if (!_TexData || _Width <= 0 || _Height <= 0)
     return;
@@ -405,11 +393,11 @@ void Texture::GenerateMipMaps()
   int w = _Width;
   int h = _Height;
 
-  // generate next levels until 1x1
-  while (w > 1 || h > 1)
+  // generate next levels until MIN_MIP_SIZE x MIN_MIP_SIZE reached
+  while ( ( w > MIN_MIP_SIZE ) || ( h > MIN_MIP_SIZE ) )
   {
-    int nw = std::max(1, w / 2);
-    int nh = std::max(1, h / 2);
+    int nw = std::max(MIN_MIP_SIZE, w / 2);
+    int nh = std::max(MIN_MIP_SIZE, h / 2);
 
     size_t dstSize = static_cast<size_t>(nw) * nh * nc;
     if (isFloat)
