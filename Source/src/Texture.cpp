@@ -22,7 +22,9 @@
 namespace RTRT
 {
 
-// free mip data helper
+// ----------------------------------------------------------------------------
+// FreeMipData
+// ----------------------------------------------------------------------------
 static void FreeMipData(std::vector<void*>& mipData)
 {
   for (void* p : mipData)
@@ -30,7 +32,10 @@ static void FreeMipData(std::vector<void*>& mipData)
   mipData.clear();
 }
 
+// ----------------------------------------------------------------------------
+// SampleTexelFromLevel
 // helper to sample a single texel from a given mip level; returns vec4
+// ----------------------------------------------------------------------------
 static Vec4 SampleTexelFromLevel(const void* levelPtr, int levelWidth, int levelHeight, int nbComponents, bool isFloat, int x, int y)
 {
   Vec4 sample(1.f);
@@ -56,6 +61,9 @@ static Vec4 SampleTexelFromLevel(const void* levelPtr, int levelWidth, int level
   return sample;
 }
 
+// ----------------------------------------------------------------------------
+// CTOR
+// ----------------------------------------------------------------------------
 Texture::Texture(const std::string & iTexName, unsigned char * iTexData, int iWidth, int iHeight, int iNbComponents)
 : _Filename(iTexName)
 , _Width(iWidth)
@@ -66,6 +74,9 @@ Texture::Texture(const std::string & iTexName, unsigned char * iTexData, int iWi
   memcpy(_TexData, iTexData, iWidth * iHeight * iNbComponents);
 }
 
+// ----------------------------------------------------------------------------
+// DTOR
+// ----------------------------------------------------------------------------
 Texture::~Texture()
 {
   if ( _TexData )
@@ -74,6 +85,9 @@ Texture::~Texture()
   FreeMipData(_MipData);
 }
 
+// ----------------------------------------------------------------------------
+// Load
+// ----------------------------------------------------------------------------
 bool Texture::Load( const std::string & iFilename, int iNbComponents, TexFormat iFormat )
 {
   int width = 0, height = 0;
@@ -102,6 +116,9 @@ bool Texture::Load( const std::string & iFilename, int iNbComponents, TexFormat 
   return true;
 }
 
+// ----------------------------------------------------------------------------
+// Resize
+// ----------------------------------------------------------------------------
 bool Texture::Resize( int iWidth, int iHeight )
 {
   if ( !iWidth || !iHeight || !_TexData )
@@ -139,6 +156,9 @@ bool Texture::Resize( int iWidth, int iHeight )
   return false;
 }
 
+// ----------------------------------------------------------------------------
+// Sample
+// ----------------------------------------------------------------------------
 Vec4 Texture::Sample(int iX, int iY) const
 {
   Vec4 sample(1.f);
@@ -165,6 +185,9 @@ Vec4 Texture::Sample(int iX, int iY) const
   return sample;
 }
 
+// ----------------------------------------------------------------------------
+// Sample
+// ----------------------------------------------------------------------------
 void Texture::Sample(int iX, int iY, int iSpan, Vec4* oSamples) const
 {
   if (_TexData)
@@ -248,6 +271,9 @@ Vec4 Texture::Sample(int iX, int iY) const
 }
 */
 
+// ----------------------------------------------------------------------------
+// Sample
+// ----------------------------------------------------------------------------
 Vec4 Texture::Sample( Vec2 iUV ) const
 {
   iUV.x = ( iUV.x - std::floor(iUV.x) ) * ( _Width - 1 );
@@ -259,12 +285,18 @@ Vec4 Texture::Sample( Vec2 iUV ) const
   return Sample(x, y);
 }
 
+// ----------------------------------------------------------------------------
+// BiLinearSample
+// ----------------------------------------------------------------------------
 Vec4 Texture::BiLinearSample( Vec2 iUV ) const
 {
   // default behavior: base-level bilinear
   return BiLinearSample(iUV, 0.f);
 }
 
+// ----------------------------------------------------------------------------
+// BiLinearSample
+// ----------------------------------------------------------------------------
 Vec4 Texture::BiLinearSample( Vec2 iUV, float iLOD ) const
 {
   // if no mipmaps available, fall back to classic implementation
@@ -322,6 +354,9 @@ Vec4 Texture::BiLinearSample( Vec2 iUV, float iLOD ) const
   return glm::mix(c0, c1, frac);
 }
 
+// ----------------------------------------------------------------------------
+// BiLinearSample
+// ----------------------------------------------------------------------------
 Vec4 Texture::BiLinearSample(Vec2 iUV, float iLOD, bool iTrilinear) const
 {
   if (!iTrilinear)
@@ -332,6 +367,9 @@ Vec4 Texture::BiLinearSample(Vec2 iUV, float iLOD, bool iTrilinear) const
   return BiLinearSample(iUV, iLOD); // existing trilinear behavior
 }
 
+// ----------------------------------------------------------------------------
+// GenerateMipMaps
+// ----------------------------------------------------------------------------
 void Texture::GenerateMipMaps()
 {
   // free existing mip data first (except level 0 which is in _TexData)
@@ -401,6 +439,9 @@ void Texture::GenerateMipMaps()
   _MipLevels = static_cast<int>(_MipData.size());
 }
 
+// ----------------------------------------------------------------------------
+// ClearMipMaps
+// ----------------------------------------------------------------------------
 void Texture::ClearMipMaps()
 {
   FreeMipData(_MipData);

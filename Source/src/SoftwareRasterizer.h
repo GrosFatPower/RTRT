@@ -136,6 +136,8 @@ protected:
   int RasterizeARM(RasterData::Tile& ioTile);
 #endif
 
+  void ComputeLOD( RasterData::RasterTriangle & ioRasterTri );
+
 protected:
 
   QuadMesh _Quad;
