@@ -39,17 +39,22 @@ struct RenderSettings
   bool         _Accumulate            = true;                   // PathTracer
   bool         _Denoise               = false;                  // PathTracer
   bool         _TiledRendering        = false;
+  bool         _ShadowMapping         = true;                   // Deferred renderer
+  bool         _ShowShadowMap         = false;                  // Deferred renderer debug
   SamplingMode _Sampling              = SamplingMode::Bilinear; // Raster
   bool         _WBuffer               = true;                   // Raster
   ShadingType  _ShadingType           = ShadingType::Phong;     // Raster
   int          _Bounces               = 1;                      // PathTracer
   int          _NbSamplesPerPixel     = 1;                      // PathTracer
   int          _RenderScale           = 100;
+  int          _ShadowMapResolution   = 1024;                   // Deferred renderer
   float        _LowResRatio           = 0.1f;                   // PathTracer
   float        _TargetFPS             = 60.f;
   float        _Gamma                 = 2.f;
   float        _Exposure              = 1.5f;
   float        _SkyBoxRotation        = 0.f;
+  float        _ShadowBias            = 0.02f;                  // Deferred renderer
+  float        _ShadowFar             = 0.f;                    // Deferred renderer. Auto-fit when <= 0.
   float        _DenoiserThreshold     = 0.05f;                  // PathTracer
   float        _DenoiserSigmaSpatial  = 2.0f;                   // PathTracer
   float        _DenoiserSigmaRange    = 0.1f;                   // PathTracer

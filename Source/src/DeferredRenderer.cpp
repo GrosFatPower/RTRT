@@ -4,6 +4,8 @@
 #include "EnvMap.h"
 #include "PathUtils.h"
 #include "Mesh.h"
+#include "MathUtil.h"
+#include "Light.h"
 
 #include <iostream>
 #include <vector>
@@ -70,15 +72,16 @@ DeferredRenderer::DeferredRenderer(Scene& iScene, RenderSettings& iSettings)
 // ----------------------------------------------------------------------------
 DeferredRenderer::~DeferredRenderer()
 {
-  // Delete framebuffers and textures
   GLUtil::DeleteFBO(_GBufferFBO);
   GLUtil::DeleteFBO(_LightingFBO);
+  GLUtil::DeleteFBO(_ShadowFBO);
 
   GLUtil::DeleteTEX(_GAlbedoTEX);
   GLUtil::DeleteTEX(_GNormalTEX);
   GLUtil::DeleteTEX(_GPositionTEX);
   GLUtil::DeleteTEX(_GDepthTEX);
   GLUtil::DeleteTEX(_LightingTEX);
+  GLUtil::DeleteTEX(_ShadowMapTEX);
 
   GLUtil::DeleteTBO(_TexIndTBO);
   GLUtil::DeleteTEX(_TexArrayTEX);
@@ -111,6 +114,12 @@ int DeferredRenderer::Initialize()
     return 1;
   }
 
+  if ( 0 != InitializeShadowMap() )
+  {
+    std::cout << "DeferredRenderer : Failed to initialize shadow map !" << std::endl;
+    return 1;
+  }
+
   return 0;
 }
 
@@ -120,7 +129,12 @@ int DeferredRenderer::Initialize()
 int DeferredRenderer::Update()
 {
   if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
+  {
     this -> ResizeRenderTarget();
+
+    if ( _ShadowMapSize != _Settings._ShadowMapResolution )
+      this -> InitializeShadowMap();
+  }
 
   if ( _DirtyStates & (unsigned long)DirtyState::Textures )
   {
@@ -136,6 +150,7 @@ int DeferredRenderer::Update()
   if ( _DirtyStates & (unsigned long)DirtyState::SceneEnvMap )
     this -> ReloadEnvMap();
 
+  UpdateShadowState();
   UpdateUniforms();
  
   return 0;
@@ -160,9 +175,8 @@ int DeferredRenderer::UnloadScene()
 {
   _FrameNum = 0;
 
-  // Delete any GPU mesh buffers we created
   const size_t nb = _MeshVAOs.size();
-  for (size_t i = 0; i < nb; ++i)
+  for ( size_t i = 0; i < nb; ++i )
   {
     GLuint vao = _MeshVAOs[i];
     GLuint vbo = _MeshVBOs[i];
@@ -174,6 +188,200 @@ int DeferredRenderer::UnloadScene()
   _MeshVBOs.clear();
   _MeshEBOs.clear();
   _MeshIndexCount.clear();
+
+  _ShadowLightIndex = -1;
+  _HasShadowLight = false;
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ComputeSceneBounds
+// ----------------------------------------------------------------------------
+void DeferredRenderer::ComputeSceneBounds()
+{
+  bool initialized = false;
+  Vec3 low(0.f), high(0.f);
+
+  const auto & instances = _Scene.GetMeshInstances();
+  const auto & meshes = _Scene.GetMeshes();
+  for ( const MeshInstance & inst : instances )
+  {
+    if ( ( inst._MeshID < 0 ) || ( inst._MeshID >= (int)meshes.size() ) )
+      continue;
+
+    Mesh * mesh = meshes[inst._MeshID];
+    if ( !mesh )
+      continue;
+
+    const Box & bbox = mesh -> GetBoundingBox();
+    const Vec3 corners[8] = {
+      Vec3(bbox._Low.x,  bbox._Low.y,  bbox._Low.z),
+      Vec3(bbox._High.x, bbox._Low.y,  bbox._Low.z),
+      Vec3(bbox._Low.x,  bbox._High.y, bbox._Low.z),
+      Vec3(bbox._High.x, bbox._High.y, bbox._Low.z),
+      Vec3(bbox._Low.x,  bbox._Low.y,  bbox._High.z),
+      Vec3(bbox._High.x, bbox._Low.y,  bbox._High.z),
+      Vec3(bbox._Low.x,  bbox._High.y, bbox._High.z),
+      Vec3(bbox._High.x, bbox._High.y, bbox._High.z)
+    };
+
+    for ( const Vec3 & corner : corners )
+    {
+      Vec3 worldCorner = MathUtil::TransformPoint(corner, inst._Transform);
+      if ( !initialized )
+      {
+        low = high = worldCorner;
+        initialized = true;
+      }
+      else
+      {
+        MathUtil::Minimize(low, worldCorner);
+        MathUtil::Maximize(high, worldCorner);
+      }
+    }
+  }
+
+  if ( !initialized )
+  {
+    low = Vec3(-10.f);
+    high = Vec3(10.f);
+  }
+
+  _SceneBoundsLow = low;
+  _SceneBoundsHigh = high;
+  _SceneBoundsCenter = 0.5f * ( low + high );
+  _SceneBoundsRadius = std::max( glm::length( high - low ) * 0.5f, 1.f );
+}
+
+// ----------------------------------------------------------------------------
+// ComputeAutoShadowFar
+// ----------------------------------------------------------------------------
+float DeferredRenderer::ComputeAutoShadowFar( const Vec3 & iLightPos ) const
+{
+  const Vec3 corners[8] = {
+    Vec3(_SceneBoundsLow.x,  _SceneBoundsLow.y,  _SceneBoundsLow.z),
+    Vec3(_SceneBoundsHigh.x, _SceneBoundsLow.y,  _SceneBoundsLow.z),
+    Vec3(_SceneBoundsLow.x,  _SceneBoundsHigh.y, _SceneBoundsLow.z),
+    Vec3(_SceneBoundsHigh.x, _SceneBoundsHigh.y, _SceneBoundsLow.z),
+    Vec3(_SceneBoundsLow.x,  _SceneBoundsLow.y,  _SceneBoundsHigh.z),
+    Vec3(_SceneBoundsHigh.x, _SceneBoundsLow.y,  _SceneBoundsHigh.z),
+    Vec3(_SceneBoundsLow.x,  _SceneBoundsHigh.y, _SceneBoundsHigh.z),
+    Vec3(_SceneBoundsHigh.x, _SceneBoundsHigh.y, _SceneBoundsHigh.z)
+  };
+
+  float maxDistance = 1.f;
+  for ( const Vec3 & corner : corners )
+    maxDistance = std::max( maxDistance, glm::length( corner - iLightPos ) );
+
+  return maxDistance * 1.05f;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateShadowState
+// ----------------------------------------------------------------------------
+int DeferredRenderer::UpdateShadowState()
+{
+  _ShadowLightIndex = -1;
+  _HasShadowLight = false;
+
+  if ( !_Settings._ShadowMapping )
+    return 0;
+
+  int rectLightIndex = -1;
+  Vec3 rectLightPos(0.f);
+  for ( int i = 0; i < _Scene.GetNbLights(); ++i )
+  {
+    Light * curLight = _Scene.GetLight(i);
+    if ( !curLight )
+      continue;
+    LightType lightType = (LightType) curLight -> _Type;
+    if ( LightType::SphereLight == lightType )
+    {
+      _ShadowLightIndex = i;
+      _ShadowLightPos = curLight -> _Pos;
+      _HasShadowLight = true;
+      break;
+    }
+    if ( ( rectLightIndex < 0 ) && ( LightType::RectLight == lightType ) )
+    {
+      rectLightIndex = i;
+      rectLightPos = curLight -> _Pos;
+    }
+  }
+  if ( !_HasShadowLight && ( rectLightIndex >= 0 ) )
+  {
+    _ShadowLightIndex = rectLightIndex;
+    _ShadowLightPos = rectLightPos;
+    _HasShadowLight = true;
+  }
+  if ( !_HasShadowLight )
+    return 0;
+
+  _ShadowFar = ( _Settings._ShadowFar > 0.f ) ? ( _Settings._ShadowFar ) : ( ComputeAutoShadowFar( _ShadowLightPos ) );
+
+  Mat4x4 shadowProj = glm::perspective(MathUtil::ToRadians(90.f), 1.0f, _ShadowNear, _ShadowFar);
+
+  const Vec3 lookDirs[6] = {
+    Vec3( 1.f,  0.f,  0.f),
+    Vec3(-1.f,  0.f,  0.f),
+    Vec3( 0.f,  1.f,  0.f),
+    Vec3( 0.f, -1.f,  0.f),
+    Vec3( 0.f,  0.f,  1.f),
+    Vec3( 0.f,  0.f, -1.f)
+  };
+  const Vec3 upDirs[6] = {
+    Vec3(0.f, -1.f,  0.f),
+    Vec3(0.f, -1.f,  0.f),
+    Vec3(0.f,  0.f,  1.f),
+    Vec3(0.f,  0.f, -1.f),
+    Vec3(0.f, -1.f,  0.f),
+    Vec3(0.f, -1.f,  0.f)
+  };
+
+  for ( int i = 0; i < 6; ++i )
+  {
+    Mat4x4 view = glm::lookAt(_ShadowLightPos, _ShadowLightPos + lookDirs[i], upDirs[i]);
+    _ShadowViewProj[i] = shadowProj * view;
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeShadowMap
+// ----------------------------------------------------------------------------
+int DeferredRenderer::InitializeShadowMap()
+{
+  GLUtil::DeleteFBO(_ShadowFBO);
+  GLUtil::DeleteTEX(_ShadowMapTEX);
+
+  int shadowMapSize = std::max(_Settings._ShadowMapResolution, 256);
+  _ShadowMapSize = shadowMapSize;
+
+  glGenTextures(1, &_ShadowMapTEX._Handle);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, _ShadowMapTEX._Handle);
+  for ( int i = 0; i < 6; ++i )
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, _ShadowMapTEX._InternalFormat, shadowMapSize, shadowMapSize, 0, _ShadowMapTEX._DataFormat, _ShadowMapTEX._DataType, nullptr);
+
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+
+  glGenFramebuffers(1, &_ShadowFBO._Handle);
+  glBindFramebuffer(GL_FRAMEBUFFER, _ShadowFBO._Handle);
+  glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, _ShadowMapTEX._Handle, 0);
+  glDrawBuffer(GL_NONE);
+  glReadBuffer(GL_NONE);
+  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+  {
+    std::cout << "DeferredRenderer : Shadow framebuffer not complete !" << std::endl;
+    return 1;
+  }
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   return 0;
 }
@@ -276,6 +484,10 @@ int DeferredRenderer::ReloadScene()
     _MeshEBOs[mi] = ebo;
     _MeshIndexCount[mi] = static_cast<int>(outIndices.size());
   }
+
+  ComputeSceneBounds();
+  if ( _Settings._ShadowFar <= 0.f )
+    _Settings._ShadowFar = std::max( _SceneBoundsRadius * 2.f, 25.f );
 
   // Materials
   if ( _Scene.GetTextureArrayIDs().size() )
@@ -462,6 +674,13 @@ int DeferredRenderer::RecompileShaders()
   if (!wireProg)
     return 1;
   _WireframeShader.reset(wireProg);
+
+  ShaderSource shadowVert = Shader::LoadShader(PathUtils::GetShaderPath("vertex_ShadowCubeDepth.glsl"));
+  ShaderSource shadowFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_ShadowCubeDepth.glsl"));
+  ShaderProgram* shadowProg = ShaderProgram::LoadShaders(shadowVert, shadowFrag);
+  if (!shadowProg)
+    return 1;
+  _ShadowShader.reset(shadowProg);
  
   return 0;
 }
@@ -488,6 +707,7 @@ int DeferredRenderer::BindLightingTextures()
   GLUtil::ActivateTexture(_MaterialsTEX);
 
   GLUtil::ActivateTexture(_EnvMapTEX);
+  GLUtil::ActivateTexture(_ShadowMapTEX);
 
   return 0;
 }
@@ -508,7 +728,6 @@ int DeferredRenderer::BindRenderToScreenTextures()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::UpdateUniforms()
 {
-  // Build camera matrices and common camera params
   Mat4x4 V;
   _Scene.GetCamera().ComputeLookAtMatrix(V);
 
@@ -517,16 +736,12 @@ int DeferredRenderer::UpdateUniforms()
   Mat4x4 P;
   _Scene.GetCamera().ComputePerspectiveProjMatrix(ratio, P, &top, &right);
 
-  float zNear = 0.0f, zFar = 0.0f;
-  _Scene.GetCamera().GetZNearFar(zNear, zFar);
-
   Vec3 camPos = _Scene.GetCamera().GetPos();
   Vec3 camUp = _Scene.GetCamera().GetUp();
   Vec3 camRight = _Scene.GetCamera().GetRight();
   Vec3 camForward = _Scene.GetCamera().GetForward();
   float camFov = _Scene.GetCamera().GetFOV();
 
-  // Update Scene data
   if ( _DirtyStates & (unsigned long)DirtyState::SceneMaterials )
   {
     glBindTexture(GL_TEXTURE_2D, _MaterialsTEX._Handle);
@@ -534,23 +749,18 @@ int DeferredRenderer::UpdateUniforms()
     glBindTexture(GL_TEXTURE_2D, 0);
   }
 
-  // Geometry shader
   if ( _GeometryShader )
   {
     _GeometryShader -> Use();
     _GeometryShader -> SetUniform("u_CameraPos", camPos);
     _GeometryShader -> SetUniform("u_View", V);
     _GeometryShader -> SetUniform("u_Proj", P);
-
-    // Scene data
     _GeometryShader -> SetUniform("u_TexIndTexture",    (int)DeferredTexSlot::_TexInd);
     _GeometryShader -> SetUniform("u_TexArrayTexture",  (int)DeferredTexSlot::_TexArray);
     _GeometryShader -> SetUniform("u_MaterialsTexture", (int)DeferredTexSlot::_Materials);
-
     _GeometryShader -> StopUsing();
   }
 
-  // Lighting shader
   if ( _LightingShader )
   {
     _LightingShader -> Use();
@@ -560,41 +770,36 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> SetUniform("u_Camera._Forward", camForward);
     _LightingShader -> SetUniform("u_Camera._FOV", camFov);
 
-    // The lighting shader expects samplers named u_GAlbedo, u_GNormal, u_GPosition, u_GDepth
     _LightingShader -> SetUniform("u_GAlbedo",   (int)DeferredTexSlot::_GAlbedo);
     _LightingShader -> SetUniform("u_GNormal",   (int)DeferredTexSlot::_GNormal);
     _LightingShader -> SetUniform("u_GPosition", (int)DeferredTexSlot::_GPosition);
     _LightingShader -> SetUniform("u_GDepth",    (int)DeferredTexSlot::_GDepth);
+    _LightingShader -> SetUniform("u_ShadowMap", (int)DeferredTexSlot::_ShadowMap);
     _LightingShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
 
-    if ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
+    int nbLights = 0;
+    for ( int i = 0; i < _Scene.GetNbLights(); ++i )
     {
-      int nbLights = 0;
+      Light * curLight = _Scene.GetLight(i);
+      if ( !curLight )
+        continue;
 
-      for ( int i = 0; i < _Scene.GetNbLights(); ++i )
-      {
-        Light * curLight = _Scene.GetLight(i);
-        if ( !curLight )
-          continue;
+      _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Pos"     ), curLight -> _Pos);
+      _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Emission"), curLight -> _Emission * curLight -> _Intensity);
+      _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_DirU"    ), curLight -> _DirU);
+      _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_DirV"    ), curLight -> _DirV);
+      _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Radius"  ), curLight -> _Radius);
+      _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Area"    ), curLight -> _Area);
+      _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Type"    ), curLight -> _Type);
 
-        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Pos"     ), curLight -> _Pos);
-        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Emission"), curLight -> _Emission * curLight -> _Intensity);
-        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_DirU"    ), curLight -> _DirU);
-        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_DirV"    ), curLight -> _DirV);
-        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Radius"  ), curLight -> _Radius);
-        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Area"    ), curLight -> _Area);
-        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Type"    ), curLight -> _Type);
-
-        nbLights++;
-        if ( nbLights >= 32 )
-          break;
-      }
-
-      _LightingShader -> SetUniform("u_NbLights", nbLights);
-      _LightingShader -> SetUniform("u_ShowLights", (int)_Settings._ShowLights);
+      nbLights++;
+      if ( nbLights >= 32 )
+        break;
     }
 
-    // Scene data
+    _LightingShader -> SetUniform("u_NbLights", nbLights);
+    _LightingShader -> SetUniform("u_ShowLights", (int)_Settings._ShowLights);
+
     _LightingShader -> SetUniform("u_BackgroundColor", _Settings._BackgroundColor);
     _LightingShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
     _LightingShader -> SetUniform("u_EnableBackground" , (int)_Settings._EnableBackGround);
@@ -602,13 +807,25 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> SetUniform("u_EnvMapRes", (float)_Scene.GetEnvMap().GetWidth(), (float)_Scene.GetEnvMap().GetHeight());
     _LightingShader -> SetUniform("u_EnvMap", (int)DeferredTexSlot::_EnvMap);
 
-    // Debug
+    _LightingShader -> SetUniform("u_EnableShadowMapping", ( _Settings._ShadowMapping && _HasShadowLight ) ? ( 1 ) : ( 0 ));
+    _LightingShader -> SetUniform("u_ShadowLightIndex", _ShadowLightIndex);
+    _LightingShader -> SetUniform("u_ShadowLightPos", _ShadowLightPos);
+    _LightingShader -> SetUniform("u_ShadowBias", _Settings._ShadowBias);
+    _LightingShader -> SetUniform("u_ShadowFar", _ShadowFar);
+
     _LightingShader -> SetUniform("u_DebugMode" , _DebugMode);
 
     _LightingShader -> StopUsing();
   }
 
-  // DEBUG : Wireframe shader
+  if ( _ShadowShader )
+  {
+    _ShadowShader -> Use();
+    _ShadowShader -> SetUniform("u_LightPos", _ShadowLightPos);
+    _ShadowShader -> SetUniform("u_FarPlane", _ShadowFar);
+    _ShadowShader -> StopUsing();
+  }
+
   if ( _WireframeShader )
   {
     _WireframeShader -> Use();
@@ -619,7 +836,6 @@ int DeferredRenderer::UpdateUniforms()
     _WireframeShader -> StopUsing();
   }
 
-  // Composite shader
   if ( _CompositeShader )
   {
     _CompositeShader -> Use();
@@ -638,10 +854,66 @@ int DeferredRenderer::UpdateUniforms()
 }
 
 // ----------------------------------------------------------------------------
+// RenderShadowMap
+// ----------------------------------------------------------------------------
+int DeferredRenderer::RenderShadowMap()
+{
+  if ( !_Settings._ShadowMapping || !_HasShadowLight || !_ShadowShader || !_ShadowFBO._Handle || !_ShadowMapTEX._Handle )
+    return 0;
+
+  glViewport(0, 0, _ShadowMapSize, _ShadowMapSize);
+  glBindFramebuffer(GL_FRAMEBUFFER, _ShadowFBO._Handle);
+  glEnable(GL_DEPTH_TEST);
+  glDepthFunc(GL_LESS);
+  glDepthMask(GL_TRUE);
+  glDisable(GL_BLEND);
+  glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
+
+  _ShadowShader -> Use();
+  _ShadowShader -> SetUniform("u_LightPos", _ShadowLightPos);
+  _ShadowShader -> SetUniform("u_FarPlane", _ShadowFar);
+
+  const auto & instances = _Scene.GetMeshInstances();
+  for ( int face = 0; face < 6; ++face )
+  {
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, _ShadowMapTEX._Handle, 0);
+    glClear(GL_DEPTH_BUFFER_BIT);
+
+    _ShadowShader -> SetUniform("u_LightViewProj", _ShadowViewProj[face]);
+
+    for ( const MeshInstance & inst : instances )
+    {
+      int meshID = inst._MeshID;
+      if ( ( meshID < 0 ) || ( static_cast<size_t>(meshID) >= _MeshVAOs.size() ) )
+        continue;
+
+      GLuint vao = _MeshVAOs[meshID];
+      int idxCount = _MeshIndexCount[meshID];
+      if ( !vao || idxCount <= 0 )
+        continue;
+
+      _ShadowShader -> SetUniform("u_Model", inst._Transform);
+      glBindVertexArray(vao);
+      glDrawElements(GL_TRIANGLES, idxCount, GL_UNSIGNED_INT, 0);
+    }
+  }
+
+  glBindVertexArray(0);
+  _ShadowShader -> StopUsing();
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // RenderToTexture
 // ----------------------------------------------------------------------------
 int DeferredRenderer::RenderToTexture()
 {
+  if ( _Settings._ShadowMapping && _HasShadowLight )
+    RenderShadowMap();
+
   if (_GeometryShader)
   {
     // Geometry pass: render scene into G-buffer
@@ -862,3 +1134,4 @@ int DeferredRenderer::RenderToFile(const std::filesystem::path& iFilePath)
 }
 
 } // namespace RTRT
+

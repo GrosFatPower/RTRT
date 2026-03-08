@@ -497,6 +497,24 @@ int Test5::DrawUI()
           int anisoLevel = deferredRenderer -> GetAnisotropicLevel();
           if ( ImGui::SliderInt( "Anisotropic level", &anisoLevel, 1, 16 ) )
             deferredRenderer -> SetAnisotropicLevel(anisoLevel);
+
+          if ( ImGui::Checkbox( "Shadow mapping", &_Settings._ShadowMapping ) )
+            _Renderer -> Notify(DirtyState::RenderSettings);
+
+          int shadowMapResolution = _Settings._ShadowMapResolution;
+          if ( ImGui::SliderInt( "Shadow map resolution", &shadowMapResolution, 256, 4096 ) )
+          {
+            shadowMapResolution = std::max(256, ( shadowMapResolution / 64 ) * 64);
+            _Settings._ShadowMapResolution = shadowMapResolution;
+            _Renderer -> Notify(DirtyState::RenderSettings);
+          }
+
+          if ( ImGui::SliderFloat( "Shadow bias", &_Settings._ShadowBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic ) )
+            _Renderer -> Notify(DirtyState::RenderSettings);
+
+          if ( ImGui::SliderFloat( "Shadow far plane", &_Settings._ShadowFar, 1.f, 500.f ) )
+            _Renderer -> Notify(DirtyState::RenderSettings);
+
         }
       }
 
@@ -526,9 +544,14 @@ int Test5::DrawUI()
         g_DebugMode = 0;
 
         static const char * COLORorDEPTHorNORMALS[] = { "Color", "Depth", "Normals" };
+        static const char * COLORorDEPTHorNORMALSorSHADOWS[] = { "Color", "Depth", "Normals", "Shadows" };
 
         static int bufferChoice = 0;
-        if ( ImGui::Combo("Buffer", &bufferChoice, COLORorDEPTHorNORMALS, 3) )
+        int maxBufferChoice = ( RendererType::OpenGLRasterizer == _RendererType ) ? ( 4 ) : ( 3 );
+        if ( ( RendererType::SoftwareRasterizer == _RendererType ) && ( bufferChoice > 2 ) )
+          bufferChoice = 0;
+
+        if ( ImGui::Combo("Buffer", &bufferChoice, ( RendererType::OpenGLRasterizer == _RendererType ) ? ( COLORorDEPTHorNORMALSorSHADOWS ) : ( COLORorDEPTHorNORMALS ), maxBufferChoice ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
         static int showWires = 0;
@@ -549,12 +572,16 @@ int Test5::DrawUI()
         }
         else if ( RendererType::OpenGLRasterizer == _RendererType )
         {
+          _Settings._ShowShadowMap = ( 3 == bufferChoice );
+
           if ( 0 == bufferChoice )
             g_DebugMode |= (int)DeferredDebugModes::ColorBuffer;
           else if ( 1 == bufferChoice )
             g_DebugMode |= (int)DeferredDebugModes::DepthBuffer;
           else if ( 2 == bufferChoice )
             g_DebugMode |= (int)DeferredDebugModes::Normals;
+          else if ( 3 == bufferChoice )
+            g_DebugMode |= (int)DeferredDebugModes::Shadows;
 
           if ( showWires )
             g_DebugMode |= (int)DeferredDebugModes::Wires;

@@ -3,62 +3,140 @@
 #include Globals.glsl
 #include Lights.glsl
 #include Sampling.glsl
+#include Structures.glsl
+#include Intersections.glsl
 
 in vec2 fragUV; // from fullscreen quad vertex shader
 out vec4 fragColor;
 
-// G-buffer samplers (bound by the C++ code to texture units 0..3)
-uniform sampler2D u_GAlbedo;
-uniform sampler2D u_GNormal;
-uniform sampler2D u_GPosition;
-uniform sampler2D u_GDepth;
+uniform sampler2D   u_GAlbedo;
+uniform sampler2D   u_GNormal;
+uniform sampler2D   u_GPosition;
+uniform sampler2D   u_GDepth;
+uniform samplerCube u_ShadowMap;
 
-// Simple lighting parameters (tweak in C++ or expose more uniforms)
 uniform vec3 u_Ambient = vec3(0.001, 0.001, 0.001);
 uniform vec3 u_BackgroundColor = vec3(1.0, 1.0, 1.0);
 uniform vec2 u_Resolution;
 uniform Camera u_Camera;
 
-// EnvMap
 uniform int       u_EnableBackground  = 0;
 uniform int       u_EnableEnvMap      = 0;
 uniform float     u_EnvMapRotation    = 0.f;
 uniform vec2      u_EnvMapRes;
 uniform sampler2D u_EnvMap;
 
+uniform int   u_EnableShadowMapping = 0;
+uniform int   u_ShadowLightIndex    = -1;
+uniform vec3  u_ShadowLightPos      = vec3(0.0);
+uniform float u_ShadowBias          = 0.02;
+uniform float u_ShadowFar           = 25.0;
+
+vec3 GetCameraRayDir()
+{
+  vec2 centeredUV = fragUV * 2.0 - 1.0;
+
+  float scale = tan(u_Camera._FOV * .5);
+  centeredUV.x *= scale;
+  centeredUV.y *= ( u_Resolution.y / u_Resolution.x ) * scale;
+
+  return normalize(u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward);
+}
+
+bool TraceVisibleLight( in Ray iRay, in float iSceneDist, out vec3 oLightColor )
+{
+  float closestLightDist = iSceneDist;
+  bool hitLight = false;
+  oLightColor = vec3(0.0);
+
+  for ( int i = 0; i < u_NbLights; ++i )
+  {
+    float hitDist = 0.0;
+    bool hit = false;
+
+    if ( u_Lights[i]._Type == SPHERE_LIGHT )
+      hit = SphereIntersection( vec4( u_Lights[i]._Pos, u_Lights[i]._Radius ), iRay, hitDist );
+    else if ( u_Lights[i]._Type == QUAD_LIGHT )
+      hit = QuadIntersection( u_Lights[i]._Pos, u_Lights[i]._DirU, u_Lights[i]._DirV, iRay, hitDist );
+
+    if ( hit && ( hitDist > 0.0 ) && ( hitDist < closestLightDist ) )
+    {
+      closestLightDist = hitDist;
+      oLightColor = u_Lights[i]._Emission;
+      hitLight = true;
+    }
+  }
+
+  return hitLight;
+}
+
+float ComputeShadow( vec3 iFragPos )
+{
+  if ( u_EnableShadowMapping == 0 )
+    return 1.0;
+
+  vec3 fragToLight = iFragPos - u_ShadowLightPos;
+  float currentDepth = length(fragToLight);
+  if ( currentDepth <= 0.0 || currentDepth >= u_ShadowFar )
+    return 1.0;
+
+  const int SampleCount = 20;
+  const vec3 SampleOffsetDirections[20] = vec3[](
+    vec3( 1,  1,  1), vec3( 1, -1,  1), vec3(-1, -1,  1), vec3(-1,  1,  1),
+    vec3( 1,  1, -1), vec3( 1, -1, -1), vec3(-1, -1, -1), vec3(-1,  1, -1),
+    vec3( 1,  1,  0), vec3( 1, -1,  0), vec3(-1, -1,  0), vec3(-1,  1,  0),
+    vec3( 1,  0,  1), vec3(-1,  0,  1), vec3( 1,  0, -1), vec3(-1,  0, -1),
+    vec3( 0,  1,  1), vec3( 0, -1,  1), vec3( 0, -1, -1), vec3( 0,  1, -1)
+  );
+
+  float diskRadius = max( 0.02 * currentDepth / u_ShadowFar, 0.005 );
+  float shadow = 0.0;
+  for ( int i = 0; i < SampleCount; ++i )
+  {
+    float closestDepth = texture( u_ShadowMap, fragToLight + SampleOffsetDirections[i] * diskRadius ).r;
+    closestDepth *= u_ShadowFar;
+    if ( currentDepth - u_ShadowBias > closestDepth )
+      shadow += 1.0;
+  }
+
+  return 1.0 - shadow / float(SampleCount);
+}
+
 void main()
 {
-  // Read G-buffer
   vec3 albedo  = texture(u_GAlbedo, fragUV).rgb;
-  vec3 N       = normalize(texture(u_GNormal, fragUV).xyz * 2.0 - 1.0); // [0,1] -> [-1,1]
+  vec3 N       = normalize(texture(u_GNormal, fragUV).xyz * 2.0 - 1.0);
   vec3 pos     = texture(u_GPosition, fragUV).xyz;
   float depth  = texture(u_GDepth, fragUV).x;
 
-  if ( depth >= 1.0 ) // far plane, no geometry
+  vec3 cameraRayDir = GetCameraRayDir();
+
+  if ( depth >= 1.0 )
   {
+    if ( u_ShowLights != 0 )
+    {
+      Ray lightRay = Ray( u_Camera._Pos, cameraRayDir );
+      vec3 lightColor = vec3(0.0);
+      if ( TraceVisibleLight( lightRay, 1e20, lightColor ) )
+      {
+        fragColor = vec4(lightColor, 1.0);
+        return;
+      }
+    }
+
     if ( u_EnableEnvMap > 0 )
     {
-      // Compute view direction
-      vec2 centeredUV = fragUV * 2.0 - 1.0;
-
-      float scale = tan(u_Camera._FOV * .5);
-      centeredUV.x *= scale;
-      centeredUV.y *= ( u_Resolution.y / u_Resolution.x ) * scale;
-
-      vec3 V = normalize(u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward);
-
-      fragColor = vec4(SampleSkybox(V, u_EnvMap, u_EnvMapRotation), 1.);
+      fragColor = vec4(SampleSkybox(cameraRayDir, u_EnvMap, u_EnvMapRotation), 1.);
     }
     else if ( u_EnableBackground > 0 )
     {
-	  fragColor = vec4(u_BackgroundColor, 1.);
+      fragColor = vec4(u_BackgroundColor, 1.);
     }
     else
       fragColor = vec4(0., 0., 0., 1.);
-	return;
+    return;
   }
 
-  // Debug
   if ( ( u_DebugMode & 0x01 ) != 0 )
   {
     fragColor = vec4(vec3(depth), 1.);
@@ -70,8 +148,20 @@ void main()
     return;
   }
 
-  // Shading
+  float sceneDist = length(pos - u_Camera._Pos);
+  if ( u_ShowLights != 0 )
+  {
+    Ray lightRay = Ray( u_Camera._Pos, cameraRayDir );
+    vec3 lightColor = vec3(0.0);
+    if ( TraceVisibleLight( lightRay, sceneDist, lightColor ) )
+    {
+      fragColor = vec4(lightColor, 1.0);
+      return;
+    }
+  }
+
   vec4 alpha = vec4(0.);
+  float shadowFactorDebug = 1.0;
   for ( int i = 0; i < u_NbLights; ++i )
   {
     float ambientStrength = .1;
@@ -80,21 +170,38 @@ void main()
 
     vec3 L;
     if ( u_Lights[i]._Type == DISTANT_LIGHT )
-	  L = u_Lights[i]._Pos;
-	else
-	  L = normalize(u_Lights[i]._Pos - pos);
+      L = normalize(u_Lights[i]._Pos);
+    else
+      L = normalize(u_Lights[i]._Pos - pos);
 
     diffuse = max(0., dot(N, L));
 
     vec3 V = normalize(u_Camera._Pos - pos);
     vec3 H = reflect(-L, N);
 
-	float specPow = 32.0;
+    float specPow = 32.0;
     float specularStrength = 0.5f;
     specular = pow(max(dot(V, H), 0.), specPow) * specularStrength;
 
-    alpha += min(diffuse + ambientStrength + specular, 1.) * vec4(normalize(u_Lights[i]._Emission), 1.);
+    float visibility = 1.0;
+    if ( ( u_EnableShadowMapping > 0 )
+      && ( i == u_ShadowLightIndex )
+      && ( ( u_Lights[i]._Type == SPHERE_LIGHT ) || ( u_Lights[i]._Type == QUAD_LIGHT ) ) )
+    {
+      visibility = ComputeShadow(pos);
+      shadowFactorDebug = visibility;
+    }
+
+    float directLighting = visibility * min(diffuse + specular, 1.0);
+    alpha += vec4(normalize(u_Lights[i]._Emission), 1.) * ( ambientStrength + directLighting );
+  }
+
+  if ( ( u_DebugMode & 0x08 ) != 0 )
+  {
+    fragColor = vec4(vec3(shadowFactorDebug), 1.0);
+    return;
   }
 
   fragColor = min(vec4(albedo, 1.) * alpha, vec4(1.));
 }
+
