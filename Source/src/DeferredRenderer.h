@@ -7,6 +7,7 @@
 #include "GLUtil.h"
 #include "ShaderProgram.h"
 #include "PathUtils.h"
+#include "Light.h"
 
 #include <array>
 #include <memory>
@@ -17,16 +18,17 @@ namespace RTRT
 
 struct DeferredTexSlot
 {
-  static const TextureSlot _GAlbedo   = 0;
-  static const TextureSlot _GNormal   = 1;
-  static const TextureSlot _GPosition = 2;
-  static const TextureSlot _GDepth    = 3;
-  static const TextureSlot _Lighting  = 4;
-  static const TextureSlot _TexInd    = 5;
-  static const TextureSlot _TexArray  = 6;
-  static const TextureSlot _Materials = 7;
-  static const TextureSlot _EnvMap    = 8;
-  static const TextureSlot _ShadowMap = 9;
+  static const TextureSlot _GAlbedo       = 0;
+  static const TextureSlot _GNormal       = 1;
+  static const TextureSlot _GPosition     = 2;
+  static const TextureSlot _GDepth        = 3;
+  static const TextureSlot _Lighting      = 4;
+  static const TextureSlot _TexInd        = 5;
+  static const TextureSlot _TexArray      = 6;
+  static const TextureSlot _Materials     = 7;
+  static const TextureSlot _EnvMap        = 8;
+  static const TextureSlot _ShadowCubeMap = 9;
+  static const TextureSlot _Shadow2DMap   = 10;
 };
 
 enum class DeferredDebugModes
@@ -97,7 +99,8 @@ protected:
 
   // Shadow target
   GLFrameBuffer _ShadowFBO;
-  GLTexture     _ShadowMapTEX = { 0, GL_TEXTURE_CUBE_MAP, DeferredTexSlot::_ShadowMap, GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT };
+  GLTexture     _ShadowCubeMapTEX = { 0, GL_TEXTURE_CUBE_MAP, DeferredTexSlot::_ShadowCubeMap, GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT };
+  GLTexture     _Shadow2DMapTEX   = { 0, GL_TEXTURE_2D, DeferredTexSlot::_Shadow2DMap, GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT };
 
   // Scene data
   GLTextureBuffer _TexIndTBO     = { 0, { 0, GL_TEXTURE_BUFFER, DeferredTexSlot::_TexInd } };
@@ -110,7 +113,8 @@ protected:
   std::unique_ptr<ShaderProgram> _LightingShader;
   std::unique_ptr<ShaderProgram> _CompositeShader;
   std::unique_ptr<ShaderProgram> _WireframeShader;
-  std::unique_ptr<ShaderProgram> _ShadowShader;
+  std::unique_ptr<ShaderProgram> _ShadowCubeShader;
+  std::unique_ptr<ShaderProgram> _ShadowDirectionalShader;
 
   // Frame counters
   unsigned int _FrameNum = 1;
@@ -122,17 +126,20 @@ protected:
   std::vector<int>    _MeshIndexCount;
 
   // Scene bounds and shadow state
-  Vec3 _SceneBoundsLow     = Vec3(-1.f);
-  Vec3 _SceneBoundsHigh    = Vec3( 1.f);
-  Vec3 _SceneBoundsCenter  = Vec3( 0.f);
-  float _SceneBoundsRadius = 1.f;
-  int _ShadowLightIndex = -1;
-  Vec3 _ShadowLightPos   = Vec3(0.f);
-  float _ShadowNear      = 0.1f;
-  float _ShadowFar       = 25.f;
-  int _ShadowMapSize     = -1;
-  bool _HasShadowLight   = false;
+  Vec3 _SceneBoundsLow      = Vec3(-1.f);
+  Vec3 _SceneBoundsHigh     = Vec3( 1.f);
+  Vec3 _SceneBoundsCenter   = Vec3( 0.f);
+  float _SceneBoundsRadius  = 1.f;
+  int _ShadowLightIndex     = -1;
+  LightType _ShadowLightType = LightType::SphereLight;
+  Vec3 _ShadowLightPos      = Vec3(0.f);
+  Vec3 _ShadowLightDir      = Vec3(0.f, 1.f, 0.f);
+  float _ShadowNear         = 0.1f;
+  float _ShadowFar          = 25.f;
+  int _ShadowMapSize        = -1;
+  bool _HasShadowLight      = false;
   std::array<Mat4x4, 6> _ShadowViewProj;
+  Mat4x4 _ShadowDirectionalViewProj = Mat4x4(1.f);
 
   // Textures filtering
   bool _GenerateMipMaps = true;

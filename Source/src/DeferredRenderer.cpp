@@ -11,6 +11,7 @@
 #include <vector>
 #include <unordered_map>
 #include <tuple>
+#include <cfloat>
 #include <cstdint>
 #include <cstring>
 
@@ -80,8 +81,8 @@ DeferredRenderer::~DeferredRenderer()
   GLUtil::DeleteTEX(_GNormalTEX);
   GLUtil::DeleteTEX(_GPositionTEX);
   GLUtil::DeleteTEX(_GDepthTEX);
-  GLUtil::DeleteTEX(_LightingTEX);
-  GLUtil::DeleteTEX(_ShadowMapTEX);
+  GLUtil::DeleteTEX(_ShadowCubeMapTEX);
+  GLUtil::DeleteTEX(_Shadow2DMapTEX);
 
   GLUtil::DeleteTBO(_TexIndTBO);
   GLUtil::DeleteTEX(_TexArrayTEX);
@@ -190,6 +191,7 @@ int DeferredRenderer::UnloadScene()
   _MeshIndexCount.clear();
 
   _ShadowLightIndex = -1;
+  _ShadowLightType = LightType::SphereLight;
   _HasShadowLight = false;
 
   return 0;
@@ -276,32 +278,43 @@ float DeferredRenderer::ComputeAutoShadowFar( const Vec3 & iLightPos ) const
 
   return maxDistance * 1.05f;
 }
-
-// ----------------------------------------------------------------------------
 // UpdateShadowState
 // ----------------------------------------------------------------------------
 int DeferredRenderer::UpdateShadowState()
 {
   _ShadowLightIndex = -1;
+  _ShadowLightType = LightType::SphereLight;
   _HasShadowLight = false;
 
   if ( !_Settings._ShadowMapping )
     return 0;
 
+  int distantLightIndex = -1;
+  Vec3 distantLightDir(0.f, 1.f, 0.f);
+  int sphereLightIndex = -1;
+  Vec3 sphereLightPos(0.f);
   int rectLightIndex = -1;
   Vec3 rectLightPos(0.f);
+
   for ( int i = 0; i < _Scene.GetNbLights(); ++i )
   {
     Light * curLight = _Scene.GetLight(i);
     if ( !curLight )
       continue;
+
     LightType lightType = (LightType) curLight -> _Type;
-    if ( LightType::SphereLight == lightType )
+    if ( ( distantLightIndex < 0 ) && ( LightType::DistantLight == lightType ) )
     {
-      _ShadowLightIndex = i;
-      _ShadowLightPos = curLight -> _Pos;
-      _HasShadowLight = true;
-      break;
+      distantLightIndex = i;
+      if ( glm::length(curLight -> _Pos) > 0.f )
+        distantLightDir = glm::normalize(curLight -> _Pos);
+      continue;
+    }
+    if ( ( sphereLightIndex < 0 ) && ( LightType::SphereLight == lightType ) )
+    {
+      sphereLightIndex = i;
+      sphereLightPos = curLight -> _Pos;
+      continue;
     }
     if ( ( rectLightIndex < 0 ) && ( LightType::RectLight == lightType ) )
     {
@@ -309,12 +322,65 @@ int DeferredRenderer::UpdateShadowState()
       rectLightPos = curLight -> _Pos;
     }
   }
-  if ( !_HasShadowLight && ( rectLightIndex >= 0 ) )
+
+  if ( distantLightIndex >= 0 )
+  {
+    _ShadowLightIndex = distantLightIndex;
+    _ShadowLightType = LightType::DistantLight;
+    _ShadowLightDir = distantLightDir;
+    _HasShadowLight = true;
+
+    float lightDistance = std::max( _SceneBoundsRadius * 2.f, 10.f );
+    Vec3 lightPos = _SceneBoundsCenter + _ShadowLightDir * lightDistance;
+    Vec3 up = ( std::abs(glm::dot(_ShadowLightDir, Vec3(0.f, 1.f, 0.f))) > 0.99f ) ? ( Vec3(0.f, 0.f, 1.f) ) : ( Vec3(0.f, 1.f, 0.f) );
+    Mat4x4 lightView = glm::lookAt(lightPos, _SceneBoundsCenter, up);
+
+    const Vec3 corners[8] = {
+      Vec3(_SceneBoundsLow.x,  _SceneBoundsLow.y,  _SceneBoundsLow.z),
+      Vec3(_SceneBoundsHigh.x, _SceneBoundsLow.y,  _SceneBoundsLow.z),
+      Vec3(_SceneBoundsLow.x,  _SceneBoundsHigh.y, _SceneBoundsLow.z),
+      Vec3(_SceneBoundsHigh.x, _SceneBoundsHigh.y, _SceneBoundsLow.z),
+      Vec3(_SceneBoundsLow.x,  _SceneBoundsLow.y,  _SceneBoundsHigh.z),
+      Vec3(_SceneBoundsHigh.x, _SceneBoundsLow.y,  _SceneBoundsHigh.z),
+      Vec3(_SceneBoundsLow.x,  _SceneBoundsHigh.y, _SceneBoundsHigh.z),
+      Vec3(_SceneBoundsHigh.x, _SceneBoundsHigh.y, _SceneBoundsHigh.z)
+    };
+
+    Vec3 lightSpaceLow( FLT_MAX );
+    Vec3 lightSpaceHigh( -FLT_MAX );
+    for ( const Vec3 & corner : corners )
+    {
+      Vec4 lightSpaceCorner = lightView * Vec4(corner, 1.f);
+      MathUtil::Minimize(lightSpaceLow, Vec3(lightSpaceCorner));
+      MathUtil::Maximize(lightSpaceHigh, Vec3(lightSpaceCorner));
+    }
+
+    float padXY = std::max( _SceneBoundsRadius * 0.1f, 1.f );
+    float nearPlane = 0.1f;
+    float farPlane = lightDistance + _SceneBoundsRadius * 4.f;
+    Mat4x4 shadowProj = glm::ortho(lightSpaceLow.x - padXY, lightSpaceHigh.x + padXY,
+                                   lightSpaceLow.y - padXY, lightSpaceHigh.y + padXY,
+                                   nearPlane, farPlane);
+    _ShadowDirectionalViewProj = shadowProj * lightView;
+
+    return 0;
+  }
+
+  if ( sphereLightIndex >= 0 )
+  {
+    _ShadowLightIndex = sphereLightIndex;
+    _ShadowLightType = LightType::SphereLight;
+    _ShadowLightPos = sphereLightPos;
+    _HasShadowLight = true;
+  }
+  else if ( rectLightIndex >= 0 )
   {
     _ShadowLightIndex = rectLightIndex;
+    _ShadowLightType = LightType::RectLight;
     _ShadowLightPos = rectLightPos;
     _HasShadowLight = true;
   }
+
   if ( !_HasShadowLight )
     return 0;
 
@@ -354,15 +420,16 @@ int DeferredRenderer::UpdateShadowState()
 int DeferredRenderer::InitializeShadowMap()
 {
   GLUtil::DeleteFBO(_ShadowFBO);
-  GLUtil::DeleteTEX(_ShadowMapTEX);
+  GLUtil::DeleteTEX(_ShadowCubeMapTEX);
+  GLUtil::DeleteTEX(_Shadow2DMapTEX);
 
   int shadowMapSize = std::max(_Settings._ShadowMapResolution, 256);
   _ShadowMapSize = shadowMapSize;
 
-  glGenTextures(1, &_ShadowMapTEX._Handle);
-  glBindTexture(GL_TEXTURE_CUBE_MAP, _ShadowMapTEX._Handle);
+  glGenTextures(1, &_ShadowCubeMapTEX._Handle);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, _ShadowCubeMapTEX._Handle);
   for ( int i = 0; i < 6; ++i )
-    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, _ShadowMapTEX._InternalFormat, shadowMapSize, shadowMapSize, 0, _ShadowMapTEX._DataFormat, _ShadowMapTEX._DataType, nullptr);
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, _ShadowCubeMapTEX._InternalFormat, shadowMapSize, shadowMapSize, 0, _ShadowCubeMapTEX._DataFormat, _ShadowCubeMapTEX._DataType, nullptr);
 
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -371,9 +438,18 @@ int DeferredRenderer::InitializeShadowMap()
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
   glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 
+  glGenTextures(1, &_Shadow2DMapTEX._Handle);
+  glBindTexture(GL_TEXTURE_2D, _Shadow2DMapTEX._Handle);
+  glTexImage2D(GL_TEXTURE_2D, 0, _Shadow2DMapTEX._InternalFormat, shadowMapSize, shadowMapSize, 0, _Shadow2DMapTEX._DataFormat, _Shadow2DMapTEX._DataType, nullptr);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glBindTexture(GL_TEXTURE_2D, 0);
+
   glGenFramebuffers(1, &_ShadowFBO._Handle);
   glBindFramebuffer(GL_FRAMEBUFFER, _ShadowFBO._Handle);
-  glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, _ShadowMapTEX._Handle, 0);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, _Shadow2DMapTEX._Handle, 0);
   glDrawBuffer(GL_NONE);
   glReadBuffer(GL_NONE);
   if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
@@ -385,7 +461,6 @@ int DeferredRenderer::InitializeShadowMap()
 
   return 0;
 }
-
 // ----------------------------------------------------------------------------
 // ReloadScene
 // Build GPU buffers (VAO/VBO/EBO) for every mesh found in the Scene.
@@ -639,7 +714,6 @@ int DeferredRenderer::ResizeRenderTarget()
 
   return 0;
 }
-
 // ----------------------------------------------------------------------------
 // RecompileShaders
 // ----------------------------------------------------------------------------
@@ -670,17 +744,24 @@ int DeferredRenderer::RecompileShaders()
 
   // DEBUG : Wireframe shader
   ShaderSource wireFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Wireframe.glsl"));
-  ShaderProgram* wireProg = ShaderProgram::LoadShaders(geomVert, wireFrag); // reuse geometry vertex shader
+  ShaderProgram* wireProg = ShaderProgram::LoadShaders(geomVert, wireFrag);
   if (!wireProg)
     return 1;
   _WireframeShader.reset(wireProg);
 
-  ShaderSource shadowVert = Shader::LoadShader(PathUtils::GetShaderPath("vertex_ShadowCubeDepth.glsl"));
-  ShaderSource shadowFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_ShadowCubeDepth.glsl"));
-  ShaderProgram* shadowProg = ShaderProgram::LoadShaders(shadowVert, shadowFrag);
-  if (!shadowProg)
+  ShaderSource shadowCubeVert = Shader::LoadShader(PathUtils::GetShaderPath("vertex_ShadowCubeDepth.glsl"));
+  ShaderSource shadowCubeFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_ShadowCubeDepth.glsl"));
+  ShaderProgram* shadowCubeProg = ShaderProgram::LoadShaders(shadowCubeVert, shadowCubeFrag);
+  if (!shadowCubeProg)
     return 1;
-  _ShadowShader.reset(shadowProg);
+  _ShadowCubeShader.reset(shadowCubeProg);
+
+  ShaderSource shadowDirVert = Shader::LoadShader(PathUtils::GetShaderPath("vertex_ShadowDirectionalDepth.glsl"));
+  ShaderSource shadowDirFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_ShadowDirectionalDepth.glsl"));
+  ShaderProgram* shadowDirProg = ShaderProgram::LoadShaders(shadowDirVert, shadowDirFrag);
+  if (!shadowDirProg)
+    return 1;
+  _ShadowDirectionalShader.reset(shadowDirProg);
  
   return 0;
 }
@@ -707,7 +788,8 @@ int DeferredRenderer::BindLightingTextures()
   GLUtil::ActivateTexture(_MaterialsTEX);
 
   GLUtil::ActivateTexture(_EnvMapTEX);
-  GLUtil::ActivateTexture(_ShadowMapTEX);
+  GLUtil::ActivateTexture(_ShadowCubeMapTEX);
+  GLUtil::ActivateTexture(_Shadow2DMapTEX);
 
   return 0;
 }
@@ -774,7 +856,8 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> SetUniform("u_GNormal",   (int)DeferredTexSlot::_GNormal);
     _LightingShader -> SetUniform("u_GPosition", (int)DeferredTexSlot::_GPosition);
     _LightingShader -> SetUniform("u_GDepth",    (int)DeferredTexSlot::_GDepth);
-    _LightingShader -> SetUniform("u_ShadowMap", (int)DeferredTexSlot::_ShadowMap);
+    _LightingShader -> SetUniform("u_ShadowCubeMap", (int)DeferredTexSlot::_ShadowCubeMap);
+    _LightingShader -> SetUniform("u_Shadow2DMap", (int)DeferredTexSlot::_Shadow2DMap);
     _LightingShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
 
     int nbLights = 0;
@@ -809,7 +892,10 @@ int DeferredRenderer::UpdateUniforms()
 
     _LightingShader -> SetUniform("u_EnableShadowMapping", ( _Settings._ShadowMapping && _HasShadowLight ) ? ( 1 ) : ( 0 ));
     _LightingShader -> SetUniform("u_ShadowLightIndex", _ShadowLightIndex);
+    _LightingShader -> SetUniform("u_ShadowLightType", (int)_ShadowLightType);
     _LightingShader -> SetUniform("u_ShadowLightPos", _ShadowLightPos);
+    _LightingShader -> SetUniform("u_ShadowLightDir", _ShadowLightDir);
+    _LightingShader -> SetUniform("u_ShadowLightViewProj", _ShadowDirectionalViewProj);
     _LightingShader -> SetUniform("u_ShadowBias", _Settings._ShadowBias);
     _LightingShader -> SetUniform("u_ShadowFar", _ShadowFar);
 
@@ -818,12 +904,19 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> StopUsing();
   }
 
-  if ( _ShadowShader )
+  if ( _ShadowCubeShader )
   {
-    _ShadowShader -> Use();
-    _ShadowShader -> SetUniform("u_LightPos", _ShadowLightPos);
-    _ShadowShader -> SetUniform("u_FarPlane", _ShadowFar);
-    _ShadowShader -> StopUsing();
+    _ShadowCubeShader -> Use();
+    _ShadowCubeShader -> SetUniform("u_LightPos", _ShadowLightPos);
+    _ShadowCubeShader -> SetUniform("u_FarPlane", _ShadowFar);
+    _ShadowCubeShader -> StopUsing();
+  }
+
+  if ( _ShadowDirectionalShader )
+  {
+    _ShadowDirectionalShader -> Use();
+    _ShadowDirectionalShader -> SetUniform("u_LightViewProj", _ShadowDirectionalViewProj);
+    _ShadowDirectionalShader -> StopUsing();
   }
 
   if ( _WireframeShader )
@@ -858,7 +951,7 @@ int DeferredRenderer::UpdateUniforms()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::RenderShadowMap()
 {
-  if ( !_Settings._ShadowMapping || !_HasShadowLight || !_ShadowShader || !_ShadowFBO._Handle || !_ShadowMapTEX._Handle )
+  if ( !_Settings._ShadowMapping || !_HasShadowLight || !_ShadowFBO._Handle )
     return 0;
 
   glViewport(0, 0, _ShadowMapSize, _ShadowMapSize);
@@ -870,17 +963,18 @@ int DeferredRenderer::RenderShadowMap()
   glEnable(GL_CULL_FACE);
   glCullFace(GL_BACK);
 
-  _ShadowShader -> Use();
-  _ShadowShader -> SetUniform("u_LightPos", _ShadowLightPos);
-  _ShadowShader -> SetUniform("u_FarPlane", _ShadowFar);
-
   const auto & instances = _Scene.GetMeshInstances();
-  for ( int face = 0; face < 6; ++face )
+
+  if ( LightType::DistantLight == _ShadowLightType )
   {
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, _ShadowMapTEX._Handle, 0);
+    if ( !_ShadowDirectionalShader || !_Shadow2DMapTEX._Handle )
+      return 0;
+
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, _Shadow2DMapTEX._Handle, 0);
     glClear(GL_DEPTH_BUFFER_BIT);
 
-    _ShadowShader -> SetUniform("u_LightViewProj", _ShadowViewProj[face]);
+    _ShadowDirectionalShader -> Use();
+    _ShadowDirectionalShader -> SetUniform("u_LightViewProj", _ShadowDirectionalViewProj);
 
     for ( const MeshInstance & inst : instances )
     {
@@ -893,14 +987,51 @@ int DeferredRenderer::RenderShadowMap()
       if ( !vao || idxCount <= 0 )
         continue;
 
-      _ShadowShader -> SetUniform("u_Model", inst._Transform);
+      _ShadowDirectionalShader -> SetUniform("u_Model", inst._Transform);
+      glBindVertexArray(vao);
+      glDrawElements(GL_TRIANGLES, idxCount, GL_UNSIGNED_INT, 0);
+    }
+
+    _ShadowDirectionalShader -> StopUsing();
+    glBindVertexArray(0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    return 0;
+  }
+
+  if ( !_ShadowCubeShader || !_ShadowCubeMapTEX._Handle )
+    return 0;
+
+  _ShadowCubeShader -> Use();
+  _ShadowCubeShader -> SetUniform("u_LightPos", _ShadowLightPos);
+  _ShadowCubeShader -> SetUniform("u_FarPlane", _ShadowFar);
+
+  for ( int face = 0; face < 6; ++face )
+  {
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, _ShadowCubeMapTEX._Handle, 0);
+    glClear(GL_DEPTH_BUFFER_BIT);
+
+    _ShadowCubeShader -> SetUniform("u_LightViewProj", _ShadowViewProj[face]);
+
+    for ( const MeshInstance & inst : instances )
+    {
+      int meshID = inst._MeshID;
+      if ( ( meshID < 0 ) || ( static_cast<size_t>(meshID) >= _MeshVAOs.size() ) )
+        continue;
+
+      GLuint vao = _MeshVAOs[meshID];
+      int idxCount = _MeshIndexCount[meshID];
+      if ( !vao || idxCount <= 0 )
+        continue;
+
+      _ShadowCubeShader -> SetUniform("u_Model", inst._Transform);
       glBindVertexArray(vao);
       glDrawElements(GL_TRIANGLES, idxCount, GL_UNSIGNED_INT, 0);
     }
   }
 
   glBindVertexArray(0);
-  _ShadowShader -> StopUsing();
+  _ShadowCubeShader -> StopUsing();
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   return 0;
@@ -1134,4 +1265,5 @@ int DeferredRenderer::RenderToFile(const std::filesystem::path& iFilePath)
 }
 
 } // namespace RTRT
+
 

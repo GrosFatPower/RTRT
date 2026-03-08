@@ -6,14 +6,15 @@
 #include Structures.glsl
 #include Intersections.glsl
 
-in vec2 fragUV; // from fullscreen quad vertex shader
+in vec2 fragUV;
 out vec4 fragColor;
 
 uniform sampler2D   u_GAlbedo;
 uniform sampler2D   u_GNormal;
 uniform sampler2D   u_GPosition;
 uniform sampler2D   u_GDepth;
-uniform samplerCube u_ShadowMap;
+uniform samplerCube u_ShadowCubeMap;
+uniform sampler2D   u_Shadow2DMap;
 
 uniform vec3 u_Ambient = vec3(0.001, 0.001, 0.001);
 uniform vec3 u_BackgroundColor = vec3(1.0, 1.0, 1.0);
@@ -28,7 +29,10 @@ uniform sampler2D u_EnvMap;
 
 uniform int   u_EnableShadowMapping = 0;
 uniform int   u_ShadowLightIndex    = -1;
+uniform int   u_ShadowLightType     = -1;
 uniform vec3  u_ShadowLightPos      = vec3(0.0);
+uniform vec3  u_ShadowLightDir      = vec3(0.0, 1.0, 0.0);
+uniform mat4  u_ShadowLightViewProj = mat4(1.0);
 uniform float u_ShadowBias          = 0.02;
 uniform float u_ShadowFar           = 25.0;
 
@@ -70,11 +74,8 @@ bool TraceVisibleLight( in Ray iRay, in float iSceneDist, out vec3 oLightColor )
   return hitLight;
 }
 
-float ComputeShadow( vec3 iFragPos )
+float ComputeLocalShadow( vec3 iFragPos )
 {
-  if ( u_EnableShadowMapping == 0 )
-    return 1.0;
-
   vec3 fragToLight = iFragPos - u_ShadowLightPos;
   float currentDepth = length(fragToLight);
   if ( currentDepth <= 0.0 || currentDepth >= u_ShadowFar )
@@ -93,13 +94,53 @@ float ComputeShadow( vec3 iFragPos )
   float shadow = 0.0;
   for ( int i = 0; i < SampleCount; ++i )
   {
-    float closestDepth = texture( u_ShadowMap, fragToLight + SampleOffsetDirections[i] * diskRadius ).r;
+    float closestDepth = texture( u_ShadowCubeMap, fragToLight + SampleOffsetDirections[i] * diskRadius ).r;
     closestDepth *= u_ShadowFar;
     if ( currentDepth - u_ShadowBias > closestDepth )
       shadow += 1.0;
   }
 
   return 1.0 - shadow / float(SampleCount);
+}
+
+float ComputeDistantShadow( vec3 iFragPos, vec3 iNormal, vec3 iLightDir )
+{
+  vec4 shadowPos = u_ShadowLightViewProj * vec4(iFragPos, 1.0);
+  vec3 projCoords = shadowPos.xyz / shadowPos.w;
+
+  if ( ( projCoords.x < -1.0 ) || ( projCoords.x > 1.0 )
+    || ( projCoords.y < -1.0 ) || ( projCoords.y > 1.0 )
+    || ( projCoords.z < -1.0 ) || ( projCoords.z > 1.0 ) )
+    return 1.0;
+
+  vec2 uv = projCoords.xy * 0.5 + 0.5;
+  float currentDepth = projCoords.z * 0.5 + 0.5;
+  float bias = max( u_ShadowBias * ( 1.0 - max(dot(iNormal, iLightDir), 0.0) ), u_ShadowBias * 0.25 );
+  vec2 texelSize = 1.0 / vec2(textureSize(u_Shadow2DMap, 0));
+
+  float shadow = 0.0;
+  for ( int y = -1; y <= 1; ++y )
+  {
+    for ( int x = -1; x <= 1; ++x )
+    {
+      float closestDepth = texture( u_Shadow2DMap, uv + vec2(x, y) * texelSize ).r;
+      if ( currentDepth - bias > closestDepth )
+        shadow += 1.0;
+    }
+  }
+
+  return 1.0 - shadow / 9.0;
+}
+
+float ComputeShadow( vec3 iFragPos, vec3 iNormal, vec3 iLightDir )
+{
+  if ( u_EnableShadowMapping == 0 )
+    return 1.0;
+
+  if ( u_ShadowLightType == DISTANT_LIGHT )
+    return ComputeDistantShadow( iFragPos, iNormal, iLightDir );
+
+  return ComputeLocalShadow( iFragPos );
 }
 
 void main()
@@ -125,13 +166,9 @@ void main()
     }
 
     if ( u_EnableEnvMap > 0 )
-    {
       fragColor = vec4(SampleSkybox(cameraRayDir, u_EnvMap, u_EnvMapRotation), 1.);
-    }
     else if ( u_EnableBackground > 0 )
-    {
       fragColor = vec4(u_BackgroundColor, 1.);
-    }
     else
       fragColor = vec4(0., 0., 0., 1.);
     return;
@@ -186,9 +223,9 @@ void main()
     float visibility = 1.0;
     if ( ( u_EnableShadowMapping > 0 )
       && ( i == u_ShadowLightIndex )
-      && ( ( u_Lights[i]._Type == SPHERE_LIGHT ) || ( u_Lights[i]._Type == QUAD_LIGHT ) ) )
+      && ( int(u_Lights[i]._Type) == u_ShadowLightType ) )
     {
-      visibility = ComputeShadow(pos);
+      visibility = ComputeShadow(pos, N, L);
       shadowFactorDebug = visibility;
     }
 
@@ -204,4 +241,3 @@ void main()
 
   fragColor = min(vec4(albedo, 1.) * alpha, vec4(1.));
 }
-
