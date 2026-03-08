@@ -14,6 +14,7 @@
 #include <cfloat>
 #include <cstdint>
 #include <cstring>
+#include <random>
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -76,11 +77,16 @@ DeferredRenderer::~DeferredRenderer()
   GLUtil::DeleteFBO(_GBufferFBO);
   GLUtil::DeleteFBO(_LightingFBO);
   GLUtil::DeleteFBO(_ShadowFBO);
+  GLUtil::DeleteFBO(_SSAOFBO);
+  GLUtil::DeleteFBO(_SSAOBlurFBO);
 
   GLUtil::DeleteTEX(_GAlbedoTEX);
   GLUtil::DeleteTEX(_GNormalTEX);
   GLUtil::DeleteTEX(_GPositionTEX);
   GLUtil::DeleteTEX(_GDepthTEX);
+  GLUtil::DeleteTEX(_SSAOTEX);
+  GLUtil::DeleteTEX(_SSAOBlurTEX);
+  GLUtil::DeleteTEX(_SSAONoiseTEX);
   GLUtil::DeleteTEX(_ShadowCubeMapTEX);
   GLUtil::DeleteTEX(_Shadow2DMapTEX);
 
@@ -112,6 +118,12 @@ int DeferredRenderer::Initialize()
   if ( 0 != InitializeFrameBuffers() )
   {
     std::cout << "DeferredRenderer : Failed to initialize G-buffer !" << std::endl;
+    return 1;
+  }
+
+  if ( 0 != InitializeSSAO() )
+  {
+    std::cout << "DeferredRenderer : Failed to initialize SSAO !" << std::endl;
     return 1;
   }
 
@@ -462,6 +474,84 @@ int DeferredRenderer::InitializeShadowMap()
   return 0;
 }
 // ----------------------------------------------------------------------------
+// InitializeSSAO
+// ----------------------------------------------------------------------------
+int DeferredRenderer::InitializeSSAO()
+{
+  GLUtil::DeleteFBO(_SSAOFBO);
+  GLUtil::DeleteFBO(_SSAOBlurFBO);
+  GLUtil::DeleteTEX(_SSAOTEX);
+  GLUtil::DeleteTEX(_SSAOBlurTEX);
+  GLUtil::DeleteTEX(_SSAONoiseTEX);
+
+  GLUtil::GenTexture(GL_TEXTURE_2D, _SSAOTEX._InternalFormat, RenderWidth(), RenderHeight(), _SSAOTEX._DataFormat, _SSAOTEX._DataType, nullptr, _SSAOTEX, GL_LINEAR, GL_LINEAR);
+  glGenFramebuffers(1, &_SSAOFBO._Handle);
+  glBindFramebuffer(GL_FRAMEBUFFER, _SSAOFBO._Handle);
+  _SSAOFBO._Tex.clear();
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _SSAOTEX._Handle, 0);
+  _SSAOFBO._Tex.push_back(_SSAOTEX);
+  GLenum ssaoDrawBuffers[] = { GL_COLOR_ATTACHMENT0 };
+  glDrawBuffers(1, ssaoDrawBuffers);
+  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+  {
+    std::cout << "DeferredRenderer : SSAO framebuffer not complete !" << std::endl;
+    return 1;
+  }
+
+  GLUtil::GenTexture(GL_TEXTURE_2D, _SSAOBlurTEX._InternalFormat, RenderWidth(), RenderHeight(), _SSAOBlurTEX._DataFormat, _SSAOBlurTEX._DataType, nullptr, _SSAOBlurTEX, GL_LINEAR, GL_LINEAR);
+  glGenFramebuffers(1, &_SSAOBlurFBO._Handle);
+  glBindFramebuffer(GL_FRAMEBUFFER, _SSAOBlurFBO._Handle);
+  _SSAOBlurFBO._Tex.clear();
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _SSAOBlurTEX._Handle, 0);
+  _SSAOBlurFBO._Tex.push_back(_SSAOBlurTEX);
+  glDrawBuffers(1, ssaoDrawBuffers);
+  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+  {
+    std::cout << "DeferredRenderer : SSAO blur framebuffer not complete !" << std::endl;
+    return 1;
+  }
+
+  std::mt19937 rng(1337u);
+  std::uniform_real_distribution<float> dist01(0.f, 1.f);
+  std::uniform_real_distribution<float> dist11(-1.f, 1.f);
+
+  for ( int i = 0; i < (int)_SSAOKernel.size(); ++i )
+  {
+    Vec3 sample(dist11(rng), dist11(rng), dist01(rng));
+    if ( glm::length(sample) > 0.f )
+      sample = glm::normalize(sample);
+
+    sample *= dist01(rng);
+    float scale = float(i) / float(_SSAOKernel.size());
+    scale = MathUtil::Lerp(0.1f, 1.0f, scale * scale);
+    _SSAOKernel[i] = sample * scale;
+  }
+
+  std::vector<Vec4> noiseData;
+  noiseData.reserve(16);
+  for ( int i = 0; i < 16; ++i )
+  {
+    Vec3 noise(dist11(rng), dist11(rng), 0.f);
+    if ( glm::length(noise) > 0.f )
+      noise = glm::normalize(noise);
+    noiseData.push_back(Vec4(noise, 1.f));
+  }
+
+  glGenTextures(1, &_SSAONoiseTEX._Handle);
+  glBindTexture(GL_TEXTURE_2D, _SSAONoiseTEX._Handle);
+  glTexImage2D(GL_TEXTURE_2D, 0, _SSAONoiseTEX._InternalFormat, 4, 4, 0, _SSAONoiseTEX._DataFormat, _SSAONoiseTEX._DataType, noiseData.data());
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  glBindTexture(GL_TEXTURE_2D, 0);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // ReloadScene
 // Build GPU buffers (VAO/VBO/EBO) for every mesh found in the Scene.
 // ----------------------------------------------------------------------------
@@ -711,6 +801,8 @@ int DeferredRenderer::ResizeRenderTarget()
 
   GLUtil::ResizeFBO(_GBufferFBO, RenderWidth(), RenderHeight());
   GLUtil::ResizeFBO(_LightingFBO, RenderWidth(), RenderHeight());
+  GLUtil::ResizeFBO(_SSAOFBO, RenderWidth(), RenderHeight());
+  GLUtil::ResizeFBO(_SSAOBlurFBO, RenderWidth(), RenderHeight());
 
   return 0;
 }
@@ -734,6 +826,18 @@ int DeferredRenderer::RecompileShaders()
   if (!lightProg)
     return 1;
   _LightingShader.reset(lightProg);
+
+  ShaderSource ssaoFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_SSAO.glsl"));
+  ShaderProgram* ssaoProg = ShaderProgram::LoadShaders(defaultVert, ssaoFrag);
+  if (!ssaoProg)
+    return 1;
+  _SSAOShader.reset(ssaoProg);
+
+  ShaderSource ssaoBlurFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_SSAOBlur.glsl"));
+  ShaderProgram* ssaoBlurProg = ShaderProgram::LoadShaders(defaultVert, ssaoBlurFrag);
+  if (!ssaoBlurProg)
+    return 1;
+  _SSAOBlurShader.reset(ssaoBlurProg);
 
   // Optional post-process/composite (reuse existing postprocess if desired)
   ShaderSource postFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Postprocess.glsl"));
@@ -777,6 +881,17 @@ int DeferredRenderer::BindGBufferTextures()
 }
 
 // ----------------------------------------------------------------------------
+// BindSSAOPassTextures
+// ----------------------------------------------------------------------------
+int DeferredRenderer::BindSSAOPassTextures()
+{
+  GLUtil::ActivateTextures(_GBufferFBO);
+  GLUtil::ActivateTexture(_SSAONoiseTEX);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // BindLightingTextures
 // ----------------------------------------------------------------------------
 int DeferredRenderer::BindLightingTextures()
@@ -790,6 +905,7 @@ int DeferredRenderer::BindLightingTextures()
   GLUtil::ActivateTexture(_EnvMapTEX);
   GLUtil::ActivateTexture(_ShadowCubeMapTEX);
   GLUtil::ActivateTexture(_Shadow2DMapTEX);
+  GLUtil::ActivateTexture(_SSAOBlurTEX);
 
   return 0;
 }
@@ -843,6 +959,36 @@ int DeferredRenderer::UpdateUniforms()
     _GeometryShader -> StopUsing();
   }
 
+  if ( _SSAOShader )
+  {
+    _SSAOShader -> Use();
+    _SSAOShader -> SetUniform("u_GNormal", (int)DeferredTexSlot::_GNormal);
+    _SSAOShader -> SetUniform("u_GPosition", (int)DeferredTexSlot::_GPosition);
+    _SSAOShader -> SetUniform("u_GDepth", (int)DeferredTexSlot::_GDepth);
+    _SSAOShader -> SetUniform("u_SSAONoise", (int)DeferredTexSlot::_SSAONoise);
+    _SSAOShader -> SetUniform("u_View", V);
+    _SSAOShader -> SetUniform("u_Proj", P);
+    _SSAOShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
+    _SSAOShader -> SetUniform("u_EnableSSAO", _Settings._SSAO ? 1 : 0);
+    _SSAOShader -> SetUniform("u_SSAORadius", _Settings._SSAORadius);
+    _SSAOShader -> SetUniform("u_SSAOBias", _Settings._SSAOBias);
+    _SSAOShader -> SetUniform("u_KernelSize", std::min(std::max(_Settings._SSAOKernelSize, 1), 32));
+    for ( int i = 0; i < (int)_SSAOKernel.size(); ++i )
+      _SSAOShader -> SetUniform("u_KernelSamples[" + std::to_string(i) + "]", _SSAOKernel[i]);
+    _SSAOShader -> StopUsing();
+  }
+
+  if ( _SSAOBlurShader )
+  {
+    _SSAOBlurShader -> Use();
+    _SSAOBlurShader -> SetUniform("u_SSAOInput", (int)DeferredTexSlot::_SSAO);
+    _SSAOBlurShader -> SetUniform("u_GDepth", (int)DeferredTexSlot::_GDepth);
+    _SSAOBlurShader -> SetUniform("u_GNormal", (int)DeferredTexSlot::_GNormal);
+    _SSAOBlurShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
+    _SSAOBlurShader -> SetUniform("u_EnableBlur", _Settings._SSAOBlur ? 1 : 0);
+    _SSAOBlurShader -> StopUsing();
+  }
+
   if ( _LightingShader )
   {
     _LightingShader -> Use();
@@ -858,6 +1004,7 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> SetUniform("u_GDepth",    (int)DeferredTexSlot::_GDepth);
     _LightingShader -> SetUniform("u_ShadowCubeMap", (int)DeferredTexSlot::_ShadowCubeMap);
     _LightingShader -> SetUniform("u_Shadow2DMap", (int)DeferredTexSlot::_Shadow2DMap);
+    _LightingShader -> SetUniform("u_SSAOMap", (int)DeferredTexSlot::_SSAOBlur);
     _LightingShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
 
     int nbLights = 0;
@@ -898,6 +1045,8 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> SetUniform("u_ShadowLightViewProj", _ShadowDirectionalViewProj);
     _LightingShader -> SetUniform("u_ShadowBias", _Settings._ShadowBias);
     _LightingShader -> SetUniform("u_ShadowFar", _ShadowFar);
+    _LightingShader -> SetUniform("u_EnableSSAO", _Settings._SSAO ? 1 : 0);
+    _LightingShader -> SetUniform("u_SSAOIntensity", _Settings._SSAOIntensity);
 
     _LightingShader -> SetUniform("u_DebugMode" , _DebugMode);
 
@@ -1038,6 +1187,46 @@ int DeferredRenderer::RenderShadowMap()
 }
 
 // ----------------------------------------------------------------------------
+// RenderSSAO
+// ----------------------------------------------------------------------------
+int DeferredRenderer::RenderSSAO()
+{
+  if ( !_SSAOFBO._Handle || !_SSAOBlurFBO._Handle || !_SSAOShader || !_SSAOBlurShader )
+    return 0;
+
+  glDisable(GL_DEPTH_TEST);
+  glDepthMask(GL_FALSE);
+  glDisable(GL_CULL_FACE);
+  glDisable(GL_BLEND);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, _SSAOFBO._Handle);
+  glViewport(0, 0, RenderWidth(), RenderHeight());
+  glClearColor(1.f, 1.f, 1.f, 1.f);
+  glClear(GL_COLOR_BUFFER_BIT);
+
+  _SSAOShader -> Use();
+  BindSSAOPassTextures();
+  _Quad.Render(*_SSAOShader);
+  _SSAOShader -> StopUsing();
+
+  glBindFramebuffer(GL_FRAMEBUFFER, _SSAOBlurFBO._Handle);
+  glViewport(0, 0, RenderWidth(), RenderHeight());
+  glClearColor(1.f, 1.f, 1.f, 1.f);
+  glClear(GL_COLOR_BUFFER_BIT);
+
+  _SSAOBlurShader -> Use();
+  GLUtil::ActivateTexture(_SSAOTEX);
+  GLUtil::ActivateTexture(_GDepthTEX);
+  GLUtil::ActivateTexture(_GNormalTEX);
+  _Quad.Render(*_SSAOBlurShader);
+  _SSAOBlurShader -> StopUsing();
+
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // RenderToTexture
 // ----------------------------------------------------------------------------
 int DeferredRenderer::RenderToTexture()
@@ -1095,6 +1284,8 @@ int DeferredRenderer::RenderToTexture()
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
   }
+
+  RenderSSAO();
 
   if (_LightingShader)
   {

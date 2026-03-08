@@ -15,6 +15,7 @@ uniform sampler2D   u_GPosition;
 uniform sampler2D   u_GDepth;
 uniform samplerCube u_ShadowCubeMap;
 uniform sampler2D   u_Shadow2DMap;
+uniform sampler2D   u_SSAOMap;
 
 uniform vec3 u_Ambient = vec3(0.001, 0.001, 0.001);
 uniform vec3 u_BackgroundColor = vec3(1.0, 1.0, 1.0);
@@ -35,6 +36,8 @@ uniform vec3  u_ShadowLightDir      = vec3(0.0, 1.0, 0.0);
 uniform mat4  u_ShadowLightViewProj = mat4(1.0);
 uniform float u_ShadowBias          = 0.02;
 uniform float u_ShadowFar           = 25.0;
+uniform int   u_EnableSSAO          = 0;
+uniform float u_SSAOIntensity       = 1.0;
 
 vec3 GetCameraRayDir()
 {
@@ -149,6 +152,8 @@ void main()
   vec3 N       = normalize(texture(u_GNormal, fragUV).xyz * 2.0 - 1.0);
   vec3 pos     = texture(u_GPosition, fragUV).xyz;
   float depth  = texture(u_GDepth, fragUV).x;
+  float aoRaw  = texture(u_SSAOMap, fragUV).r;
+  float ao     = ( u_EnableSSAO != 0 ) ? clamp(1.0 - (1.0 - aoRaw) * u_SSAOIntensity, 0.0, 1.0) : 1.0;
 
   vec3 cameraRayDir = GetCameraRayDir();
 
@@ -201,7 +206,7 @@ void main()
   float shadowFactorDebug = 1.0;
   for ( int i = 0; i < u_NbLights; ++i )
   {
-    float ambientStrength = .1;
+    float ambientStrength = .1 * ao;
     float diffuse = 0.;
     float specular = 0.;
 
@@ -230,12 +235,19 @@ void main()
     }
 
     float directLighting = visibility * min(diffuse + specular, 1.0);
+    directLighting *= mix(1.0, ao, 0.35);
     alpha += vec4(normalize(u_Lights[i]._Emission), 1.) * ( ambientStrength + directLighting );
   }
 
   if ( ( u_DebugMode & 0x08 ) != 0 )
   {
     fragColor = vec4(vec3(shadowFactorDebug), 1.0);
+    return;
+  }
+
+  if ( ( u_DebugMode & 0x10 ) != 0 )
+  {
+    fragColor = vec4(vec3(aoRaw), 1.0);
     return;
   }
 

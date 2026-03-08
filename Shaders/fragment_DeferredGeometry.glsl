@@ -22,29 +22,21 @@ void main()
   HitPoint hitPoint;
   InitializeHitPoint(hitPoint);
 
-  hitPoint._Dist       = length(gPosition.xyz - u_CameraPos);
-  hitPoint._Pos        = gPosition.xyz;
+  hitPoint._Pos        = fragWorldPos;
+  hitPoint._Dist       = length(hitPoint._Pos - u_CameraPos);
   hitPoint._Normal     = normalize(fragNormal);
   hitPoint._UV         = fragUV;
   hitPoint._MaterialID = v_MaterialID;
 
-  // Simple albedo output: shader can be extended to sample material/texture arrays.
   vec3 albedo = u_DefaultAlbedo;
   if ( v_MaterialID >= 0 )
   {
     Material mat;
     LoadMaterial(hitPoint, mat);
-    
     albedo = mat._Albedo;
   }
-  //ComputeOnB(hitPoint._Normal, hitPoint._Tangent, hitPoint._Bitangent);
 
-  // Pack outputs
   gAlbedo = vec4(albedo, 1.0);
-
-  // Store normal in [0,1] range so it fits into unsigned textures easily
   gNormal = vec4(hitPoint._Normal * 0.5 + 0.5, 1.0);
-
-  // Store world position directly
   gPosition = vec4(fragWorldPos, 1.0);
 }

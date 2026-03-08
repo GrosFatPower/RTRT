@@ -515,6 +515,28 @@ int Test5::DrawUI()
           if ( ImGui::SliderFloat( "Shadow far plane", &_Settings._ShadowFar, 1.f, 500.f ) )
             _Renderer -> Notify(DirtyState::RenderSettings);
 
+          if ( ImGui::Checkbox( "SSAO", &_Settings._SSAO ) )
+            _Renderer -> Notify(DirtyState::RenderSettings);
+
+          if ( ImGui::Checkbox( "SSAO blur", &_Settings._SSAOBlur ) )
+            _Renderer -> Notify(DirtyState::RenderSettings);
+
+          if ( ImGui::SliderFloat( "SSAO radius", &_Settings._SSAORadius, 0.05f, 5.f, "%.3f", ImGuiSliderFlags_Logarithmic ) )
+            _Renderer -> Notify(DirtyState::RenderSettings);
+
+          if ( ImGui::SliderFloat( "SSAO bias", &_Settings._SSAOBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic ) )
+            _Renderer -> Notify(DirtyState::RenderSettings);
+
+          if ( ImGui::SliderFloat( "SSAO intensity", &_Settings._SSAOIntensity, 0.f, 3.f ) )
+            _Renderer -> Notify(DirtyState::RenderSettings);
+
+          int ssaoKernelSize = _Settings._SSAOKernelSize;
+          if ( ImGui::SliderInt( "SSAO kernel size", &ssaoKernelSize, 4, 32 ) )
+          {
+            _Settings._SSAOKernelSize = std::max(4, std::min(32, ssaoKernelSize));
+            _Renderer -> Notify(DirtyState::RenderSettings);
+          }
+
         }
       }
 
@@ -544,14 +566,14 @@ int Test5::DrawUI()
         g_DebugMode = 0;
 
         static const char * COLORorDEPTHorNORMALS[] = { "Color", "Depth", "Normals" };
-        static const char * COLORorDEPTHorNORMALSorSHADOWS[] = { "Color", "Depth", "Normals", "Shadows" };
+        static const char * COLORorDEPTHorNORMALSorSHADOWSorSSAO[] = { "Color", "Depth", "Normals", "Shadows", "SSAO" };
 
         static int bufferChoice = 0;
-        int maxBufferChoice = ( RendererType::OpenGLRasterizer == _RendererType ) ? ( 4 ) : ( 3 );
+        int maxBufferChoice = ( RendererType::OpenGLRasterizer == _RendererType ) ? ( 5 ) : ( 3 );
         if ( ( RendererType::SoftwareRasterizer == _RendererType ) && ( bufferChoice > 2 ) )
           bufferChoice = 0;
 
-        if ( ImGui::Combo("Buffer", &bufferChoice, ( RendererType::OpenGLRasterizer == _RendererType ) ? ( COLORorDEPTHorNORMALSorSHADOWS ) : ( COLORorDEPTHorNORMALS ), maxBufferChoice ) )
+        if ( ImGui::Combo("Buffer", &bufferChoice, ( RendererType::OpenGLRasterizer == _RendererType ) ? ( COLORorDEPTHorNORMALSorSHADOWSorSSAO ) : ( COLORorDEPTHorNORMALS ), maxBufferChoice ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
         static int showWires = 0;
@@ -582,6 +604,8 @@ int Test5::DrawUI()
             g_DebugMode |= (int)DeferredDebugModes::Normals;
           else if ( 3 == bufferChoice )
             g_DebugMode |= (int)DeferredDebugModes::Shadows;
+          else if ( 4 == bufferChoice )
+            g_DebugMode |= (int)DeferredDebugModes::SSAO;
 
           if ( showWires )
             g_DebugMode |= (int)DeferredDebugModes::Wires;
