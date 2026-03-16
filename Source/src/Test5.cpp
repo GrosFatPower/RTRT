@@ -537,6 +537,12 @@ int Test5::DrawUI()
             _Renderer -> Notify(DirtyState::RenderSettings);
           }
 
+          if ( ImGui::Checkbox( "Specular IBL", &_Settings._SpecularIBL ) )
+            _Renderer -> Notify(DirtyState::RenderSettings);
+
+          if ( ImGui::SliderFloat( "IBL intensity", &_Settings._SpecularIBLIntensity, 0.f, 3.f ) )
+            _Renderer -> Notify(DirtyState::RenderSettings);
+
         }
       }
 
@@ -566,10 +572,10 @@ int Test5::DrawUI()
         g_DebugMode = 0;
 
         static const char * COLORorDEPTHorNORMALS[] = { "Color", "Depth", "Normals" };
-        static const char * COLORorDEPTHorNORMALSorSHADOWSorSSAO[] = { "Color", "Depth", "Normals", "Shadows", "SSAO" };
+        static const char * COLORorDEPTHorNORMALSorSHADOWSorSSAO[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params" };
 
         static int bufferChoice = 0;
-        int maxBufferChoice = ( RendererType::OpenGLRasterizer == _RendererType ) ? ( 5 ) : ( 3 );
+        int maxBufferChoice = ( RendererType::OpenGLRasterizer == _RendererType ) ? ( 7 ) : ( 3 );
         if ( ( RendererType::SoftwareRasterizer == _RendererType ) && ( bufferChoice > 2 ) )
           bufferChoice = 0;
 
@@ -606,6 +612,10 @@ int Test5::DrawUI()
             g_DebugMode |= (int)DeferredDebugModes::Shadows;
           else if ( 4 == bufferChoice )
             g_DebugMode |= (int)DeferredDebugModes::SSAO;
+          else if ( 5 == bufferChoice )
+            g_DebugMode |= (int)DeferredDebugModes::SpecularIBL;
+          else if ( 6 == bufferChoice )
+            g_DebugMode |= (int)DeferredDebugModes::MaterialParams;
 
           if ( showWires )
             g_DebugMode |= (int)DeferredDebugModes::Wires;

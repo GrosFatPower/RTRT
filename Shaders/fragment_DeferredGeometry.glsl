@@ -12,6 +12,7 @@ flat in int v_MaterialID; // optional: present if vertex shader provides it
 layout(location = 0) out vec4 gAlbedo;   // RGB: albedo, A: unused / opacity
 layout(location = 1) out vec4 gNormal;   // RGB: normal encoded in 0..1, A: unused
 layout(location = 2) out vec4 gPosition; // RGB: world position, A: unused
+layout(location = 3) out vec4 gMaterial; // R: roughness, G: metallic, B: reflectance, A: unused
 
 // Optional fallback uniform (simple default albedo if no material sampling)
 uniform vec3 u_DefaultAlbedo = vec3(0.8, 0.8, 0.8);
@@ -29,14 +30,21 @@ void main()
   hitPoint._MaterialID = v_MaterialID;
 
   vec3 albedo = u_DefaultAlbedo;
+  float roughness = 1.0;
+  float metallic = 0.0;
+  float reflectance = 0.5;
   if ( v_MaterialID >= 0 )
   {
     Material mat;
     LoadMaterial(hitPoint, mat);
     albedo = mat._Albedo;
+    roughness = mat._Roughness;
+    metallic = mat._Metallic;
+    reflectance = mat._Reflectance;
   }
 
   gAlbedo = vec4(albedo, 1.0);
   gNormal = vec4(hitPoint._Normal * 0.5 + 0.5, 1.0);
   gPosition = vec4(fragWorldPos, 1.0);
+  gMaterial = vec4(roughness, metallic, reflectance, 1.0);
 }

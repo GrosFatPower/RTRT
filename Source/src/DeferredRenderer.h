@@ -21,17 +21,19 @@ struct DeferredTexSlot
   static const TextureSlot _GAlbedo       = 0;
   static const TextureSlot _GNormal       = 1;
   static const TextureSlot _GPosition     = 2;
-  static const TextureSlot _GDepth        = 3;
-  static const TextureSlot _Lighting      = 4;
-  static const TextureSlot _TexInd        = 5;
-  static const TextureSlot _TexArray      = 6;
-  static const TextureSlot _Materials     = 7;
-  static const TextureSlot _EnvMap        = 8;
-  static const TextureSlot _ShadowCubeMap = 9;
-  static const TextureSlot _Shadow2DMap   = 10;
-  static const TextureSlot _SSAO          = 11;
-  static const TextureSlot _SSAOBlur      = 12;
-  static const TextureSlot _SSAONoise     = 13;
+  static const TextureSlot _GMaterial     = 3;
+  static const TextureSlot _GDepth        = 4;
+  static const TextureSlot _Lighting      = 5;
+  static const TextureSlot _TexInd        = 6;
+  static const TextureSlot _TexArray      = 7;
+  static const TextureSlot _Materials     = 8;
+  static const TextureSlot _EnvMap        = 9;
+  static const TextureSlot _ShadowCubeMap = 10;
+  static const TextureSlot _Shadow2DMap   = 11;
+  static const TextureSlot _SSAO          = 12;
+  static const TextureSlot _SSAOBlur      = 13;
+  static const TextureSlot _SSAONoise     = 14;
+  static const TextureSlot _BRDFLUT       = 15;
 };
 
 enum class DeferredDebugModes
@@ -41,7 +43,9 @@ enum class DeferredDebugModes
   Normals     = 0x02,
   Wires       = 0x04,
   Shadows     = 0x08,
-  SSAO        = 0x10
+  SSAO        = 0x10,
+  SpecularIBL = 0x20,
+  MaterialParams = 0x40
 };
 
 class DeferredRenderer : public Renderer
@@ -75,6 +79,7 @@ protected:
   int ResizeRenderTarget();
   int InitializeShadowMap();
   int InitializeSSAO();
+  int InitializeBRDFLUT();
 
   int RecompileShaders();
 
@@ -98,6 +103,7 @@ protected:
   GLTexture     _GAlbedoTEX   = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GAlbedo, GL_RGBA8,  GL_RGBA, GL_UNSIGNED_BYTE };
   GLTexture     _GNormalTEX   = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GNormal, GL_RGBA16F, GL_RGBA, GL_FLOAT };
   GLTexture     _GPositionTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GPosition, GL_RGBA16F, GL_RGBA, GL_FLOAT };
+  GLTexture     _GMaterialTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GMaterial, GL_RGBA16F, GL_RGBA, GL_FLOAT };
   GLTexture     _GDepthTEX    = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GDepth, GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT };
 
   // Lighting target (single texture)
@@ -110,6 +116,10 @@ protected:
   GLTexture     _SSAOTEX      = { 0, GL_TEXTURE_2D, DeferredTexSlot::_SSAO, GL_R16F, GL_RED, GL_FLOAT };
   GLTexture     _SSAOBlurTEX  = { 0, GL_TEXTURE_2D, DeferredTexSlot::_SSAOBlur, GL_R16F, GL_RED, GL_FLOAT };
   GLTexture     _SSAONoiseTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_SSAONoise, GL_RGBA16F, GL_RGBA, GL_FLOAT };
+
+  // BRDF LUT target
+  GLFrameBuffer _BRDFFBO;
+  GLTexture     _BRDFLUTTEX   = { 0, GL_TEXTURE_2D, DeferredTexSlot::_BRDFLUT, GL_RG16F, GL_RG, GL_FLOAT };
 
   // Shadow target
   GLFrameBuffer _ShadowFBO;
@@ -131,6 +141,7 @@ protected:
   std::unique_ptr<ShaderProgram> _ShadowDirectionalShader;
   std::unique_ptr<ShaderProgram> _SSAOShader;
   std::unique_ptr<ShaderProgram> _SSAOBlurShader;
+  std::unique_ptr<ShaderProgram> _BRDFLUTShader;
 
   // Frame counters
   unsigned int _FrameNum = 1;

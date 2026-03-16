@@ -43,6 +43,7 @@ struct RenderSettings
   bool         _ShowShadowMap         = false;                  // Deferred renderer debug
   bool         _SSAO                  = true;                   // Deferred renderer
   bool         _SSAOBlur              = true;                   // Deferred renderer
+  bool         _SpecularIBL           = true;                   // Deferred renderer
   SamplingMode _Sampling              = SamplingMode::Bilinear; // Raster
   bool         _WBuffer               = true;                   // Raster
   ShadingType  _ShadingType           = ShadingType::Phong;     // Raster
@@ -61,6 +62,7 @@ struct RenderSettings
   float        _SSAORadius            = 0.5f;                   // Deferred renderer
   float        _SSAOBias              = 0.025f;                 // Deferred renderer
   float        _SSAOIntensity         = 1.0f;                   // Deferred renderer
+  float        _SpecularIBLIntensity  = 0.5f;                   // Deferred renderer
   float        _DenoiserThreshold     = 0.05f;                  // PathTracer
   float        _DenoiserSigmaSpatial  = 2.0f;                   // PathTracer
   float        _DenoiserSigmaRange    = 0.1f;                   // PathTracer

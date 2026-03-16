@@ -29,6 +29,7 @@ void main()
   vec3 normalWS = normalize(texture(u_GNormal, fragUV).xyz * 2.0 - 1.0);
   vec3 fragPosWS = texture(u_GPosition, fragUV).xyz;
   vec3 fragPosVS = (u_View * vec4(fragPosWS, 1.0)).xyz;
+  // View matrix is orthonormal (rotation + translation), so inverse-transpose == rotation for normals here.
   vec3 normalVS = normalize(mat3(u_View) * normalWS);
 
   vec2 noiseScale = u_Resolution / 4.0;

@@ -12,6 +12,7 @@ out vec4 fragColor;
 uniform sampler2D   u_GAlbedo;
 uniform sampler2D   u_GNormal;
 uniform sampler2D   u_GPosition;
+uniform sampler2D   u_GMaterial;
 uniform sampler2D   u_GDepth;
 uniform samplerCube u_ShadowCubeMap;
 uniform sampler2D   u_Shadow2DMap;
@@ -27,6 +28,8 @@ uniform int       u_EnableEnvMap      = 0;
 uniform float     u_EnvMapRotation    = 0.f;
 uniform vec2      u_EnvMapRes;
 uniform sampler2D u_EnvMap;
+uniform sampler2D u_BRDFLUT;
+uniform float     u_EnvMapMipCount = 1.0;
 
 uniform int   u_EnableShadowMapping = 0;
 uniform int   u_ShadowLightIndex    = -1;
@@ -38,6 +41,8 @@ uniform float u_ShadowBias          = 0.02;
 uniform float u_ShadowFar           = 25.0;
 uniform int   u_EnableSSAO          = 0;
 uniform float u_SSAOIntensity       = 1.0;
+uniform int   u_EnableSpecularIBL   = 0;
+uniform float u_SpecularIBLIntensity = 1.0;
 
 vec3 GetCameraRayDir()
 {
@@ -48,6 +53,34 @@ vec3 GetCameraRayDir()
   centeredUV.y *= ( u_Resolution.y / u_Resolution.x ) * scale;
 
   return normalize(u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward);
+}
+
+vec2 EnvMapUV( in vec3 iDir )
+{
+  float theta = acos(clamp(iDir.y, -1.0, 1.0));
+  float phi   = atan(iDir.z, iDir.x);
+  return vec2((PI + phi) * INV_TWO_PI, theta * INV_PI) + vec2(u_EnvMapRotation, 0.0);
+}
+
+vec3 SampleEnvMapNoSeam( in vec3 iDir )
+{
+  vec2 uv = EnvMapUV(iDir);
+  uv.x = fract(uv.x);
+  vec2 texel = 1.0 / max(u_EnvMapRes, vec2(1.0));
+  uv.x = clamp(uv.x, texel.x, 1.0 - texel.x);
+  uv.y = clamp(uv.y, texel.y, 1.0 - texel.y);
+  return texture(u_EnvMap, uv).rgb;
+}
+
+vec3 SampleEnvMapNoSeamLod( in vec3 iDir, in float iLod )
+{
+  vec2 uv = EnvMapUV(iDir);
+  uv.x = fract(uv.x);
+  float lodScale = exp2(iLod);
+  vec2 texel = 1.0 / max(u_EnvMapRes * lodScale, vec2(1.0));
+  uv.x = clamp(uv.x, texel.x, 1.0 - texel.x);
+  uv.y = clamp(uv.y, texel.y, 1.0 - texel.y);
+  return textureLod(u_EnvMap, uv, iLod).rgb;
 }
 
 bool TraceVisibleLight( in Ray iRay, in float iSceneDist, out vec3 oLightColor )
@@ -151,9 +184,13 @@ void main()
   vec3 albedo  = texture(u_GAlbedo, fragUV).rgb;
   vec3 N       = normalize(texture(u_GNormal, fragUV).xyz * 2.0 - 1.0);
   vec3 pos     = texture(u_GPosition, fragUV).xyz;
+  vec3 material = texture(u_GMaterial, fragUV).rgb;
   float depth  = texture(u_GDepth, fragUV).x;
   float aoRaw  = texture(u_SSAOMap, fragUV).r;
   float ao     = ( u_EnableSSAO != 0 ) ? clamp(1.0 - (1.0 - aoRaw) * u_SSAOIntensity, 0.0, 1.0) : 1.0;
+  float roughness = clamp(material.r, 0.001, 1.0);
+  float metallic = clamp(material.g, 0.0, 1.0);
+  float reflectance = clamp(material.b, 0.0, 1.0);
 
   vec3 cameraRayDir = GetCameraRayDir();
 
@@ -171,7 +208,7 @@ void main()
     }
 
     if ( u_EnableEnvMap > 0 )
-      fragColor = vec4(SampleSkybox(cameraRayDir, u_EnvMap, u_EnvMapRotation), 1.);
+      fragColor = vec4(SampleEnvMapNoSeamLod(cameraRayDir, 0.0), 1.);
     else if ( u_EnableBackground > 0 )
       fragColor = vec4(u_BackgroundColor, 1.);
     else
@@ -202,6 +239,22 @@ void main()
     }
   }
 
+  vec3 V = normalize(u_Camera._Pos - pos);
+  float NdotV = max(dot(N, V), 0.0);
+  vec3 F0 = mix(vec3(0.16 * reflectance * reflectance), albedo, metallic);
+  vec3 specularIBL = vec3(0.0);
+
+  if ( ( u_EnableSpecularIBL != 0 ) && ( u_EnableEnvMap > 0 ) )
+  {
+    float lod = roughness * roughness * max(u_EnvMapMipCount - 1.0, 0.0);
+    vec3 R = reflect(-V, N);
+    vec3 prefiltered = SampleEnvMapNoSeamLod(R, lod);
+    vec2 brdf = texture(u_BRDFLUT, vec2(NdotV, roughness)).rg;
+    specularIBL = prefiltered * (F0 * brdf.x + brdf.y);
+    specularIBL *= u_SpecularIBLIntensity;
+    specularIBL *= mix(1.0, ao, 0.2);
+  }
+
   vec4 alpha = vec4(0.);
   float shadowFactorDebug = 1.0;
   for ( int i = 0; i < u_NbLights; ++i )
@@ -218,7 +271,6 @@ void main()
 
     diffuse = max(0., dot(N, L));
 
-    vec3 V = normalize(u_Camera._Pos - pos);
     vec3 H = reflect(-L, N);
 
     float specPow = 32.0;
@@ -250,6 +302,17 @@ void main()
     fragColor = vec4(vec3(aoRaw), 1.0);
     return;
   }
+  else if ( ( u_DebugMode & 0x20 ) != 0 )
+  {
+    fragColor = vec4(specularIBL, 1.0);
+    return;
+  }
+  else if ( ( u_DebugMode & 0x40 ) != 0 )
+  {
+    fragColor = vec4(roughness, metallic, reflectance, 1.0);
+    return;
+  }
 
-  fragColor = min(vec4(albedo, 1.) * alpha, vec4(1.));
+  vec3 outColor = albedo * alpha.rgb + specularIBL;
+  fragColor = vec4(min(outColor, vec3(1.0)), 1.0);
 }

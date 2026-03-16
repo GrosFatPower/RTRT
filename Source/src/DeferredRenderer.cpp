@@ -76,6 +76,7 @@ DeferredRenderer::~DeferredRenderer()
 {
   GLUtil::DeleteFBO(_GBufferFBO);
   GLUtil::DeleteFBO(_LightingFBO);
+  GLUtil::DeleteFBO(_BRDFFBO);
   GLUtil::DeleteFBO(_ShadowFBO);
   GLUtil::DeleteFBO(_SSAOFBO);
   GLUtil::DeleteFBO(_SSAOBlurFBO);
@@ -83,12 +84,14 @@ DeferredRenderer::~DeferredRenderer()
   GLUtil::DeleteTEX(_GAlbedoTEX);
   GLUtil::DeleteTEX(_GNormalTEX);
   GLUtil::DeleteTEX(_GPositionTEX);
+  GLUtil::DeleteTEX(_GMaterialTEX);
   GLUtil::DeleteTEX(_GDepthTEX);
   GLUtil::DeleteTEX(_SSAOTEX);
   GLUtil::DeleteTEX(_SSAOBlurTEX);
   GLUtil::DeleteTEX(_SSAONoiseTEX);
   GLUtil::DeleteTEX(_ShadowCubeMapTEX);
   GLUtil::DeleteTEX(_Shadow2DMapTEX);
+  GLUtil::DeleteTEX(_BRDFLUTTEX);
 
   GLUtil::DeleteTBO(_TexIndTBO);
   GLUtil::DeleteTEX(_TexArrayTEX);
@@ -118,6 +121,12 @@ int DeferredRenderer::Initialize()
   if ( 0 != InitializeFrameBuffers() )
   {
     std::cout << "DeferredRenderer : Failed to initialize G-buffer !" << std::endl;
+    return 1;
+  }
+
+  if ( 0 != InitializeBRDFLUT() )
+  {
+    std::cout << "DeferredRenderer : Failed to initialize BRDF LUT !" << std::endl;
     return 1;
   }
 
@@ -552,6 +561,48 @@ int DeferredRenderer::InitializeSSAO()
 }
 
 // ----------------------------------------------------------------------------
+// InitializeBRDFLUT
+// ----------------------------------------------------------------------------
+int DeferredRenderer::InitializeBRDFLUT()
+{
+  GLUtil::DeleteFBO(_BRDFFBO);
+  GLUtil::DeleteTEX(_BRDFLUTTEX);
+
+  const int lutSize = 256;
+  GLUtil::GenTexture(GL_TEXTURE_2D, _BRDFLUTTEX._InternalFormat, lutSize, lutSize, _BRDFLUTTEX._DataFormat, _BRDFLUTTEX._DataType, nullptr, _BRDFLUTTEX, GL_LINEAR, GL_LINEAR);
+
+  glGenFramebuffers(1, &_BRDFFBO._Handle);
+  glBindFramebuffer(GL_FRAMEBUFFER, _BRDFFBO._Handle);
+  _BRDFFBO._Tex.clear();
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _BRDFLUTTEX._Handle, 0);
+  _BRDFFBO._Tex.push_back(_BRDFLUTTEX);
+
+  GLenum drawBuffers[] = { GL_COLOR_ATTACHMENT0 };
+  glDrawBuffers(1, drawBuffers);
+  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+  {
+    std::cout << "DeferredRenderer : BRDF LUT framebuffer not complete !" << std::endl;
+    return 1;
+  }
+
+  if ( _BRDFLUTShader )
+  {
+    glViewport(0, 0, lutSize, lutSize);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    glClearColor(0.f, 0.f, 0.f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    _Quad.Render(*_BRDFLUTShader);
+  }
+
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // ReloadScene
 // Build GPU buffers (VAO/VBO/EBO) for every mesh found in the Scene.
 // ----------------------------------------------------------------------------
@@ -714,8 +765,11 @@ int DeferredRenderer::ReloadEnvMap()
     glGenTextures(1, &_EnvMapTEX._Handle);
     glBindTexture(GL_TEXTURE_2D, _EnvMapTEX._Handle);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, _Scene.GetEnvMap().GetWidth(), _Scene.GetEnvMap().GetHeight(), 0, GL_RGB, GL_FLOAT, _Scene.GetEnvMap().GetRawData());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glGenerateMipmap(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     _Scene.GetEnvMap().SetHandle(_EnvMapTEX._Handle);
@@ -743,6 +797,9 @@ int DeferredRenderer::InitializeFrameBuffers()
   // World positions (high precision)
   GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA16F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _GPositionTEX);
 
+  // Material params (roughness, metallic, reflectance)
+  GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA16F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _GMaterialTEX);
+
   // Depth
   GLUtil::GenTexture(GL_TEXTURE_2D, GL_DEPTH_COMPONENT24, RenderWidth(), RenderHeight(), GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr, _GDepthTEX, GL_NEAREST, GL_NEAREST);
 
@@ -757,11 +814,13 @@ int DeferredRenderer::InitializeFrameBuffers()
   _GBufferFBO._Tex.push_back(_GNormalTEX);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, _GPositionTEX._Handle, 0);
   _GBufferFBO._Tex.push_back(_GPositionTEX);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, _GMaterialTEX._Handle, 0);
+  _GBufferFBO._Tex.push_back(_GMaterialTEX);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,  GL_TEXTURE_2D, _GDepthTEX._Handle, 0);
   _GBufferFBO._Tex.push_back(_GDepthTEX);
 
-  GLenum DrawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
-  glDrawBuffers(3, DrawBuffers);
+  GLenum DrawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3 };
+  glDrawBuffers(4, DrawBuffers);
   if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
   {
     std::cout << "DeferredRenderer : G-buffer framebuffer not complete !" << std::endl;
@@ -839,6 +898,12 @@ int DeferredRenderer::RecompileShaders()
     return 1;
   _SSAOBlurShader.reset(ssaoBlurProg);
 
+  ShaderSource brdfLutFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_BRDFLUT.glsl"));
+  ShaderProgram* brdfLutProg = ShaderProgram::LoadShaders(defaultVert, brdfLutFrag);
+  if (!brdfLutProg)
+    return 1;
+  _BRDFLUTShader.reset(brdfLutProg);
+
   // Optional post-process/composite (reuse existing postprocess if desired)
   ShaderSource postFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Postprocess.glsl"));
   ShaderProgram* postProg = ShaderProgram::LoadShaders(defaultVert, postFrag);
@@ -903,6 +968,7 @@ int DeferredRenderer::BindLightingTextures()
   GLUtil::ActivateTexture(_MaterialsTEX);
 
   GLUtil::ActivateTexture(_EnvMapTEX);
+  GLUtil::ActivateTexture(_BRDFLUTTEX);
   GLUtil::ActivateTexture(_ShadowCubeMapTEX);
   GLUtil::ActivateTexture(_Shadow2DMapTEX);
   GLUtil::ActivateTexture(_SSAOBlurTEX);
@@ -1001,10 +1067,12 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> SetUniform("u_GAlbedo",   (int)DeferredTexSlot::_GAlbedo);
     _LightingShader -> SetUniform("u_GNormal",   (int)DeferredTexSlot::_GNormal);
     _LightingShader -> SetUniform("u_GPosition", (int)DeferredTexSlot::_GPosition);
+    _LightingShader -> SetUniform("u_GMaterial", (int)DeferredTexSlot::_GMaterial);
     _LightingShader -> SetUniform("u_GDepth",    (int)DeferredTexSlot::_GDepth);
     _LightingShader -> SetUniform("u_ShadowCubeMap", (int)DeferredTexSlot::_ShadowCubeMap);
     _LightingShader -> SetUniform("u_Shadow2DMap", (int)DeferredTexSlot::_Shadow2DMap);
     _LightingShader -> SetUniform("u_SSAOMap", (int)DeferredTexSlot::_SSAOBlur);
+    _LightingShader -> SetUniform("u_BRDFLUT", (int)DeferredTexSlot::_BRDFLUT);
     _LightingShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
 
     int nbLights = 0;
@@ -1036,6 +1104,13 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
     _LightingShader -> SetUniform("u_EnvMapRes", (float)_Scene.GetEnvMap().GetWidth(), (float)_Scene.GetEnvMap().GetHeight());
     _LightingShader -> SetUniform("u_EnvMap", (int)DeferredTexSlot::_EnvMap);
+    float envMipCount = 1.f;
+    if ( _Scene.GetEnvMap().GetWidth() > 0 && _Scene.GetEnvMap().GetHeight() > 0 )
+    {
+      int maxDim = std::max(_Scene.GetEnvMap().GetWidth(), _Scene.GetEnvMap().GetHeight());
+      envMipCount = std::floor(std::log2((float)maxDim)) + 1.0f;
+    }
+    _LightingShader -> SetUniform("u_EnvMapMipCount", envMipCount);
 
     _LightingShader -> SetUniform("u_EnableShadowMapping", ( _Settings._ShadowMapping && _HasShadowLight ) ? ( 1 ) : ( 0 ));
     _LightingShader -> SetUniform("u_ShadowLightIndex", _ShadowLightIndex);
@@ -1047,6 +1122,8 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> SetUniform("u_ShadowFar", _ShadowFar);
     _LightingShader -> SetUniform("u_EnableSSAO", _Settings._SSAO ? 1 : 0);
     _LightingShader -> SetUniform("u_SSAOIntensity", _Settings._SSAOIntensity);
+    _LightingShader -> SetUniform("u_EnableSpecularIBL", _Settings._SpecularIBL ? 1 : 0);
+    _LightingShader -> SetUniform("u_SpecularIBLIntensity", _Settings._SpecularIBLIntensity);
 
     _LightingShader -> SetUniform("u_DebugMode" , _DebugMode);
 
