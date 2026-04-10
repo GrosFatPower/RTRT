@@ -444,7 +444,7 @@ int DeferredRenderer::InitializeShadowMap()
   GLUtil::DeleteTEX(_ShadowCubeMapTEX);
   GLUtil::DeleteTEX(_Shadow2DMapTEX);
 
-  int shadowMapSize = std::max(_Settings._ShadowMapResolution, 256);
+  int shadowMapSize = std::clamp(_Settings._ShadowMapResolution, 256, 4096);
   _ShadowMapSize = shadowMapSize;
 
   glGenTextures(1, &_ShadowCubeMapTEX._Handle);
