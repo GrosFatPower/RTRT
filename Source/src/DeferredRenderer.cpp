@@ -224,7 +224,7 @@ int DeferredRenderer::UnloadScene()
 void DeferredRenderer::ComputeSceneBounds()
 {
   bool initialized = false;
-  Vec3 low(0.f), high(0.f);
+  Vec3 low(-10.f), high(10.f);
 
   const auto & instances = _Scene.GetMeshInstances();
   const auto & meshes = _Scene.GetMeshes();
@@ -237,17 +237,9 @@ void DeferredRenderer::ComputeSceneBounds()
     if ( !mesh )
       continue;
 
-    const Box & bbox = mesh -> GetBoundingBox();
-    const Vec3 corners[8] = {
-      Vec3(bbox._Low.x,  bbox._Low.y,  bbox._Low.z),
-      Vec3(bbox._High.x, bbox._Low.y,  bbox._Low.z),
-      Vec3(bbox._Low.x,  bbox._High.y, bbox._Low.z),
-      Vec3(bbox._High.x, bbox._High.y, bbox._Low.z),
-      Vec3(bbox._Low.x,  bbox._Low.y,  bbox._High.z),
-      Vec3(bbox._High.x, bbox._Low.y,  bbox._High.z),
-      Vec3(bbox._Low.x,  bbox._High.y, bbox._High.z),
-      Vec3(bbox._High.x, bbox._High.y, bbox._High.z)
-    };
+    const AABB<Vec3> & bbox = mesh -> GetBoundingBox();
+    Vec3 corners[8];
+    bbox.Corners(corners);
 
     for ( const Vec3 & corner : corners )
     {
@@ -265,15 +257,8 @@ void DeferredRenderer::ComputeSceneBounds()
     }
   }
 
-  if ( !initialized )
-  {
-    low = Vec3(-10.f);
-    high = Vec3(10.f);
-  }
-
-  _SceneBoundsLow = low;
-  _SceneBoundsHigh = high;
-  _SceneBoundsCenter = 0.5f * ( low + high );
+  _SceneBounds._Low = low;
+  _SceneBounds._High = high;
   _SceneBoundsRadius = std::max( glm::length( high - low ) * 0.5f, 1.f );
 }
 
@@ -282,16 +267,8 @@ void DeferredRenderer::ComputeSceneBounds()
 // ----------------------------------------------------------------------------
 float DeferredRenderer::ComputeAutoShadowFar( const Vec3 & iLightPos ) const
 {
-  const Vec3 corners[8] = {
-    Vec3(_SceneBoundsLow.x,  _SceneBoundsLow.y,  _SceneBoundsLow.z),
-    Vec3(_SceneBoundsHigh.x, _SceneBoundsLow.y,  _SceneBoundsLow.z),
-    Vec3(_SceneBoundsLow.x,  _SceneBoundsHigh.y, _SceneBoundsLow.z),
-    Vec3(_SceneBoundsHigh.x, _SceneBoundsHigh.y, _SceneBoundsLow.z),
-    Vec3(_SceneBoundsLow.x,  _SceneBoundsLow.y,  _SceneBoundsHigh.z),
-    Vec3(_SceneBoundsHigh.x, _SceneBoundsLow.y,  _SceneBoundsHigh.z),
-    Vec3(_SceneBoundsLow.x,  _SceneBoundsHigh.y, _SceneBoundsHigh.z),
-    Vec3(_SceneBoundsHigh.x, _SceneBoundsHigh.y, _SceneBoundsHigh.z)
-  };
+  Vec3 corners[8];
+  _SceneBounds.Corners(corners);
 
   float maxDistance = 1.f;
   for ( const Vec3 & corner : corners )
@@ -352,20 +329,12 @@ int DeferredRenderer::UpdateShadowState()
     _HasShadowLight = true;
 
     float lightDistance = std::max( _SceneBoundsRadius * 2.f, 10.f );
-    Vec3 lightPos = _SceneBoundsCenter + _ShadowLightDir * lightDistance;
+    Vec3 lightPos = _SceneBounds.Center() + _ShadowLightDir * lightDistance;
     Vec3 up = ( std::abs(glm::dot(_ShadowLightDir, Vec3(0.f, 1.f, 0.f))) > 0.99f ) ? ( Vec3(0.f, 0.f, 1.f) ) : ( Vec3(0.f, 1.f, 0.f) );
-    Mat4x4 lightView = glm::lookAt(lightPos, _SceneBoundsCenter, up);
+    Mat4x4 lightView = glm::lookAt(lightPos, _SceneBounds.Center(), up);
 
-    const Vec3 corners[8] = {
-      Vec3(_SceneBoundsLow.x,  _SceneBoundsLow.y,  _SceneBoundsLow.z),
-      Vec3(_SceneBoundsHigh.x, _SceneBoundsLow.y,  _SceneBoundsLow.z),
-      Vec3(_SceneBoundsLow.x,  _SceneBoundsHigh.y, _SceneBoundsLow.z),
-      Vec3(_SceneBoundsHigh.x, _SceneBoundsHigh.y, _SceneBoundsLow.z),
-      Vec3(_SceneBoundsLow.x,  _SceneBoundsLow.y,  _SceneBoundsHigh.z),
-      Vec3(_SceneBoundsHigh.x, _SceneBoundsLow.y,  _SceneBoundsHigh.z),
-      Vec3(_SceneBoundsLow.x,  _SceneBoundsHigh.y, _SceneBoundsHigh.z),
-      Vec3(_SceneBoundsHigh.x, _SceneBoundsHigh.y, _SceneBoundsHigh.z)
-    };
+    Vec3 corners[8];
+    _SceneBounds.Corners(corners);
 
     Vec3 lightSpaceLow( FLT_MAX );
     Vec3 lightSpaceHigh( -FLT_MAX );

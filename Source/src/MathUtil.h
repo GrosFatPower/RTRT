@@ -401,6 +401,20 @@ struct AABB
     MathUtil::Minimize(_Low, iP);
     MathUtil::Maximize(_High, iP);
   }
+
+  Vec3 Center() const { return 0.5f * (_Low + _High); }
+
+  void Corners( T oCorners[8] ) const
+  {
+    oCorners[0] = Vec3(_Low.x,  _Low.y,  _Low.z);
+    oCorners[1] = Vec3(_High.x, _Low.y,  _Low.z);
+    oCorners[2] = Vec3(_Low.x,  _High.y, _Low.z);
+    oCorners[3] = Vec3(_High.x, _High.y, _Low.z);
+    oCorners[4] = Vec3(_Low.x,  _Low.y,  _High.z);
+    oCorners[5] = Vec3(_High.x, _Low.y,  _High.z);
+    oCorners[6] = Vec3(_Low.x,  _High.y, _High.z);
+    oCorners[7] = Vec3(_High.x, _High.y, _High.z);
+  }
 };
 
 }

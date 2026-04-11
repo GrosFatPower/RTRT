@@ -40,7 +40,7 @@ public:
 
   std::shared_ptr<GpuBLAS> & GetBvh() { return _Bvh; }
 
-  const Box & GetBoundingBox() const { return _BoundingBox; }
+  const AABB<Vec3> & GetBoundingBox() const { return _BoundingBox; }
 
 private:
 
@@ -52,7 +52,7 @@ private:
   std::vector<Vec2>        _UVs;
   std::vector<Vec3i>       _Indices;
 
-  Box                      _BoundingBox;
+  AABB<Vec3>               _BoundingBox;
 
   std::shared_ptr<GpuBLAS> _Bvh = nullptr;
 

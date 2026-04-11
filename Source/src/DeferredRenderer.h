@@ -152,11 +152,11 @@ protected:
   std::vector<GLuint> _MeshEBOs;
   std::vector<int>    _MeshIndexCount;
 
-  // Scene bounds and shadow state
-  Vec3 _SceneBoundsLow       = Vec3(-1.f);
-  Vec3 _SceneBoundsHigh      = Vec3( 1.f);
-  Vec3 _SceneBoundsCenter    = Vec3( 0.f);
-  float _SceneBoundsRadius   = 1.f;
+  // Scene bounds
+  AABB<Vec3> _SceneBounds;
+  float      _SceneBoundsRadius = 1.f;
+
+  // Shadow state
   int _ShadowLightIndex      = -1;
   LightType _ShadowLightType = LightType::SphereLight;
   Vec3 _ShadowLightPos       = Vec3(0.f);
@@ -167,6 +167,8 @@ protected:
   bool _HasShadowLight       = false;
   std::array<Mat4x4, 6> _ShadowViewProj;
   Mat4x4 _ShadowDirectionalViewProj = Mat4x4(1.f);
+
+  // SSAO state
   std::array<Vec3, 32> _SSAOKernel;
 
   // Textures filtering
