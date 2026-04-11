@@ -276,6 +276,8 @@ float DeferredRenderer::ComputeAutoShadowFar( const Vec3 & iLightPos ) const
 
   return maxDistance * 1.05f;
 }
+
+// ----------------------------------------------------------------------------
 // UpdateShadowState
 // ----------------------------------------------------------------------------
 int DeferredRenderer::UpdateShadowState()
@@ -336,8 +338,8 @@ int DeferredRenderer::UpdateShadowState()
     Vec3 corners[8];
     _SceneBounds.Corners(corners);
 
-    Vec3 lightSpaceLow( FLT_MAX );
-    Vec3 lightSpaceHigh( -FLT_MAX );
+    Vec3 lightSpaceLow( std::numeric_limits<float>::infinity() );
+    Vec3 lightSpaceHigh( -std::numeric_limits<float>::infinity() );
     for ( const Vec3 & corner : corners )
     {
       Vec4 lightSpaceCorner = lightView * Vec4(corner, 1.f);
