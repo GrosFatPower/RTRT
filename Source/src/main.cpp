@@ -12,12 +12,91 @@
 
 #include <iostream>
 #include <memory>
+#include <algorithm>
+#include <cctype>
 
 // ----------------------------------------------------------------------------
 // Global variables
 // ----------------------------------------------------------------------------
 static int g_ScreenWidth  = 640;
 static int g_ScreenHeight = 480;
+
+// ----------------------------------------------------------------------------
+// ParseTestArg
+// ----------------------------------------------------------------------------
+static int ParseTestArg( const std::string & iArg )
+{
+  if ( 1 == iArg.size() )
+  {
+    if ( ( iArg[0] >= '1' ) && ( iArg[0] <= '5' ) )
+      return ( iArg[0] - '0' );
+    return 0;
+  }
+
+  if ( 5 == iArg.size() )
+  {
+    std::string lowerArg( iArg );
+    std::transform( lowerArg.begin(), lowerArg.end(), lowerArg.begin(), [](unsigned char c) { return (char)std::tolower(c); } );
+
+    if ( lowerArg.rfind("test", 0) == 0 )
+    {
+      if ( ( lowerArg[4] >= '1' ) && ( lowerArg[4] <= '5' ) )
+        return ( lowerArg[4] - '0' );
+    }
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// PrintUsage
+// ----------------------------------------------------------------------------
+static void PrintUsage( const char * iExeName )
+{
+  const char * exeName = ( iExeName && iExeName[0] ) ? iExeName : "RenderLab";
+
+  std::cout << "Usage: " << exeName << " [Test1|Test2|Test3|Test4|Test5|1|2|3|4|5]" << std::endl;
+  std::cout << "Examples:" << std::endl;
+  std::cout << "  " << exeName << std::endl;
+  std::cout << "  " << exeName << " Test5" << std::endl;
+  std::cout << "  " << exeName << " 5" << std::endl;
+}
+
+// ----------------------------------------------------------------------------
+// RunSelectedTest
+// ----------------------------------------------------------------------------
+static int RunSelectedTest( const int iSelectedTest, std::shared_ptr<GLFWwindow> iMainWindow )
+{
+  int failure = 0;
+
+  if ( 1 == iSelectedTest )
+  {
+    RTRT::Test1 test1(iMainWindow, g_ScreenWidth, g_ScreenHeight);
+    failure = test1.Run();
+  }
+  else if ( 2 == iSelectedTest )
+  {
+    RTRT::Test2 test2(iMainWindow, g_ScreenWidth, g_ScreenHeight);
+    failure = test2.Run();
+  }
+  else if ( 3 == iSelectedTest )
+  {
+    RTRT::Test3 test3(iMainWindow, g_ScreenWidth, g_ScreenHeight);
+    failure = test3.Run();
+  }
+  else if ( 4 == iSelectedTest )
+  {
+    RTRT::Test4 test4(iMainWindow, g_ScreenWidth, g_ScreenHeight);
+    failure = test4.Run();
+  }
+  else if ( 5 == iSelectedTest )
+  {
+    RTRT::Test5 test5(iMainWindow, g_ScreenWidth, g_ScreenHeight);
+    failure = test5.Run();
+  }
+
+  return failure;
+}
 
 // ----------------------------------------------------------------------------
 // Global functions
@@ -114,9 +193,27 @@ int TestSelectionPanel( GLFWwindow * iMainWindow )
 // ----------------------------------------------------------------------------
 // main
 // ----------------------------------------------------------------------------
-int main(int, char**)
+int main(int iArgc, char** iArgv)
 {
   int failure = 0;
+  int cliSelectedTest = 0;
+
+  if ( iArgc > 2 )
+  {
+    PrintUsage( ( iArgv ) ? ( iArgv[0] ) : nullptr );
+    return 1;
+  }
+
+  if ( 2 == iArgc )
+  {
+    const std::string arg = ( iArgv && iArgv[1] ) ? iArgv[1] : "";
+    cliSelectedTest = ParseTestArg( arg );
+    if ( !cliSelectedTest )
+    {
+      PrintUsage( ( iArgv ) ? ( iArgv[0] ) : nullptr );
+      return 1;
+    }
+  }
 
   // Setup window
   glfwSetErrorCallback(glfw_error_callback);
@@ -143,42 +240,20 @@ int main(int, char**)
 
     while ( !glfwWindowShouldClose(mainWindow.get()) )
     {
-      int selectedTest = TestSelectionPanel(mainWindow.get());
+      int selectedTest = cliSelectedTest;
 
-      if ( 1 == selectedTest )
-      {
-        RTRT::Test1 test1(mainWindow, g_ScreenWidth, g_ScreenHeight);
-        failure = test1.Run();
-      }
+      if ( !selectedTest )
+        selectedTest = TestSelectionPanel(mainWindow.get());
 
-      else if ( 2 == selectedTest )
-      {
-        RTRT::Test2 test2(mainWindow, g_ScreenWidth, g_ScreenHeight);
-        failure = test2.Run();
-      }
-
-      else if ( 3 == selectedTest )
-      {
-        RTRT::Test3 test3(mainWindow, g_ScreenWidth, g_ScreenHeight);
-        failure = test3.Run();
-      }
-
-      else if ( 4 == selectedTest )
-      {
-        RTRT::Test4 test4(mainWindow, g_ScreenWidth, g_ScreenHeight);
-        failure = test4.Run();
-      }
-
-      else if ( 5 == selectedTest )
-      {
-        RTRT::Test5 test5(mainWindow, g_ScreenWidth, g_ScreenHeight);
-        failure = test5.Run();
-      }
-
-      else
+      if ( selectedTest < 1 || selectedTest > 5 )
       {
         break;
       }
+
+      failure = RunSelectedTest( selectedTest, mainWindow );
+
+      if ( cliSelectedTest )
+        break;
     }
   }
   glfwTerminate();

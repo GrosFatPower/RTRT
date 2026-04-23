@@ -82,7 +82,7 @@ source_group("src"    FILES ${CORE_SOURCE} ${EXT_SOURCE})
 source_group("header" FILES ${CORE_HEADER} ${EXT_HEADER})
 source_group("shaders" FILES ${SHADERS})
 
-SET(EXE_NAME "RT_renderer")
+SET(EXE_NAME "RenderLab")
 add_executable(${EXE_NAME} ${CORE_SOURCE} ${CORE_HEADER} ${EXT_SOURCE} ${EXT_HEADER} ${SHADERS})
 
 # OpenGL
