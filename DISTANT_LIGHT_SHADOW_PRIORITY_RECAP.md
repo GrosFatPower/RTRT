@@ -3,6 +3,12 @@
 Date: 2026-03-08
 Feature: `DistantLight` now takes priority as the deferred shadow emitter
 
+## Current Status Note
+
+This recap still matches the current shadow-emitter priority in code.
+
+The current CMake executable target name is `RenderLab`.
+
 ## Goal
 
 When a scene contains a `DistantLight`, use it as the shadow emitter in the deferred `OpenGLRasterizer` instead of falling back to sphere or rect lights.
@@ -53,8 +59,10 @@ Added new directional shadow shaders:
 
 ## Verification
 
-Build verification performed with:
-- `cmake --build Build --config Debug --target RT_renderer`
+Build verification at the time used the then-current target naming.
+
+Current equivalent local build command:
+- `cmake --build build --target RenderLab`
 
 Result:
 - build succeeded

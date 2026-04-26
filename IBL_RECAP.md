@@ -3,6 +3,12 @@
 Date: 2026-03-16
 Feature: specular image-based lighting (IBL) for the deferred `OpenGLRasterizer`
 
+## Current Status Note
+
+This recap still matches the current specular-IBL feature set in code.
+
+The current CMake executable target name is `RenderLab`.
+
 ## Goal
 
 Add specular environment reflections to the deferred OpenGL renderer using the existing lat-long env map with mipmap filtering and a preintegrated BRDF LUT.
@@ -60,8 +66,10 @@ Updated `Source/src/Test5.cpp`:
 
 ## Build Verification
 
-Build verification performed with:
-- `cmake --build Build --config Debug --target RT_renderer`
+Build verification at the time used the then-current target naming.
+
+Current equivalent local build command:
+- `cmake --build build --target RenderLab`
 
 Result:
 - build succeeded

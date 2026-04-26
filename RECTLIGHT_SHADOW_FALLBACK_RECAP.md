@@ -3,6 +3,12 @@
 Date: 2026-03-08
 Feature: `RectLight` fallback for deferred shadow mapping
 
+## Current Status Note
+
+This recap still reflects the rect-light fallback work, but current code now gives `DistantLight` priority ahead of both `SphereLight` and `RectLight`.
+
+The current CMake executable target name is `RenderLab`.
+
 ## Goal
 
 Extend the deferred `OpenGLRasterizer` shadow-caster selection so scenes that contain no `SphereLight` can still use v1 shadow mapping from a `RectLight`.
@@ -28,8 +34,10 @@ Updated `Shaders/fragment_DeferredLighting.glsl`:
 
 ## Verification
 
-Build verification performed with:
-- `cmake --build Build --config Debug --target RT_renderer`
+Build verification at the time used the then-current target naming.
+
+Current equivalent local build command:
+- `cmake --build build --target RenderLab`
 
 Result:
 - build succeeded

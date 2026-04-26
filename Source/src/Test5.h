@@ -63,6 +63,7 @@ protected:
   int InitializeBackgroundFiles();
 
   int UpdateCPUTime();
+  void SyncFramebufferResolution( bool iNotifyRenderer = false );
 
 protected:
 

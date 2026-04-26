@@ -12,6 +12,7 @@ Main pattern:
 - `Scene` stores loaded assets plus compiled render data.
 - `Renderer` defines the common rendering lifecycle.
 - `PathTracer`, `SoftwareRasterizer`, and `DeferredRenderer` are the main renderer implementations.
+- Root `CMakeLists.txt` defines the current executable target as `RenderLab`.
 
 ## Entry Flow
 
@@ -68,6 +69,7 @@ Purpose:
 - Load custom `.scene` descriptions.
 - Load `gltf` and `glb` scenes.
 - Translate imported assets into the internal `Scene` representation.
+- Parse scene-level render settings and optional environment-map references.
 - Locate assets, backgrounds, and shaders using the repo-relative path helpers.
 
 ### Renderer Abstraction
@@ -125,14 +127,21 @@ Core files:
 
 Main responsibilities:
 - Build a G-buffer from scene geometry.
-- Run deferred lighting.
-- Composite and present the frame.
-- Manage GPU-side texture filtering options such as mip generation and anisotropy.
+- Run shadow-map, SSAO, deferred-lighting, and fullscreen composite passes.
+- Support deferred debug-buffer views, visible light drawing, and wireframe overlay.
+- Manage GPU-side texture filtering, env-map mip usage, BRDF LUT generation, and anisotropy.
 
 Key shader files:
 - `Shaders/vertex_DeferredGeometry.glsl`
 - `Shaders/fragment_DeferredGeometry.glsl`
 - `Shaders/fragment_DeferredLighting.glsl`
+- `Shaders/fragment_SSAO.glsl`
+- `Shaders/fragment_SSAOBlur.glsl`
+- `Shaders/fragment_BRDFLUT.glsl`
+- `Shaders/vertex_ShadowCubeDepth.glsl`
+- `Shaders/fragment_ShadowCubeDepth.glsl`
+- `Shaders/vertex_ShadowDirectionalDepth.glsl`
+- `Shaders/fragment_ShadowDirectionalDepth.glsl`
 - `Shaders/fragment_Output.glsl`
 
 ## Historical Tests
@@ -185,7 +194,7 @@ If the task is about:
 - GPU path tracing: start with `Source/src/PathTracer.cpp` and the path tracing shaders
 - CPU rasterization: start with `Source/src/SoftwareRasterizer.cpp`
 - Deferred rasterization: start with `Source/src/DeferredRenderer.cpp`
-- Build configuration: start with `CMakeLists.txt`
+- Build configuration: start with root `CMakeLists.txt`, which is the source of truth for the `RenderLab` target
 
 ## Current Architectural Center
 

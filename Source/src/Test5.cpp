@@ -93,15 +93,7 @@ void Test5::FramebufferSizeCallback(GLFWwindow* iWindow, const int iWidth, const
   if ( !iWidth || !iHeight)
     return;
 
-  this_ -> _Settings._WindowResolution.x = iWidth;
-  this_ -> _Settings._WindowResolution.y = iHeight;
-  this_ -> _Settings._RenderResolution.x = iWidth;
-  this_ -> _Settings._RenderResolution.y = iHeight;
-
-  glViewport(0, 0, this_ -> _Settings._WindowResolution.x, this_ -> _Settings._WindowResolution.y);
-
-  if ( this_ -> _Renderer )
-    this_ -> _Renderer -> Notify(DirtyState::RenderSettings);
+  this_ -> SyncFramebufferResolution( true );
 }
 
 // ----------------------------------------------------------------------------
@@ -130,6 +122,32 @@ Test5::~Test5()
   GLUtil::DeleteTEX(_MetalRoughTEX);
   GLUtil::DeleteTEX(_NormalMapTEX);
   GLUtil::DeleteTEX(_EmissionMapTEX);
+}
+
+// ----------------------------------------------------------------------------
+// SyncFramebufferResolution
+// ----------------------------------------------------------------------------
+void Test5::SyncFramebufferResolution( bool iNotifyRenderer )
+{
+  if ( !_MainWindow )
+    return;
+
+  int frameBufferWidth = 0;
+  int frameBufferHeight = 0;
+  glfwGetFramebufferSize( _MainWindow.get(), &frameBufferWidth, &frameBufferHeight );
+
+  if ( frameBufferWidth <= 0 || frameBufferHeight <= 0 )
+    return;
+
+  _Settings._WindowResolution.x = frameBufferWidth;
+  _Settings._WindowResolution.y = frameBufferHeight;
+  _Settings._RenderResolution.x = int( _Settings._WindowResolution.x * ( _Settings._RenderScale * 0.01f ) );
+  _Settings._RenderResolution.y = int( _Settings._WindowResolution.y * ( _Settings._RenderScale * 0.01f ) );
+
+  glViewport( 0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y );
+
+  if ( iNotifyRenderer && _Renderer )
+    _Renderer -> Notify(DirtyState::RenderSettings);
 }
 
 // ----------------------------------------------------------------------------
@@ -1287,6 +1305,11 @@ int Test5::UpdateScene()
   {
     _ReloadRenderer = false;
 
+    // On macOS, framebuffer pixels can differ from the logical GLFW window size.
+    // Keep the current framebuffer dimensions authoritative when switching
+    // renderers so we do not feed backing-pixel sizes back into glfwSetWindowSize().
+    SyncFramebufferResolution();
+
     // Initialize the renderer
     if ( 0 != InitializeRenderer() || !_Renderer )
     {
@@ -1294,8 +1317,7 @@ int Test5::UpdateScene()
       return 1;
     }
 
-    glfwSetWindowSize(_MainWindow.get(), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
-    glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+    SyncFramebufferResolution();
   }
 
   if ( _ReloadBackground )
@@ -1406,7 +1428,7 @@ int Test5::Run()
 
     // Main loop
     glfwSetWindowSize( _MainWindow.get(), _Settings._WindowResolution.x, _Settings._WindowResolution.y );
-    glViewport( 0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y );
+    SyncFramebufferResolution();
     glDisable( GL_DEPTH_TEST );
 
     while ( !glfwWindowShouldClose( _MainWindow.get() ) )

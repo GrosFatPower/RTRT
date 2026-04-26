@@ -3,6 +3,16 @@
 Date: 2026-03-08
 Feature: v1 local-light shadow mapping for the deferred `OpenGLRasterizer`
 
+## Current Status Note
+
+This recap describes the initial local-light shadow pass.
+
+Current code has since moved on:
+- shadow-emitter priority is now `DistantLight` -> `SphereLight` -> `RectLight`
+- directional shadows use a 2D depth map when a distant light is selected
+- the shadow debug view now lives in the deferred `Buffer` combo
+- the current CMake executable target name is `RenderLab`
+
 ## Goal
 
 Implemented omnidirectional shadow mapping for one local light in the deferred OpenGL renderer, prioritizing `SphereLight` and falling back to `RectLight`.
@@ -89,8 +99,10 @@ Updated `Shaders/fragment_DeferredLighting.glsl`:
 
 ## Build Verification
 
-Build verification performed with:
-- `cmake --build Build --config Debug --target RT_renderer`
+Build verification at the time used the then-current target naming.
+
+Current equivalent local build command:
+- `cmake --build build --target RenderLab`
 
 Result:
 - build succeeded
@@ -127,4 +139,3 @@ Added:
 - tune `_ShadowBias` to reduce acne and peter-panning
 - verify whether `_ShadowFar` is too large for small scenes
 - check that cubemap face seams are not obvious in normal camera views
-

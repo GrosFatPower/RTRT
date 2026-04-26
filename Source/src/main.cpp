@@ -3,6 +3,7 @@
 #include "Test3.h"
 #include "Test4.h"
 #include "Test5.h"
+#include "PathUtils.h"
 
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
@@ -197,6 +198,8 @@ int main(int iArgc, char** iArgv)
 {
   int failure = 0;
   int cliSelectedTest = 0;
+
+  RTRT::PathUtils::Initialize( ( iArgv ) ? ( iArgv[0] ) : nullptr );
 
   if ( iArgc > 2 )
   {

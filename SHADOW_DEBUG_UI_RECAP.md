@@ -3,6 +3,14 @@
 Date: 2026-03-08
 Feature: deferred shadow debug view moved into the `Buffer` combo
 
+## Current Status Note
+
+This recap still matches the current shadow debug UI behavior.
+
+The deferred `Buffer` combo has since expanded further and now also includes `SSAO`, `Specular IBL`, and `Material Params`.
+
+The current CMake executable target name is `RenderLab`.
+
 ## Goal
 
 Replace the standalone `Show shadow factor` checkbox in the `OpenGLRasterizer` UI with a proper `Shadows` entry in the existing `Buffer` dropdown, alongside `Color`, `Depth`, and `Normals`.
@@ -25,8 +33,10 @@ Updated `Source/src/Test5.cpp`:
 
 ## Verification
 
-Build verification performed with:
-- `cmake --build Build --config Debug --target RT_renderer`
+Build verification at the time used the then-current target naming.
+
+Current equivalent local build command:
+- `cmake --build build --target RenderLab`
 
 Result:
 - build succeeded

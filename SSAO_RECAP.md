@@ -3,6 +3,12 @@
 Date: 2026-03-08
 Feature: polished v1 SSAO for the deferred `OpenGLRasterizer`
 
+## Current Status Note
+
+This recap still matches the current SSAO feature set in code.
+
+The current CMake executable target name is `RenderLab`.
+
 ## Goal
 
 Implemented screen-space ambient occlusion for the deferred OpenGL renderer, with:
@@ -97,8 +103,10 @@ Updated `Shaders/fragment_DeferredGeometry.glsl`:
 
 ## Build Verification
 
-Build verification performed with:
-- `cmake --build Build --config Debug --target RT_renderer`
+Build verification at the time used the then-current target naming.
+
+Current equivalent local build command:
+- `cmake --build build --target RenderLab`
 
 Result:
 - build succeeded
