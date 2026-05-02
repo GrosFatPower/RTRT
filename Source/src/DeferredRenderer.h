@@ -10,6 +10,7 @@
 #include "Light.h"
 
 #include <array>
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -97,6 +98,8 @@ protected:
   void BuildDeferredDrawLists();
   void SortTransparentInstances();
   bool IsTransparentMaterial(int iMaterialID);
+  void BuildTransparentMeshTriangleData( size_t iMeshID, const std::vector<Vec3> & iPositions, const std::vector<uint32_t> & iIndices );
+  bool UpdateSortedTransparentMeshIndices( int iMeshID, const Mat4x4 & iModel, const Mat4x4 & iView );
 
   void ComputeSceneBounds();
   float ComputeAutoShadowFar(const Vec3 & iLightPos) const;
@@ -157,6 +160,11 @@ protected:
   std::vector<GLuint> _MeshVBOs;
   std::vector<GLuint> _MeshEBOs;
   std::vector<int>    _MeshIndexCount;
+  std::vector<std::vector<uint32_t>> _TransparentMeshBaseIndices;
+  std::vector<std::vector<Vec3>>     _TransparentMeshLocalTriCenters;
+  std::vector<std::vector<uint32_t>> _TransparentMeshSortedIndices;
+  std::vector<std::vector<int>>      _TransparentMeshSortedTriOrder;
+  std::vector<std::vector<float>>    _TransparentMeshTriDepths;
   std::vector<int>    _OpaqueMeshInstanceIDs;
   std::vector<int>    _TransparentMeshInstanceIDs;
 

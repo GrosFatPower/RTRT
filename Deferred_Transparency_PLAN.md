@@ -144,3 +144,31 @@ Build acceptance:
 - Sorting is per mesh instance using transformed mesh-bounds center, not per triangle.
 - `MASK` is treated as cutout-opaque, not as a transparent material.
 - No scene-format changes are needed; v1 relies on existing `AlphaMode`, `Opacity`, `AlphaCutoff`, and `SpecTrans`.
+
+## Trace Update - 2026-05-02 - Per-Triangle Transparent Sorting (v2)
+
+- Observed symptom:
+  - Intra-mesh random triangle visibility persisted on partially transmissive glass (for example `coffee_maker.scene` with `transmission=0.3`) even with per-instance sorting.
+- Confirmed root cause:
+  - Single-pass transparent rendering draws triangle indices in static mesh index order.
+  - Per-instance sorting only orders whole objects, not overlapping front/back triangles inside the same transparent mesh.
+- Chosen fix:
+  - Keep transparent/opaque classification and per-instance transparent sorting unchanged.
+  - Build per-mesh transparent triangle metadata at scene reload:
+    - immutable base triangle index list
+    - immutable local-space triangle centers
+    - reusable sorted index scratch buffers
+  - In transparent rendering, for each transparent instance:
+    - compute view-space depth for each triangle center
+    - sort triangles back-to-front
+    - rewrite the mesh EBO with sorted indices using `glBufferSubData`
+    - draw once with existing premultiplied alpha blend/depth state
+- Validation scenes and expected outcomes:
+  - `coffee_maker.scene` (`transmission=0.3`): no random triangle mosaic on the glass pot.
+  - `coffee_maker.scene` (`transmission=1.0`): no regression in glass visibility/reflection behavior.
+  - `mustang.scene`: interior remains visible through windows with no regression.
+  - Orbit/dolly camera in both scenes: stable ordering without flickering triangle flips.
+  - Transparency OFF/ON toggle: OFF removes transparent contribution, ON uses sorted triangle rendering.
+- Residual limitations:
+  - Still not full OIT; intersecting transparent meshes can still show ordering conflicts.
+  - Quality-first runtime policy: all transparent triangles are sorted every frame (higher CPU cost accepted for this iteration).

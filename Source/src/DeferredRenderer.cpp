@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <tuple>
 #include <algorithm>
+#include <numeric>
 #include <cfloat>
 #include <cstdint>
 #include <cstring>
@@ -216,6 +217,11 @@ int DeferredRenderer::UnloadScene()
   _MeshVBOs.clear();
   _MeshEBOs.clear();
   _MeshIndexCount.clear();
+  _TransparentMeshBaseIndices.clear();
+  _TransparentMeshLocalTriCenters.clear();
+  _TransparentMeshSortedIndices.clear();
+  _TransparentMeshSortedTriOrder.clear();
+  _TransparentMeshTriDepths.clear();
   _OpaqueMeshInstanceIDs.clear();
   _TransparentMeshInstanceIDs.clear();
 
@@ -366,6 +372,132 @@ void DeferredRenderer::SortTransparentInstances()
 
       return lhsViewZ < rhsViewZ;
     } );
+}
+
+// ----------------------------------------------------------------------------
+// BuildTransparentMeshTriangleData
+// ----------------------------------------------------------------------------
+void DeferredRenderer::BuildTransparentMeshTriangleData( size_t iMeshID, const std::vector<Vec3> & iPositions, const std::vector<uint32_t> & iIndices )
+{
+  if ( iMeshID >= _TransparentMeshBaseIndices.size() )
+    return;
+
+  std::vector<uint32_t> & baseIndices = _TransparentMeshBaseIndices[iMeshID];
+  std::vector<Vec3> & localCenters = _TransparentMeshLocalTriCenters[iMeshID];
+  std::vector<uint32_t> & sortedIndices = _TransparentMeshSortedIndices[iMeshID];
+  std::vector<int> & sortedTriOrder = _TransparentMeshSortedTriOrder[iMeshID];
+  std::vector<float> & triDepths = _TransparentMeshTriDepths[iMeshID];
+
+  baseIndices.clear();
+  localCenters.clear();
+  sortedIndices.clear();
+  sortedTriOrder.clear();
+  triDepths.clear();
+
+  if ( iIndices.size() < 3 )
+    return;
+
+  const size_t triCount = iIndices.size() / 3;
+  baseIndices.reserve(triCount * 3);
+  localCenters.reserve(triCount);
+
+  for ( size_t ti = 0; ti < triCount; ++ti )
+  {
+    size_t base = ti * 3;
+    uint32_t i0 = iIndices[base + 0];
+    uint32_t i1 = iIndices[base + 1];
+    uint32_t i2 = iIndices[base + 2];
+
+    if ( ( static_cast<size_t>(i0) >= iPositions.size() )
+      || ( static_cast<size_t>(i1) >= iPositions.size() )
+      || ( static_cast<size_t>(i2) >= iPositions.size() ) )
+      continue;
+
+    baseIndices.push_back(i0);
+    baseIndices.push_back(i1);
+    baseIndices.push_back(i2);
+
+    Vec3 center = ( iPositions[i0] + iPositions[i1] + iPositions[i2] ) * (1.f / 3.f);
+    localCenters.push_back(center);
+  }
+
+  sortedIndices = baseIndices;
+  sortedTriOrder.resize(localCenters.size(), 0);
+  triDepths.resize(localCenters.size(), 0.f);
+  std::iota(sortedTriOrder.begin(), sortedTriOrder.end(), 0);
+}
+
+// ----------------------------------------------------------------------------
+// UpdateSortedTransparentMeshIndices
+// ----------------------------------------------------------------------------
+bool DeferredRenderer::UpdateSortedTransparentMeshIndices( int iMeshID, const Mat4x4 & iModel, const Mat4x4 & iView )
+{
+  if ( ( iMeshID < 0 ) || ( static_cast<size_t>(iMeshID) >= _MeshEBOs.size() ) )
+    return false;
+  if ( ( static_cast<size_t>(iMeshID) >= _TransparentMeshBaseIndices.size() )
+    || ( static_cast<size_t>(iMeshID) >= _TransparentMeshLocalTriCenters.size() )
+    || ( static_cast<size_t>(iMeshID) >= _TransparentMeshSortedIndices.size() )
+    || ( static_cast<size_t>(iMeshID) >= _TransparentMeshSortedTriOrder.size() )
+    || ( static_cast<size_t>(iMeshID) >= _TransparentMeshTriDepths.size() ) )
+    return false;
+
+  const std::vector<uint32_t> & baseIndices = _TransparentMeshBaseIndices[iMeshID];
+  const std::vector<Vec3> & localCenters = _TransparentMeshLocalTriCenters[iMeshID];
+  std::vector<uint32_t> & sortedIndices = _TransparentMeshSortedIndices[iMeshID];
+  std::vector<int> & sortedTriOrder = _TransparentMeshSortedTriOrder[iMeshID];
+  std::vector<float> & triDepths = _TransparentMeshTriDepths[iMeshID];
+
+  if ( localCenters.empty() || baseIndices.empty() )
+    return false;
+
+  if ( ( baseIndices.size() % 3 ) != 0 )
+    return false;
+
+  const size_t triCount = localCenters.size();
+  if ( triCount != ( baseIndices.size() / 3 ) )
+    return false;
+
+  if ( sortedTriOrder.size() != triCount )
+  {
+    sortedTriOrder.resize(triCount, 0);
+    std::iota(sortedTriOrder.begin(), sortedTriOrder.end(), 0);
+  }
+  if ( triDepths.size() != triCount )
+    triDepths.resize(triCount, 0.f);
+  if ( sortedIndices.size() != baseIndices.size() )
+    sortedIndices.resize(baseIndices.size(), 0u);
+
+  for ( size_t ti = 0; ti < triCount; ++ti )
+  {
+    Vec3 worldCenter = MathUtil::TransformPoint(localCenters[ti], iModel);
+    triDepths[ti] = ( iView * Vec4(worldCenter, 1.f) ).z;
+  }
+
+  std::sort( sortedTriOrder.begin(), sortedTriOrder.end(),
+    [&]( int iLhs, int iRhs )
+    {
+      return triDepths[iLhs] < triDepths[iRhs];
+    } );
+
+  for ( size_t sortedIdx = 0; sortedIdx < triCount; ++sortedIdx )
+  {
+    size_t srcTri = static_cast<size_t>(sortedTriOrder[sortedIdx]);
+    size_t srcBase = srcTri * 3;
+    size_t dstBase = sortedIdx * 3;
+    sortedIndices[dstBase + 0] = baseIndices[srcBase + 0];
+    sortedIndices[dstBase + 1] = baseIndices[srcBase + 1];
+    sortedIndices[dstBase + 2] = baseIndices[srcBase + 2];
+  }
+
+  GLuint ebo = _MeshEBOs[iMeshID];
+  if ( !ebo )
+    return false;
+
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+  glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(sortedIndices.size() * sizeof(uint32_t)), sortedIndices.data());
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+  return true;
 }
 
 // ----------------------------------------------------------------------------
@@ -682,6 +814,11 @@ int DeferredRenderer::ReloadScene()
   _MeshVBOs.assign(meshCount, 0u);
   _MeshEBOs.assign(meshCount, 0u);
   _MeshIndexCount.assign(meshCount, 0);
+  _TransparentMeshBaseIndices.assign(meshCount, {});
+  _TransparentMeshLocalTriCenters.assign(meshCount, {});
+  _TransparentMeshSortedIndices.assign(meshCount, {});
+  _TransparentMeshSortedTriOrder.assign(meshCount, {});
+  _TransparentMeshTriDepths.assign(meshCount, {});
 
   for ( size_t mi = 0; mi < meshCount; ++mi )
   {
@@ -761,6 +898,12 @@ int DeferredRenderer::ReloadScene()
     _MeshVBOs[mi] = vbo;
     _MeshEBOs[mi] = ebo;
     _MeshIndexCount[mi] = static_cast<int>(outIndices.size());
+
+    std::vector<Vec3> gpuPositions;
+    gpuPositions.reserve(outVertices.size());
+    for ( const GPUMeshVertex & vertex : outVertices )
+      gpuPositions.push_back(vertex._Pos);
+    BuildTransparentMeshTriangleData(mi, gpuPositions, outIndices);
   }
 
   ComputeSceneBounds();
@@ -1458,6 +1601,8 @@ int DeferredRenderer::RenderTransparent()
     return 0;
 
   SortTransparentInstances();
+  Mat4x4 view;
+  _Scene.GetCamera().ComputeLookAtMatrix(view);
 
   glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
   glViewport(0, 0, RenderWidth(), RenderHeight());
@@ -1474,6 +1619,8 @@ int DeferredRenderer::RenderTransparent()
   _TransparentShader -> Use();
   BindLightingTextures();
 
+  // Per-instance sorting is not enough for transparent shell meshes. Re-sorting
+  // triangles back-to-front per draw stabilizes intra-mesh blending order.
   for ( int instID : _TransparentMeshInstanceIDs )
   {
     if ( ( instID < 0 ) || ( static_cast<size_t>(instID) >= instances.size() ) )
@@ -1487,6 +1634,8 @@ int DeferredRenderer::RenderTransparent()
     GLuint vao = _MeshVAOs[meshID];
     int idxCount = _MeshIndexCount[meshID];
     if ( !vao || ( idxCount <= 0 ) )
+      continue;
+    if ( !UpdateSortedTransparentMeshIndices(meshID, inst._Transform, view) )
       continue;
 
     _TransparentShader -> SetUniform("u_Model", inst._Transform);
