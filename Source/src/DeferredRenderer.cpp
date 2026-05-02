@@ -4,6 +4,7 @@
 #include "EnvMap.h"
 #include "PathUtils.h"
 #include "Mesh.h"
+#include "Material.h"
 #include "MathUtil.h"
 #include "Light.h"
 
@@ -11,6 +12,7 @@
 #include <vector>
 #include <unordered_map>
 #include <tuple>
+#include <algorithm>
 #include <cfloat>
 #include <cstdint>
 #include <cstring>
@@ -26,6 +28,7 @@ namespace RTRT
 
 static Vec3 S_WireColor = Vec3(1.f, 0.f, 0.f);
 static float S_WireWidth = 3.0f;
+static const float S_TransparentSpecTransThreshold = 0.001f;
 
 // ----------------------------------------------------------------------------
 // HELPER TYPES
@@ -172,6 +175,9 @@ int DeferredRenderer::Update()
   if ( _DirtyStates & (unsigned long)DirtyState::SceneEnvMap )
     this -> ReloadEnvMap();
 
+  if ( _DirtyStates & ( (unsigned long)DirtyState::SceneMaterials | (unsigned long)DirtyState::SceneInstances ) )
+    BuildDeferredDrawLists();
+
   UpdateShadowState();
   UpdateUniforms();
  
@@ -210,6 +216,8 @@ int DeferredRenderer::UnloadScene()
   _MeshVBOs.clear();
   _MeshEBOs.clear();
   _MeshIndexCount.clear();
+  _OpaqueMeshInstanceIDs.clear();
+  _TransparentMeshInstanceIDs.clear();
 
   _ShadowLightIndex = -1;
   _ShadowLightType = LightType::SphereLight;
@@ -275,6 +283,89 @@ float DeferredRenderer::ComputeAutoShadowFar( const Vec3 & iLightPos ) const
     maxDistance = std::max( maxDistance, glm::length( corner - iLightPos ) );
 
   return maxDistance * 1.05f;
+}
+
+// ----------------------------------------------------------------------------
+// IsTransparentMaterial
+// ----------------------------------------------------------------------------
+bool DeferredRenderer::IsTransparentMaterial( int iMaterialID )
+{
+  const std::vector<Material> & materials = _Scene.GetMaterials();
+  if ( ( iMaterialID < 0 ) || ( static_cast<size_t>(iMaterialID) >= materials.size() ) )
+    return false;
+
+  const Material & mat = materials[iMaterialID];
+  AlphaMode alphaMode = static_cast<AlphaMode>(static_cast<int>(mat._AlphaMode + 0.5f));
+
+  if ( AlphaMode::Blend == alphaMode )
+    return true;
+
+  if ( mat._SpecTrans > S_TransparentSpecTransThreshold )
+    return true;
+
+  return false;
+}
+
+// ----------------------------------------------------------------------------
+// BuildDeferredDrawLists
+// ----------------------------------------------------------------------------
+void DeferredRenderer::BuildDeferredDrawLists()
+{
+  _OpaqueMeshInstanceIDs.clear();
+  _TransparentMeshInstanceIDs.clear();
+
+  const std::vector<MeshInstance> & instances = _Scene.GetMeshInstances();
+  _OpaqueMeshInstanceIDs.reserve(instances.size());
+  _TransparentMeshInstanceIDs.reserve(instances.size());
+
+  for ( int i = 0; i < static_cast<int>(instances.size()); ++i )
+  {
+    const MeshInstance & inst = instances[i];
+    if ( IsTransparentMaterial( inst._MaterialID ) )
+      _TransparentMeshInstanceIDs.push_back(i);
+    else
+      _OpaqueMeshInstanceIDs.push_back(i);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// SortTransparentInstances
+// ----------------------------------------------------------------------------
+void DeferredRenderer::SortTransparentInstances()
+{
+  if ( _TransparentMeshInstanceIDs.size() < 2 )
+    return;
+
+  Mat4x4 view;
+  _Scene.GetCamera().ComputeLookAtMatrix(view);
+
+  const std::vector<MeshInstance> & instances = _Scene.GetMeshInstances();
+  const std::vector<Mesh*> & meshes = _Scene.GetMeshes();
+
+  std::sort( _TransparentMeshInstanceIDs.begin(), _TransparentMeshInstanceIDs.end(),
+    [&]( int iLhsIdx, int iRhsIdx )
+    {
+      if ( ( iLhsIdx < 0 ) || ( static_cast<size_t>(iLhsIdx) >= instances.size() )
+        || ( iRhsIdx < 0 ) || ( static_cast<size_t>(iRhsIdx) >= instances.size() ) )
+        return iLhsIdx > iRhsIdx;
+
+      const MeshInstance & lhsInst = instances[iLhsIdx];
+      const MeshInstance & rhsInst = instances[iRhsIdx];
+
+      Vec3 lhsWorldCenter(0.f);
+      Vec3 rhsWorldCenter(0.f);
+
+      if ( ( lhsInst._MeshID >= 0 ) && ( static_cast<size_t>(lhsInst._MeshID) < meshes.size() ) && meshes[lhsInst._MeshID] )
+        lhsWorldCenter = MathUtil::TransformPoint( meshes[lhsInst._MeshID] -> GetBoundingBox().Center(), lhsInst._Transform );
+
+      if ( ( rhsInst._MeshID >= 0 ) && ( static_cast<size_t>(rhsInst._MeshID) < meshes.size() ) && meshes[rhsInst._MeshID] )
+        rhsWorldCenter = MathUtil::TransformPoint( meshes[rhsInst._MeshID] -> GetBoundingBox().Center(), rhsInst._Transform );
+
+      float lhsViewZ = ( view * Vec4(lhsWorldCenter, 1.f) ).z;
+      float rhsViewZ = ( view * Vec4(rhsWorldCenter, 1.f) ).z;
+
+      return lhsViewZ < rhsViewZ;
+    } );
 }
 
 // ----------------------------------------------------------------------------
@@ -703,6 +794,8 @@ int DeferredRenderer::ReloadScene()
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glBindTexture(GL_TEXTURE_2D, 0);
 
+  BuildDeferredDrawLists();
+
   return 0;
 }
 
@@ -808,6 +901,7 @@ int DeferredRenderer::InitializeFrameBuffers()
   _LightingFBO._Tex.clear();
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _LightingTEX._Handle, 0);
   _LightingFBO._Tex.push_back(_LightingTEX);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, _GDepthTEX._Handle, 0);
 
   GLenum LightDrawBuffers[] = { GL_COLOR_ATTACHMENT0 };
   glDrawBuffers(1, LightDrawBuffers);
@@ -902,6 +996,12 @@ int DeferredRenderer::RecompileShaders()
   if (!shadowDirProg)
     return 1;
   _ShadowDirectionalShader.reset(shadowDirProg);
+
+  ShaderSource transparentFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_DeferredTransparent.glsl"));
+  ShaderProgram* transparentProg = ShaderProgram::LoadShaders(geomVert, transparentFrag);
+  if ( !transparentProg )
+    return 1;
+  _TransparentShader.reset(transparentProg);
  
   return 0;
 }
@@ -1126,6 +1226,70 @@ int DeferredRenderer::UpdateUniforms()
     _WireframeShader -> StopUsing();
   }
 
+  if ( _TransparentShader )
+  {
+    _TransparentShader -> Use();
+    _TransparentShader -> SetUniform("u_Camera._Pos", camPos);
+    _TransparentShader -> SetUniform("u_Camera._Up", camUp);
+    _TransparentShader -> SetUniform("u_Camera._Right", camRight);
+    _TransparentShader -> SetUniform("u_Camera._Forward", camForward);
+    _TransparentShader -> SetUniform("u_Camera._FOV", camFov);
+
+    _TransparentShader -> SetUniform("u_View", V);
+    _TransparentShader -> SetUniform("u_Proj", P);
+    _TransparentShader -> SetUniform("u_TexIndTexture",    (int)DeferredTexSlot::_TexInd);
+    _TransparentShader -> SetUniform("u_TexArrayTexture",  (int)DeferredTexSlot::_TexArray);
+    _TransparentShader -> SetUniform("u_MaterialsTexture", (int)DeferredTexSlot::_Materials);
+    _TransparentShader -> SetUniform("u_GDepth", (int)DeferredTexSlot::_GDepth);
+
+    int transparentNbLights = 0;
+    for ( int i = 0; i < _Scene.GetNbLights(); ++i )
+    {
+      Light * curLight = _Scene.GetLight(i);
+      if ( !curLight )
+        continue;
+
+      _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Pos"),      curLight -> _Pos);
+      _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Emission"), curLight -> _Emission * curLight -> _Intensity);
+      _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_DirU"),     curLight -> _DirU);
+      _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_DirV"),     curLight -> _DirV);
+      _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Radius"),   curLight -> _Radius);
+      _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Area"),     curLight -> _Area);
+      _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Type"),     curLight -> _Type);
+
+      transparentNbLights++;
+      if ( transparentNbLights >= 32 )
+        break;
+    }
+
+    _TransparentShader -> SetUniform("u_NbLights", transparentNbLights);
+    _TransparentShader -> SetUniform("u_EnvMapRes", (float)_Scene.GetEnvMap().GetWidth(), (float)_Scene.GetEnvMap().GetHeight());
+    _TransparentShader -> SetUniform("u_EnvMap", (int)DeferredTexSlot::_EnvMap);
+    _TransparentShader -> SetUniform("u_BRDFLUT", (int)DeferredTexSlot::_BRDFLUT);
+    _TransparentShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
+    _TransparentShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
+    float transparentEnvMipCount = 1.f;
+    if ( _Scene.GetEnvMap().GetWidth() > 0 && _Scene.GetEnvMap().GetHeight() > 0 )
+    {
+      int maxDim = std::max(_Scene.GetEnvMap().GetWidth(), _Scene.GetEnvMap().GetHeight());
+      transparentEnvMipCount = std::floor(std::log2((float)maxDim)) + 1.0f;
+    }
+    _TransparentShader -> SetUniform("u_EnvMapMipCount", transparentEnvMipCount);
+
+    _TransparentShader -> SetUniform("u_ShadowCubeMap", (int)DeferredTexSlot::_ShadowCubeMap);
+    _TransparentShader -> SetUniform("u_Shadow2DMap", (int)DeferredTexSlot::_Shadow2DMap);
+    _TransparentShader -> SetUniform("u_EnableShadowMapping", ( _Settings._ShadowMapping && _HasShadowLight ) ? ( 1 ) : ( 0 ));
+    _TransparentShader -> SetUniform("u_ShadowLightIndex", _ShadowLightIndex);
+    _TransparentShader -> SetUniform("u_ShadowLightType", (int)_ShadowLightType);
+    _TransparentShader -> SetUniform("u_ShadowLightPos", _ShadowLightPos);
+    _TransparentShader -> SetUniform("u_ShadowLightDir", _ShadowLightDir);
+    _TransparentShader -> SetUniform("u_ShadowLightViewProj", _ShadowDirectionalViewProj);
+    _TransparentShader -> SetUniform("u_ShadowBias", _Settings._ShadowBias);
+    _TransparentShader -> SetUniform("u_ShadowFar", _ShadowFar);
+
+    _TransparentShader -> StopUsing();
+  }
+
   if ( _CompositeShader )
   {
     _CompositeShader -> Use();
@@ -1157,10 +1321,9 @@ int DeferredRenderer::RenderShadowMap()
   glDepthFunc(GL_LESS);
   glDepthMask(GL_TRUE);
   glDisable(GL_BLEND);
-  glEnable(GL_CULL_FACE);
-  glCullFace(GL_BACK);
+  glDisable(GL_CULL_FACE);
 
-  const auto & instances = _Scene.GetMeshInstances();
+  const std::vector<MeshInstance> & instances = _Scene.GetMeshInstances();
 
   if ( LightType::DistantLight == _ShadowLightType )
   {
@@ -1173,8 +1336,12 @@ int DeferredRenderer::RenderShadowMap()
     _ShadowDirectionalShader -> Use();
     _ShadowDirectionalShader -> SetUniform("u_LightViewProj", _ShadowDirectionalViewProj);
 
-    for ( const MeshInstance & inst : instances )
+    for ( int instID : _OpaqueMeshInstanceIDs )
     {
+      if ( ( instID < 0 ) || ( static_cast<size_t>(instID) >= instances.size() ) )
+        continue;
+
+      const MeshInstance & inst = instances[instID];
       int meshID = inst._MeshID;
       if ( ( meshID < 0 ) || ( static_cast<size_t>(meshID) >= _MeshVAOs.size() ) )
         continue;
@@ -1210,8 +1377,12 @@ int DeferredRenderer::RenderShadowMap()
 
     _ShadowCubeShader -> SetUniform("u_LightViewProj", _ShadowViewProj[face]);
 
-    for ( const MeshInstance & inst : instances )
+    for ( int instID : _OpaqueMeshInstanceIDs )
     {
+      if ( ( instID < 0 ) || ( static_cast<size_t>(instID) >= instances.size() ) )
+        continue;
+
+      const MeshInstance & inst = instances[instID];
       int meshID = inst._MeshID;
       if ( ( meshID < 0 ) || ( static_cast<size_t>(meshID) >= _MeshVAOs.size() ) )
         continue;
@@ -1275,6 +1446,68 @@ int DeferredRenderer::RenderSSAO()
 }
 
 // ----------------------------------------------------------------------------
+// RenderTransparent
+// ----------------------------------------------------------------------------
+int DeferredRenderer::RenderTransparent()
+{
+  if ( !_Settings._Transparency || !_TransparentShader || !_LightingFBO._Handle || !_GDepthTEX._Handle )
+    return 0;
+
+  const std::vector<MeshInstance> & instances = _Scene.GetMeshInstances();
+  if ( _TransparentMeshInstanceIDs.empty() || instances.empty() )
+    return 0;
+
+  SortTransparentInstances();
+
+  glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
+  glViewport(0, 0, RenderWidth(), RenderHeight());
+
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, _GDepthTEX._Handle, 0);
+  glEnable(GL_DEPTH_TEST);
+  glDepthFunc(GL_LEQUAL);
+  glDepthMask(GL_FALSE);
+  glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+  _TransparentShader -> Use();
+  BindLightingTextures();
+
+  for ( int instID : _TransparentMeshInstanceIDs )
+  {
+    if ( ( instID < 0 ) || ( static_cast<size_t>(instID) >= instances.size() ) )
+      continue;
+
+    const MeshInstance & inst = instances[instID];
+    int meshID = inst._MeshID;
+    if ( ( meshID < 0 ) || ( static_cast<size_t>(meshID) >= _MeshVAOs.size() ) )
+      continue;
+
+    GLuint vao = _MeshVAOs[meshID];
+    int idxCount = _MeshIndexCount[meshID];
+    if ( !vao || ( idxCount <= 0 ) )
+      continue;
+
+    _TransparentShader -> SetUniform("u_Model", inst._Transform);
+    _TransparentShader -> SetUniform("u_MaterialID", inst._MaterialID);
+    glBindVertexArray(vao);
+    glDrawElements(GL_TRIANGLES, idxCount, GL_UNSIGNED_INT, 0);
+  }
+
+  glBindVertexArray(0);
+  _TransparentShader -> StopUsing();
+
+  glDisable(GL_BLEND);
+  glDepthMask(GL_TRUE);
+  glDisable(GL_DEPTH_TEST);
+  glDisable(GL_CULL_FACE);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // RenderToTexture
 // ----------------------------------------------------------------------------
 int DeferredRenderer::RenderToTexture()
@@ -1293,8 +1526,7 @@ int DeferredRenderer::RenderToTexture()
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
     glDepthMask(GL_TRUE);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
+    glDisable(GL_CULL_FACE);
     glClearColor(0.f, 0.f, 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // now actually clears depth
 
@@ -1302,9 +1534,13 @@ int DeferredRenderer::RenderToTexture()
 
     this -> BindGBufferTextures();
 
-    const auto & instances = _Scene.GetMeshInstances();
-    for ( const MeshInstance& inst : instances )
+    const std::vector<MeshInstance> & instances = _Scene.GetMeshInstances();
+    for ( int instID : _OpaqueMeshInstanceIDs )
     {
+      if ( ( instID < 0 ) || ( static_cast<size_t>(instID) >= instances.size() ) )
+        continue;
+
+      const MeshInstance & inst = instances[instID];
       int meshID = inst._MeshID;
       if ( ( meshID < 0 ) || ( static_cast<size_t>(meshID) >= _MeshVAOs.size() ) )
         continue;
@@ -1357,6 +1593,8 @@ int DeferredRenderer::RenderToTexture()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
   }
 
+  RenderTransparent();
+
   // DEBUG : Wireframe overlay. Render lines into lighting target on top of shaded image
   if ( ( _DebugMode & (int)DeferredDebugModes::Wires ) && _WireframeShader )
   { 
@@ -1380,9 +1618,13 @@ int DeferredRenderer::RenderToTexture()
 
     this -> BindLightingTextures();
 
-    const auto & instances2 = _Scene.GetMeshInstances();
-    for ( const MeshInstance& inst : instances2 )
+    const std::vector<MeshInstance> & instances2 = _Scene.GetMeshInstances();
+    for ( int instID : _OpaqueMeshInstanceIDs )
     {
+      if ( ( instID < 0 ) || ( static_cast<size_t>(instID) >= instances2.size() ) )
+        continue;
+
+      const MeshInstance& inst = instances2[instID];
       int meshID = inst._MeshID;
       if ( ( meshID < 0 ) || ( static_cast<size_t>(meshID) >= _MeshVAOs.size() ) )
         continue;
@@ -1504,5 +1746,3 @@ int DeferredRenderer::RenderToFile(const std::filesystem::path& iFilePath)
 }
 
 } // namespace RTRT
-
-

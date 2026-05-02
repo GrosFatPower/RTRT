@@ -44,6 +44,7 @@ struct RenderSettings
   bool         _SSAO                  = true;                   // Deferred renderer
   bool         _SSAOBlur              = true;                   // Deferred renderer
   bool         _SpecularIBL           = true;                   // Deferred renderer
+  bool         _Transparency          = true;                   // Deferred renderer
   SamplingMode _Sampling              = SamplingMode::Bilinear; // Raster
   bool         _WBuffer               = true;                   // Raster
   ShadingType  _ShadingType           = ShadingType::Phong;     // Raster
@@ -78,4 +79,3 @@ struct RenderSettings
 }
 
 #endif /* _RenderSettings_ */
-

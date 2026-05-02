@@ -561,6 +561,9 @@ int Test5::DrawUI()
           if ( ImGui::SliderFloat( "IBL intensity", &_Settings._SpecularIBLIntensity, 0.f, 3.f ) )
             _Renderer -> Notify(DirtyState::RenderSettings);
 
+          if ( ImGui::Checkbox( "Transparency", &_Settings._Transparency ) )
+            _Renderer -> Notify(DirtyState::RenderSettings);
+
         }
       }
 

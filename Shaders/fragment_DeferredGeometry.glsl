@@ -26,6 +26,8 @@ void main()
   hitPoint._Pos        = fragWorldPos;
   hitPoint._Dist       = length(hitPoint._Pos - u_CameraPos);
   hitPoint._Normal     = normalize(fragNormal);
+  if ( !gl_FrontFacing )
+    hitPoint._Normal *= -1.0;
   hitPoint._UV         = fragUV;
   hitPoint._MaterialID = v_MaterialID;
 
@@ -37,6 +39,10 @@ void main()
   {
     Material mat;
     LoadMaterial(hitPoint, mat);
+
+    if ( ( mat._AlphaMode == ALPHA_MODE_MASK ) && ( mat._Opacity < mat._AlphaCutoff ) )
+      discard;
+
     albedo = mat._Albedo;
     roughness = mat._Roughness;
     metallic = mat._Metallic;

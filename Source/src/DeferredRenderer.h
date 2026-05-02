@@ -92,6 +92,11 @@ protected:
   int UpdateShadowState();
   int RenderShadowMap();
   int RenderSSAO();
+  int RenderTransparent();
+
+  void BuildDeferredDrawLists();
+  void SortTransparentInstances();
+  bool IsTransparentMaterial(int iMaterialID);
 
   void ComputeSceneBounds();
   float ComputeAutoShadowFar(const Vec3 & iLightPos) const;
@@ -142,6 +147,7 @@ protected:
   std::unique_ptr<ShaderProgram> _SSAOShader;
   std::unique_ptr<ShaderProgram> _SSAOBlurShader;
   std::unique_ptr<ShaderProgram> _BRDFLUTShader;
+  std::unique_ptr<ShaderProgram> _TransparentShader;
 
   // Frame counters
   unsigned int _FrameNum = 1;
@@ -151,6 +157,8 @@ protected:
   std::vector<GLuint> _MeshVBOs;
   std::vector<GLuint> _MeshEBOs;
   std::vector<int>    _MeshIndexCount;
+  std::vector<int>    _OpaqueMeshInstanceIDs;
+  std::vector<int>    _TransparentMeshInstanceIDs;
 
   // Scene bounds
   AABB<Vec3> _SceneBounds;

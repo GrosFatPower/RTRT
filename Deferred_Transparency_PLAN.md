@@ -1,4 +1,4 @@
-# Plan: Deferred Renderer Transparency v1
+# Deferred Renderer Transparency v1 Plan
 
 ## Summary
 
