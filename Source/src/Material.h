@@ -66,6 +66,11 @@ struct Material
   float _Reflectance            = 0.5f;
 };
 
+inline AlphaMode MaterialAlphaMode( const Material & iMaterial )
+{
+  return static_cast<AlphaMode>( static_cast<int>( iMaterial._AlphaMode + 0.5f ) );
+}
+
 }
 
 #endif /* _Material_ */

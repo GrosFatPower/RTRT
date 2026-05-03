@@ -55,16 +55,16 @@ echo ""
 echo "✅ Compilation succeeded!"
 echo ""
 
-if [ -f "Release/RT_renderer" ]; then
-    echo "✅ Executable found: Release/RT_renderer"
+if [ -f "Release/RenderLab" ]; then
+    echo "✅ Executable found: Release/RenderLab"
     
     echo ""
     echo "=== Informations sur l'exécutable ==="
-    file Release/RT_renderer
+    file Release/RenderLab
     
     echo ""
     echo "=== Dynamic dependencies ==="
-    otool -L Release/RT_renderer   
+    otool -L Release/RenderLab   
 else
     echo "❌ Executable non found in Release"
     exit 1

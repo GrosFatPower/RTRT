@@ -55,16 +55,16 @@ echo ""
 echo "✅ Compilation succeeded!"
 echo ""
 
-if [ -f "Debug/RT_renderer" ]; then
-    echo "✅ Executable found: Debug/RT_renderer"
+if [ -f "Debug/RenderLab" ]; then
+    echo "✅ Executable found: Debug/RenderLab"
     
     echo ""
     echo "=== Informations sur l'exécutable ==="
-    file Debug/RT_renderer
+    file Debug/RenderLab
     
     echo ""
     echo "=== Dynamic dependencies ==="
-    otool -L Debug/RT_renderer   
+    otool -L Debug/RenderLab   
 else
     echo "❌ Executable non found in Debug"
     exit 1

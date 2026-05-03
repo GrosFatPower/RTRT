@@ -301,7 +301,7 @@ bool DeferredRenderer::IsTransparentMaterial( int iMaterialID )
     return false;
 
   const Material & mat = materials[iMaterialID];
-  AlphaMode alphaMode = static_cast<AlphaMode>(static_cast<int>(mat._AlphaMode + 0.5f));
+  AlphaMode alphaMode = MaterialAlphaMode(mat);
 
   if ( AlphaMode::Blend == alphaMode )
     return true;
@@ -1601,6 +1601,7 @@ int DeferredRenderer::RenderTransparent()
     return 0;
 
   SortTransparentInstances();
+  
   Mat4x4 view;
   _Scene.GetCamera().ComputeLookAtMatrix(view);
 
