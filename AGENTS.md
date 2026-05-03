@@ -20,6 +20,7 @@ Use this as the fast navigation guide.
 - Assets and scene definitions: `Assets/`
 - GLSL programs and shared shader includes: `Shaders/`
 - Third-party libraries: `Dependencies/`
+- Useful information about project structure, work in progress, to-do lists: `Docs/`
 
 ## House Style
 
