@@ -491,18 +491,6 @@ bool DeferredRenderer::UpdateSortedTransparentMeshIndices( int iMeshID, const Ma
     sortedIndices[dstBase + 2] = baseIndices[srcBase + 2];
   }
 
-  GLuint ebo = _MeshEBOs[iMeshID];
-  GLuint vao = _MeshVAOs[iMeshID];
-  if ( !ebo )
-    return false;
-  if ( !vao )
-    return false;
-
-  glBindVertexArray(vao);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-  glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(sortedIndices.size() * sizeof(uint32_t)), sortedIndices.data());
-  glBindVertexArray(0);
-
   return true;
 }
 
@@ -1254,17 +1242,20 @@ int DeferredRenderer::UpdateUniforms()
     _SSAOShader -> SetUniform("u_SSAONoise", (int)DeferredTexSlot::_SSAONoise);
     _SSAOShader -> SetUniform("u_View", V);
     _SSAOShader -> SetUniform("u_Proj", P);
-    _SSAOShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
-    _SSAOShader -> SetUniform("u_EnableSSAO", _Settings._SSAO ? 1 : 0);
-    _SSAOShader -> SetUniform("u_SSAORadius", _Settings._SSAORadius);
-    _SSAOShader -> SetUniform("u_SSAOBias", _Settings._SSAOBias);
-    _SSAOShader -> SetUniform("u_KernelSize", std::min(std::max(_Settings._SSAOKernelSize, 1), 32));
-    for ( int i = 0; i < (int)_SSAOKernel.size(); ++i )
-      _SSAOShader -> SetUniform("u_KernelSamples[" + std::to_string(i) + "]", _SSAOKernel[i]);
+    if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
+    {
+      _SSAOShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
+      _SSAOShader -> SetUniform("u_EnableSSAO", _Settings._SSAO ? 1 : 0);
+      _SSAOShader -> SetUniform("u_SSAORadius", _Settings._SSAORadius);
+      _SSAOShader -> SetUniform("u_SSAOBias", _Settings._SSAOBias);
+      _SSAOShader -> SetUniform("u_KernelSize", std::min(std::max(_Settings._SSAOKernelSize, 1), 32));
+      for ( int i = 0; i < (int)_SSAOKernel.size(); ++i )
+        _SSAOShader -> SetUniform("u_KernelSamples[" + std::to_string(i) + "]", _SSAOKernel[i]);
+    }
     _SSAOShader -> StopUsing();
   }
 
-  if ( _SSAOBlurShader )
+  if ( _SSAOBlurShader && ( _DirtyStates & (unsigned long)DirtyState::RenderSettings ) ) 
   {
     _SSAOBlurShader -> Use();
     _SSAOBlurShader -> SetUniform("u_SSAOInput", (int)DeferredTexSlot::_SSAO);
@@ -1284,66 +1275,81 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> SetUniform("u_Camera._Forward", camForward);
     _LightingShader -> SetUniform("u_Camera._FOV", camFov);
 
-    _LightingShader -> SetUniform("u_GAlbedo",   (int)DeferredTexSlot::_GAlbedo);
-    _LightingShader -> SetUniform("u_GNormal",   (int)DeferredTexSlot::_GNormal);
-    _LightingShader -> SetUniform("u_GPosition", (int)DeferredTexSlot::_GPosition);
-    _LightingShader -> SetUniform("u_GMaterial", (int)DeferredTexSlot::_GMaterial);
-    _LightingShader -> SetUniform("u_GDepth",    (int)DeferredTexSlot::_GDepth);
-    _LightingShader -> SetUniform("u_ShadowCubeMap", (int)DeferredTexSlot::_ShadowCubeMap);
-    _LightingShader -> SetUniform("u_Shadow2DMap", (int)DeferredTexSlot::_Shadow2DMap);
-    _LightingShader -> SetUniform("u_SSAOMap", (int)DeferredTexSlot::_SSAOBlur);
-    _LightingShader -> SetUniform("u_BRDFLUT", (int)DeferredTexSlot::_BRDFLUT);
-    _LightingShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
-
-    int nbLights = 0;
-    for ( int i = 0; i < _Scene.GetNbLights(); ++i )
+    if ( ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
+      || ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
+      || ( _DirtyStates & (unsigned long)DirtyState::Textures )
+      || ( _DirtyStates & (unsigned long)DirtyState::SceneInstances ) )
     {
-      Light * curLight = _Scene.GetLight(i);
-      if ( !curLight )
-        continue;
+      _LightingShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
 
-      _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Pos"     ), curLight -> _Pos);
-      _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Emission"), curLight -> _Emission * curLight -> _Intensity);
-      _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_DirU"    ), curLight -> _DirU);
-      _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_DirV"    ), curLight -> _DirV);
-      _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Radius"  ), curLight -> _Radius);
-      _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Area"    ), curLight -> _Area);
-      _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Type"    ), curLight -> _Type);
+      _LightingShader -> SetUniform("u_GAlbedo",   (int)DeferredTexSlot::_GAlbedo);
+      _LightingShader -> SetUniform("u_GNormal",   (int)DeferredTexSlot::_GNormal);
+      _LightingShader -> SetUniform("u_GPosition", (int)DeferredTexSlot::_GPosition);
+      _LightingShader -> SetUniform("u_GMaterial", (int)DeferredTexSlot::_GMaterial);
+      _LightingShader -> SetUniform("u_GDepth",    (int)DeferredTexSlot::_GDepth);
 
-      nbLights++;
-      if ( nbLights >= 32 )
-        break;
+      _LightingShader -> SetUniform("u_SSAOMap", (int)DeferredTexSlot::_SSAOBlur);
+      _LightingShader -> SetUniform("u_EnableSSAO", _Settings._SSAO ? 1 : 0);
+      _LightingShader -> SetUniform("u_SSAOIntensity", _Settings._SSAOIntensity);
+
+      _LightingShader -> SetUniform("u_ShadowCubeMap", (int)DeferredTexSlot::_ShadowCubeMap);
+      _LightingShader -> SetUniform("u_Shadow2DMap", (int)DeferredTexSlot::_Shadow2DMap);
+      _LightingShader -> SetUniform("u_EnableShadowMapping", ( _Settings._ShadowMapping && _HasShadowLight ) ? ( 1 ) : ( 0 ));
+      _LightingShader -> SetUniform("u_ShadowLightIndex", _ShadowLightIndex);
+      _LightingShader -> SetUniform("u_ShadowLightType", (int)_ShadowLightType);
+      _LightingShader -> SetUniform("u_ShadowLightPos", _ShadowLightPos);
+      _LightingShader -> SetUniform("u_ShadowLightDir", _ShadowLightDir);
+      _LightingShader -> SetUniform("u_ShadowLightViewProj", _ShadowDirectionalViewProj);
+      _LightingShader -> SetUniform("u_ShadowBias", _Settings._ShadowBias);
+      _LightingShader -> SetUniform("u_ShadowFar", _ShadowFar);
+
+      _LightingShader -> SetUniform("u_BRDFLUT", (int)DeferredTexSlot::_BRDFLUT);
+      _LightingShader -> SetUniform("u_EnableSpecularIBL", _Settings._SpecularIBL ? 1 : 0);
+      _LightingShader -> SetUniform("u_SpecularIBLIntensity", _Settings._SpecularIBLIntensity);
     }
 
-    _LightingShader -> SetUniform("u_NbLights", nbLights);
-    _LightingShader -> SetUniform("u_ShowLights", (int)_Settings._ShowLights);
-
-    _LightingShader -> SetUniform("u_BackgroundColor", _Settings._BackgroundColor);
-    _LightingShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
-    _LightingShader -> SetUniform("u_EnableBackground" , (int)_Settings._EnableBackGround);
-    _LightingShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
-    _LightingShader -> SetUniform("u_EnvMapRes", (float)_Scene.GetEnvMap().GetWidth(), (float)_Scene.GetEnvMap().GetHeight());
-    _LightingShader -> SetUniform("u_EnvMap", (int)DeferredTexSlot::_EnvMap);
-    float envMipCount = 1.f;
-    if ( _Scene.GetEnvMap().GetWidth() > 0 && _Scene.GetEnvMap().GetHeight() > 0 )
+    if ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
     {
-      int maxDim = std::max(_Scene.GetEnvMap().GetWidth(), _Scene.GetEnvMap().GetHeight());
-      envMipCount = std::floor(std::log2((float)maxDim)) + 1.0f;
-    }
-    _LightingShader -> SetUniform("u_EnvMapMipCount", envMipCount);
+      int nbLights = 0;
+      for ( int i = 0; i < _Scene.GetNbLights(); ++i )
+      {
+        Light * curLight = _Scene.GetLight(i);
+        if ( !curLight )
+          continue;
 
-    _LightingShader -> SetUniform("u_EnableShadowMapping", ( _Settings._ShadowMapping && _HasShadowLight ) ? ( 1 ) : ( 0 ));
-    _LightingShader -> SetUniform("u_ShadowLightIndex", _ShadowLightIndex);
-    _LightingShader -> SetUniform("u_ShadowLightType", (int)_ShadowLightType);
-    _LightingShader -> SetUniform("u_ShadowLightPos", _ShadowLightPos);
-    _LightingShader -> SetUniform("u_ShadowLightDir", _ShadowLightDir);
-    _LightingShader -> SetUniform("u_ShadowLightViewProj", _ShadowDirectionalViewProj);
-    _LightingShader -> SetUniform("u_ShadowBias", _Settings._ShadowBias);
-    _LightingShader -> SetUniform("u_ShadowFar", _ShadowFar);
-    _LightingShader -> SetUniform("u_EnableSSAO", _Settings._SSAO ? 1 : 0);
-    _LightingShader -> SetUniform("u_SSAOIntensity", _Settings._SSAOIntensity);
-    _LightingShader -> SetUniform("u_EnableSpecularIBL", _Settings._SpecularIBL ? 1 : 0);
-    _LightingShader -> SetUniform("u_SpecularIBLIntensity", _Settings._SpecularIBLIntensity);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Pos"     ), curLight -> _Pos);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Emission"), curLight -> _Emission * curLight -> _Intensity);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_DirU"    ), curLight -> _DirU);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_DirV"    ), curLight -> _DirV);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Radius"  ), curLight -> _Radius);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Area"    ), curLight -> _Area);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights",i,"_Type"    ), curLight -> _Type);
+
+        nbLights++;
+        if ( nbLights >= 32 )
+          break;
+      }
+
+      _LightingShader -> SetUniform("u_NbLights", nbLights);
+      _LightingShader -> SetUniform("u_ShowLights", (int)_Settings._ShowLights);
+    }
+
+    if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
+    {
+      _LightingShader -> SetUniform("u_BackgroundColor", _Settings._BackgroundColor);
+      _LightingShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
+      _LightingShader -> SetUniform("u_EnableBackground" , (int)_Settings._EnableBackGround);
+      _LightingShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
+      _LightingShader -> SetUniform("u_EnvMapRes", (float)_Scene.GetEnvMap().GetWidth(), (float)_Scene.GetEnvMap().GetHeight());
+      _LightingShader -> SetUniform("u_EnvMap", (int)DeferredTexSlot::_EnvMap);
+      float envMipCount = 1.f;
+      if ( _Scene.GetEnvMap().GetWidth() > 0 && _Scene.GetEnvMap().GetHeight() > 0 )
+      {
+        int maxDim = std::max(_Scene.GetEnvMap().GetWidth(), _Scene.GetEnvMap().GetHeight());
+        envMipCount = std::floor(std::log2((float)maxDim)) + 1.0f;
+      }
+      _LightingShader -> SetUniform("u_EnvMapMipCount", envMipCount);
+    }
 
     _LightingShader -> SetUniform("u_DebugMode" , _DebugMode);
 
@@ -1391,50 +1397,62 @@ int DeferredRenderer::UpdateUniforms()
     _TransparentShader -> SetUniform("u_MaterialsTexture", (int)DeferredTexSlot::_Materials);
     _TransparentShader -> SetUniform("u_GDepth", (int)DeferredTexSlot::_GDepth);
 
-    int transparentNbLights = 0;
-    for ( int i = 0; i < _Scene.GetNbLights(); ++i )
+    if ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
     {
-      Light * curLight = _Scene.GetLight(i);
-      if ( !curLight )
-        continue;
+      int transparentNbLights = 0;
+      for ( int i = 0; i < _Scene.GetNbLights(); ++i )
+      {
+        Light * curLight = _Scene.GetLight(i);
+        if ( !curLight )
+          continue;
 
-      _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Pos"),      curLight -> _Pos);
-      _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Emission"), curLight -> _Emission * curLight -> _Intensity);
-      _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_DirU"),     curLight -> _DirU);
-      _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_DirV"),     curLight -> _DirV);
-      _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Radius"),   curLight -> _Radius);
-      _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Area"),     curLight -> _Area);
-      _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Type"),     curLight -> _Type);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Pos"),      curLight -> _Pos);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Emission"), curLight -> _Emission * curLight -> _Intensity);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_DirU"),     curLight -> _DirU);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_DirV"),     curLight -> _DirV);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Radius"),   curLight -> _Radius);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Area"),     curLight -> _Area);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Type"),     curLight -> _Type);
 
-      transparentNbLights++;
-      if ( transparentNbLights >= 32 )
-        break;
+        transparentNbLights++;
+        if ( transparentNbLights >= 32 )
+          break;
+      }
+      _TransparentShader -> SetUniform("u_NbLights", transparentNbLights);
     }
 
-    _TransparentShader -> SetUniform("u_NbLights", transparentNbLights);
-    _TransparentShader -> SetUniform("u_EnvMapRes", (float)_Scene.GetEnvMap().GetWidth(), (float)_Scene.GetEnvMap().GetHeight());
-    _TransparentShader -> SetUniform("u_EnvMap", (int)DeferredTexSlot::_EnvMap);
-    _TransparentShader -> SetUniform("u_BRDFLUT", (int)DeferredTexSlot::_BRDFLUT);
-    _TransparentShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
-    _TransparentShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
-    float transparentEnvMipCount = 1.f;
-    if ( _Scene.GetEnvMap().GetWidth() > 0 && _Scene.GetEnvMap().GetHeight() > 0 )
+    if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
     {
-      int maxDim = std::max(_Scene.GetEnvMap().GetWidth(), _Scene.GetEnvMap().GetHeight());
-      transparentEnvMipCount = std::floor(std::log2((float)maxDim)) + 1.0f;
+      _TransparentShader -> SetUniform("u_EnvMapRes", (float)_Scene.GetEnvMap().GetWidth(), (float)_Scene.GetEnvMap().GetHeight());
+      _TransparentShader -> SetUniform("u_EnvMap", (int)DeferredTexSlot::_EnvMap);
+      _TransparentShader -> SetUniform("u_BRDFLUT", (int)DeferredTexSlot::_BRDFLUT);
+      _TransparentShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
+      _TransparentShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
+      float transparentEnvMipCount = 1.f;
+      if ( _Scene.GetEnvMap().GetWidth() > 0 && _Scene.GetEnvMap().GetHeight() > 0 )
+      {
+        int maxDim = std::max(_Scene.GetEnvMap().GetWidth(), _Scene.GetEnvMap().GetHeight());
+        transparentEnvMipCount = std::floor(std::log2((float)maxDim)) + 1.0f;
+      }
+      _TransparentShader -> SetUniform("u_EnvMapMipCount", transparentEnvMipCount);
     }
-    _TransparentShader -> SetUniform("u_EnvMapMipCount", transparentEnvMipCount);
 
-    _TransparentShader -> SetUniform("u_ShadowCubeMap", (int)DeferredTexSlot::_ShadowCubeMap);
-    _TransparentShader -> SetUniform("u_Shadow2DMap", (int)DeferredTexSlot::_Shadow2DMap);
-    _TransparentShader -> SetUniform("u_EnableShadowMapping", ( _Settings._ShadowMapping && _HasShadowLight ) ? ( 1 ) : ( 0 ));
-    _TransparentShader -> SetUniform("u_ShadowLightIndex", _ShadowLightIndex);
-    _TransparentShader -> SetUniform("u_ShadowLightType", (int)_ShadowLightType);
-    _TransparentShader -> SetUniform("u_ShadowLightPos", _ShadowLightPos);
-    _TransparentShader -> SetUniform("u_ShadowLightDir", _ShadowLightDir);
-    _TransparentShader -> SetUniform("u_ShadowLightViewProj", _ShadowDirectionalViewProj);
-    _TransparentShader -> SetUniform("u_ShadowBias", _Settings._ShadowBias);
-    _TransparentShader -> SetUniform("u_ShadowFar", _ShadowFar);
+    if ( ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
+      || ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
+      || ( _DirtyStates & (unsigned long)DirtyState::Textures )
+      || ( _DirtyStates & (unsigned long)DirtyState::SceneInstances ) )
+    {
+      _TransparentShader -> SetUniform("u_ShadowCubeMap", (int)DeferredTexSlot::_ShadowCubeMap);
+      _TransparentShader -> SetUniform("u_Shadow2DMap", (int)DeferredTexSlot::_Shadow2DMap);
+      _TransparentShader -> SetUniform("u_EnableShadowMapping", ( _Settings._ShadowMapping && _HasShadowLight ) ? ( 1 ) : ( 0 ));
+      _TransparentShader -> SetUniform("u_ShadowLightIndex", _ShadowLightIndex);
+      _TransparentShader -> SetUniform("u_ShadowLightType", (int)_ShadowLightType);
+      _TransparentShader -> SetUniform("u_ShadowLightPos", _ShadowLightPos);
+      _TransparentShader -> SetUniform("u_ShadowLightDir", _ShadowLightDir);
+      _TransparentShader -> SetUniform("u_ShadowLightViewProj", _ShadowDirectionalViewProj);
+      _TransparentShader -> SetUniform("u_ShadowBias", _Settings._ShadowBias);
+      _TransparentShader -> SetUniform("u_ShadowFar", _ShadowFar);
+    }
 
     _TransparentShader -> StopUsing();
   }
@@ -1639,15 +1657,23 @@ int DeferredRenderer::RenderTransparent()
       continue;
 
     GLuint vao = _MeshVAOs[meshID];
+    GLuint ebo = _MeshEBOs[meshID];
     int idxCount = _MeshIndexCount[meshID];
-    if ( !vao || ( idxCount <= 0 ) )
+    if ( !vao || !ebo || ( idxCount <= 0 ) )
       continue;
-    UpdateSortedTransparentMeshIndices(meshID, inst._Transform, view);
+
+    this -> UpdateSortedTransparentMeshIndices(meshID, inst._Transform, view);
+
+    std::vector<uint32_t> & sortedIndices = _TransparentMeshSortedIndices[meshID];
+
+    glBindVertexArray(vao);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(sortedIndices.size() * sizeof(uint32_t)), sortedIndices.data());
 
     _TransparentShader -> SetUniform("u_Model", inst._Transform);
     _TransparentShader -> SetUniform("u_MaterialID", inst._MaterialID);
-    glBindVertexArray(vao);
     glDrawElements(GL_TRIANGLES, idxCount, GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
   }
 
   glBindVertexArray(0);
