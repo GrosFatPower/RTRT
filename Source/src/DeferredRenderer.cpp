@@ -434,6 +434,8 @@ bool DeferredRenderer::UpdateSortedTransparentMeshIndices( int iMeshID, const Ma
 {
   if ( ( iMeshID < 0 ) || ( static_cast<size_t>(iMeshID) >= _MeshEBOs.size() ) )
     return false;
+  if ( static_cast<size_t>(iMeshID) >= _MeshVAOs.size() )
+    return false;
   if ( ( static_cast<size_t>(iMeshID) >= _TransparentMeshBaseIndices.size() )
     || ( static_cast<size_t>(iMeshID) >= _TransparentMeshLocalTriCenters.size() )
     || ( static_cast<size_t>(iMeshID) >= _TransparentMeshSortedIndices.size() )
@@ -490,12 +492,16 @@ bool DeferredRenderer::UpdateSortedTransparentMeshIndices( int iMeshID, const Ma
   }
 
   GLuint ebo = _MeshEBOs[iMeshID];
+  GLuint vao = _MeshVAOs[iMeshID];
   if ( !ebo )
     return false;
+  if ( !vao )
+    return false;
 
+  glBindVertexArray(vao);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
   glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(sortedIndices.size() * sizeof(uint32_t)), sortedIndices.data());
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+  glBindVertexArray(0);
 
   return true;
 }
@@ -1636,8 +1642,7 @@ int DeferredRenderer::RenderTransparent()
     int idxCount = _MeshIndexCount[meshID];
     if ( !vao || ( idxCount <= 0 ) )
       continue;
-    if ( !UpdateSortedTransparentMeshIndices(meshID, inst._Transform, view) )
-      continue;
+    UpdateSortedTransparentMeshIndices(meshID, inst._Transform, view);
 
     _TransparentShader -> SetUniform("u_Model", inst._Transform);
     _TransparentShader -> SetUniform("u_MaterialID", inst._MaterialID);
