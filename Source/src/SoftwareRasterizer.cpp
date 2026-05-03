@@ -58,7 +58,6 @@ namespace rd = RTRT::RasterData;
 namespace RTRT
 {
 
-static constexpr float EPSILON = 1e-9f;
 static constexpr RGBA8 S_DefaultColor(0, 0, 0, (uint8_t)255);
 
 

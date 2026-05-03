@@ -11,11 +11,6 @@ namespace RTRT
 // UTILS
 // ----------------------------------------------------------------------------
 
-static constexpr float EPSILON    = 1e-9f;
-static constexpr float RESOLUTION = 0.001f;
-static constexpr float INV_PI     = 1 / static_cast<float>(M_PI);
-
-
 void ComputeOnB( Vec3 iN, Vec3 & oT, Vec3 & oBT )
 {
   Vec3 up = ( abs( iN.z ) < 0.999 ) ? Vec3( 0, 0, 1. ) : Vec3( 1., 0, 0 );

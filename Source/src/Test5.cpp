@@ -308,763 +308,13 @@ int Test5::DrawUI()
       _RenderToFile = true;
     }
 
-    if (ImGui::CollapsingHeader("Rendering stats"))
-    {
-      ImGui::Text("Window width : %d height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
-      ImGui::Text("Render width : %d height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
-
-      ImGui::Text( "Render time           : %.3f ms/frame", _FrameTime * 1000. );
-
-      if ( RendererType::PathTracer == _RendererType )
-      {
-        ImGui::Text("Path trace time       : %.3f ms", _Renderer -> AsPathTracer() -> GetPathTraceTime() * 1000.);
-        ImGui::Text("Accumulate time       : %.3f ms", _Renderer -> AsPathTracer() -> GetAccumulateTime() * 1000.);
-        ImGui::Text("Denoise time          : %.3f ms", _Renderer -> AsPathTracer() -> GetDenoiseTime() * 1000.);
-        ImGui::Text("Render to screen time : %.3f ms", _Renderer -> AsPathTracer() -> GetRenderToScreenTime() * 1000.);
-
-        ImGui::Text("Frame number          : %d", _Renderer -> AsPathTracer() -> GetFrameNum());
-        ImGui::Text("Nb complete frames    : %d", _Renderer -> AsPathTracer() -> GetNbCompleteFrames());
-      }
-
-      if ( _Scene )
-      {
-        ImGui::Text("Nb vertices           : %d", (int)_Scene -> GetVertices().size());
-        ImGui::Text("Nb triangles          : %d", (int)_Scene -> GetIndices().size()/3);
-        ImGui::Text("Nb meshes instances   : %d", _Scene -> GetNbMeshInstances());
-      }
-    }
-
-    if (ImGui::CollapsingHeader("Settings"))
-    {
-      static const char * YESorNO[] = { "No", "Yes" };
-
-      static bool vSync = false;
-      if ( ImGui::Checkbox( "VSync", &vSync ) )
-      {
-        if ( vSync )
-          glfwSwapInterval( 1 );
-        else
-          glfwSwapInterval( 0 );
-      }
-
-      if ( RendererType::SoftwareRasterizer == _RendererType )
-      {
-        int numThreads = _Settings._NbThreads;
-        if ( ImGui::SliderInt("Nb Threads", &numThreads, 1, g_NbThreadsMax) && ( numThreads > 0 ) )
-        {
-          _Settings._NbThreads = numThreads;
-          _Renderer -> Notify(DirtyState::RenderSettings);
-        }
-
-        if (ImGui::Checkbox("Tiled rendering", &_Settings._TiledRendering))
-        {
-          _Renderer->Notify(DirtyState::RenderSettings);
-        }
-
-        SoftwareRasterizer * softwareRasterizer = _Renderer -> AsSoftwareRasterizer();
-        if ( softwareRasterizer )
-        {
-          if (_Settings._TiledRendering)
-          {
-            static const char * TILE_SIZE[] = { "16", "32", "64", "128", "256", "512" };
-
-            unsigned int tileSize = softwareRasterizer -> GetTileSize();
-            tileSize = tileSize >> 4;
-            int curIndex = 0;
-            while ( !(tileSize & 1) && ( curIndex < 5 ) )
-            {
-              tileSize = tileSize >> 1;
-              curIndex++;
-            }
-
-            if ( ImGui::Combo( "Tile Size", &curIndex, TILE_SIZE, 6 ) )
-            {
-              softwareRasterizer -> SetTileSize(atoi(TILE_SIZE[curIndex]));
-              _Renderer -> Notify(DirtyState::RenderSettings);
-            }
-
-            if ( SIMDUtils::HasSIMDSupport() )
-            {
-              bool enableSIMD = softwareRasterizer -> GetEnableSIMD();
-              if (ImGui::Checkbox("Enable SIMD", &enableSIMD))
-              {
-                softwareRasterizer->SetEnableSIMD(enableSIMD);
-                _Renderer->Notify(DirtyState::RenderSettings);
-              }
-            }
-          }
-        }
-      }
-
-      int scale = _Settings._RenderScale;
-      if ( ImGui::SliderInt("Render scale", &scale, 5, 200) )
-      {
-        _Settings._RenderScale = scale;
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      }
-
-      if ( RendererType::PathTracer == _RendererType )
-      {
-        if ( ImGui::SliderFloat( "Interactive res Ratio", &_Settings._LowResRatio, 0.05f, 1.f ) )
-        {
-          _Renderer -> Notify(DirtyState::RenderSettings);
-        }
-
-        if ( ImGui::SliderInt( "SPP", &_Settings._NbSamplesPerPixel, 1, 10 ) )
-          _Renderer -> Notify(DirtyState::RenderSettings);
-
-        if ( ImGui::SliderInt( "Bounces", &_Settings._Bounces, 1, 10 ) )
-          _Renderer -> Notify(DirtyState::RenderSettings);
-
-        if ( ImGui::Checkbox( "Russian Roulette", &_Settings._RussianRoulette) )
-          _Renderer -> Notify(DirtyState::RenderSettings);
-
-        if ( ImGui::Checkbox( "Accumulate", &_Settings._Accumulate ) )
-          _Renderer -> Notify(DirtyState::RenderSettings);
-
-        if ( ImGui::Checkbox( "Tiled rendering", &_Settings._TiledRendering ) )
-        {
-          if ( _Settings._TiledRendering && ( ( _Settings._TileResolution.x <= 0 ) || ( _Settings._TileResolution.y <= 0 ) ) )
-            _Settings._TileResolution.x = _Settings._TileResolution.y = 256;
-          _Renderer -> Notify(DirtyState::RenderSettings);
-        }
-
-        if ( _Settings._TiledRendering )
-        {
-          int tileSize = _Settings._TileResolution.x;
-          if ( ImGui::SliderInt("Tile size", &tileSize, 64, 1024) )
-          {
-            _Settings._TileResolution = Vec2i(tileSize);
-            _Renderer -> Notify(DirtyState::RenderSettings);
-          }
-        }
-
-        if ( ImGui::Checkbox( "Denoise", &_Settings._Denoise ) )
-        {}
-
-        if ( _Settings._Denoise )
-        {
-          static const char * DENOISING_METHODS[] = { "Bilateral", "Wavelet", "Edge-aware" };
-          int denoisingMethod = (int)_Settings._DenoisingMethod;
-          if ( ImGui::Combo( "Denoising method", &denoisingMethod, DENOISING_METHODS, 3 ) )
-          {
-            _Settings._DenoisingMethod = denoisingMethod;
-          }
-
-          if ( 0 == _Settings._DenoisingMethod )
-          {
-            if ( ImGui::SliderFloat( "Sigma spatial", &_Settings._DenoiserSigmaSpatial, 0.1f, 10.f ) )
-            {}
-
-            if ( ImGui::SliderFloat( "Sigma range", &_Settings._DenoiserSigmaRange, 0.01f, 1.f ) )
-            {}
-          }
-          else if ( 1 == _Settings._DenoisingMethod )
-          {
-            if ( ImGui::SliderInt( "Wavelet scale", (int*)&_Settings._DenoisingWaveletScale, 1, 5 ) )
-            {}
-
-            if ( ImGui::SliderFloat( "Threshold", &_Settings._DenoiserThreshold, .01f, 1.f ) )
-            {}
-          }
-          else if ( 2 == _Settings._DenoisingMethod )
-          {
-            if ( ImGui::SliderFloat( "Color phi", &_Settings._DenoiserColorPhi, 0.01f, 1.f ) )
-            {}
-
-            if ( ImGui::SliderFloat( "Normal phi", &_Settings._DenoiserNormalPhi, 0.01f, 1.f ) )
-            {}
-
-            if ( ImGui::SliderFloat( "Position phi", &_Settings._DenoiserPositionPhi, 0.01f, 1.f ) )
-            {}
-          }
-        }
-      }
-      else if ( RendererType::SoftwareRasterizer == _RendererType )
-      {
-        static const char * NEARESTorBILNEAR[] = { "Nearest", "Bilinear", "Trilinear" };
-        static const char * PHONGorFLATorPBR[]      = { "Flat", "Phong", "PBR" };
-
-        int sampling = (int)_Settings._Sampling;
-        if ( ImGui::Combo("Texture sampling", &sampling, NEARESTorBILNEAR, 3) )
-          _Renderer -> Notify(DirtyState::RenderSettings);
-        _Settings._Sampling = (SamplingMode)sampling;
-
-        int shadingType = (int)_Settings._ShadingType;
-        if ( ImGui::Combo("Shading", &shadingType, PHONGorFLATorPBR, 3) )
-          _Renderer -> Notify(DirtyState::RenderSettings);
-        _Settings._ShadingType = (ShadingType)shadingType;
-
-        int useWBuffer = !!_Settings._WBuffer;
-        if ( ImGui::Combo("W-Buffer", &useWBuffer, YESorNO, 2) )
-          _Renderer -> Notify(DirtyState::RenderSettings);
-        _Settings._WBuffer = !!useWBuffer;
-
-        SoftwareRasterizer * softwareRasterizer = _Renderer -> AsSoftwareRasterizer();
-        if ( softwareRasterizer )
-        {
-          bool generateMips = softwareRasterizer ->  GetGenerateMipMaps();
-          if ( ImGui::Checkbox( "Generate mip maps", &generateMips ) )
-            softwareRasterizer -> SetGenerateMipMaps(generateMips);
-        }
-      }
-      else if ( RendererType::OpenGLRasterizer == _RendererType )
-      {
-        DeferredRenderer * deferredRenderer = _Renderer -> AsDeferredRenderer();
-        if ( deferredRenderer )
-        {
-          bool generateMips = deferredRenderer ->  GetGenerateMipMaps();
-          if ( ImGui::Checkbox( "Generate mip maps", &generateMips ) )
-            deferredRenderer -> SetGenerateMipMaps(generateMips);
-
-          int anisoLevel = deferredRenderer -> GetAnisotropicLevel();
-          if ( ImGui::SliderInt( "Anisotropic level", &anisoLevel, 1, 16 ) )
-            deferredRenderer -> SetAnisotropicLevel(anisoLevel);
-
-          if ( ImGui::Checkbox( "Shadow mapping", &_Settings._ShadowMapping ) )
-            _Renderer -> Notify(DirtyState::RenderSettings);
-
-          int shadowMapResolution = _Settings._ShadowMapResolution;
-          if ( ImGui::SliderInt( "Shadow map resolution", &shadowMapResolution, 256, 4096 ) )
-          {
-            shadowMapResolution = std::max(256, ( shadowMapResolution / 64 ) * 64);
-            _Settings._ShadowMapResolution = shadowMapResolution;
-            _Renderer -> Notify(DirtyState::RenderSettings);
-          }
-
-          if ( ImGui::SliderFloat( "Shadow bias", &_Settings._ShadowBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic ) )
-            _Renderer -> Notify(DirtyState::RenderSettings);
-
-          if ( ImGui::SliderFloat( "Shadow far plane", &_Settings._ShadowFar, 1.f, 500.f ) )
-            _Renderer -> Notify(DirtyState::RenderSettings);
-
-          if ( ImGui::Checkbox( "SSAO", &_Settings._SSAO ) )
-            _Renderer -> Notify(DirtyState::RenderSettings);
-
-          if ( ImGui::Checkbox( "SSAO blur", &_Settings._SSAOBlur ) )
-            _Renderer -> Notify(DirtyState::RenderSettings);
-
-          if ( ImGui::SliderFloat( "SSAO radius", &_Settings._SSAORadius, 0.05f, 5.f, "%.3f", ImGuiSliderFlags_Logarithmic ) )
-            _Renderer -> Notify(DirtyState::RenderSettings);
-
-          if ( ImGui::SliderFloat( "SSAO bias", &_Settings._SSAOBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic ) )
-            _Renderer -> Notify(DirtyState::RenderSettings);
-
-          if ( ImGui::SliderFloat( "SSAO intensity", &_Settings._SSAOIntensity, 0.f, 3.f ) )
-            _Renderer -> Notify(DirtyState::RenderSettings);
-
-          int ssaoKernelSize = _Settings._SSAOKernelSize;
-          if ( ImGui::SliderInt( "SSAO kernel size", &ssaoKernelSize, 4, 32 ) )
-          {
-            _Settings._SSAOKernelSize = std::max(4, std::min(32, ssaoKernelSize));
-            _Renderer -> Notify(DirtyState::RenderSettings);
-          }
-
-          if ( ImGui::Checkbox( "Specular IBL", &_Settings._SpecularIBL ) )
-            _Renderer -> Notify(DirtyState::RenderSettings);
-
-          if ( ImGui::SliderFloat( "IBL intensity", &_Settings._SpecularIBLIntensity, 0.f, 3.f ) )
-            _Renderer -> Notify(DirtyState::RenderSettings);
-
-          if ( ImGui::Checkbox( "Transparency", &_Settings._Transparency ) )
-            _Renderer -> Notify(DirtyState::RenderSettings);
-
-        }
-      }
-
-      if ( ImGui::Checkbox( "FXAA", &_Settings._FXAA ) )
-      {}
-
-      if ( ImGui::Checkbox( "Tone mapping", &_Settings._ToneMapping ) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-
-      if ( _Settings._ToneMapping )
-      {
-        if ( ImGui::SliderFloat( "Gamma", &_Settings._Gamma, .5f, 3.f ) )
-          _Renderer -> Notify(DirtyState::RenderSettings);
-
-        if ( ImGui::SliderFloat( "Exposure", &_Settings._Exposure, .1f, 5.f ) )
-          _Renderer -> Notify(DirtyState::RenderSettings);
-      }
-
-      if ( RendererType::PathTracer == _RendererType )
-      {
-        static const char * PATH_TRACE_DEBUG_MODES[] = { "Off", "Tiles", "Albedo", "Metalness", "Roughness", "Normals", "UV", "BLAS"};
-        if ( ImGui::Combo( "Debug view", &g_DebugMode, PATH_TRACE_DEBUG_MODES, 8 ) )
-          _Renderer -> Notify(DirtyState::RenderSettings);
-      }
-      else if ( ( RendererType::SoftwareRasterizer == _RendererType ) || ( RendererType::OpenGLRasterizer == _RendererType ) )
-      {
-        g_DebugMode = 0;
-
-        static const char * COLORorDEPTHorNORMALS[] = { "Color", "Depth", "Normals" };
-        static const char * COLORorDEPTHorNORMALSorSHADOWSorSSAO[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params" };
-
-        static int bufferChoice = 0;
-        int maxBufferChoice = ( RendererType::OpenGLRasterizer == _RendererType ) ? ( 7 ) : ( 3 );
-        if ( ( RendererType::SoftwareRasterizer == _RendererType ) && ( bufferChoice > 2 ) )
-          bufferChoice = 0;
-
-        if ( ImGui::Combo("Buffer", &bufferChoice, ( RendererType::OpenGLRasterizer == _RendererType ) ? ( COLORorDEPTHorNORMALSorSHADOWSorSSAO ) : ( COLORorDEPTHorNORMALS ), maxBufferChoice ) )
-          _Renderer -> Notify(DirtyState::RenderSettings);
-
-        static int showWires = 0;
-        if ( ImGui::Combo("Show wires", &showWires, YESorNO, 2) )
-          _Renderer -> Notify(DirtyState::RenderSettings);
-
-        if ( RendererType::SoftwareRasterizer == _RendererType )
-        {
-          if ( 0 == bufferChoice )
-            g_DebugMode |= (int)RasterDebugModes::ColorBuffer;
-          else if ( 1 == bufferChoice )
-            g_DebugMode |= (int)RasterDebugModes::DepthBuffer;
-          else if ( 2 == bufferChoice )
-            g_DebugMode |= (int)RasterDebugModes::Normals;
-
-          if ( showWires )
-            g_DebugMode |= (int)RasterDebugModes::Wires;
-        }
-        else if ( RendererType::OpenGLRasterizer == _RendererType )
-        {
-          _Settings._ShowShadowMap = ( 3 == bufferChoice );
-
-          if ( 0 == bufferChoice )
-            g_DebugMode |= (int)DeferredDebugModes::ColorBuffer;
-          else if ( 1 == bufferChoice )
-            g_DebugMode |= (int)DeferredDebugModes::DepthBuffer;
-          else if ( 2 == bufferChoice )
-            g_DebugMode |= (int)DeferredDebugModes::Normals;
-          else if ( 3 == bufferChoice )
-            g_DebugMode |= (int)DeferredDebugModes::Shadows;
-          else if ( 4 == bufferChoice )
-            g_DebugMode |= (int)DeferredDebugModes::SSAO;
-          else if ( 5 == bufferChoice )
-            g_DebugMode |= (int)DeferredDebugModes::SpecularIBL;
-          else if ( 6 == bufferChoice )
-            g_DebugMode |= (int)DeferredDebugModes::MaterialParams;
-
-          if ( showWires )
-            g_DebugMode |= (int)DeferredDebugModes::Wires;
-        }
-      }
-
-      _Renderer -> SetDebugMode(g_DebugMode);
-    }
-
-    if ( ImGui::CollapsingHeader("Camera") )
-    {
-      ImGui::Text("Position : %f, %f, %f", _Scene -> GetCamera().GetPos().x, _Scene -> GetCamera().GetPos().y, _Scene -> GetCamera().GetPos().z);
-      ImGui::Text("Pivot    : %f, %f, %f", _Scene -> GetCamera().GetPivot().x, _Scene -> GetCamera().GetPivot().y, _Scene -> GetCamera().GetPivot().z);
-      ImGui::Text("Radius   : %f", _Scene -> GetCamera().GetRadius());
-
-      float fov = _Scene -> GetCamera().GetFOVInDegrees();
-      if ( ImGui::SliderFloat( "FOV", &fov, 5.f, 150.f ) )
-      {
-        _Scene -> GetCamera().SetFOVInDegrees(fov);
-        _Renderer -> Notify(DirtyState::SceneCamera);
-      }
-
-      if ((RendererType::SoftwareRasterizer == _RendererType) || ( RendererType::OpenGLRasterizer == _RendererType ) )
-      {
-        float zNear = 0.f, zFar = 0.f;
-        _Scene -> GetCamera().GetZNearFar(zNear, zFar);
-        float zVal = zNear;
-        if ( ImGui::SliderFloat("zNear", &zVal, 0.01f, std::min(10.f, zFar)) )
-        {
-          zNear = zVal;
-          _Scene -> GetCamera().SetZNearFar(zNear, zFar);
-          _Renderer -> Notify(DirtyState::SceneCamera);
-        }
-
-        zVal = zFar;
-        if ( ImGui::SliderFloat("zFar", &zVal, zNear + 0.01f, 10000.f) )
-        {
-          zFar = zVal;
-          _Scene -> GetCamera().SetZNearFar(zNear, zFar);
-          _Renderer -> Notify(DirtyState::SceneCamera);
-        }
-      }
-
-      if ( RendererType::PathTracer == _RendererType )
-      {
-        float focalDist = _Scene -> GetCamera().GetFocalDist();
-        //float fStop = ( _Scene -> GetCamera().GetAperture() > 0.f ) ? ( focalDist / _Scene -> GetCamera().GetAperture() ) : ( 1.4f );
-        if ( ImGui::SliderFloat( "Focal distance", &focalDist, 0.1f, 10.f ) )
-        {
-          _Scene -> GetCamera().SetFocalDist(focalDist);
-          _Renderer -> Notify(DirtyState::SceneCamera);
-        }
-
-        static float FStopValue[] = { 0.f, 1.f, 1.4f, 2.f, 2.8f, 4.f, 5.6f, 8.f, 11.f, 16.f, 22.f, 32.f, 45.f, 64.f };
-        static const char * FStopModes[] = { "INFINITE", "1.0", "1.4", "2.0", "2.8", "4.0", "5.6", "8.0", "11.0", "16.0", "22.0", "32.0", "45.0", "64.0" };
-        if ( ImGui::Combo( "FStop", &g_FStopMode, FStopModes, 14 ) )
-        {
-          float aperture = ( g_FStopMode > 0 ) ? ( focalDist / FStopValue[g_FStopMode] ) : ( 0.f );
-          _Scene -> GetCamera().SetAperture(aperture);
-          _Renderer -> Notify(DirtyState::SceneCamera);
-        }
-      }
-
-      if ( ImGui::Button( "Reset" ) )
-      {
-        _Scene -> SetCamera(_DefaultCam);
-        _Renderer -> Notify(DirtyState::SceneCamera);
-      }
-    }
-
+    DrawRenderStatsUI();
+    DrawSettingsUI();
+    DrawCameraUI();
     DrawMeshInstanceUI();
-
-    if ( ImGui::CollapsingHeader("Background") )
-    {
-      if ( ImGui::Checkbox( "Show background", &_Settings._EnableBackGround ) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-
-      float rgb[3] = { _Settings._BackgroundColor.r, _Settings._BackgroundColor.g, _Settings._BackgroundColor.b };
-      if ( ImGui::ColorEdit3("Background", rgb) )
-      {
-        _Settings._BackgroundColor = { rgb[0], rgb[1], rgb[2] };
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      }
-
-      if ( ImGui::Checkbox("Environment mapping", &_Settings._EnableSkybox) )
-      {
-        if ( ( _CurBackgroundId < 0 ) && _BackgroundNames.size() )
-        {
-          _CurBackgroundId = 0;
-          _ReloadBackground = true;
-        }
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      }
-
-      if ( _Settings._EnableSkybox )
-      {
-        if ( ImGui::SliderFloat("Env map rotation", &_Settings._SkyBoxRotation, 0.f, 360.f) )
-          _Renderer -> Notify(DirtyState::RenderSettings);
-      }
-
-      if ( _Settings._EnableSkybox && _BackgroundNames.size() && ( _CurBackgroundId >= 0 ) )
-      {
-        int selectedBgdId = _CurBackgroundId;
-        if ( ImGui::Combo( "Background selection", &selectedBgdId, _BackgroundNames.data(), static_cast<int>(_BackgroundNames.size()) ) )
-        {
-          if ( selectedBgdId != _CurBackgroundId )
-          {
-            _CurBackgroundId = selectedBgdId;
-            _ReloadBackground = true;
-          }
-          _Renderer -> Notify(DirtyState::RenderSettings);
-        }
-
-        if ( _Scene -> GetEnvMap().IsInitialized() && _Scene -> GetEnvMap().GetHandle() )
-        {
-          ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_Scene -> GetEnvMap().GetHandle());
-          ImGui::Image(texture, ImVec2(128, 128));
-        }
-      }
-    }
-
-   if ( ImGui::CollapsingHeader("Materials") )
-    {
-      std::vector<Material> & Materials =  _Scene -> GetMaterials();
-      std::vector<Texture*> & Textures = _Scene -> GetTextures();
-
-      static int selectedMaterial = -1;
-      if ( selectedMaterial >= _MaterialNames.size() )
-        selectedMaterial = -1;
-
-      bool newMaterial = false;
-      if ( ImGui::BeginListBox("##MaterialNames") )
-      {
-        for (int i = 0; i < _MaterialNames.size(); i++)
-        {
-          bool is_selected = ( selectedMaterial == i );
-          if (ImGui::Selectable(_MaterialNames[i].c_str(), is_selected))
-          {
-            selectedMaterial = i;
-            newMaterial = true;
-          }
-        }
-        ImGui::EndListBox();
-      }
-
-      if ( selectedMaterial >= 0 )
-      {
-        Material & curMat = Materials[selectedMaterial];
-
-        float rgb[3] = { curMat._Albedo.r, curMat._Albedo.g, curMat._Albedo.b };
-        if ( ImGui::ColorEdit3("Albedo", rgb) )
-        {
-          curMat._Albedo.r = rgb[0];
-          curMat._Albedo.g = rgb[1];
-          curMat._Albedo.b = rgb[2];
-          _Renderer -> Notify(DirtyState::SceneMaterials);
-        }
-
-        rgb[0] = curMat._Emission.r, rgb[1] = curMat._Emission.g, rgb[2] = curMat._Emission.b;
-        if ( ImGui::ColorEdit3("Emission", rgb) )
-        {
-          curMat._Emission.r = rgb[0];
-          curMat._Emission.g = rgb[1];
-          curMat._Emission.b = rgb[2];
-          _Renderer -> Notify(DirtyState::SceneMaterials);
-        }
-
-        if ( ImGui::SliderFloat("Metallic", &curMat._Metallic, 0.f, 1.f) )
-          _Renderer -> Notify(DirtyState::SceneMaterials);
-
-        if ( ImGui::SliderFloat("Roughness", &curMat._Roughness, 0.f, 1.f) )
-          _Renderer -> Notify(DirtyState::SceneMaterials);
-
-        if ( ImGui::SliderFloat("Reflectance", &curMat._Reflectance, 0.f, 1.f) )
-          _Renderer -> Notify(DirtyState::SceneMaterials);
-
-        if ( ImGui::SliderFloat("Subsurface", &curMat._Subsurface, 0.f, 1.f) )
-          _Renderer -> Notify(DirtyState::SceneMaterials);
-
-        if ( ImGui::SliderFloat("Sheen Tint", &curMat._SheenTint, 0.f, 1.f) )
-          _Renderer -> Notify(DirtyState::SceneMaterials);
-
-        if ( ImGui::SliderFloat("Anisotropic", &curMat._Anisotropic, 0.f, 1.f) )
-          _Renderer -> Notify(DirtyState::SceneMaterials);
-
-        if ( ImGui::SliderFloat("Specular Trans", &curMat._SpecTrans, 0.f, 1.f) )
-          _Renderer -> Notify(DirtyState::SceneMaterials);
-
-        if ( ImGui::SliderFloat("Specular Tint", &curMat._SpecTint, 0.f, 1.f) )
-          _Renderer -> Notify(DirtyState::SceneMaterials);
-
-        if ( ImGui::SliderFloat("Clearcoat", &curMat._Clearcoat, 0.f, 1.f) )
-          _Renderer -> Notify(DirtyState::SceneMaterials);
-
-        if ( ImGui::SliderFloat("Clearcoat Gloss", &curMat._ClearcoatGloss, 0.f, 1.f) )
-          _Renderer -> Notify(DirtyState::SceneMaterials);
-
-        if ( ImGui::SliderFloat("IOR", &curMat._IOR, 1.f, 3.f) )
-          _Renderer -> Notify(DirtyState::SceneMaterials);
-
-        static const char * ALPHA_MODES[] = { "Opaque", "Blend", "Mask" };
-        int alphaMode = (int)curMat._AlphaMode;
-        if ( ImGui::Combo( "Alpha mode", &alphaMode, ALPHA_MODES, 3 ) )
-        {
-          curMat._AlphaMode = (float)alphaMode;
-          _Renderer -> Notify( DirtyState::SceneMaterials );
-        }
-
-        if ( curMat._AlphaMode != 0.f )
-        {
-          if ( ImGui::SliderFloat("Opacity", &curMat._Opacity, 0.f, 1.f) )
-            _Renderer -> Notify(DirtyState::SceneMaterials);
-        }
-
-        if ( AlphaMode::Mask == (AlphaMode)curMat._AlphaMode )
-        {
-          if ( ImGui::SliderFloat("Alpha cutoff", &curMat._AlphaCutoff, 0.f, 1.f) )
-            _Renderer -> Notify(DirtyState::SceneMaterials);
-        }
-
-        if ( curMat._BaseColorTexId >= 0 )
-        {
-          Texture * basecolorTexture = Textures[static_cast<int>(curMat._BaseColorTexId)];
-          if ( basecolorTexture )
-          {
-            if ( newMaterial )
-            {
-              GLUtil::DeleteTEX(_AlbedoTEX);
-              if ( basecolorTexture -> GetUCData() )
-                GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, basecolorTexture -> GetWidth(), basecolorTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, basecolorTexture -> GetUCData(), _AlbedoTEX);
-              else if ( basecolorTexture -> GetFData() )
-                GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, basecolorTexture -> GetWidth(), basecolorTexture -> GetHeight(), GL_RGBA, GL_FLOAT, basecolorTexture -> GetFData(), _AlbedoTEX);
-            }
-
-            if ( _AlbedoTEX._Handle )
-            {
-              ImGui::Text("Base color :");
-              ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_AlbedoTEX._Handle);
-              ImGui::Image(texture, ImVec2(256, 256));
-            }
-          }
-        }
-
-        if ( curMat._MetallicRoughnessTexID >= 0 )
-        {
-          Texture * metallicRoughnessTexture = Textures[static_cast<int>(curMat._MetallicRoughnessTexID)];
-          if ( metallicRoughnessTexture )
-          {
-            if ( newMaterial )
-            {
-              GLUtil::DeleteTEX(_MetalRoughTEX);
-              if ( metallicRoughnessTexture -> GetUCData() )
-                GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, metallicRoughnessTexture -> GetWidth(), metallicRoughnessTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, metallicRoughnessTexture -> GetUCData(), _MetalRoughTEX);
-              else if ( metallicRoughnessTexture -> GetFData() )
-                GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, metallicRoughnessTexture -> GetWidth(), metallicRoughnessTexture -> GetHeight(), GL_RGBA, GL_FLOAT, metallicRoughnessTexture -> GetFData(), _MetalRoughTEX);
-            }
-
-            if ( _MetalRoughTEX._Handle )
-            {
-              ImGui::Text("Metallic Roughness :");
-              ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_MetalRoughTEX._Handle);
-              ImGui::Image(texture, ImVec2(256, 256));
-            }
-          }
-        }
-
-        if ( curMat._NormalMapTexID >= 0 )
-        {
-          Texture * normalMapTexture = Textures[static_cast<int>(curMat._NormalMapTexID)];
-          if ( normalMapTexture )
-          {
-            if ( newMaterial )
-            {
-              GLUtil::DeleteTEX(_NormalMapTEX);
-              if ( normalMapTexture -> GetUCData() )
-                GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, normalMapTexture -> GetWidth(), normalMapTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, normalMapTexture -> GetUCData(), _NormalMapTEX);
-              else if ( normalMapTexture -> GetFData() )
-                GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, normalMapTexture -> GetWidth(), normalMapTexture -> GetHeight(), GL_RGBA, GL_FLOAT, normalMapTexture -> GetFData(), _NormalMapTEX);
-            }
-
-            if ( _NormalMapTEX._Handle )
-            {
-              ImGui::Text("Normal map :");
-              ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_NormalMapTEX._Handle);
-              ImGui::Image(texture, ImVec2(256, 256));
-            }
-          }
-        }
-
-        if ( curMat._EmissionMapTexID >= 0 )
-        {
-          Texture * emissionMapTexture = Textures[static_cast<int>(curMat._EmissionMapTexID)];
-          if ( emissionMapTexture )
-          {
-            if ( newMaterial )
-            {
-              GLUtil::DeleteTEX(_EmissionMapTEX);
-              if ( emissionMapTexture -> GetUCData() )
-                GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, emissionMapTexture -> GetWidth(), emissionMapTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, emissionMapTexture -> GetUCData(), _EmissionMapTEX);
-              else if ( emissionMapTexture -> GetFData() )
-                GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, emissionMapTexture -> GetWidth(), emissionMapTexture -> GetHeight(), GL_RGBA, GL_FLOAT, emissionMapTexture -> GetFData(), _EmissionMapTEX);
-            }
-
-            if ( _EmissionMapTEX._Handle )
-            {
-              ImGui::Text("Emission map :");
-              ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_EmissionMapTEX._Handle);
-              ImGui::Image(texture, ImVec2(256, 256));
-            }
-          }
-        }
-      }
-    }
-
-    if ( ImGui::CollapsingHeader("Lights") )
-    {
-      if ( ImGui::Checkbox("Show lights", &_Settings._ShowLights) )
-        _Renderer -> Notify(DirtyState::SceneLights);
-
-      static int selectedLight = -1;
-      if ( ImGui::BeginListBox("##Lights") )
-      {
-        for (int i = 0; i < _Scene -> GetNbLights(); i++)
-        {
-          std::string lightName("Light#");
-          lightName += std::to_string(i);
-
-          bool is_selected = ( selectedLight == i );
-          if (ImGui::Selectable(lightName.c_str(), is_selected))
-          {
-            selectedLight = i;
-          }
-        }
-        ImGui::EndListBox();
-      }
-
-      if (ImGui::Button("Add light"))
-      {
-        Light newLight;
-        _Scene -> AddLight(newLight);
-        selectedLight = _Scene -> GetNbLights() - 1;
-        _Renderer -> Notify(DirtyState::SceneLights);
-      }
-      ImGui::SameLine();
-      if (ImGui::Button("Remove light"))
-      {
-        if ( selectedLight >= 0 )
-        {
-          _Scene -> RemoveLight( selectedLight );
-          selectedLight = -1;
-          _Renderer -> Notify(DirtyState::SceneLights);
-        }
-      }
-
-      if ( selectedLight >= 0 )
-      {
-        Light * curLight = _Scene -> GetLight(selectedLight);
-        if ( curLight )
-        {
-          const char * LightTypes[3] = { "Quad", "Sphere", "Distant" };
-
-          int lightType = (int)curLight -> _Type;
-          if ( ImGui::Combo("Type", &lightType, LightTypes, 3) )
-          {
-            if ( lightType != (int)curLight -> _Type )
-            {
-              curLight -> _Type = (float)lightType;
-              _Renderer -> Notify(DirtyState::SceneLights);
-            }
-          }
-
-          float pos[3] = { curLight -> _Pos.x, curLight -> _Pos.y, curLight -> _Pos.z };
-          if ( ImGui::InputFloat3("Position", pos) )
-          {
-            curLight -> _Pos.x = pos[0];
-            curLight -> _Pos.y = pos[1];
-            curLight -> _Pos.z = pos[2];
-            _Renderer -> Notify(DirtyState::SceneLights);
-          }
-
-          if ( ImGui::SliderFloat( "Intensity", &curLight -> _Intensity, 0.001f, 100.f ) )
-            _Renderer -> Notify(DirtyState::SceneLights);
-
-          float rgb[3] = { curLight -> _Emission.r, curLight -> _Emission.g, curLight -> _Emission.b };
-          if ( ImGui::ColorEdit3("Emission", rgb) )
-          {
-            curLight -> _Emission = Vec3( rgb[0], rgb[1], rgb[2] );
-            _Renderer -> Notify(DirtyState::SceneLights);
-          }
-
-          if ( LightType::SphereLight == (LightType) lightType )
-          {
-            if ( ImGui::SliderFloat("Light radius", &curLight -> _Radius, 0.001f, 1.f) )
-            {
-              curLight -> _Area = 4.0f * static_cast<float>(M_PI) * curLight -> _Radius * curLight -> _Radius;
-              _Renderer -> Notify(DirtyState::SceneLights);
-            }
-          }
-          else if ( LightType::RectLight == (LightType) lightType )
-          {
-            float dirU[3] = { curLight -> _DirU.x, curLight -> _DirU.y, curLight -> _DirU.z };
-            if ( ImGui::InputFloat3("DirU", dirU) )
-            {
-              curLight -> _DirU.x = dirU[0];
-              curLight -> _DirU.y = dirU[1];
-              curLight -> _DirU.z = dirU[2];
-              curLight -> _Area = glm::length(glm::cross(curLight -> _DirU, curLight -> _DirV));
-              _Renderer -> Notify(DirtyState::SceneLights);
-            }
-
-            float dirV[3] = { curLight -> _DirV.x, curLight -> _DirV.y, curLight -> _DirV.z };
-            if ( ImGui::InputFloat3("DirV", dirV) )
-            {
-              curLight -> _DirV.x = dirV[0];
-              curLight -> _DirV.y = dirV[1];
-              curLight -> _DirV.z = dirV[2];
-              curLight -> _Area = glm::length(glm::cross(curLight -> _DirU, curLight -> _DirV));
-              _Renderer -> Notify(DirtyState::SceneLights);
-            }
-          }
-        }
-      }
-    }
+    DrawBackgroundUI();
+    DrawMaterialsUI();
+    DrawLightsUI();
 
     ImGui::End();
   }
@@ -1091,6 +341,434 @@ void Test5::NotifyMeshInstanceEdited()
 {
   if ( _Renderer )
     _Renderer -> Notify(DirtyState::SceneInstances);
+}
+
+// ----------------------------------------------------------------------------
+// DrawRenderStatsUI
+// ----------------------------------------------------------------------------
+int Test5::DrawRenderStatsUI()
+{
+  if (ImGui::CollapsingHeader("Rendering stats"))
+  {
+    ImGui::Text("Window width : %d height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+    ImGui::Text("Render width : %d height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
+
+    ImGui::Text( "Render time           : %.3f ms/frame", _FrameTime * 1000. );
+
+    if ( RendererType::PathTracer == _RendererType )
+    {
+      ImGui::Text("Path trace time       : %.3f ms", _Renderer -> AsPathTracer() -> GetPathTraceTime() * 1000.);
+      ImGui::Text("Accumulate time       : %.3f ms", _Renderer -> AsPathTracer() -> GetAccumulateTime() * 1000.);
+      ImGui::Text("Denoise time          : %.3f ms", _Renderer -> AsPathTracer() -> GetDenoiseTime() * 1000.);
+      ImGui::Text("Render to screen time : %.3f ms", _Renderer -> AsPathTracer() -> GetRenderToScreenTime() * 1000.);
+
+      ImGui::Text("Frame number          : %d", _Renderer -> AsPathTracer() -> GetFrameNum());
+      ImGui::Text("Nb complete frames    : %d", _Renderer -> AsPathTracer() -> GetNbCompleteFrames());
+    }
+
+    if ( _Scene )
+    {
+      ImGui::Text("Nb vertices           : %d", (int)_Scene -> GetVertices().size());
+      ImGui::Text("Nb triangles          : %d", (int)_Scene -> GetIndices().size()/3);
+      ImGui::Text("Nb meshes instances   : %d", _Scene -> GetNbMeshInstances());
+    }
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawSettingsUI
+// ----------------------------------------------------------------------------
+int Test5::DrawSettingsUI()
+{
+  if (ImGui::CollapsingHeader("Settings"))
+  {
+    static const char * YESorNO[] = { "No", "Yes" };
+
+    static bool vSync = false;
+    if ( ImGui::Checkbox( "VSync", &vSync ) )
+    {
+      if ( vSync )
+        glfwSwapInterval( 1 );
+      else
+        glfwSwapInterval( 0 );
+    }
+
+    if ( RendererType::SoftwareRasterizer == _RendererType )
+    {
+      int numThreads = _Settings._NbThreads;
+      if ( ImGui::SliderInt("Nb Threads", &numThreads, 1, g_NbThreadsMax) && ( numThreads > 0 ) )
+      {
+        _Settings._NbThreads = numThreads;
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      }
+
+      if (ImGui::Checkbox("Tiled rendering", &_Settings._TiledRendering))
+      {
+        _Renderer->Notify(DirtyState::RenderSettings);
+      }
+
+      SoftwareRasterizer * softwareRasterizer = _Renderer -> AsSoftwareRasterizer();
+      if ( softwareRasterizer )
+      {
+        if (_Settings._TiledRendering)
+        {
+          static const char * TILE_SIZE[] = { "16", "32", "64", "128", "256", "512" };
+
+          unsigned int tileSize = softwareRasterizer -> GetTileSize();
+          tileSize = tileSize >> 4;
+          int curIndex = 0;
+          while ( !(tileSize & 1) && ( curIndex < 5 ) )
+          {
+            tileSize = tileSize >> 1;
+            curIndex++;
+          }
+
+          if ( ImGui::Combo( "Tile Size", &curIndex, TILE_SIZE, 6 ) )
+          {
+            softwareRasterizer -> SetTileSize(atoi(TILE_SIZE[curIndex]));
+            _Renderer -> Notify(DirtyState::RenderSettings);
+          }
+
+          if ( SIMDUtils::HasSIMDSupport() )
+          {
+            bool enableSIMD = softwareRasterizer -> GetEnableSIMD();
+            if (ImGui::Checkbox("Enable SIMD", &enableSIMD))
+            {
+              softwareRasterizer->SetEnableSIMD(enableSIMD);
+              _Renderer->Notify(DirtyState::RenderSettings);
+            }
+          }
+        }
+      }
+    }
+
+    int scale = _Settings._RenderScale;
+    if ( ImGui::SliderInt("Render scale", &scale, 5, 200) )
+    {
+      _Settings._RenderScale = scale;
+      _Renderer -> Notify(DirtyState::RenderSettings);
+    }
+
+    if ( RendererType::PathTracer == _RendererType )
+    {
+      if ( ImGui::SliderFloat( "Interactive res Ratio", &_Settings._LowResRatio, 0.05f, 1.f ) )
+      {
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      }
+
+      if ( ImGui::SliderInt( "SPP", &_Settings._NbSamplesPerPixel, 1, 10 ) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
+      if ( ImGui::SliderInt( "Bounces", &_Settings._Bounces, 1, 10 ) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
+      if ( ImGui::Checkbox( "Russian Roulette", &_Settings._RussianRoulette) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
+      if ( ImGui::Checkbox( "Accumulate", &_Settings._Accumulate ) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
+      if ( ImGui::Checkbox( "Tiled rendering", &_Settings._TiledRendering ) )
+      {
+        if ( _Settings._TiledRendering && ( ( _Settings._TileResolution.x <= 0 ) || ( _Settings._TileResolution.y <= 0 ) ) )
+          _Settings._TileResolution.x = _Settings._TileResolution.y = 256;
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      }
+
+      if ( _Settings._TiledRendering )
+      {
+        int tileSize = _Settings._TileResolution.x;
+        if ( ImGui::SliderInt("Tile size", &tileSize, 64, 1024) )
+        {
+          _Settings._TileResolution = Vec2i(tileSize);
+          _Renderer -> Notify(DirtyState::RenderSettings);
+        }
+      }
+
+      if ( ImGui::Checkbox( "Denoise", &_Settings._Denoise ) )
+      {}
+
+      if ( _Settings._Denoise )
+      {
+        static const char * DENOISING_METHODS[] = { "Bilateral", "Wavelet", "Edge-aware" };
+        int denoisingMethod = (int)_Settings._DenoisingMethod;
+        if ( ImGui::Combo( "Denoising method", &denoisingMethod, DENOISING_METHODS, 3 ) )
+        {
+          _Settings._DenoisingMethod = denoisingMethod;
+        }
+
+        if ( 0 == _Settings._DenoisingMethod )
+        {
+          if ( ImGui::SliderFloat( "Sigma spatial", &_Settings._DenoiserSigmaSpatial, 0.1f, 10.f ) )
+          {}
+
+          if ( ImGui::SliderFloat( "Sigma range", &_Settings._DenoiserSigmaRange, 0.01f, 1.f ) )
+          {}
+        }
+        else if ( 1 == _Settings._DenoisingMethod )
+        {
+          if ( ImGui::SliderInt( "Wavelet scale", (int*)&_Settings._DenoisingWaveletScale, 1, 5 ) )
+          {}
+
+          if ( ImGui::SliderFloat( "Threshold", &_Settings._DenoiserThreshold, .01f, 1.f ) )
+          {}
+        }
+        else if ( 2 == _Settings._DenoisingMethod )
+        {
+          if ( ImGui::SliderFloat( "Color phi", &_Settings._DenoiserColorPhi, 0.01f, 1.f ) )
+          {}
+
+          if ( ImGui::SliderFloat( "Normal phi", &_Settings._DenoiserNormalPhi, 0.01f, 1.f ) )
+          {}
+
+          if ( ImGui::SliderFloat( "Position phi", &_Settings._DenoiserPositionPhi, 0.01f, 1.f ) )
+          {}
+        }
+      }
+    }
+    else if ( RendererType::SoftwareRasterizer == _RendererType )
+    {
+      static const char * NEARESTorBILNEAR[] = { "Nearest", "Bilinear", "Trilinear" };
+      static const char * PHONGorFLATorPBR[]      = { "Flat", "Phong", "PBR" };
+
+      int sampling = (int)_Settings._Sampling;
+      if ( ImGui::Combo("Texture sampling", &sampling, NEARESTorBILNEAR, 3) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      _Settings._Sampling = (SamplingMode)sampling;
+
+      int shadingType = (int)_Settings._ShadingType;
+      if ( ImGui::Combo("Shading", &shadingType, PHONGorFLATorPBR, 3) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      _Settings._ShadingType = (ShadingType)shadingType;
+
+      int useWBuffer = !!_Settings._WBuffer;
+      if ( ImGui::Combo("W-Buffer", &useWBuffer, YESorNO, 2) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      _Settings._WBuffer = !!useWBuffer;
+
+      SoftwareRasterizer * softwareRasterizer = _Renderer -> AsSoftwareRasterizer();
+      if ( softwareRasterizer )
+      {
+        bool generateMips = softwareRasterizer ->  GetGenerateMipMaps();
+        if ( ImGui::Checkbox( "Generate mip maps", &generateMips ) )
+          softwareRasterizer -> SetGenerateMipMaps(generateMips);
+      }
+    }
+    else if ( RendererType::OpenGLRasterizer == _RendererType )
+    {
+      DeferredRenderer * deferredRenderer = _Renderer -> AsDeferredRenderer();
+      if ( deferredRenderer )
+      {
+        bool generateMips = deferredRenderer ->  GetGenerateMipMaps();
+        if ( ImGui::Checkbox( "Generate mip maps", &generateMips ) )
+          deferredRenderer -> SetGenerateMipMaps(generateMips);
+
+        int anisoLevel = deferredRenderer -> GetAnisotropicLevel();
+        if ( ImGui::SliderInt( "Anisotropic level", &anisoLevel, 1, 16 ) )
+          deferredRenderer -> SetAnisotropicLevel(anisoLevel);
+
+        if ( ImGui::Checkbox( "Shadow mapping", &_Settings._ShadowMapping ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        int shadowMapResolution = _Settings._ShadowMapResolution;
+        if ( ImGui::SliderInt( "Shadow map resolution", &shadowMapResolution, 256, 4096 ) )
+        {
+          shadowMapResolution = std::max(256, ( shadowMapResolution / 64 ) * 64);
+          _Settings._ShadowMapResolution = shadowMapResolution;
+          _Renderer -> Notify(DirtyState::RenderSettings);
+        }
+
+        if ( ImGui::SliderFloat( "Shadow bias", &_Settings._ShadowBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "Shadow far plane", &_Settings._ShadowFar, 1.f, 500.f ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::Checkbox( "SSAO", &_Settings._SSAO ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::Checkbox( "SSAO blur", &_Settings._SSAOBlur ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "SSAO radius", &_Settings._SSAORadius, 0.05f, 5.f, "%.3f", ImGuiSliderFlags_Logarithmic ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "SSAO bias", &_Settings._SSAOBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "SSAO intensity", &_Settings._SSAOIntensity, 0.f, 3.f ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        int ssaoKernelSize = _Settings._SSAOKernelSize;
+        if ( ImGui::SliderInt( "SSAO kernel size", &ssaoKernelSize, 4, 32 ) )
+        {
+          _Settings._SSAOKernelSize = std::max(4, std::min(32, ssaoKernelSize));
+          _Renderer -> Notify(DirtyState::RenderSettings);
+        }
+
+        if ( ImGui::Checkbox( "Specular IBL", &_Settings._SpecularIBL ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "IBL intensity", &_Settings._SpecularIBLIntensity, 0.f, 3.f ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::Checkbox( "Transparency", &_Settings._Transparency ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+      }
+    }
+
+    if ( ImGui::Checkbox( "FXAA", &_Settings._FXAA ) )
+    {}
+
+    if ( ImGui::Checkbox( "Tone mapping", &_Settings._ToneMapping ) )
+      _Renderer -> Notify(DirtyState::RenderSettings);
+
+    if ( _Settings._ToneMapping )
+    {
+      if ( ImGui::SliderFloat( "Gamma", &_Settings._Gamma, .5f, 3.f ) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
+      if ( ImGui::SliderFloat( "Exposure", &_Settings._Exposure, .1f, 5.f ) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+    }
+
+    if ( RendererType::PathTracer == _RendererType )
+    {
+      static const char * PATH_TRACE_DEBUG_MODES[] = { "Off", "Tiles", "Albedo", "Metalness", "Roughness", "Normals", "UV", "BLAS"};
+      if ( ImGui::Combo( "Debug view", &g_DebugMode, PATH_TRACE_DEBUG_MODES, 8 ) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+    }
+    else if ( ( RendererType::SoftwareRasterizer == _RendererType ) || ( RendererType::OpenGLRasterizer == _RendererType ) )
+    {
+      g_DebugMode = 0;
+
+      static const char * COLORorDEPTHorNORMALS[] = { "Color", "Depth", "Normals" };
+      static const char * COLORorDEPTHorNORMALSorSHADOWSorSSAO[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params" };
+
+      static int bufferChoice = 0;
+      int maxBufferChoice = ( RendererType::OpenGLRasterizer == _RendererType ) ? ( 7 ) : ( 3 );
+      if ( ( RendererType::SoftwareRasterizer == _RendererType ) && ( bufferChoice > 2 ) )
+        bufferChoice = 0;
+
+      if ( ImGui::Combo("Buffer", &bufferChoice, ( RendererType::OpenGLRasterizer == _RendererType ) ? ( COLORorDEPTHorNORMALSorSHADOWSorSSAO ) : ( COLORorDEPTHorNORMALS ), maxBufferChoice ) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
+      static int showWires = 0;
+      if ( ImGui::Combo("Show wires", &showWires, YESorNO, 2) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
+      if ( RendererType::SoftwareRasterizer == _RendererType )
+      {
+        if ( 0 == bufferChoice )
+          g_DebugMode |= (int)RasterDebugModes::ColorBuffer;
+        else if ( 1 == bufferChoice )
+          g_DebugMode |= (int)RasterDebugModes::DepthBuffer;
+        else if ( 2 == bufferChoice )
+          g_DebugMode |= (int)RasterDebugModes::Normals;
+
+        if ( showWires )
+          g_DebugMode |= (int)RasterDebugModes::Wires;
+      }
+      else if ( RendererType::OpenGLRasterizer == _RendererType )
+      {
+        _Settings._ShowShadowMap = ( 3 == bufferChoice );
+
+        if ( 0 == bufferChoice )
+          g_DebugMode |= (int)DeferredDebugModes::ColorBuffer;
+        else if ( 1 == bufferChoice )
+          g_DebugMode |= (int)DeferredDebugModes::DepthBuffer;
+        else if ( 2 == bufferChoice )
+          g_DebugMode |= (int)DeferredDebugModes::Normals;
+        else if ( 3 == bufferChoice )
+          g_DebugMode |= (int)DeferredDebugModes::Shadows;
+        else if ( 4 == bufferChoice )
+          g_DebugMode |= (int)DeferredDebugModes::SSAO;
+        else if ( 5 == bufferChoice )
+          g_DebugMode |= (int)DeferredDebugModes::SpecularIBL;
+        else if ( 6 == bufferChoice )
+          g_DebugMode |= (int)DeferredDebugModes::MaterialParams;
+
+        if ( showWires )
+          g_DebugMode |= (int)DeferredDebugModes::Wires;
+      }
+    }
+
+    _Renderer -> SetDebugMode(g_DebugMode);
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawCameraUI
+// ----------------------------------------------------------------------------
+int Test5::DrawCameraUI()
+{
+  if ( ImGui::CollapsingHeader("Camera") )
+  {
+    ImGui::Text("Position : %f, %f, %f", _Scene -> GetCamera().GetPos().x, _Scene -> GetCamera().GetPos().y, _Scene -> GetCamera().GetPos().z);
+    ImGui::Text("Pivot    : %f, %f, %f", _Scene -> GetCamera().GetPivot().x, _Scene -> GetCamera().GetPivot().y, _Scene -> GetCamera().GetPivot().z);
+    ImGui::Text("Radius   : %f", _Scene -> GetCamera().GetRadius());
+
+    float fov = _Scene -> GetCamera().GetFOVInDegrees();
+    if ( ImGui::SliderFloat( "FOV", &fov, 5.f, 150.f ) )
+    {
+      _Scene -> GetCamera().SetFOVInDegrees(fov);
+      _Renderer -> Notify(DirtyState::SceneCamera);
+    }
+
+    if ((RendererType::SoftwareRasterizer == _RendererType) || ( RendererType::OpenGLRasterizer == _RendererType ) )
+    {
+      float zNear = 0.f, zFar = 0.f;
+      _Scene -> GetCamera().GetZNearFar(zNear, zFar);
+      float zVal = zNear;
+      if ( ImGui::SliderFloat("zNear", &zVal, 0.01f, std::min(10.f, zFar)) )
+      {
+        zNear = zVal;
+        _Scene -> GetCamera().SetZNearFar(zNear, zFar);
+        _Renderer -> Notify(DirtyState::SceneCamera);
+      }
+
+      zVal = zFar;
+      if ( ImGui::SliderFloat("zFar", &zVal, zNear + 0.01f, 10000.f) )
+      {
+        zFar = zVal;
+        _Scene -> GetCamera().SetZNearFar(zNear, zFar);
+        _Renderer -> Notify(DirtyState::SceneCamera);
+      }
+    }
+
+    if ( RendererType::PathTracer == _RendererType )
+    {
+      float focalDist = _Scene -> GetCamera().GetFocalDist();
+      //float fStop = ( _Scene -> GetCamera().GetAperture() > 0.f ) ? ( focalDist / _Scene -> GetCamera().GetAperture() ) : ( 1.4f );
+      if ( ImGui::SliderFloat( "Focal distance", &focalDist, 0.1f, 10.f ) )
+      {
+        _Scene -> GetCamera().SetFocalDist(focalDist);
+        _Renderer -> Notify(DirtyState::SceneCamera);
+      }
+
+      static float FStopValue[] = { 0.f, 1.f, 1.4f, 2.f, 2.8f, 4.f, 5.6f, 8.f, 11.f, 16.f, 22.f, 32.f, 45.f, 64.f };
+      static const char * FStopModes[] = { "INFINITE", "1.0", "1.4", "2.0", "2.8", "4.0", "5.6", "8.0", "11.0", "16.0", "22.0", "32.0", "45.0", "64.0" };
+      if ( ImGui::Combo( "FStop", &g_FStopMode, FStopModes, 14 ) )
+      {
+        float aperture = ( g_FStopMode > 0 ) ? ( focalDist / FStopValue[g_FStopMode] ) : ( 0.f );
+        _Scene -> GetCamera().SetAperture(aperture);
+        _Renderer -> Notify(DirtyState::SceneCamera);
+      }
+    }
+
+    if ( ImGui::Button( "Reset" ) )
+    {
+      _Scene -> SetCamera(_DefaultCam);
+      _Renderer -> Notify(DirtyState::SceneCamera);
+    }
+  }
+
+  return 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -1168,6 +846,382 @@ int Test5::DrawMeshInstanceUI()
     }
 
     ImGui::Text("Ctrl + Left Click selects the nearest mesh instance.");
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawBackgroundUI
+// ----------------------------------------------------------------------------
+int Test5::DrawBackgroundUI()
+{
+  if ( ImGui::CollapsingHeader("Background") )
+  {
+    if ( ImGui::Checkbox( "Show background", &_Settings._EnableBackGround ) )
+      _Renderer -> Notify(DirtyState::RenderSettings);
+
+    float rgb[3] = { _Settings._BackgroundColor.r, _Settings._BackgroundColor.g, _Settings._BackgroundColor.b };
+    if ( ImGui::ColorEdit3("Background", rgb) )
+    {
+      _Settings._BackgroundColor = { rgb[0], rgb[1], rgb[2] };
+      _Renderer -> Notify(DirtyState::RenderSettings);
+    }
+
+    if ( ImGui::Checkbox("Environment mapping", &_Settings._EnableSkybox) )
+    {
+      if ( ( _CurBackgroundId < 0 ) && _BackgroundNames.size() )
+      {
+        _CurBackgroundId = 0;
+        _ReloadBackground = true;
+      }
+      _Renderer -> Notify(DirtyState::RenderSettings);
+    }
+
+    if ( _Settings._EnableSkybox )
+    {
+      if ( ImGui::SliderFloat("Env map rotation", &_Settings._SkyBoxRotation, 0.f, 360.f) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+    }
+
+    if ( _Settings._EnableSkybox && _BackgroundNames.size() && ( _CurBackgroundId >= 0 ) )
+    {
+      int selectedBgdId = _CurBackgroundId;
+      if ( ImGui::Combo( "Background selection", &selectedBgdId, _BackgroundNames.data(), static_cast<int>(_BackgroundNames.size()) ) )
+      {
+        if ( selectedBgdId != _CurBackgroundId )
+        {
+          _CurBackgroundId = selectedBgdId;
+          _ReloadBackground = true;
+        }
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      }
+
+      if ( _Scene -> GetEnvMap().IsInitialized() && _Scene -> GetEnvMap().GetHandle() )
+      {
+        ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_Scene -> GetEnvMap().GetHandle());
+        ImGui::Image(texture, ImVec2(128, 128));
+      }
+    }
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawMaterialsUI
+// ----------------------------------------------------------------------------
+int Test5::DrawMaterialsUI()
+{
+  if (ImGui::CollapsingHeader("Materials"))
+  {
+    std::vector<Material>& Materials = _Scene -> GetMaterials();
+    std::vector<Texture*>& Textures = _Scene -> GetTextures();
+
+    static int selectedMaterial = -1;
+    if (selectedMaterial >= _MaterialNames.size())
+      selectedMaterial = -1;
+
+    bool newMaterial = false;
+    if (ImGui::BeginListBox("##MaterialNames"))
+    {
+      for (int i = 0; i < _MaterialNames.size(); i++)
+      {
+        bool is_selected = (selectedMaterial == i);
+        if (ImGui::Selectable(_MaterialNames[i].c_str(), is_selected))
+        {
+          selectedMaterial = i;
+          newMaterial = true;
+        }
+      }
+      ImGui::EndListBox();
+    }
+
+    if (selectedMaterial >= 0)
+    {
+      Material& curMat = Materials[selectedMaterial];
+
+      float rgb[3] = { curMat._Albedo.r, curMat._Albedo.g, curMat._Albedo.b };
+      if (ImGui::ColorEdit3("Albedo", rgb))
+      {
+        curMat._Albedo.r = rgb[0];
+        curMat._Albedo.g = rgb[1];
+        curMat._Albedo.b = rgb[2];
+        _Renderer -> Notify(DirtyState::SceneMaterials);
+      }
+
+      rgb[0] = curMat._Emission.r, rgb[1] = curMat._Emission.g, rgb[2] = curMat._Emission.b;
+      if (ImGui::ColorEdit3("Emission", rgb))
+      {
+        curMat._Emission.r = rgb[0];
+        curMat._Emission.g = rgb[1];
+        curMat._Emission.b = rgb[2];
+        _Renderer -> Notify(DirtyState::SceneMaterials);
+      }
+
+      if (ImGui::SliderFloat("Metallic", &curMat._Metallic, 0.f, 1.f))
+        _Renderer -> Notify(DirtyState::SceneMaterials);
+
+      if (ImGui::SliderFloat("Roughness", &curMat._Roughness, 0.f, 1.f))
+        _Renderer -> Notify(DirtyState::SceneMaterials);
+
+      if (ImGui::SliderFloat("Reflectance", &curMat._Reflectance, 0.f, 1.f))
+        _Renderer -> Notify(DirtyState::SceneMaterials);
+
+      if (ImGui::SliderFloat("Subsurface", &curMat._Subsurface, 0.f, 1.f))
+        _Renderer -> Notify(DirtyState::SceneMaterials);
+
+      if (ImGui::SliderFloat("Sheen Tint", &curMat._SheenTint, 0.f, 1.f))
+        _Renderer -> Notify(DirtyState::SceneMaterials);
+
+      if (ImGui::SliderFloat("Anisotropic", &curMat._Anisotropic, 0.f, 1.f))
+        _Renderer -> Notify(DirtyState::SceneMaterials);
+
+      if (ImGui::SliderFloat("Specular Trans", &curMat._SpecTrans, 0.f, 1.f))
+        _Renderer -> Notify(DirtyState::SceneMaterials);
+
+      if (ImGui::SliderFloat("Specular Tint", &curMat._SpecTint, 0.f, 1.f))
+        _Renderer -> Notify(DirtyState::SceneMaterials);
+
+      if (ImGui::SliderFloat("Clearcoat", &curMat._Clearcoat, 0.f, 1.f))
+        _Renderer -> Notify(DirtyState::SceneMaterials);
+
+      if (ImGui::SliderFloat("Clearcoat Gloss", &curMat._ClearcoatGloss, 0.f, 1.f))
+        _Renderer -> Notify(DirtyState::SceneMaterials);
+
+      if (ImGui::SliderFloat("IOR", &curMat._IOR, 1.f, 3.f))
+        _Renderer -> Notify(DirtyState::SceneMaterials);
+
+      static const char* ALPHA_MODES[] = { "Opaque", "Blend", "Mask" };
+      int alphaMode = (int)curMat._AlphaMode;
+      if (ImGui::Combo("Alpha mode", &alphaMode, ALPHA_MODES, 3))
+      {
+        curMat._AlphaMode = (float)alphaMode;
+        _Renderer -> Notify(DirtyState::SceneMaterials);
+      }
+
+      if (curMat._AlphaMode != 0.f)
+      {
+        if (ImGui::SliderFloat("Opacity", &curMat._Opacity, 0.f, 1.f))
+          _Renderer -> Notify(DirtyState::SceneMaterials);
+      }
+
+      if (AlphaMode::Mask == (AlphaMode)curMat._AlphaMode)
+      {
+        if (ImGui::SliderFloat("Alpha cutoff", &curMat._AlphaCutoff, 0.f, 1.f))
+          _Renderer -> Notify(DirtyState::SceneMaterials);
+      }
+
+      if (curMat._BaseColorTexId >= 0)
+      {
+        Texture* basecolorTexture = Textures[static_cast<int>(curMat._BaseColorTexId)];
+        if (basecolorTexture)
+        {
+          if (newMaterial)
+          {
+            GLUtil::DeleteTEX(_AlbedoTEX);
+            if (basecolorTexture -> GetUCData())
+              GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, basecolorTexture -> GetWidth(), basecolorTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, basecolorTexture -> GetUCData(), _AlbedoTEX);
+            else if (basecolorTexture -> GetFData())
+              GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, basecolorTexture -> GetWidth(), basecolorTexture -> GetHeight(), GL_RGBA, GL_FLOAT, basecolorTexture -> GetFData(), _AlbedoTEX);
+          }
+
+          if (_AlbedoTEX._Handle)
+          {
+            ImGui::Text("Base color :");
+            ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_AlbedoTEX._Handle);
+            ImGui::Image(texture, ImVec2(256, 256));
+          }
+        }
+      }
+
+      if (curMat._MetallicRoughnessTexID >= 0)
+      {
+        Texture* metallicRoughnessTexture = Textures[static_cast<int>(curMat._MetallicRoughnessTexID)];
+        if (metallicRoughnessTexture)
+        {
+          if (newMaterial)
+          {
+            GLUtil::DeleteTEX(_MetalRoughTEX);
+            if (metallicRoughnessTexture -> GetUCData())
+              GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, metallicRoughnessTexture -> GetWidth(), metallicRoughnessTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, metallicRoughnessTexture -> GetUCData(), _MetalRoughTEX);
+            else if (metallicRoughnessTexture -> GetFData())
+              GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, metallicRoughnessTexture -> GetWidth(), metallicRoughnessTexture -> GetHeight(), GL_RGBA, GL_FLOAT, metallicRoughnessTexture -> GetFData(), _MetalRoughTEX);
+          }
+
+          if (_MetalRoughTEX._Handle)
+          {
+            ImGui::Text("Metallic Roughness :");
+            ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_MetalRoughTEX._Handle);
+            ImGui::Image(texture, ImVec2(256, 256));
+          }
+        }
+      }
+
+      if (curMat._NormalMapTexID >= 0)
+      {
+        Texture* normalMapTexture = Textures[static_cast<int>(curMat._NormalMapTexID)];
+        if (normalMapTexture)
+        {
+          if (newMaterial)
+          {
+            GLUtil::DeleteTEX(_NormalMapTEX);
+            if (normalMapTexture -> GetUCData())
+              GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, normalMapTexture -> GetWidth(), normalMapTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, normalMapTexture -> GetUCData(), _NormalMapTEX);
+            else if (normalMapTexture -> GetFData())
+              GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, normalMapTexture -> GetWidth(), normalMapTexture -> GetHeight(), GL_RGBA, GL_FLOAT, normalMapTexture -> GetFData(), _NormalMapTEX);
+          }
+
+          if (_NormalMapTEX._Handle)
+          {
+            ImGui::Text("Normal map :");
+            ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_NormalMapTEX._Handle);
+            ImGui::Image(texture, ImVec2(256, 256));
+          }
+        }
+      }
+
+      if (curMat._EmissionMapTexID >= 0)
+      {
+        Texture* emissionMapTexture = Textures[static_cast<int>(curMat._EmissionMapTexID)];
+        if (emissionMapTexture)
+        {
+          if (newMaterial)
+          {
+            GLUtil::DeleteTEX(_EmissionMapTEX);
+            if (emissionMapTexture -> GetUCData())
+              GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, emissionMapTexture -> GetWidth(), emissionMapTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, emissionMapTexture -> GetUCData(), _EmissionMapTEX);
+            else if (emissionMapTexture -> GetFData())
+              GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, emissionMapTexture -> GetWidth(), emissionMapTexture -> GetHeight(), GL_RGBA, GL_FLOAT, emissionMapTexture -> GetFData(), _EmissionMapTEX);
+          }
+
+          if (_EmissionMapTEX._Handle)
+          {
+            ImGui::Text("Emission map :");
+            ImTextureID texture = (ImTextureID)static_cast<uintptr_t>(_EmissionMapTEX._Handle);
+            ImGui::Image(texture, ImVec2(256, 256));
+          }
+        }
+      }
+    }
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawLightsUI
+// ----------------------------------------------------------------------------
+int Test5::DrawLightsUI()
+{
+  if ( ImGui::CollapsingHeader("Lights") )
+  {
+    if ( ImGui::Checkbox("Show lights", &_Settings._ShowLights) )
+      _Renderer -> Notify(DirtyState::SceneLights);
+
+    static int selectedLight = -1;
+    if ( ImGui::BeginListBox("##Lights") )
+    {
+      for (int i = 0; i < _Scene -> GetNbLights(); i++)
+      {
+        std::string lightName("Light#");
+        lightName += std::to_string(i);
+
+        bool is_selected = ( selectedLight == i );
+        if (ImGui::Selectable(lightName.c_str(), is_selected))
+        {
+          selectedLight = i;
+        }
+      }
+      ImGui::EndListBox();
+    }
+
+    if (ImGui::Button("Add light"))
+    {
+      Light newLight;
+      _Scene -> AddLight(newLight);
+      selectedLight = _Scene -> GetNbLights() - 1;
+      _Renderer -> Notify(DirtyState::SceneLights);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Remove light"))
+    {
+      if ( selectedLight >= 0 )
+      {
+        _Scene -> RemoveLight( selectedLight );
+        selectedLight = -1;
+        _Renderer -> Notify(DirtyState::SceneLights);
+      }
+    }
+
+    if ( selectedLight >= 0 )
+    {
+      Light * curLight = _Scene -> GetLight(selectedLight);
+      if ( curLight )
+      {
+        const char * LightTypes[3] = { "Quad", "Sphere", "Distant" };
+
+        int lightType = (int)curLight -> _Type;
+        if ( ImGui::Combo("Type", &lightType, LightTypes, 3) )
+        {
+          if ( lightType != (int)curLight -> _Type )
+          {
+            curLight -> _Type = (float)lightType;
+            _Renderer -> Notify(DirtyState::SceneLights);
+          }
+        }
+
+        float pos[3] = { curLight -> _Pos.x, curLight -> _Pos.y, curLight -> _Pos.z };
+        if ( ImGui::InputFloat3("Position", pos) )
+        {
+          curLight -> _Pos.x = pos[0];
+          curLight -> _Pos.y = pos[1];
+          curLight -> _Pos.z = pos[2];
+          _Renderer -> Notify(DirtyState::SceneLights);
+        }
+
+        if ( ImGui::SliderFloat( "Intensity", &curLight -> _Intensity, 0.001f, 100.f ) )
+          _Renderer -> Notify(DirtyState::SceneLights);
+
+        float rgb[3] = { curLight -> _Emission.r, curLight -> _Emission.g, curLight -> _Emission.b };
+        if ( ImGui::ColorEdit3("Emission", rgb) )
+        {
+          curLight -> _Emission = Vec3( rgb[0], rgb[1], rgb[2] );
+          _Renderer -> Notify(DirtyState::SceneLights);
+        }
+
+        if ( LightType::SphereLight == (LightType) lightType )
+        {
+          if ( ImGui::SliderFloat("Light radius", &curLight -> _Radius, 0.001f, 1.f) )
+          {
+            curLight -> _Area = 4.0f * static_cast<float>(M_PI) * curLight -> _Radius * curLight -> _Radius;
+            _Renderer -> Notify(DirtyState::SceneLights);
+          }
+        }
+        else if ( LightType::RectLight == (LightType) lightType )
+        {
+          float dirU[3] = { curLight -> _DirU.x, curLight -> _DirU.y, curLight -> _DirU.z };
+          if ( ImGui::InputFloat3("DirU", dirU) )
+          {
+            curLight -> _DirU.x = dirU[0];
+            curLight -> _DirU.y = dirU[1];
+            curLight -> _DirU.z = dirU[2];
+            curLight -> _Area = glm::length(glm::cross(curLight -> _DirU, curLight -> _DirV));
+            _Renderer -> Notify(DirtyState::SceneLights);
+          }
+
+          float dirV[3] = { curLight -> _DirV.x, curLight -> _DirV.y, curLight -> _DirV.z };
+          if ( ImGui::InputFloat3("DirV", dirV) )
+          {
+            curLight -> _DirV.x = dirV[0];
+            curLight -> _DirV.y = dirV[1];
+            curLight -> _DirV.z = dirV[2];
+            curLight -> _Area = glm::length(glm::cross(curLight -> _DirU, curLight -> _DirV));
+            _Renderer -> Notify(DirtyState::SceneLights);
+          }
+        }
+      }
+    }
   }
 
   return 0;
@@ -1260,71 +1314,6 @@ bool Test5::BuildPickingRay( double iMouseX, double iMouseY, Vec3 & oRayOrigin, 
 }
 
 // ----------------------------------------------------------------------------
-// IntersectRayAABB
-// ----------------------------------------------------------------------------
-bool Test5::IntersectRayAABB( const Vec3 & iRayOrigin, const Vec3 & iRayDir, const AABB<Vec3> & iBox, float & oHitT ) const
-{
-  float tMin = 0.f;
-  float tMax = std::numeric_limits<float>::max();
-
-  for ( int axis = 0; axis < 3; ++axis )
-  {
-    if ( std::abs(iRayDir[axis]) < 1e-8f )
-    {
-      if ( ( iRayOrigin[axis] < iBox._Low[axis] ) || ( iRayOrigin[axis] > iBox._High[axis] ) )
-        return false;
-      continue;
-    }
-
-    float invDir = 1.f / iRayDir[axis];
-    float t0 = ( iBox._Low[axis]  - iRayOrigin[axis] ) * invDir;
-    float t1 = ( iBox._High[axis] - iRayOrigin[axis] ) * invDir;
-    if ( t0 > t1 )
-      std::swap(t0, t1);
-
-    tMin = std::max(tMin, t0);
-    tMax = std::min(tMax, t1);
-    if ( tMin > tMax )
-      return false;
-  }
-
-  oHitT = tMin;
-  return true;
-}
-
-// ----------------------------------------------------------------------------
-// IntersectRayTriangle
-// ----------------------------------------------------------------------------
-bool Test5::IntersectRayTriangle( const Vec3 & iRayOrigin, const Vec3 & iRayDir, const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2, float & oHitT ) const
-{
-  const float epsilon = 1e-7f;
-  Vec3 edge1 = iV1 - iV0;
-  Vec3 edge2 = iV2 - iV0;
-  Vec3 pvec = glm::cross(iRayDir, edge2);
-  float det = glm::dot(edge1, pvec);
-  if ( std::abs(det) < epsilon )
-    return false;
-
-  float invDet = 1.f / det;
-  Vec3 tvec = iRayOrigin - iV0;
-  float u = glm::dot(tvec, pvec) * invDet;
-  if ( ( u < 0.f ) || ( u > 1.f ) )
-    return false;
-
-  Vec3 qvec = glm::cross(tvec, edge1);
-  float v = glm::dot(iRayDir, qvec) * invDet;
-  if ( ( v < 0.f ) || ( u + v > 1.f ) )
-    return false;
-
-  float t = glm::dot(edge2, qvec) * invDet;
-  if ( t <= epsilon )
-    return false;
-
-  oHitT = t;
-  return true;
-}
-
-// ----------------------------------------------------------------------------
 // PickMeshInstance
 // ----------------------------------------------------------------------------
 bool Test5::PickMeshInstance( double iMouseX, double iMouseY, int & oMeshInstanceID ) const
@@ -1359,7 +1348,7 @@ bool Test5::PickMeshInstance( double iMouseX, double iMouseY, int & oMeshInstanc
     Vec3 localDir = glm::normalize(Vec3(localDir4));
 
     float boxHitT = 0.f;
-    if ( !IntersectRayAABB(localOrigin, localDir, mesh -> GetBoundingBox(), boxHitT) )
+    if ( !MathUtil::IntersectRayAABB(localOrigin, localDir, mesh -> GetBoundingBox(), boxHitT) )
       continue;
 
     const std::vector<Vec3> & vertices = mesh -> GetVertices();
@@ -1373,7 +1362,7 @@ bool Test5::PickMeshInstance( double iMouseX, double iMouseY, int & oMeshInstanc
         continue;
 
       float triHitT = 0.f;
-      if ( IntersectRayTriangle(localOrigin, localDir, vertices[tri.x], vertices[tri.y], vertices[tri.z], triHitT) )
+      if ( MathUtil::IntersectRayTriangle(localOrigin, localDir, vertices[tri.x], vertices[tri.y], vertices[tri.z], triHitT) )
       {
         Vec3 localHit = localOrigin + localDir * triHitT;
         Vec3 worldHit = MathUtil::TransformPoint(localHit, inst._Transform);
