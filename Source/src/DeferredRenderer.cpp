@@ -179,6 +179,9 @@ int DeferredRenderer::Update()
   if ( _DirtyStates & ( (unsigned long)DirtyState::SceneMaterials | (unsigned long)DirtyState::SceneInstances ) )
     BuildDeferredDrawLists();
 
+  if ( _DirtyStates & (unsigned long)DirtyState::SceneInstances )
+    ComputeSceneBounds();
+
   UpdateShadowState();
   UpdateUniforms();
  

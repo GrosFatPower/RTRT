@@ -345,6 +345,21 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
   _Normals.clear();
   _UVMatID.clear();
   _Indices.clear();
+  _NbCompiledTex = 0;
+  _TextureArrayIDs.clear();
+  _TextureArray.clear();
+  _MeshBBoxes.clear();
+  _MeshIdxRange.clear();
+  _TLAS = GpuTLAS();
+  _TLASPackedTransforms.clear();
+  _TLASPackedMeshMatID.clear();
+  _BLASNodes.clear();
+  _BLASNodesRange.clear();
+  _BLASPackedIndices.clear();
+  _BLASPackedIndicesRange.clear();
+  _BLASPackedVertices.clear();
+  _BLASPackedNormals.clear();
+  _BLASPackedUVs.clear();
 
   // Geometry
   int vtxIndexOffset  = 0;

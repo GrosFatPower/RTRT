@@ -8,17 +8,21 @@
 #include "DeferredRenderer.h"
 #include "Util.h"
 #include "PathUtils.h"
+#include "Mesh.h"
 
 #include <string>
 #include <iostream>
 #include <thread>
+#include <limits>
 
 #include "imgui.h"
+#include "ImGuizmo.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
+#include "glm/gtc/type_ptr.hpp"
 
 namespace RTRT
 {
@@ -235,6 +239,7 @@ int Test5::DrawUI()
   ImGui_ImplOpenGL3_NewFrame();
   ImGui_ImplGlfw_NewFrame();
   ImGui::NewFrame();
+  ImGuizmo::BeginFrame();
 
   {
     ImGui::Begin("Test 5 : Viewer");
@@ -707,6 +712,8 @@ int Test5::DrawUI()
       }
     }
 
+    DrawMeshInstanceUI();
+
     if ( ImGui::CollapsingHeader("Background") )
     {
       if ( ImGui::Checkbox( "Show background", &_Settings._EnableBackGround ) )
@@ -1062,6 +1069,8 @@ int Test5::DrawUI()
     ImGui::End();
   }
 
+  DrawMeshInstanceGizmo();
+
   // Rendering
   ImGui::Render();
 
@@ -1073,6 +1082,312 @@ int Test5::DrawUI()
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
   return 0;
+}
+
+// ----------------------------------------------------------------------------
+// NotifyMeshInstanceEdited
+// ----------------------------------------------------------------------------
+void Test5::NotifyMeshInstanceEdited()
+{
+  if ( _Renderer )
+    _Renderer -> Notify(DirtyState::SceneInstances);
+}
+
+// ----------------------------------------------------------------------------
+// DrawMeshInstanceUI
+// ----------------------------------------------------------------------------
+int Test5::DrawMeshInstanceUI()
+{
+  if ( !_Scene )
+    return 0;
+
+  std::vector<MeshInstance> & meshInstances = _Scene -> GetMeshInstances();
+  if ( _SelectedMeshInstanceID >= static_cast<int>(meshInstances.size()) )
+    _SelectedMeshInstanceID = -1;
+
+  if ( ImGui::CollapsingHeader("Mesh Instances") )
+  {
+    ImGui::Checkbox("Enable gizmo", &_MeshGizmoEnabled);
+
+    const char * operations[] = { "Translate", "Rotate" };
+    ImGui::Combo("Operation", &_MeshGizmoOperation, operations, 2);
+
+    const char * modes[] = { "Local", "World" };
+    ImGui::Combo("Mode", &_MeshGizmoMode, modes, 2);
+
+    ImGui::Checkbox("Snap", &_MeshGizmoSnap);
+    if ( _MeshGizmoSnap )
+    {
+      ImGui::InputFloat("Translate snap", &_MeshGizmoTranslateSnap, 0.05f, 1.f, "%.3f");
+      ImGui::InputFloat("Rotate snap", &_MeshGizmoRotateSnap, 1.f, 15.f, "%.1f");
+    }
+
+    if ( ImGui::BeginListBox("##MeshInstances") )
+    {
+      for ( int i = 0; i < static_cast<int>(meshInstances.size()); ++i )
+      {
+        const MeshInstance & inst = meshInstances[i];
+        std::string instanceName = std::string("Instance #") + std::to_string(i);
+        if ( !inst._Filename.empty() )
+          instanceName += std::string(" : ") + inst._Filename;
+
+        bool isSelected = ( _SelectedMeshInstanceID == i );
+        if ( ImGui::Selectable(instanceName.c_str(), isSelected) )
+          _SelectedMeshInstanceID = i;
+      }
+      ImGui::EndListBox();
+    }
+
+    if ( _SelectedMeshInstanceID >= 0 )
+    {
+      MeshInstance & inst = meshInstances[_SelectedMeshInstanceID];
+
+      ImGui::Text("Mesh ID     : %d", inst._MeshID);
+      ImGui::Text("Material ID : %d", inst._MaterialID);
+
+      float translation[3] = { 0.f, 0.f, 0.f };
+      float rotation[3]    = { 0.f, 0.f, 0.f };
+      float scale[3]       = { 1.f, 1.f, 1.f };
+      ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(inst._Transform), translation, rotation, scale);
+
+      bool transformChanged = false;
+      transformChanged |= ImGui::InputFloat3("Translation", translation);
+      transformChanged |= ImGui::InputFloat3("Rotation", rotation);
+
+      if ( transformChanged )
+      {
+        ImGuizmo::RecomposeMatrixFromComponents(translation, rotation, scale, glm::value_ptr(inst._Transform));
+        NotifyMeshInstanceEdited();
+      }
+
+      if ( ImGui::Button("Reset transform") )
+      {
+        inst._Transform = Mat4x4(1.f);
+        NotifyMeshInstanceEdited();
+      }
+    }
+
+    ImGui::Text("Ctrl + Left Click selects the nearest mesh instance.");
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawMeshInstanceGizmo
+// ----------------------------------------------------------------------------
+int Test5::DrawMeshInstanceGizmo()
+{
+  if ( !_MeshGizmoEnabled || !_Scene || !_Renderer )
+    return 0;
+
+  std::vector<MeshInstance> & meshInstances = _Scene -> GetMeshInstances();
+  if ( ( _SelectedMeshInstanceID < 0 ) || ( _SelectedMeshInstanceID >= static_cast<int>(meshInstances.size()) ) )
+    return 0;
+
+  Mat4x4 view(1.f);
+  Mat4x4 proj(1.f);
+
+  Camera & cam = _Scene -> GetCamera();
+  cam.ComputeLookAtMatrix(view);
+
+  const float width  = static_cast<float>(std::max(1, _Settings._WindowResolution.x));
+  const float height = static_cast<float>(std::max(1, _Settings._WindowResolution.y));
+  cam.ComputePerspectiveProjMatrix(width / height, proj);
+
+  ImGuiIO & io = ImGui::GetIO();
+  ImGuizmo::SetDrawlist(ImGui::GetForegroundDrawList());
+  ImGuizmo::SetRect(0.f, 0.f, io.DisplaySize.x, io.DisplaySize.y);
+  ImGuizmo::SetOrthographic(false);
+
+  ImGuizmo::OPERATION operation = ( 0 == _MeshGizmoOperation ) ? ImGuizmo::TRANSLATE : ImGuizmo::ROTATE;
+  ImGuizmo::MODE mode = ( 0 == _MeshGizmoMode ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
+
+  float snap[3] = { 0.f, 0.f, 0.f };
+  const float * snapPtr = nullptr;
+  if ( _MeshGizmoSnap )
+  {
+    const float snapValue = ( ImGuizmo::TRANSLATE == operation ) ? _MeshGizmoTranslateSnap : _MeshGizmoRotateSnap;
+    snap[0] = snap[1] = snap[2] = snapValue;
+    snapPtr = snap;
+  }
+
+  MeshInstance & inst = meshInstances[_SelectedMeshInstanceID];
+  if ( ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), operation, mode, glm::value_ptr(inst._Transform), nullptr, snapPtr) )
+    NotifyMeshInstanceEdited();
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// BuildPickingRay
+// ----------------------------------------------------------------------------
+bool Test5::BuildPickingRay( double iMouseX, double iMouseY, Vec3 & oRayOrigin, Vec3 & oRayDir ) const
+{
+  if ( !_MainWindow || !_Scene )
+    return false;
+
+  int windowWidth = 0;
+  int windowHeight = 0;
+  glfwGetWindowSize(_MainWindow.get(), &windowWidth, &windowHeight);
+  if ( !windowWidth || !windowHeight || !_Settings._WindowResolution.x || !_Settings._WindowResolution.y )
+    return false;
+
+  const float mouseX = static_cast<float>(iMouseX) * static_cast<float>(_Settings._WindowResolution.x) / static_cast<float>(windowWidth);
+  const float mouseY = static_cast<float>(iMouseY) * static_cast<float>(_Settings._WindowResolution.y) / static_cast<float>(windowHeight);
+
+  const float ndcX = 2.f * mouseX / static_cast<float>(_Settings._WindowResolution.x) - 1.f;
+  const float ndcY = 1.f - 2.f * mouseY / static_cast<float>(_Settings._WindowResolution.y);
+
+  Mat4x4 view(1.f);
+  Mat4x4 proj(1.f);
+  Camera & cam = const_cast<Scene*>(_Scene.get()) -> GetCamera();
+  cam.ComputeLookAtMatrix(view);
+  cam.ComputePerspectiveProjMatrix(static_cast<float>(_Settings._WindowResolution.x) / static_cast<float>(_Settings._WindowResolution.y), proj);
+
+  Mat4x4 invViewProj = glm::inverse(proj * view);
+  Vec4 nearPoint = invViewProj * Vec4(ndcX, ndcY, -1.f, 1.f);
+  Vec4 farPoint  = invViewProj * Vec4(ndcX, ndcY,  1.f, 1.f);
+  if ( nearPoint.w != 0.f )
+    nearPoint /= nearPoint.w;
+  if ( farPoint.w != 0.f )
+    farPoint /= farPoint.w;
+
+  oRayOrigin = cam.GetPos();
+  oRayDir = glm::normalize(Vec3(farPoint) - oRayOrigin);
+
+  return glm::length(oRayDir) > 0.f;
+}
+
+// ----------------------------------------------------------------------------
+// IntersectRayAABB
+// ----------------------------------------------------------------------------
+bool Test5::IntersectRayAABB( const Vec3 & iRayOrigin, const Vec3 & iRayDir, const AABB<Vec3> & iBox, float & oHitT ) const
+{
+  float tMin = 0.f;
+  float tMax = std::numeric_limits<float>::max();
+
+  for ( int axis = 0; axis < 3; ++axis )
+  {
+    if ( std::abs(iRayDir[axis]) < 1e-8f )
+    {
+      if ( ( iRayOrigin[axis] < iBox._Low[axis] ) || ( iRayOrigin[axis] > iBox._High[axis] ) )
+        return false;
+      continue;
+    }
+
+    float invDir = 1.f / iRayDir[axis];
+    float t0 = ( iBox._Low[axis]  - iRayOrigin[axis] ) * invDir;
+    float t1 = ( iBox._High[axis] - iRayOrigin[axis] ) * invDir;
+    if ( t0 > t1 )
+      std::swap(t0, t1);
+
+    tMin = std::max(tMin, t0);
+    tMax = std::min(tMax, t1);
+    if ( tMin > tMax )
+      return false;
+  }
+
+  oHitT = tMin;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// IntersectRayTriangle
+// ----------------------------------------------------------------------------
+bool Test5::IntersectRayTriangle( const Vec3 & iRayOrigin, const Vec3 & iRayDir, const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2, float & oHitT ) const
+{
+  const float epsilon = 1e-7f;
+  Vec3 edge1 = iV1 - iV0;
+  Vec3 edge2 = iV2 - iV0;
+  Vec3 pvec = glm::cross(iRayDir, edge2);
+  float det = glm::dot(edge1, pvec);
+  if ( std::abs(det) < epsilon )
+    return false;
+
+  float invDet = 1.f / det;
+  Vec3 tvec = iRayOrigin - iV0;
+  float u = glm::dot(tvec, pvec) * invDet;
+  if ( ( u < 0.f ) || ( u > 1.f ) )
+    return false;
+
+  Vec3 qvec = glm::cross(tvec, edge1);
+  float v = glm::dot(iRayDir, qvec) * invDet;
+  if ( ( v < 0.f ) || ( u + v > 1.f ) )
+    return false;
+
+  float t = glm::dot(edge2, qvec) * invDet;
+  if ( t <= epsilon )
+    return false;
+
+  oHitT = t;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// PickMeshInstance
+// ----------------------------------------------------------------------------
+bool Test5::PickMeshInstance( double iMouseX, double iMouseY, int & oMeshInstanceID ) const
+{
+  oMeshInstanceID = -1;
+  if ( !_Scene )
+    return false;
+
+  Vec3 rayOrigin(0.f);
+  Vec3 rayDir(0.f);
+  if ( !BuildPickingRay(iMouseX, iMouseY, rayOrigin, rayDir) )
+    return false;
+
+  const std::vector<MeshInstance> & meshInstances = _Scene -> GetMeshInstances();
+  const std::vector<Mesh*> & meshes = _Scene -> GetMeshes();
+
+  float nearestDist = std::numeric_limits<float>::max();
+  for ( int instID = 0; instID < static_cast<int>(meshInstances.size()); ++instID )
+  {
+    const MeshInstance & inst = meshInstances[instID];
+    if ( ( inst._MeshID < 0 ) || ( inst._MeshID >= static_cast<int>(meshes.size()) ) )
+      continue;
+
+    Mesh * mesh = meshes[inst._MeshID];
+    if ( !mesh )
+      continue;
+
+    Mat4x4 invTransform = glm::inverse(inst._Transform);
+    Vec4 localOrigin4 = invTransform * Vec4(rayOrigin, 1.f);
+    Vec4 localDir4 = invTransform * Vec4(rayDir, 0.f);
+    Vec3 localOrigin = Vec3(localOrigin4);
+    Vec3 localDir = glm::normalize(Vec3(localDir4));
+
+    float boxHitT = 0.f;
+    if ( !IntersectRayAABB(localOrigin, localDir, mesh -> GetBoundingBox(), boxHitT) )
+      continue;
+
+    const std::vector<Vec3> & vertices = mesh -> GetVertices();
+    const std::vector<Vec3i> & indices = mesh -> GetIndices();
+    for ( const Vec3i & tri : indices )
+    {
+      if ( ( tri.x < 0 ) || ( tri.y < 0 ) || ( tri.z < 0 )
+        || ( tri.x >= static_cast<int>(vertices.size()) )
+        || ( tri.y >= static_cast<int>(vertices.size()) )
+        || ( tri.z >= static_cast<int>(vertices.size()) ) )
+        continue;
+
+      float triHitT = 0.f;
+      if ( IntersectRayTriangle(localOrigin, localDir, vertices[tri.x], vertices[tri.y], vertices[tri.z], triHitT) )
+      {
+        Vec3 localHit = localOrigin + localDir * triHitT;
+        Vec3 worldHit = MathUtil::TransformPoint(localHit, inst._Transform);
+        float worldDist = glm::length(worldHit - rayOrigin);
+        if ( worldDist < nearestDist )
+        {
+          nearestDist = worldDist;
+          oMeshInstanceID = instID;
+        }
+      }
+    }
+  }
+
+  return ( oMeshInstanceID >= 0 );
 }
 
 // ----------------------------------------------------------------------------
@@ -1089,6 +1404,20 @@ int Test5::ProcessInput()
 
     float deltaX = 0., deltaY = 0.;
     double mouseX = 0.f, mouseY = 0.f;
+
+    const bool ctrlDown = ( glfwGetKey(_MainWindow.get(), GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS )
+                       || ( glfwGetKey(_MainWindow.get(), GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS );
+    if ( ctrlDown
+      && _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1, mouseX, mouseY)
+      && !ImGui::GetIO().WantCaptureMouse
+      && !ImGuizmo::IsOver()
+      && !ImGuizmo::IsUsing() )
+    {
+      int pickedInstance = -1;
+      if ( PickMeshInstance(mouseX, mouseY, pickedInstance) )
+        _SelectedMeshInstanceID = pickedInstance;
+    }
+
      // RIGHT CLICK
     if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_2, mouseX, mouseY) )
     {
@@ -1215,6 +1544,7 @@ int Test5::InitializeScene()
     return 1;
   }
   _Scene.reset(newScene);
+  _SelectedMeshInstanceID = -1;
 
   // Scene should contain at least one light
   //Light * firstLight = _Scene -> GetLight(0);

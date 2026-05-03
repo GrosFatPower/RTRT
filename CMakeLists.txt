@@ -134,6 +134,7 @@ target_include_directories(${EXE_NAME}
   PUBLIC ${CMAKE_SOURCE_DIR}/Source/src
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glfw/include
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/imgui
+  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/imguizmo
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/stb
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glm
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinyobjloader
@@ -152,6 +153,7 @@ if(APPLE)
   target_link_libraries(${EXE_NAME}
     glfw
     imgui
+    imguizmo
     ${GLEW_LIBRARIES}
     ${OPENGL_LIBRARIES}
     ${COCOA_LIBRARY} 
@@ -162,6 +164,7 @@ else()
   target_link_libraries(${EXE_NAME}
     glfw
     imgui
+    imguizmo
     ${GLEW_LIBRARIES}
     ${OPENGL_LIBRARIES}
   )

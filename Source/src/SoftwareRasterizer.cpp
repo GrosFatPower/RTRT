@@ -185,6 +185,13 @@ int SoftwareRasterizer::Update()
   if (_DirtyStates & (unsigned long)DirtyState::SceneEnvMap)
     this->ReloadEnvMap();
 
+  if (_DirtyStates & (unsigned long)DirtyState::SceneInstances)
+  {
+    if ( 0 != this->ReloadScene() )
+      return 1;
+    this->ReloadEnvMap();
+  }
+
   this->UpdateImageBuffer();
 
   this->UpdateTextures();

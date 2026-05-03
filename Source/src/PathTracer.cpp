@@ -43,7 +43,7 @@ PathTracer::~PathTracer()
   GLUtil::DeleteFBO(_RenderTargetTileFBO);
   GLUtil::DeleteFBO(_AccumulateFBO);
 
-  UnloadScene();
+  UnloadScene( true );
 }
 
 // ----------------------------------------------------------------------------
@@ -93,6 +93,12 @@ int PathTracer::Update()
 
   if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
     this -> ResizeRenderTarget();
+
+  if ( _DirtyStates & (unsigned long)DirtyState::SceneInstances )
+  {
+    if ( 0 != this -> ReloadScene() )
+      return 1;
+  }
 
   if ( _DirtyStates & (unsigned long)DirtyState::SceneEnvMap )
     this -> ReloadEnvMap();
@@ -901,7 +907,7 @@ int PathTracer::RecompileShaders()
 // ----------------------------------------------------------------------------
 // UnloadScene
 // ----------------------------------------------------------------------------
-int PathTracer::UnloadScene()
+int PathTracer::UnloadScene( bool iDeleteOutputTextures )
 {
   _NbTriangles = 0;
   _NbMeshInstances = 0;
@@ -923,12 +929,16 @@ int PathTracer::UnloadScene()
   GLUtil::DeleteTBO(_BLASPackedNormalsTBO);
   GLUtil::DeleteTBO(_BLASPackedUVsTBO);
 
-  GLUtil::DeleteTEX(_DenoisedTEX);
   GLUtil::DeleteTEX(_TexArrayTEX);
   GLUtil::DeleteTEX(_MaterialsTEX);
   GLUtil::DeleteTEX(_TLASTransformsIDTEX);
-  GLUtil::DeleteTEX(_EnvMapTEX);
-  GLUtil::DeleteTEX(_EnvMapCDFTEX);
+
+  if ( iDeleteOutputTextures )
+  {
+    GLUtil::DeleteTEX(_DenoisedTEX);
+    GLUtil::DeleteTEX(_EnvMapTEX);
+    GLUtil::DeleteTEX(_EnvMapCDFTEX);
+  }
 
   _FrameNum = 0;
 

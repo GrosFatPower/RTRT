@@ -82,7 +82,7 @@ protected:
   int InitializeFrameBuffers();
   int RecompileShaders();
 
-  int UnloadScene();
+  int UnloadScene( bool iDeleteOutputTextures = false );
   int ReloadScene();
   int ReloadEnvMap();
 

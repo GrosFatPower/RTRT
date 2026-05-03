@@ -65,6 +65,15 @@ protected:
   int UpdateCPUTime();
   void SyncFramebufferResolution( bool iNotifyRenderer = false );
 
+  int DrawMeshInstanceUI();
+  int DrawMeshInstanceGizmo();
+  void NotifyMeshInstanceEdited();
+
+  bool PickMeshInstance( double iMouseX, double iMouseY, int & oMeshInstanceID ) const;
+  bool BuildPickingRay( double iMouseX, double iMouseY, Vec3 & oRayOrigin, Vec3 & oRayDir ) const;
+  bool IntersectRayAABB( const Vec3 & iRayOrigin, const Vec3 & iRayDir, const AABB<Vec3> & iBox, float & oHitT ) const;
+  bool IntersectRayTriangle( const Vec3 & iRayOrigin, const Vec3 & iRayDir, const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2, float & oHitT ) const;
+
 protected:
 
   std::unique_ptr<Scene>    _Scene;
@@ -102,6 +111,15 @@ protected:
 
   bool                       _RenderToFile = false;
   std::filesystem::path      _CaptureOutputPath;
+
+  // Mesh instance editor
+  int                        _SelectedMeshInstanceID = -1;
+  bool                       _MeshGizmoEnabled       = true;
+  int                        _MeshGizmoOperation     = 0;
+  int                        _MeshGizmoMode          = 0;
+  bool                       _MeshGizmoSnap          = false;
+  float                      _MeshGizmoTranslateSnap = 0.25f;
+  float                      _MeshGizmoRotateSnap    = 15.f;
 };
 
 }
