@@ -1394,19 +1394,6 @@ int Test5::ProcessInput()
     float deltaX = 0., deltaY = 0.;
     double mouseX = 0.f, mouseY = 0.f;
 
-    const bool ctrlDown = ( glfwGetKey(_MainWindow.get(), GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS )
-                       || ( glfwGetKey(_MainWindow.get(), GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS );
-    if ( ctrlDown
-      && _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1, mouseX, mouseY)
-      && !ImGui::GetIO().WantCaptureMouse
-      && !ImGuizmo::IsOver()
-      && !ImGuizmo::IsUsing() )
-    {
-      int pickedInstance = -1;
-      if ( PickMeshInstance(mouseX, mouseY, pickedInstance) )
-        _SelectedMeshInstanceID = pickedInstance;
-    }
-
      // RIGHT CLICK
     if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_2, mouseX, mouseY) )
     {
@@ -1510,6 +1497,21 @@ int Test5::ProcessInput()
       else
         _Scene -> GetCamera().OffsetOrientations(static_cast<float>(-_DeltaTime * Velocity[1]), 0.f);
       _Renderer -> Notify(DirtyState::SceneCamera);
+    }
+
+    if ( _KeyInput.IsKeyDown(GLFW_KEY_LEFT_CONTROL)
+      || _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_CONTROL) )
+    {
+      double mouseX = 0.f, mouseY = 0.f;
+      if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1, mouseX, mouseY)
+        && !ImGui::GetIO().WantCaptureMouse
+        && !ImGuizmo::IsOver()
+        && !ImGuizmo::IsUsing() )
+      {
+        int pickedInstance = -1;
+        if ( PickMeshInstance(mouseX, mouseY, pickedInstance) )
+          _SelectedMeshInstanceID = pickedInstance;
+      }
     }
   }
 
