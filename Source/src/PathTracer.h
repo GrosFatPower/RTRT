@@ -84,7 +84,12 @@ protected:
 
   int UnloadScene( bool iDeleteOutputTextures = false );
   int ReloadScene();
+  int ReloadSceneInstances();
   int ReloadEnvMap();
+
+  int UploadTLASData();
+  int UploadTLASTransforms();
+  int UploadOrCreateTBO( GLTextureBuffer & ioTBO, GLsizeiptr iSize, const void * iData, GLenum iInternalformat );
 
   int UpdatePathTraceUniforms();
   int UpdateAccumulateUniforms();

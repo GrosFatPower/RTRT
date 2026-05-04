@@ -80,6 +80,23 @@ static void InitializeTBO( GLTextureBuffer & ioTBO, GLsizeiptr iSize, const void
   glTexBuffer(GL_TEXTURE_BUFFER, iInternalformat, ioTBO._Handle);
 }
 
+// UpdateTBO
+static bool UpdateTBO( GLTextureBuffer & ioTBO, GLsizeiptr iSize, const void * iData )
+{
+  if ( !ioTBO._Handle )
+    return false;
+
+  glBindBuffer(GL_TEXTURE_BUFFER, ioTBO._Handle);
+
+  GLint curSize = 0;
+  glGetBufferParameteriv(GL_TEXTURE_BUFFER, GL_BUFFER_SIZE, &curSize);
+  if ( curSize != iSize )
+    return false;
+
+  glBufferSubData(GL_TEXTURE_BUFFER, 0, iSize, iData);
+  return true;
+}
+
 // ResizeTexture
 static void ResizeTexture( GLTexture & ioTex, GLsizei iWidth, GLsizei iHeight )
 {

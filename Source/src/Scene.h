@@ -77,6 +77,7 @@ public:
 
   // Compiled data
   void CompileMeshData( Vec2i iTextureArraySize = Vec2i(0), bool iBuildTextureArray = true, bool iBuildBVH = true );
+  int RebuildTLASData();
   int GetNbFaces() const { return _NbFaces; }
   int GetNbCompiledTex() const { return _NbCompiledTex; }
   const std::vector<Vec3>          & GetVertices()               const { return _Vertices;                }

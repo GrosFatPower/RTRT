@@ -336,6 +336,24 @@ void Scene::ResetEnvMap()
   return _EnvMap.Reset();
 }
 
+int Scene::RebuildTLASData()
+{
+  _TLAS.Clear();
+  _TLASPackedTransforms.clear();
+  _TLASPackedMeshMatID.clear();
+
+  if ( 0 != _TLAS.Build(_Meshes, _MeshInstances) )
+    return 1;
+
+  for ( auto meshInst : _TLAS.GetPackedMeshInstances() )
+  {
+    _TLASPackedTransforms.emplace_back(meshInst._Transform);
+    _TLASPackedMeshMatID.emplace_back(meshInst._MeshID, meshInst._MaterialID);
+  }
+
+  return 0;
+}
+
 void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, bool iBuildBVH )
 {
   auto startTime = std::chrono::system_clock::now();
@@ -350,7 +368,7 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
   _TextureArray.clear();
   _MeshBBoxes.clear();
   _MeshIdxRange.clear();
-  _TLAS = GpuTLAS();
+  _TLAS.Clear();
   _TLASPackedTransforms.clear();
   _TLASPackedMeshMatID.clear();
   _BLASNodes.clear();
@@ -530,14 +548,8 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
   // BVH
   if ( iBuildBVH )
   {
-    _TLAS.Clear();
-    _TLAS.Build(_Meshes, _MeshInstances);
-
-    for ( auto meshInst : _TLAS.GetPackedMeshInstances() )
-    {
-      _TLASPackedTransforms.emplace_back(meshInst._Transform);
-      _TLASPackedMeshMatID.emplace_back(meshInst._MeshID, meshInst._MaterialID);
-    }
+    if ( 0 != RebuildTLASData() )
+      std::cout << "Scene : ERROR. Unable to rebuild TLAS data" << std::endl;
 
     for (auto & mesh : _Meshes)
     {

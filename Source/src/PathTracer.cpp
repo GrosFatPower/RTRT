@@ -96,7 +96,7 @@ int PathTracer::Update()
 
   if ( _DirtyStates & (unsigned long)DirtyState::SceneInstances )
   {
-    if ( 0 != this -> ReloadScene() )
+    if ( 0 != this -> ReloadSceneInstances() )
       return 1;
   }
 
@@ -996,16 +996,9 @@ int PathTracer::ReloadScene()
     glBindTexture(GL_TEXTURE_2D, 0);
 
     // BVH
-    GLUtil::InitializeTBO(_TLASNodesTBO, sizeof(GpuBvh::Node) * _Scene.GetTLASNode().size(), &_Scene.GetTLASNode()[0], GL_RGB32F);
+    if ( 0 != this -> UploadTLASData() )
+      return 1;
 
-    glGenTextures(1, &_TLASTransformsIDTEX._Handle);
-    glBindTexture(GL_TEXTURE_2D, _TLASTransformsIDTEX._Handle);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>((sizeof(Mat4x4) / sizeof(Vec4)) * _Scene.GetTLASPackedTransforms().size()), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetTLASPackedTransforms()[0]);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    GLUtil::InitializeTBO(_TLASMeshMatIDTBO, sizeof(Vec2i) * _Scene.GetTLASPackedMeshMatID().size(), &_Scene.GetTLASPackedMeshMatID()[0], GL_RG32I);
     GLUtil::InitializeTBO(_BLASNodesTBO, sizeof(GpuBvh::Node) * _Scene.GetBLASNode().size(), &_Scene.GetBLASNode()[0], GL_RGB32F);
     GLUtil::InitializeTBO(_BLASNodesRangeTBO, sizeof(Vec2i) * _Scene.GetBLASNodeRange().size(), &_Scene.GetBLASNodeRange()[0], GL_RG32I);
     GLUtil::InitializeTBO(_BLASPackedIndicesTBO, sizeof(Vec3i) * _Scene.GetBLASPackedIndices().size(), &_Scene.GetBLASPackedIndices()[0], GL_RGB32I);
@@ -1016,6 +1009,106 @@ int PathTracer::ReloadScene()
   }
 
   //this -> ReloadEnvMap();
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ReloadSceneInstances
+// ----------------------------------------------------------------------------
+int PathTracer::ReloadSceneInstances()
+{
+  if ( 0 != _Scene.RebuildTLASData() )
+    return 1;
+
+  _NbMeshInstances = _Scene.GetNbMeshInstances();
+
+  if ( _NbTriangles )
+  {
+    if ( 0 != this -> UploadTLASData() )
+      return 1;
+  }
+
+  _FrameNum = 0;
+  _NbCompleteFrames = 0;
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UploadTLASData
+// ----------------------------------------------------------------------------
+int PathTracer::UploadTLASData()
+{
+  const std::vector<GpuBvh::Node> & TLASNodes = _Scene.GetTLASNode();
+  const std::vector<Vec2i>        & TLASMeshMatID = _Scene.GetTLASPackedMeshMatID();
+
+  const GLsizeiptr tlasNodesSize = static_cast<GLsizeiptr>(sizeof(GpuBvh::Node) * TLASNodes.size());
+  const void * tlasNodesData = TLASNodes.size() ? static_cast<const void*>(&TLASNodes[0]) : nullptr;
+  if ( 0 != this -> UploadOrCreateTBO(_TLASNodesTBO, tlasNodesSize, tlasNodesData, GL_RGB32F) )
+    return 1;
+
+  if ( 0 != this -> UploadTLASTransforms() )
+    return 1;
+
+  const GLsizeiptr tlasMeshMatIDSize = static_cast<GLsizeiptr>(sizeof(Vec2i) * TLASMeshMatID.size());
+  const void * tlasMeshMatIDData = TLASMeshMatID.size() ? static_cast<const void*>(&TLASMeshMatID[0]) : nullptr;
+  if ( 0 != this -> UploadOrCreateTBO(_TLASMeshMatIDTBO, tlasMeshMatIDSize, tlasMeshMatIDData, GL_RG32I) )
+    return 1;
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UploadTLASTransforms
+// ----------------------------------------------------------------------------
+int PathTracer::UploadTLASTransforms()
+{
+  const std::vector<Mat4x4> & TLASTransforms = _Scene.GetTLASPackedTransforms();
+
+  const GLsizei texWidth = static_cast<GLsizei>((sizeof(Mat4x4) / sizeof(Vec4)) * TLASTransforms.size());
+  if ( ( texWidth <= 0 ) || TLASTransforms.empty() )
+  {
+    GLUtil::DeleteTEX(_TLASTransformsIDTEX);
+    return 0;
+  }
+
+  if ( !_TLASTransformsIDTEX._Handle )
+    glGenTextures(1, &_TLASTransformsIDTEX._Handle);
+
+  glBindTexture(GL_TEXTURE_2D, _TLASTransformsIDTEX._Handle);
+
+  GLint curWidth = 0;
+  glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &curWidth);
+
+  if ( curWidth == texWidth )
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, texWidth, 1, GL_RGBA, GL_FLOAT, &TLASTransforms[0]);
+  else
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, texWidth, 1, 0, GL_RGBA, GL_FLOAT, &TLASTransforms[0]);
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glBindTexture(GL_TEXTURE_2D, 0);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UploadOrCreateTBO
+// ----------------------------------------------------------------------------
+int PathTracer::UploadOrCreateTBO( GLTextureBuffer & ioTBO, GLsizeiptr iSize, const void * iData, GLenum iInternalformat )
+{
+  if ( ( iSize <= 0 ) || !iData )
+  {
+    GLUtil::DeleteTBO(ioTBO);
+    return 0;
+  }
+
+  if ( GLUtil::UpdateTBO(ioTBO, iSize, iData) )
+    return 0;
+
+  GLUtil::DeleteTBO(ioTBO);
+  GLUtil::InitializeTBO(ioTBO, iSize, iData, iInternalformat);
 
   return 0;
 }
