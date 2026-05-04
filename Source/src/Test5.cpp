@@ -319,6 +319,7 @@ int Test5::DrawUI()
     ImGui::End();
   }
 
+  DrawSelectedMeshInstanceBBox();
   DrawMeshInstanceGizmo();
 
   // Rendering
@@ -786,6 +787,7 @@ int Test5::DrawMeshInstanceUI()
   if ( ImGui::CollapsingHeader("Mesh Instances") )
   {
     ImGui::Checkbox("Enable gizmo", &_MeshGizmoEnabled);
+    ImGui::Checkbox("Show bounding box", &_ShowSelectedMeshBBox);
 
     const char * operations[] = { "Translate", "Rotate" };
     ImGui::Combo("Operation", &_MeshGizmoOperation, operations, 2);
@@ -1222,6 +1224,79 @@ int Test5::DrawLightsUI()
         }
       }
     }
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawSelectedMeshInstanceBBox
+// ----------------------------------------------------------------------------
+int Test5::DrawSelectedMeshInstanceBBox()
+{
+  if ( !_ShowSelectedMeshBBox || !_Scene )
+    return 0;
+
+  std::vector<MeshInstance> & meshInstances = _Scene -> GetMeshInstances();
+  std::vector<Mesh*>        & meshes        = _Scene -> GetMeshes();
+
+  if ( ( _SelectedMeshInstanceID < 0 ) || ( _SelectedMeshInstanceID >= static_cast<int>(meshInstances.size()) ) )
+    return 0;
+
+  const MeshInstance & inst = meshInstances[_SelectedMeshInstanceID];
+  if ( ( inst._MeshID < 0 ) || ( inst._MeshID >= static_cast<int>(meshes.size()) ) )
+    return 0;
+
+  Mesh * mesh = meshes[inst._MeshID];
+  if ( !mesh )
+    return 0;
+
+  Mat4x4 view(1.f);
+  Mat4x4 proj(1.f);
+
+  Camera & cam = _Scene -> GetCamera();
+  cam.ComputeLookAtMatrix(view);
+
+  const float width  = static_cast<float>(std::max(1, _Settings._WindowResolution.x));
+  const float height = static_cast<float>(std::max(1, _Settings._WindowResolution.y));
+  cam.ComputePerspectiveProjMatrix(width / height, proj);
+
+  Vec3 localCorners[8];
+  mesh -> GetBoundingBox().Corners(localCorners);
+
+  ImVec2 screenCorners[8];
+  bool visibleCorners[8] = { false, false, false, false, false, false, false, false };
+  ImGuiIO & io = ImGui::GetIO();
+
+  for ( int i = 0; i < 8; ++i )
+  {
+    Vec4 worldCorner = inst._Transform * Vec4(localCorners[i], 1.f);
+    Vec4 clipCorner = proj * view * worldCorner;
+    if ( clipCorner.w <= 0.00001f )
+      continue;
+
+    Vec3 ndc = Vec3(clipCorner) / clipCorner.w;
+    screenCorners[i].x = ( ndc.x * 0.5f + 0.5f ) * io.DisplaySize.x;
+    screenCorners[i].y = ( 0.5f - ndc.y * 0.5f ) * io.DisplaySize.y;
+    visibleCorners[i] = true;
+  }
+
+  static const int Edges[12][2] =
+  {
+    { 0, 1 }, { 1, 3 }, { 3, 2 }, { 2, 0 },
+    { 4, 5 }, { 5, 7 }, { 7, 6 }, { 6, 4 },
+    { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }
+  };
+
+  ImDrawList * drawList = ImGui::GetForegroundDrawList();
+  const ImU32 boxColor = IM_COL32(255, 184, 48, 235);
+  const float lineWidth = 2.f;
+  for ( int i = 0; i < 12; ++i )
+  {
+    const int c0 = Edges[i][0];
+    const int c1 = Edges[i][1];
+    if ( visibleCorners[c0] && visibleCorners[c1] )
+      drawList -> AddLine(screenCorners[c0], screenCorners[c1], boxColor, lineWidth);
   }
 
   return 0;

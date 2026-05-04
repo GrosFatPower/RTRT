@@ -59,6 +59,7 @@ protected:
   int DrawBackgroundUI();
   int DrawMaterialsUI();
   int DrawLightsUI();
+  int DrawSelectedMeshInstanceBBox();
 
   int ProcessInput();
 
@@ -119,6 +120,7 @@ protected:
   // Mesh instance editor
   int                        _SelectedMeshInstanceID = -1;
   bool                       _MeshGizmoEnabled       = true;
+  bool                       _ShowSelectedMeshBBox   = true;
   int                        _MeshGizmoOperation     = 0;
   int                        _MeshGizmoMode          = 0;
   bool                       _MeshGizmoSnap          = false;
