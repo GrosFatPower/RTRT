@@ -1353,16 +1353,14 @@ bool Test5::PickMeshInstance( double iMouseX, double iMouseY, int & oMeshInstanc
 
     const std::vector<Vec3> & vertices = mesh -> GetVertices();
     const std::vector<Vec3i> & indices = mesh -> GetIndices();
-    for ( const Vec3i & tri : indices )
+    for ( int i = 0; i + 2 < static_cast<int>(indices.size()); i += 3 )
     {
-      if ( ( tri.x < 0 ) || ( tri.y < 0 ) || ( tri.z < 0 )
-        || ( tri.x >= static_cast<int>(vertices.size()) )
-        || ( tri.y >= static_cast<int>(vertices.size()) )
-        || ( tri.z >= static_cast<int>(vertices.size()) ) )
-        continue;
+      const Vec3i & i0 = indices[i + 0];
+      const Vec3i & i1 = indices[i + 1];
+      const Vec3i & i2 = indices[i + 2];
 
       float triHitT = 0.f;
-      if ( MathUtil::IntersectRayTriangle(localOrigin, localDir, vertices[tri.x], vertices[tri.y], vertices[tri.z], triHitT) )
+      if ( MathUtil::IntersectRayTriangle(localOrigin, localDir, vertices[i0.x], vertices[i1.x], vertices[i2.x], triHitT) )
       {
         Vec3 localHit = localOrigin + localDir * triHitT;
         Vec3 worldHit = MathUtil::TransformPoint(localHit, inst._Transform);
