@@ -77,6 +77,8 @@ protected:
 
   int UnloadScene();
   int ReloadScene();
+  int RefreshSceneInstanceTransforms();
+  bool CanRefreshSceneInstanceTransforms() const;
   int ReloadEnvMap();
 
   int UpdateTextures();
@@ -140,6 +142,14 @@ protected:
 
 protected:
 
+  struct RasterSourceVertex
+  {
+    int _MeshInstanceID = -1;
+    int _MeshID         = -1;
+    int _VertexID       = -1;
+    int _NormalID       = -1;
+  };
+
   QuadMesh _Quad;
 
   // Frame buffers
@@ -173,7 +183,9 @@ protected:
   RasterData::FrameBuffer _ImageBuffer;
 
   // Scene data
+  int                                                  _CachedMeshInstanceCount = 0;
   std::vector<RasterData::Vertex>                      _VertexBuffer;
+  std::vector<RasterSourceVertex>                      _VertexSources;
   std::vector<RasterData::Triangle>                    _Triangles;
   std::vector<RasterData::ProjectedVertex>             _ProjVerticesBuf;
   std::mutex                                           _ProjVerticesMutex;

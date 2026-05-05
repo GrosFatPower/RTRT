@@ -4,6 +4,8 @@
 
 #include "Scene.h"
 #include "EnvMap.h"
+#include "Mesh.h"
+#include "MeshInstance.h"
 #include "ShaderProgram.h"
 #include "SoftwareVertexShader.h"
 #include "SoftwareFragmentShader.h"
@@ -186,9 +188,13 @@ int SoftwareRasterizer::Update()
 
   if (_DirtyStates & (unsigned long)DirtyState::SceneInstances)
   {
-    if ( 0 != this->ReloadScene() )
+    if ( CanRefreshSceneInstanceTransforms() )
+    {
+      if ( 0 != this->RefreshSceneInstanceTransforms() )
+        return 1;
+    }
+    else if ( 0 != this->ReloadScene() )
       return 1;
-    this->ReloadEnvMap();
   }
 
   this->UpdateImageBuffer();
@@ -501,7 +507,9 @@ int SoftwareRasterizer::UnloadScene()
 
   _FrameNum = 0;
 
+  _CachedMeshInstanceCount = 0;
   _VertexBuffer.clear();
+  _VertexSources.clear();
   _Triangles.clear();
   _ProjVerticesBuf.clear();
   for ( auto & rasterTriangles : _RasterTrianglesBuf )
@@ -524,75 +532,176 @@ int SoftwareRasterizer::ReloadScene()
 {
   UnloadScene();
 
-  if ((_Settings._TextureSize.x > 0) && (_Settings._TextureSize.y > 0))
-    _Scene.CompileMeshData(_Settings._TextureSize, false, false);
-  else
-    return 1;
-
-  // Load _Triangles
-  const std::vector<Vec3i>& Indices = _Scene.GetIndices();
-  const std::vector<Vec3>& Vertices = _Scene.GetVertices();
-  const std::vector<Vec3>& Normals = _Scene.GetNormals();
-  const std::vector<Vec3>& UVMatIDs = _Scene.GetUVMatID();
-  //const std::vector<Material> & Materials = _Scene.GetMaterials();
-  //const std::vector<Texture*> & Textures  = _Scene.GetTextures();
-  const int nbTris = static_cast<int>(Indices.size() / 3);
+  const std::vector<MeshInstance> & meshInstances = _Scene.GetMeshInstances();
+  const std::vector<Mesh*>        & meshes        = _Scene.GetMeshes();
 
   std::unordered_map<rd::Vertex, int> VertexIDs;
-  VertexIDs.reserve(Vertices.size());
+  VertexIDs.reserve(1024);
 
-  _Triangles.resize(nbTris);
-  for (int i = 0; i < nbTris; ++i)
+  _CachedMeshInstanceCount = static_cast<int>(meshInstances.size());
+
+  for ( int instID = 0; instID < static_cast<int>(meshInstances.size()); ++instID )
   {
-    rd::Triangle& tri = _Triangles[i];
+    const MeshInstance & meshInst = meshInstances[instID];
+    if ( ( meshInst._MeshID < 0 ) || ( meshInst._MeshID >= static_cast<int>(meshes.size()) ) )
+      continue;
 
-    Vec3i Index[3];
-    Index[0] = Indices[i * 3];
-    Index[1] = Indices[i * 3 + 1];
-    Index[2] = Indices[i * 3 + 2];
+    Mesh * curMesh = meshes[meshInst._MeshID];
+    if ( !curMesh || !curMesh -> GetNbFaces() )
+      continue;
 
-    rd::Vertex Vert[3];
-    for (int j = 0; j < 3; ++j)
+    const std::vector<Vec3>  & curVertices = curMesh -> GetVertices();
+    const std::vector<Vec3>  & curNormals  = curMesh -> GetNormals();
+    const std::vector<Vec2>  & curUVs      = curMesh -> GetUVs();
+    const std::vector<Vec3i> & curIndices  = curMesh -> GetIndices();
+    const Mat4x4 trInvTransfo = glm::transpose(glm::inverse(meshInst._Transform));
+
+    const int nbTris = static_cast<int>(curIndices.size() / 3);
+    for ( int i = 0; i < nbTris; ++i )
     {
-      Vert[j]._WorldPos = Vertices[Index[j].x];
-      Vert[j]._UV = Vec2(0.f);
-      Vert[j]._Normal = Vec3(0.f);
-    }
+      rd::Triangle tri;
 
-    Vec3 vec1(Vert[1]._WorldPos.x - Vert[0]._WorldPos.x, Vert[1]._WorldPos.y - Vert[0]._WorldPos.y, Vert[1]._WorldPos.z - Vert[0]._WorldPos.z);
-    Vec3 vec2(Vert[2]._WorldPos.x - Vert[0]._WorldPos.x, Vert[2]._WorldPos.y - Vert[0]._WorldPos.y, Vert[2]._WorldPos.z - Vert[0]._WorldPos.z);
-    tri._Normal = glm::normalize(glm::cross(vec1, vec2));
+      Vec3i Index[3];
+      Index[0] = curIndices[i * 3];
+      Index[1] = curIndices[i * 3 + 1];
+      Index[2] = curIndices[i * 3 + 2];
 
-    for (int j = 0; j < 3; ++j)
-    {
-      if (Index[j].y >= 0)
-        Vert[j]._Normal = Normals[Index[j].y];
-      else
-        Vert[j]._Normal = tri._Normal;
-
-      if (Index[j].z >= 0)
-        Vert[j]._UV = Vec2(UVMatIDs[Index[j].z].x, UVMatIDs[Index[j].z].y);
-    }
-
-    tri._MatID = (int)UVMatIDs[Index[0].z].z;
-
-    for (int j = 0; j < 3; ++j)
-    {
-      int idx = 0;
-      if (0 == VertexIDs.count(Vert[j]))
+      rd::Vertex Vert[3];
+      for ( int j = 0; j < 3; ++j )
       {
-        idx = (int)_VertexBuffer.size();
-        VertexIDs[Vert[j]] = idx;
-        _VertexBuffer.push_back(Vert[j]);
-      }
-      else
-        idx = VertexIDs[Vert[j]];
+        Vec4 transformedVtx = meshInst._Transform * Vec4(curVertices[Index[j].x], 1.f);
+        Vert[j]._WorldPos = Vec3(transformedVtx);
 
-      tri._Indices[j] = idx;
+        if ( ( Index[j].z >= 0 ) && ( Index[j].z < static_cast<int>(curUVs.size()) ) )
+          Vert[j]._UV = curUVs[Index[j].z];
+        else
+          Vert[j]._UV = Vec2(0.f);
+
+        Vert[j]._Normal = Vec3(0.f);
+      }
+
+      const Vec3 vec1(Vert[1]._WorldPos - Vert[0]._WorldPos);
+      const Vec3 vec2(Vert[2]._WorldPos - Vert[0]._WorldPos);
+      tri._Normal = glm::normalize(glm::cross(vec1, vec2));
+
+      for ( int j = 0; j < 3; ++j )
+      {
+        if ( ( Index[j].y >= 0 ) && ( Index[j].y < static_cast<int>(curNormals.size()) ) )
+        {
+          Vec4 transformedNormal = trInvTransfo * Vec4(curNormals[Index[j].y], 0.f);
+          Vert[j]._Normal = glm::normalize(Vec3(transformedNormal));
+        }
+        else
+          Vert[j]._Normal = tri._Normal;
+      }
+
+      tri._MatID = meshInst._MaterialID;
+
+      for ( int j = 0; j < 3; ++j )
+      {
+        int idx = 0;
+        if (0 == VertexIDs.count(Vert[j]))
+        {
+          idx = (int)_VertexBuffer.size();
+          VertexIDs[Vert[j]] = idx;
+          _VertexBuffer.push_back(Vert[j]);
+
+          RasterSourceVertex sourceVertex;
+          sourceVertex._MeshInstanceID = instID;
+          sourceVertex._MeshID = meshInst._MeshID;
+          sourceVertex._VertexID = Index[j].x;
+          sourceVertex._NormalID = Index[j].y;
+          _VertexSources.push_back(sourceVertex);
+        }
+        else
+          idx = VertexIDs[Vert[j]];
+
+        tri._Indices[j] = idx;
+      }
+
+      _Triangles.push_back(tri);
     }
   }
 
   this -> UpdateMipMaps();
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// CanRefreshSceneInstanceTransforms
+// ----------------------------------------------------------------------------
+bool SoftwareRasterizer::CanRefreshSceneInstanceTransforms() const
+{
+  if ( _VertexSources.size() != _VertexBuffer.size() )
+    return false;
+
+  if ( _CachedMeshInstanceCount != _Scene.GetNbMeshInstances() )
+    return false;
+
+  const std::vector<MeshInstance> & meshInstances = _Scene.GetMeshInstances();
+  const std::vector<Mesh*>        & meshes        = _Scene.GetMeshes();
+
+  for ( const RasterSourceVertex & sourceVertex : _VertexSources )
+  {
+    if ( ( sourceVertex._MeshInstanceID < 0 ) || ( sourceVertex._MeshInstanceID >= static_cast<int>(meshInstances.size()) ) )
+      return false;
+
+    const MeshInstance & meshInst = meshInstances[sourceVertex._MeshInstanceID];
+    if ( meshInst._MeshID != sourceVertex._MeshID )
+      return false;
+
+    if ( ( sourceVertex._MeshID < 0 ) || ( sourceVertex._MeshID >= static_cast<int>(meshes.size()) ) )
+      return false;
+
+    Mesh * curMesh = meshes[sourceVertex._MeshID];
+    if ( !curMesh )
+      return false;
+
+    if ( ( sourceVertex._VertexID < 0 ) || ( sourceVertex._VertexID >= static_cast<int>(curMesh -> GetVertices().size()) ) )
+      return false;
+  }
+
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// RefreshSceneInstanceTransforms
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::RefreshSceneInstanceTransforms()
+{
+  const std::vector<MeshInstance> & meshInstances = _Scene.GetMeshInstances();
+  const std::vector<Mesh*>        & meshes        = _Scene.GetMeshes();
+
+  for ( int i = 0; i < static_cast<int>(_VertexBuffer.size()); ++i )
+  {
+    const RasterSourceVertex & sourceVertex = _VertexSources[i];
+    const MeshInstance & meshInst = meshInstances[sourceVertex._MeshInstanceID];
+    Mesh * curMesh = meshes[sourceVertex._MeshID];
+
+    const std::vector<Vec3> & vertices = curMesh -> GetVertices();
+    const std::vector<Vec3> & normals = curMesh -> GetNormals();
+
+    Vec4 transformedVtx = meshInst._Transform * Vec4(vertices[sourceVertex._VertexID], 1.f);
+    _VertexBuffer[i]._WorldPos = Vec3(transformedVtx);
+
+    if ( ( sourceVertex._NormalID >= 0 ) && ( sourceVertex._NormalID < static_cast<int>(normals.size()) ) )
+    {
+      Mat4x4 trInvTransfo = glm::transpose(glm::inverse(meshInst._Transform));
+      Vec4 transformedNormal = trInvTransfo * Vec4(normals[sourceVertex._NormalID], 0.f);
+      _VertexBuffer[i]._Normal = glm::normalize(Vec3(transformedNormal));
+    }
+  }
+
+  for ( RasterData::Triangle & tri : _Triangles )
+  {
+    const Vec3 & p0 = _VertexBuffer[tri._Indices[0]]._WorldPos;
+    const Vec3 & p1 = _VertexBuffer[tri._Indices[1]]._WorldPos;
+    const Vec3 & p2 = _VertexBuffer[tri._Indices[2]]._WorldPos;
+    tri._Normal = glm::normalize(glm::cross(p1 - p0, p2 - p0));
+  }
+
+  _FrameNum = 0;
 
   return 0;
 }
