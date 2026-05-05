@@ -355,7 +355,7 @@ Vec4 Texture::BiLinearSample(Vec2 iUV, float iLOD, bool iTrilinear) const
 {
   if ( !iTrilinear )
   {
-    int nearest = static_cast<int>(std::clamp(std::floor(iLOD + 0.5f), 0.0f, static_cast<float>(_MipLevels-1)));
+    int nearest = ( _MipLevels > 0 ) ? ( static_cast<int>(std::clamp(std::floor(iLOD + 0.5f), 0.0f, static_cast<float>(_MipLevels-1))) ) : ( 0 );
     return TrilinearSample(iUV, static_cast<float>(nearest)); // existing logic with integer LOD -> single level bilinear
   }
   return TrilinearSample(iUV, iLOD); // existing trilinear behavior
