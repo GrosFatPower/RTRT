@@ -250,7 +250,7 @@ void BoidSceneBinding::Reset()
 // ----------------------------------------------------------------------------
 int BoidSceneBinding::Attach( Scene & iScene, const BoidSettings & iSettings )
 {
-  if ( 0 != EnsureSceneResources(iScene) )
+  if ( 0 != EnsureSceneResources(iScene, iSettings) )
     return 1;
 
   return ResizeInstances(iScene, iSettings);
@@ -305,18 +305,36 @@ bool BoidSceneBinding::ContainsInstanceID( int iInstanceID ) const
 }
 
 // ----------------------------------------------------------------------------
+// SyncMaterial
+// ----------------------------------------------------------------------------
+int BoidSceneBinding::SyncMaterial( Scene & iScene, const BoidSettings & iSettings )
+{
+  if ( _MaterialID < 0 )
+    return 1;
+
+  std::vector<Material> & materials = iScene.GetMaterials();
+  if ( _MaterialID >= static_cast<int>(materials.size()) )
+    return 1;
+
+  materials[_MaterialID]._Albedo = iSettings._Color;
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // EnsureSceneResources
 // ----------------------------------------------------------------------------
-int BoidSceneBinding::EnsureSceneResources( Scene & iScene )
+int BoidSceneBinding::EnsureSceneResources( Scene & iScene, const BoidSettings & iSettings )
 {
   if ( _MaterialID < 0 )
   {
     Material material;
-    material._Albedo = Vec3(0.95f, 0.35f, 0.12f);
+    material._Albedo = iSettings._Color;
     material._Roughness = 0.55f;
     material._Metallic = 0.f;
     _MaterialID = iScene.AddMaterial(material, "__BoidMaterial");
   }
+  else if ( 0 != SyncMaterial(iScene, iSettings) )
+    return 1;
 
   if ( _MeshID < 0 )
   {

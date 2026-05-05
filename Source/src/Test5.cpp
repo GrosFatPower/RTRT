@@ -983,6 +983,14 @@ int Test5::DrawBoidsUI()
 
     ImGui::Checkbox("Pause", &_BoidsSettings._Paused);
 
+    float boidColor[3] = { _BoidsSettings._Color.r, _BoidsSettings._Color.g, _BoidsSettings._Color.b };
+    if ( ImGui::ColorEdit3("Color", boidColor) )
+    {
+      _BoidsSettings._Color = Vec3(boidColor[0], boidColor[1], boidColor[2]);
+      if ( 0 == _BoidsBinding.SyncMaterial(*_Scene, _BoidsSettings) )
+        _Renderer -> Notify(DirtyState::SceneMaterials);
+    }
+
     if ( ImGui::Button("Reset##Boids") )
     {
       _BoidsSimulation.Reset(_BoidsSettings);

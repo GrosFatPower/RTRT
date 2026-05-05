@@ -27,6 +27,7 @@ struct BoidSettings
   float        _CohesionWeight   = 1.f;
   float        _BoundsWeight     = 2.f;
   float        _Scale            = 0.12f;
+  Vec3         _Color            = Vec3(0.95f, 0.35f, 0.12f);
   bool         _Paused           = false;
 };
 
@@ -65,13 +66,14 @@ class BoidSceneBinding
 public:
   int Attach( Scene & iScene, const BoidSettings & iSettings );
   int Detach( Scene & iScene );
+  int SyncMaterial( Scene & iScene, const BoidSettings & iSettings );
   int SyncTransforms( Scene & iScene, const BoidSimulation & iSimulation, const BoidSettings & iSettings );
   bool ContainsInstanceID( int iInstanceID ) const;
   bool Attached() const { return !_InstanceIDs.empty(); }
   void Reset();
 
 protected:
-  int EnsureSceneResources( Scene & iScene );
+  int EnsureSceneResources( Scene & iScene, const BoidSettings & iSettings );
   int ResizeInstances( Scene & iScene, const BoidSettings & iSettings );
   Mat4x4 BuildTransform( const BoidState & iBoid, float iScale ) const;
 
