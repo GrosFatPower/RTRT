@@ -104,6 +104,9 @@ protected:
 
   int InitializeStats();
   int UpdateStats();
+  void BeginTimer( GLuint iTimerId[2] );
+  void EndTimer( GLuint iTimerId[2] );
+  double ReadTimer( GLuint iTimerId[2] );
 
   float LowResRenderScale() const { return ( RenderScale() * _Settings._LowResRatio ); }
 
