@@ -99,6 +99,7 @@ protected:
   int BindPathTraceTextures();
   int BindAccumulateTextures();
   int BindDenoiserTextures();
+  int BindDenoiserImageTextures();
   int BindRenderToScreenTextures();
 
   int InitializeStats();
@@ -110,7 +111,7 @@ protected:
   int LowResRenderWidth()   const { return std::max(int( _Settings._RenderResolution.x * LowResRenderScale() ), 32); }
   int LowResRenderHeight()  const { return std::max(int( _Settings._RenderResolution.y * LowResRenderScale() ), 32); }
 
-  bool Denoise()            const { return (_Settings._Denoise && !LowResPass());}
+  bool Denoise()            const { return (_Settings._Denoise); }// && !LowResPass());}
 
   bool TiledRendering()     const { return _Settings._TiledRendering; }
   int TileWidth()           const { return ( _Settings._TileResolution.x > 0 ) ? ( _Settings._TileResolution.x ) : ( 64 ); }
@@ -130,6 +131,7 @@ protected:
   GLFrameBuffer _RenderTargetLowResFBO;
   GLFrameBuffer _RenderTargetTileFBO;
   GLFrameBuffer _AccumulateFBO;
+  GLFrameBuffer _DenoiseFBO;
 
   // Texture buffers
   GLTextureBuffer _VtxTBO                     = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_Vertices               } };
@@ -170,6 +172,7 @@ protected:
   // Accumulate
   unsigned int _FrameNum          = 1;
   unsigned int _NbCompleteFrames  = 0;
+  bool         _DenoisedThisFrame = false;
 
   // Scene data
   int _NbTriangles     = 0;

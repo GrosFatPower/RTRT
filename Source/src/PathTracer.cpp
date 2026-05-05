@@ -42,6 +42,7 @@ PathTracer::~PathTracer()
   GLUtil::DeleteFBO(_RenderTargetLowResFBO);
   GLUtil::DeleteFBO(_RenderTargetTileFBO);
   GLUtil::DeleteFBO(_AccumulateFBO);
+  GLUtil::DeleteFBO(_DenoiseFBO);
 
   UnloadScene( true );
 }
@@ -133,7 +134,7 @@ int PathTracer::Done()
 // ----------------------------------------------------------------------------
 int PathTracer::InitializeStats()
 {
-  _PathTraceTime       = 0.;
+  _PathTraceTime      = 0.;
   _AccumulateTime     = 0.;
   _DenoiseTime        = 0.;
   _RenderToScreenTime = 0.;
@@ -194,7 +195,7 @@ int PathTracer::UpdateStats()
   _AccumulateTime = (double)executionTime / 1000000000.; // Convert to seconds
 
   // Denoise pass
-  if ( Denoise() )
+  if ( _DenoisedThisFrame )
   {
     resultAvailable = 0;
     while ( !resultAvailable )
@@ -501,6 +502,8 @@ int PathTracer::UpdateAccumulateUniforms()
 // ----------------------------------------------------------------------------
 int PathTracer::RenderToTexture()
 {
+  _DenoisedThisFrame = false;
+
   // Path trace
   glQueryCounter(_PathTraceTimeId[0], GL_TIMESTAMP);
 
@@ -543,7 +546,7 @@ int PathTracer::RenderToTexture()
 
   // Denoise
   if ( Denoise() )
-    this -> DenoiseOutput();
+    _DenoisedThisFrame = ( 0 == this -> DenoiseOutput() );
 
   return 0;
 }
@@ -553,14 +556,15 @@ int PathTracer::RenderToTexture()
 // ----------------------------------------------------------------------------
 int PathTracer::DenoiseOutput()
 {
-  glQueryCounter(_DenoiseTimeId[0], GL_TIMESTAMP);
-
   if ( !_DenoiserShader )
     return 1;
 
+  glQueryCounter(_DenoiseTimeId[0], GL_TIMESTAMP);
+
   _DenoiserShader -> Use();
 
-  this -> BindDenoiserTextures();
+#if defined(_WIN32) || defined(_WIN64)
+  this -> BindDenoiserImageTextures();
 
   // Dispatch compute shader (assuming texture size is 512x512)
   const int workGroupSizeX = 16, workGroupSizeY = 16;
@@ -570,6 +574,14 @@ int PathTracer::DenoiseOutput()
 
   // Ensure GPU has completed work before continuing
   glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+#else
+  this -> BindDenoiserTextures();
+
+  glBindFramebuffer(GL_FRAMEBUFFER, _DenoiseFBO._Handle);
+  glViewport(0, 0, RenderWidth(), RenderHeight());
+
+  _Quad.Render(*_DenoiserShader);
+#endif
 
   _DenoiserShader -> StopUsing();
 
@@ -596,6 +608,12 @@ int PathTracer::UpdateDenoiserUniforms()
   _DenoiserShader -> SetUniform("u_ColorPhi", _Settings._DenoiserColorPhi);               // Edge-aware
   _DenoiserShader -> SetUniform("u_NormalPhi", _Settings._DenoiserNormalPhi);             // Edge-aware
   _DenoiserShader -> SetUniform("u_PositionPhi", _Settings._DenoiserPositionPhi);         // Edge-aware
+#if !defined(_WIN32) && !defined(_WIN64)
+  _DenoiserShader -> SetUniform("u_InputImage", (int)PathTracerTexSlot::_Accumulate);
+  _DenoiserShader -> SetUniform("u_InputNormals", (int)PathTracerTexSlot::_AccumulateNormals);
+  _DenoiserShader -> SetUniform("u_InputPos", (int)PathTracerTexSlot::_AccumulatePos);
+  _DenoiserShader -> SetUniform("u_ImageSize", RenderWidth(), RenderHeight());
+#endif
 
   _DenoiserShader -> StopUsing();
 
@@ -606,6 +624,16 @@ int PathTracer::UpdateDenoiserUniforms()
 // BindDenoiserTextures
 // ----------------------------------------------------------------------------
 int PathTracer::BindDenoiserTextures()
+{
+  GLUtil::ActivateTextures(_AccumulateFBO);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// BindDenoiserImageTextures
+// ----------------------------------------------------------------------------
+int PathTracer::BindDenoiserImageTextures()
 {
   if ( 3 ==_AccumulateFBO._Tex.size() )
   {
@@ -760,6 +788,9 @@ int PathTracer::ResizeRenderTarget()
   GLUtil::ResizeFBO(_AccumulateFBO, RenderWidth(), RenderHeight());
 
   GLUtil::ResizeTexture(_DenoisedTEX, RenderWidth(), RenderHeight());
+  glBindFramebuffer(GL_FRAMEBUFFER, _DenoiseFBO._Handle);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _DenoisedTEX._Handle, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   return 0;
 }
@@ -865,6 +896,16 @@ int PathTracer::InitializeFrameBuffers()
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   glBindTexture(GL_TEXTURE_2D, 0);
 
+  glGenFramebuffers(1, &_DenoiseFBO._Handle);
+  glBindFramebuffer(GL_FRAMEBUFFER, _DenoiseFBO._Handle);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _DenoisedTEX._Handle, 0);
+  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+    return 1;
+
+  GLenum denoiseDrawBuffer = GL_COLOR_ATTACHMENT0;
+  glDrawBuffers(1, &denoiseDrawBuffer);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
   return 0;
 }
 
@@ -896,6 +937,12 @@ int PathTracer::RecompileShaders()
 #if defined(_WIN32) || defined(_WIN64)
   ShaderSource computeShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("compute_Denoiser.glsl"));
   newShader = ShaderProgram::LoadShaders(computeShaderSrc);
+  if ( !newShader )
+    return 1;
+  _DenoiserShader.reset(newShader);
+#else
+  fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_DenoiserPathTracer.glsl"));
+  newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !newShader )
     return 1;
   _DenoiserShader.reset(newShader);
