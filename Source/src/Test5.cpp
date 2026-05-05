@@ -321,8 +321,13 @@ int Test5::DrawUI()
     ImGui::End();
   }
 
-  DrawSelectedMeshInstanceBBox();
-  DrawMeshInstanceGizmo();
+  if ( _SelectedLightID >= 0 )
+    DrawLightGizmo();
+  else
+  {
+    DrawSelectedMeshInstanceBBox();
+    DrawMeshInstanceGizmo();
+  }
 
   // Rendering
   ImGui::Render();
@@ -344,6 +349,15 @@ void Test5::NotifyMeshInstanceEdited()
 {
   if ( _Renderer )
     _Renderer -> Notify(DirtyState::SceneInstances);
+}
+
+// ----------------------------------------------------------------------------
+// NotifyLightEdited
+// ----------------------------------------------------------------------------
+void Test5::NotifyLightEdited()
+{
+  if ( _Renderer )
+    _Renderer -> Notify(DirtyState::SceneLights);
 }
 
 // ----------------------------------------------------------------------------
@@ -885,7 +899,10 @@ int Test5::DrawMeshInstanceUI()
 
         bool isSelected = ( _SelectedMeshInstanceID == i );
         if ( ImGui::Selectable(instanceName.c_str(), isSelected) )
+        {
           _SelectedMeshInstanceID = i;
+          _SelectedLightID = -1;
+        }
       }
       ImGui::EndListBox();
     }
@@ -1292,12 +1309,22 @@ int Test5::DrawMaterialsUI()
 // ----------------------------------------------------------------------------
 int Test5::DrawLightsUI()
 {
+  if ( !_Scene )
+    return 0;
+
+  if ( _SelectedLightID >= _Scene -> GetNbLights() )
+    _SelectedLightID = -1;
+
   if ( ImGui::CollapsingHeader("Lights") )
   {
     if ( ImGui::Checkbox("Show lights", &_Settings._ShowLights) )
-      _Renderer -> Notify(DirtyState::SceneLights);
+      NotifyLightEdited();
 
-    static int selectedLight = -1;
+    ImGui::Checkbox("Enable light gizmo", &_LightGizmoEnabled);
+    ImGui::Checkbox("Light gizmo snap", &_LightGizmoSnap);
+    if ( _LightGizmoSnap )
+      ImGui::InputFloat("Light translate snap", &_LightGizmoTranslateSnap, 0.05f, 1.f, "%.3f");
+
     if ( ImGui::BeginListBox("##Lights") )
     {
       for (int i = 0; i < _Scene -> GetNbLights(); i++)
@@ -1305,10 +1332,11 @@ int Test5::DrawLightsUI()
         std::string lightName("Light#");
         lightName += std::to_string(i);
 
-        bool is_selected = ( selectedLight == i );
+        bool is_selected = ( _SelectedLightID == i );
         if (ImGui::Selectable(lightName.c_str(), is_selected))
         {
-          selectedLight = i;
+          _SelectedLightID = i;
+          _SelectedMeshInstanceID = -1;
         }
       }
       ImGui::EndListBox();
@@ -1318,23 +1346,24 @@ int Test5::DrawLightsUI()
     {
       Light newLight;
       _Scene -> AddLight(newLight);
-      selectedLight = _Scene -> GetNbLights() - 1;
-      _Renderer -> Notify(DirtyState::SceneLights);
+      _SelectedLightID = _Scene -> GetNbLights() - 1;
+      _SelectedMeshInstanceID = -1;
+      NotifyLightEdited();
     }
     ImGui::SameLine();
     if (ImGui::Button("Remove light"))
     {
-      if ( selectedLight >= 0 )
+      if ( _SelectedLightID >= 0 )
       {
-        _Scene -> RemoveLight( selectedLight );
-        selectedLight = -1;
-        _Renderer -> Notify(DirtyState::SceneLights);
+        _Scene -> RemoveLight( _SelectedLightID );
+        _SelectedLightID = -1;
+        NotifyLightEdited();
       }
     }
 
-    if ( selectedLight >= 0 )
+    if ( _SelectedLightID >= 0 )
     {
-      Light * curLight = _Scene -> GetLight(selectedLight);
+      Light * curLight = _Scene -> GetLight(_SelectedLightID);
       if ( curLight )
       {
         const char * LightTypes[3] = { "Quad", "Sphere", "Distant" };
@@ -1345,9 +1374,12 @@ int Test5::DrawLightsUI()
           if ( lightType != (int)curLight -> _Type )
           {
             curLight -> _Type = (float)lightType;
-            _Renderer -> Notify(DirtyState::SceneLights);
+            NotifyLightEdited();
           }
         }
+
+        if ( LightType::DistantLight == (LightType) lightType )
+          ImGui::TextDisabled("Distant lights use Position as a direction; no translation gizmo is shown.");
 
         float pos[3] = { curLight -> _Pos.x, curLight -> _Pos.y, curLight -> _Pos.z };
         if ( ImGui::InputFloat3("Position", pos) )
@@ -1355,17 +1387,17 @@ int Test5::DrawLightsUI()
           curLight -> _Pos.x = pos[0];
           curLight -> _Pos.y = pos[1];
           curLight -> _Pos.z = pos[2];
-          _Renderer -> Notify(DirtyState::SceneLights);
+          NotifyLightEdited();
         }
 
         if ( ImGui::SliderFloat( "Intensity", &curLight -> _Intensity, 0.001f, 100.f ) )
-          _Renderer -> Notify(DirtyState::SceneLights);
+          NotifyLightEdited();
 
         float rgb[3] = { curLight -> _Emission.r, curLight -> _Emission.g, curLight -> _Emission.b };
         if ( ImGui::ColorEdit3("Emission", rgb) )
         {
           curLight -> _Emission = Vec3( rgb[0], rgb[1], rgb[2] );
-          _Renderer -> Notify(DirtyState::SceneLights);
+          NotifyLightEdited();
         }
 
         if ( LightType::SphereLight == (LightType) lightType )
@@ -1373,7 +1405,7 @@ int Test5::DrawLightsUI()
           if ( ImGui::SliderFloat("Light radius", &curLight -> _Radius, 0.001f, 1.f) )
           {
             curLight -> _Area = 4.0f * static_cast<float>(M_PI) * curLight -> _Radius * curLight -> _Radius;
-            _Renderer -> Notify(DirtyState::SceneLights);
+            NotifyLightEdited();
           }
         }
         else if ( LightType::RectLight == (LightType) lightType )
@@ -1385,7 +1417,7 @@ int Test5::DrawLightsUI()
             curLight -> _DirU.y = dirU[1];
             curLight -> _DirU.z = dirU[2];
             curLight -> _Area = glm::length(glm::cross(curLight -> _DirU, curLight -> _DirV));
-            _Renderer -> Notify(DirtyState::SceneLights);
+            NotifyLightEdited();
           }
 
           float dirV[3] = { curLight -> _DirV.x, curLight -> _DirV.y, curLight -> _DirV.z };
@@ -1395,7 +1427,7 @@ int Test5::DrawLightsUI()
             curLight -> _DirV.y = dirV[1];
             curLight -> _DirV.z = dirV[2];
             curLight -> _Area = glm::length(glm::cross(curLight -> _DirU, curLight -> _DirV));
-            _Renderer -> Notify(DirtyState::SceneLights);
+            NotifyLightEdited();
           }
         }
       }
@@ -1520,6 +1552,57 @@ int Test5::DrawMeshInstanceGizmo()
   MeshInstance & inst = meshInstances[_SelectedMeshInstanceID];
   if ( ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), operation, mode, glm::value_ptr(inst._Transform), nullptr, snapPtr) )
     NotifyMeshInstanceEdited();
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawLightGizmo
+// ----------------------------------------------------------------------------
+int Test5::DrawLightGizmo()
+{
+  if ( !_LightGizmoEnabled || !_Scene || !_Renderer )
+    return 0;
+
+  if ( ( _SelectedLightID < 0 ) || ( _SelectedLightID >= _Scene -> GetNbLights() ) )
+    return 0;
+
+  Light * curLight = _Scene -> GetLight(_SelectedLightID);
+  if ( !curLight )
+    return 0;
+
+  LightType lightType = (LightType)curLight -> _Type;
+  if ( LightType::DistantLight == lightType )
+    return 0;
+
+  Mat4x4 view(1.f);
+  Mat4x4 proj(1.f);
+
+  Camera & cam = _Scene -> GetCamera();
+  cam.ComputeLookAtMatrix(view);
+
+  const float width  = static_cast<float>(std::max(1, _Settings._WindowResolution.x));
+  const float height = static_cast<float>(std::max(1, _Settings._WindowResolution.y));
+  cam.ComputePerspectiveProjMatrix(width / height, proj);
+
+  ImGuiIO & io = ImGui::GetIO();
+  ImGuizmo::SetDrawlist(ImGui::GetForegroundDrawList());
+  ImGuizmo::SetRect(0.f, 0.f, io.DisplaySize.x, io.DisplaySize.y);
+  ImGuizmo::SetOrthographic(false);
+
+  float snap[3] = { _LightGizmoTranslateSnap, _LightGizmoTranslateSnap, _LightGizmoTranslateSnap };
+  const float * snapPtr = _LightGizmoSnap ? snap : nullptr;
+
+  Mat4x4 lightTransform(1.f);
+  lightTransform[3] = Vec4(curLight -> _Pos, 1.f);
+
+  if ( ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), ImGuizmo::TRANSLATE, ImGuizmo::WORLD, glm::value_ptr(lightTransform), nullptr, snapPtr) )
+  {
+    curLight -> _Pos.x = lightTransform[3].x;
+    curLight -> _Pos.y = lightTransform[3].y;
+    curLight -> _Pos.z = lightTransform[3].z;
+    NotifyLightEdited();
+  }
 
   return 0;
 }
@@ -1658,6 +1741,7 @@ int Test5::ProcessInput()
         && !_KeyInput.IsKeyDown(GLFW_KEY_RIGHT_CONTROL) )
       {
         _SelectedMeshInstanceID = -1;
+        _SelectedLightID = -1;
       }
     }
     // RIGHT CLICK
@@ -1776,7 +1860,10 @@ int Test5::ProcessInput()
       {
         int pickedInstance = -1;
         if ( PickMeshInstance(mouseX, mouseY, pickedInstance) )
+        {
           _SelectedMeshInstanceID = pickedInstance;
+          _SelectedLightID = -1;
+        }
       }
     }
   }
@@ -1802,6 +1889,7 @@ int Test5::InitializeScene()
   }
   _Scene.reset(newScene);
   _SelectedMeshInstanceID = -1;
+  _SelectedLightID = -1;
 
   // Scene should contain at least one light
   //Light * firstLight = _Scene -> GetLight(0);

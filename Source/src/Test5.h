@@ -78,7 +78,9 @@ protected:
   void SyncFramebufferResolution( bool iNotifyRenderer = false );
 
   int DrawMeshInstanceGizmo();
+  int DrawLightGizmo();
   void NotifyMeshInstanceEdited();
+  void NotifyLightEdited();
   void NotifyBoidsInstancesEdited();
   void ComputeBoidsBoundsFromScene();
 
@@ -132,6 +134,12 @@ protected:
   bool                       _MeshGizmoSnap          = false;
   float                      _MeshGizmoTranslateSnap = 0.25f;
   float                      _MeshGizmoRotateSnap    = 15.f;
+
+  // Light editor
+  int                        _SelectedLightID        = -1;
+  bool                       _LightGizmoEnabled      = true;
+  bool                       _LightGizmoSnap         = false;
+  float                      _LightGizmoTranslateSnap = 0.25f;
 
   // Boids dynamic instance test
   bool                       _BoidsEnabled           = false;
