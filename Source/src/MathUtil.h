@@ -44,8 +44,8 @@ namespace RTRT
 template <typename T>
 struct AABB
 {
-  T _Low  =  T(std::numeric_limits<T>::infinity());
-  T _High = -T(std::numeric_limits<T>::infinity());
+  T _Low  =  T(std::numeric_limits<float>::infinity());
+  T _High = -T(std::numeric_limits<float>::infinity());
 
   void Insert(T iP)
   {
