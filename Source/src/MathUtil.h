@@ -42,31 +42,7 @@ namespace RTRT
 #define DeleteTab(ioPtr) { if ( ioPtr ) delete[] ioPtr; ioPtr = nullptr; }
 
 template <typename T>
-struct AABB
-{
-  T _Low  =  T(std::numeric_limits<float>::infinity());
-  T _High = -T(std::numeric_limits<float>::infinity());
-
-  void Insert(T iP)
-  {
-    MathUtil::Minimize(_Low, iP);
-    MathUtil::Maximize(_High, iP);
-  }
-
-  Vec3 Center() const { return 0.5f * (_Low + _High); }
-
-  void Corners( T oCorners[8] ) const
-  {
-    oCorners[0] = Vec3(_Low.x,  _Low.y,  _Low.z);
-    oCorners[1] = Vec3(_High.x, _Low.y,  _Low.z);
-    oCorners[2] = Vec3(_Low.x,  _High.y, _Low.z);
-    oCorners[3] = Vec3(_High.x, _High.y, _Low.z);
-    oCorners[4] = Vec3(_Low.x,  _Low.y,  _High.z);
-    oCorners[5] = Vec3(_High.x, _Low.y,  _High.z);
-    oCorners[6] = Vec3(_Low.x,  _High.y, _High.z);
-    oCorners[7] = Vec3(_High.x, _High.y, _High.z);
-  }
-};
+struct AABB;
 
 class MathUtil
 {
@@ -422,64 +398,95 @@ public:
     return glm::dot(Luma, iRGBColor);
   }
 
-  static bool IntersectRayAABB( const Vec3 & iRayOrigin, const Vec3 & iRayDir, const AABB<Vec3> & iBox, float & oHitT )
+  static bool IntersectRayAABB( const Vec3 & iRayOrigin, const Vec3 & iRayDir, const AABB<Vec3> & iBox, float & oHitT );
+
+  static bool IntersectRayTriangle( const Vec3 & iRayOrigin, const Vec3 & iRayDir, const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2, float & oHitT );
+};
+
+template <typename T>
+struct AABB
+{
+  T _Low  =  T(std::numeric_limits<float>::infinity());
+  T _High = -T(std::numeric_limits<float>::infinity());
+
+  void Insert(T iP)
   {
-    float tMin = 0.f;
-    float tMax = MAX_FLOAT;
-
-    for ( int axis = 0; axis < 3; ++axis )
-    {
-      if ( std::abs(iRayDir[axis]) < 1e-8f )
-      {
-        if ( ( iRayOrigin[axis] < iBox._Low[axis] ) || ( iRayOrigin[axis] > iBox._High[axis] ) )
-          return false;
-        continue;
-      }
-
-      float invDir = 1.f / iRayDir[axis];
-      float t0 = ( iBox._Low[axis]  - iRayOrigin[axis] ) * invDir;
-      float t1 = ( iBox._High[axis] - iRayOrigin[axis] ) * invDir;
-      if ( t0 > t1 )
-        std::swap(t0, t1);
-
-      tMin = std::max(tMin, t0);
-      tMax = std::min(tMax, t1);
-      if ( tMin > tMax )
-        return false;
-    }
-
-    oHitT = tMin;
-    return true;
+    MathUtil::Minimize(_Low, iP);
+    MathUtil::Maximize(_High, iP);
   }
 
-  static bool IntersectRayTriangle( const Vec3 & iRayOrigin, const Vec3 & iRayDir, const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2, float & oHitT )
+  Vec3 Center() const { return 0.5f * (_Low + _High); }
+
+  void Corners( T oCorners[8] ) const
   {
-    Vec3 edge1 = iV1 - iV0;
-    Vec3 edge2 = iV2 - iV0;
-    Vec3 pvec = glm::cross(iRayDir, edge2);
-    float det = glm::dot(edge1, pvec);
-    if ( std::abs(det) < EPSILON )
-      return false;
-
-    float invDet = 1.f / det;
-    Vec3 tvec = iRayOrigin - iV0;
-    float u = glm::dot(tvec, pvec) * invDet;
-    if ( ( u < 0.f ) || ( u > 1.f ) )
-      return false;
-
-    Vec3 qvec = glm::cross(tvec, edge1);
-    float v = glm::dot(iRayDir, qvec) * invDet;
-    if ( ( v < 0.f ) || ( u + v > 1.f ) )
-      return false;
-
-    float t = glm::dot(edge2, qvec) * invDet;
-    if ( t <= EPSILON )
-      return false;
-
-    oHitT = t;
-    return true;
+    oCorners[0] = Vec3(_Low.x,  _Low.y,  _Low.z);
+    oCorners[1] = Vec3(_High.x, _Low.y,  _Low.z);
+    oCorners[2] = Vec3(_Low.x,  _High.y, _Low.z);
+    oCorners[3] = Vec3(_High.x, _High.y, _Low.z);
+    oCorners[4] = Vec3(_Low.x,  _Low.y,  _High.z);
+    oCorners[5] = Vec3(_High.x, _Low.y,  _High.z);
+    oCorners[6] = Vec3(_Low.x,  _High.y, _High.z);
+    oCorners[7] = Vec3(_High.x, _High.y, _High.z);
   }
 };
+
+inline bool MathUtil::IntersectRayAABB( const Vec3 & iRayOrigin, const Vec3 & iRayDir, const AABB<Vec3> & iBox, float & oHitT )
+{
+  float tMin = 0.f;
+  float tMax = MAX_FLOAT;
+
+  for ( int axis = 0; axis < 3; ++axis )
+  {
+    if ( std::abs(iRayDir[axis]) < 1e-8f )
+    {
+      if ( ( iRayOrigin[axis] < iBox._Low[axis] ) || ( iRayOrigin[axis] > iBox._High[axis] ) )
+        return false;
+      continue;
+    }
+
+    float invDir = 1.f / iRayDir[axis];
+    float t0 = ( iBox._Low[axis]  - iRayOrigin[axis] ) * invDir;
+    float t1 = ( iBox._High[axis] - iRayOrigin[axis] ) * invDir;
+    if ( t0 > t1 )
+      std::swap(t0, t1);
+
+    tMin = std::max(tMin, t0);
+    tMax = std::min(tMax, t1);
+    if ( tMin > tMax )
+      return false;
+  }
+
+  oHitT = tMin;
+  return true;
+}
+
+inline bool MathUtil::IntersectRayTriangle( const Vec3 & iRayOrigin, const Vec3 & iRayDir, const Vec3 & iV0, const Vec3 & iV1, const Vec3 & iV2, float & oHitT )
+{
+  Vec3 edge1 = iV1 - iV0;
+  Vec3 edge2 = iV2 - iV0;
+  Vec3 pvec = glm::cross(iRayDir, edge2);
+  float det = glm::dot(edge1, pvec);
+  if ( std::abs(det) < EPSILON )
+    return false;
+
+  float invDet = 1.f / det;
+  Vec3 tvec = iRayOrigin - iV0;
+  float u = glm::dot(tvec, pvec) * invDet;
+  if ( ( u < 0.f ) || ( u > 1.f ) )
+    return false;
+
+  Vec3 qvec = glm::cross(tvec, edge1);
+  float v = glm::dot(iRayDir, qvec) * invDet;
+  if ( ( v < 0.f ) || ( u + v > 1.f ) )
+    return false;
+
+  float t = glm::dot(edge2, qvec) * invDet;
+  if ( t <= EPSILON )
+    return false;
+
+  oHitT = t;
+  return true;
+}
 
 }
 
