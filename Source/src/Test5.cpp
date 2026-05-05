@@ -14,6 +14,7 @@
 #include <iostream>
 #include <thread>
 #include <limits>
+#include <cmath>
 
 #include "imgui.h"
 #include "ImGuizmo.h"
@@ -312,6 +313,7 @@ int Test5::DrawUI()
     DrawSettingsUI();
     DrawCameraUI();
     DrawMeshInstanceUI();
+    DrawBoidsUI();
     DrawBackgroundUI();
     DrawMaterialsUI();
     DrawLightsUI();
@@ -342,6 +344,71 @@ void Test5::NotifyMeshInstanceEdited()
 {
   if ( _Renderer )
     _Renderer -> Notify(DirtyState::SceneInstances);
+}
+
+// ----------------------------------------------------------------------------
+// NotifyBoidsInstancesEdited
+// ----------------------------------------------------------------------------
+void Test5::NotifyBoidsInstancesEdited()
+{
+  if ( _Renderer )
+    _Renderer -> Notify(DirtyState::SceneInstances);
+}
+
+// ----------------------------------------------------------------------------
+// ComputeBoidsBoundsFromScene
+// ----------------------------------------------------------------------------
+void Test5::ComputeBoidsBoundsFromScene()
+{
+  if ( !_Scene )
+    return;
+
+  Vec3 low( MAX_FLOAT );
+  Vec3 high( -MAX_FLOAT );
+  bool hasBounds = false;
+
+  const std::vector<MeshInstance> & meshInstances = _Scene -> GetMeshInstances();
+  const std::vector<Mesh*>        & meshes        = _Scene -> GetMeshes();
+
+  for ( int i = 0; i < static_cast<int>(meshInstances.size()); ++i )
+  {
+    if ( _BoidsBinding.ContainsInstanceID(i) )
+      continue;
+
+    const MeshInstance & inst = meshInstances[i];
+    if ( ( inst._MeshID < 0 ) || ( inst._MeshID >= static_cast<int>(meshes.size()) ) )
+      continue;
+
+    Mesh * mesh = meshes[inst._MeshID];
+    if ( !mesh )
+      continue;
+
+    Vec3 corners[8];
+    mesh -> GetBoundingBox().Corners(corners);
+    for ( int c = 0; c < 8; ++c )
+    {
+      const Vec3 worldCorner = MathUtil::TransformPoint(corners[c], inst._Transform);
+      MathUtil::Minimize(low, worldCorner);
+      MathUtil::Maximize(high, worldCorner);
+      hasBounds = true;
+    }
+  }
+
+  if ( !hasBounds )
+  {
+    _BoidsSettings._BoundsCenter = Vec3(0.f);
+    _BoidsSettings._BoundsRadius = 4.f;
+    _BoidsSettings._BoundsHeight = 3.f;
+    return;
+  }
+
+  const Vec3 center = 0.5f * ( low + high );
+  const Vec3 extent = high - low;
+  const float horizontalExtent = std::max(extent.x, extent.z);
+
+  _BoidsSettings._BoundsCenter = center;
+  _BoidsSettings._BoundsRadius = std::max(4.f, horizontalExtent * 0.75f + 1.f);
+  _BoidsSettings._BoundsHeight = std::max(3.f, extent.y * 1.5f + 1.f);
 }
 
 // ----------------------------------------------------------------------------
@@ -762,7 +829,7 @@ int Test5::DrawCameraUI()
       }
     }
 
-    if ( ImGui::Button( "Reset" ) )
+    if ( ImGui::Button( "Reset##Camera" ) )
     {
       _Scene -> SetCamera(_DefaultCam);
       _Renderer -> Notify(DirtyState::SceneCamera);
@@ -782,6 +849,8 @@ int Test5::DrawMeshInstanceUI()
 
   std::vector<MeshInstance> & meshInstances = _Scene -> GetMeshInstances();
   if ( _SelectedMeshInstanceID >= static_cast<int>(meshInstances.size()) )
+    _SelectedMeshInstanceID = -1;
+  if ( _BoidsBinding.ContainsInstanceID(_SelectedMeshInstanceID) )
     _SelectedMeshInstanceID = -1;
 
   if ( ImGui::CollapsingHeader("Mesh Instances") )
@@ -806,6 +875,9 @@ int Test5::DrawMeshInstanceUI()
     {
       for ( int i = 0; i < static_cast<int>(meshInstances.size()); ++i )
       {
+        if ( _BoidsBinding.ContainsInstanceID(i) )
+          continue;
+
         const MeshInstance & inst = meshInstances[i];
         std::string instanceName = std::string("Instance #") + std::to_string(i);
         if ( !inst._Filename.empty() )
@@ -817,6 +889,9 @@ int Test5::DrawMeshInstanceUI()
       }
       ImGui::EndListBox();
     }
+
+    if ( _BoidsBinding.Attached() )
+      ImGui::TextDisabled("%d boid instances hidden.", _BoidsSettings._Count);
 
     if ( _SelectedMeshInstanceID >= 0 )
     {
@@ -848,6 +923,107 @@ int Test5::DrawMeshInstanceUI()
     }
 
     ImGui::Text("Ctrl + Left Click selects the nearest mesh instance.");
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawBoidsUI
+// ----------------------------------------------------------------------------
+int Test5::DrawBoidsUI()
+{
+  if ( !_Scene )
+    return 0;
+
+  if ( ImGui::CollapsingHeader("Boids") )
+  {
+    bool enabled = _BoidsEnabled;
+    if ( ImGui::Checkbox("Enable boids", &enabled) )
+    {
+      _BoidsEnabled = enabled;
+      _SelectedMeshInstanceID = -1;
+
+      if ( _BoidsEnabled )
+      {
+        if ( 0 != InitializeBoidsForScene(true) )
+        {
+          std::cout << "ERROR: Failed to initialize boids." << std::endl;
+          _BoidsEnabled = false;
+        }
+        else
+          _ReloadRenderer = true;
+      }
+      else
+      {
+        _BoidsBinding.Detach(*_Scene);
+        NotifyBoidsInstancesEdited();
+      }
+    }
+
+    if ( !_BoidsEnabled )
+      return 0;
+
+    ImGui::Checkbox("Pause", &_BoidsSettings._Paused);
+
+    if ( ImGui::Button("Reset##Boids") )
+    {
+      _BoidsSimulation.Reset(_BoidsSettings);
+      _BoidsBinding.Attach(*_Scene, _BoidsSettings);
+      _BoidsBinding.SyncTransforms(*_Scene, _BoidsSimulation, _BoidsSettings);
+      NotifyBoidsInstancesEdited();
+    }
+    ImGui::SameLine();
+    if ( ImGui::Button("Fit bounds to scene") )
+    {
+      ComputeBoidsBoundsFromScene();
+      _BoidsSimulation.Reset(_BoidsSettings);
+      _BoidsBinding.Attach(*_Scene, _BoidsSettings);
+      _BoidsBinding.SyncTransforms(*_Scene, _BoidsSimulation, _BoidsSettings);
+      NotifyBoidsInstancesEdited();
+    }
+
+    int count = _BoidsSettings._Count;
+    if ( ImGui::SliderInt("Count", &count, 1, 512) )
+    {
+      _BoidsSettings._Count = count;
+      _BoidsSimulation.Resize(_BoidsSettings);
+      _BoidsBinding.Attach(*_Scene, _BoidsSettings);
+      _BoidsBinding.SyncTransforms(*_Scene, _BoidsSimulation, _BoidsSettings);
+      NotifyBoidsInstancesEdited();
+    }
+
+    int seed = static_cast<int>(_BoidsSettings._Seed);
+    if ( ImGui::InputInt("Seed", &seed) )
+      _BoidsSettings._Seed = static_cast<unsigned int>(std::max(seed, 1));
+
+    bool syncTransforms = false;
+    syncTransforms |= ImGui::SliderFloat("Scale", &_BoidsSettings._Scale, 0.02f, 0.5f);
+
+    if ( ImGui::SliderFloat("Min speed", &_BoidsSettings._MinSpeed, 0.05f, 5.f) )
+      _BoidsSettings._MinSpeed = std::min(_BoidsSettings._MinSpeed, _BoidsSettings._MaxSpeed);
+    if ( ImGui::SliderFloat("Max speed", &_BoidsSettings._MaxSpeed, 0.05f, 8.f) )
+      _BoidsSettings._MaxSpeed = std::max(_BoidsSettings._MaxSpeed, _BoidsSettings._MinSpeed);
+    ImGui::SliderFloat("Max force", &_BoidsSettings._MaxForce, 0.05f, 12.f);
+
+    if ( ImGui::SliderFloat("Neighbor radius", &_BoidsSettings._NeighborRadius, 0.1f, 5.f) )
+      _BoidsSettings._NeighborRadius = std::max(_BoidsSettings._NeighborRadius, _BoidsSettings._SeparationRadius);
+    if ( ImGui::SliderFloat("Separation radius", &_BoidsSettings._SeparationRadius, 0.05f, 2.f) )
+      _BoidsSettings._SeparationRadius = std::min(_BoidsSettings._SeparationRadius, _BoidsSettings._NeighborRadius);
+
+    ImGui::SliderFloat("Separation", &_BoidsSettings._SeparationWeight, 0.f, 5.f);
+    ImGui::SliderFloat("Alignment", &_BoidsSettings._AlignmentWeight, 0.f, 5.f);
+    ImGui::SliderFloat("Cohesion", &_BoidsSettings._CohesionWeight, 0.f, 5.f);
+    ImGui::SliderFloat("Bounds", &_BoidsSettings._BoundsWeight, 0.f, 5.f);
+
+    ImGui::SliderFloat("Bounds radius", &_BoidsSettings._BoundsRadius, 0.5f, 25.f);
+    ImGui::SliderFloat("Bounds height", &_BoidsSettings._BoundsHeight, 0.5f, 25.f);
+
+    if ( syncTransforms )
+    {
+      _BoidsBinding.SyncTransforms(*_Scene, _BoidsSimulation, _BoidsSettings);
+      NotifyBoidsInstancesEdited();
+    }
   }
 
   return 0;
@@ -1405,9 +1581,12 @@ bool Test5::PickMeshInstance( double iMouseX, double iMouseY, int & oMeshInstanc
   const std::vector<MeshInstance> & meshInstances = _Scene -> GetMeshInstances();
   const std::vector<Mesh*> & meshes = _Scene -> GetMeshes();
 
-  float nearestDist = std::numeric_limits<float>::max();
+  float nearestDist = MAX_FLOAT;
   for ( int instID = 0; instID < static_cast<int>(meshInstances.size()); ++instID )
   {
+    if ( _BoidsBinding.ContainsInstanceID(instID) )
+      continue;
+
     const MeshInstance & inst = meshInstances[instID];
     if ( ( inst._MeshID < 0 ) || ( inst._MeshID >= static_cast<int>(meshes.size()) ) )
       continue;
@@ -1461,13 +1640,27 @@ int Test5::ProcessInput()
   static bool toggleZoom = false;
   double curMouseX = 0., curMouseY = 0.;
   glfwGetCursorPos(_MainWindow.get(), &curMouseX, &curMouseY);
+  if ( !ImGui::GetIO().WantCaptureMouse )
   {
     const float MouseSensitivity[6] = { 1.f, 0.5f, 0.01f, 0.01f, .5f, 0.01f }; // Yaw, Pitch, StafeRight, StrafeUp, ScrollInOut, ZoomInOut
 
     float deltaX = 0., deltaY = 0.;
     double mouseX = 0.f, mouseY = 0.f;
 
-     // RIGHT CLICK
+    // LEFT CLICK
+    if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1, mouseX, mouseY)
+      && !ImGuizmo::IsOver()
+      && !ImGuizmo::IsUsing())
+    {
+      if ( !_MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_2, mouseX, mouseY)
+        && !_MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_3, mouseX, mouseY)
+        && !_KeyInput.IsKeyDown(GLFW_KEY_LEFT_CONTROL)
+        && !_KeyInput.IsKeyDown(GLFW_KEY_RIGHT_CONTROL) )
+      {
+        _SelectedMeshInstanceID = -1;
+      }
+    }
+    // RIGHT CLICK
     if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_2, mouseX, mouseY) )
     {
       _Scene -> GetCamera().SetCameraMode(CameraMode::FreeLook);
@@ -1648,6 +1841,34 @@ int Test5::InitializeScene()
 
   _Settings._NbThreads = g_NbThreadsMax;
 
+  _BoidsBinding.Reset();
+  if ( _BoidsEnabled && ( 0 != InitializeBoidsForScene(true) ) )
+    return 1;
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeBoidsForScene
+// ----------------------------------------------------------------------------
+int Test5::InitializeBoidsForScene( bool iResetSimulation )
+{
+  if ( !_Scene )
+    return 0;
+
+  ComputeBoidsBoundsFromScene();
+
+  if ( iResetSimulation )
+    _BoidsSimulation.Reset(_BoidsSettings);
+  else
+    _BoidsSimulation.Resize(_BoidsSettings);
+
+  if ( 0 != _BoidsBinding.Attach(*_Scene, _BoidsSettings) )
+    return 1;
+
+  if ( 0 != _BoidsBinding.SyncTransforms(*_Scene, _BoidsSimulation, _BoidsSettings) )
+    return 1;
+
   return 0;
 }
 
@@ -1726,6 +1947,28 @@ int Test5::UpdateScene()
 
     _ReloadBackground = false;
   }
+
+  if ( 0 != UpdateBoids() )
+    return 1;
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateBoids
+// ----------------------------------------------------------------------------
+int Test5::UpdateBoids()
+{
+  if ( !_BoidsEnabled || !_Scene || !_BoidsBinding.Attached() || _BoidsSettings._Paused )
+    return 0;
+
+  if ( 0 != _BoidsSimulation.Update(static_cast<float>(_DeltaTime), _BoidsSettings) )
+    return 1;
+
+  if ( 0 != _BoidsBinding.SyncTransforms(*_Scene, _BoidsSimulation, _BoidsSettings) )
+    return 1;
+
+  NotifyBoidsInstancesEdited();
 
   return 0;
 }

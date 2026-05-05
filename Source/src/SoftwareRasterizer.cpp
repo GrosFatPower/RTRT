@@ -504,6 +504,15 @@ int SoftwareRasterizer::UnloadScene()
   _VertexBuffer.clear();
   _Triangles.clear();
   _ProjVerticesBuf.clear();
+  for ( auto & rasterTriangles : _RasterTrianglesBuf )
+    rasterTriangles.clear();
+  for ( auto & fragments : _Fragments )
+    fragments.clear();
+  for ( auto & tile : _Tiles )
+  {
+    for ( auto & bin : tile._RasterTrisBins )
+      bin.clear();
+  }
 
   return 0;
 }
@@ -701,7 +710,7 @@ void SoftwareRasterizer::ResetTiles()
     std::fill(policy, tile._CoveredPixels.begin(), tile._CoveredPixels.end(), false);
 
     std::fill(policy, tile._LocalFB._ColorBuffer.begin(), tile._LocalFB._ColorBuffer.end(), S_DefaultColor);
-    std::fill(policy, tile._LocalFB._DepthBuffer.begin(), tile._LocalFB._DepthBuffer.end(), std::numeric_limits<float>::max());
+    std::fill(policy, tile._LocalFB._DepthBuffer.begin(), tile._LocalFB._DepthBuffer.end(), MAX_FLOAT);
   }
 }
 
@@ -1051,6 +1060,9 @@ int SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM)
 {
   int nbTriangles = static_cast<int>(_Triangles.size());
 
+  for ( unsigned int i = 0; i < _NbJobs; ++i )
+    _RasterTrianglesBuf[i].clear();
+
   for (unsigned int i = 0; i < _NbJobs; ++i)
   {
     int startInd = (nbTriangles / _NbJobs) * i;
@@ -1072,7 +1084,6 @@ int SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM)
 // ----------------------------------------------------------------------------
 void SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, int iStartInd, int iEndInd)
 {
-  _RasterTrianglesBuf[iThreadBin].clear();
   if ( _RasterTrianglesBuf[iThreadBin].capacity() < static_cast<size_t>(iEndInd - iStartInd) )
     _RasterTrianglesBuf[iThreadBin].reserve(iEndInd - iStartInd);
 

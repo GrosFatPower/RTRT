@@ -6,6 +6,7 @@
 #include "Camera.h"
 #include "RenderSettings.h"
 #include "Renderer.h"
+#include "Boids.h"
 #include "KeyInput.h"
 #include "MouseInput.h"
 #include "GLUtil.h"
@@ -56,6 +57,7 @@ protected:
   int DrawSettingsUI();
   int DrawCameraUI();
   int DrawMeshInstanceUI();
+  int DrawBoidsUI();
   int DrawBackgroundUI();
   int DrawMaterialsUI();
   int DrawLightsUI();
@@ -66,6 +68,8 @@ protected:
   int InitializeScene();
   int InitializeRenderer();
   int UpdateScene();
+  int UpdateBoids();
+  int InitializeBoidsForScene( bool iResetSimulation );
 
   int InitializeSceneFiles();
   int InitializeBackgroundFiles();
@@ -75,6 +79,8 @@ protected:
 
   int DrawMeshInstanceGizmo();
   void NotifyMeshInstanceEdited();
+  void NotifyBoidsInstancesEdited();
+  void ComputeBoidsBoundsFromScene();
 
   bool PickMeshInstance( double iMouseX, double iMouseY, int & oMeshInstanceID ) const;
   bool BuildPickingRay( double iMouseX, double iMouseY, Vec3 & oRayOrigin, Vec3 & oRayDir ) const;
@@ -126,6 +132,12 @@ protected:
   bool                       _MeshGizmoSnap          = false;
   float                      _MeshGizmoTranslateSnap = 0.25f;
   float                      _MeshGizmoRotateSnap    = 15.f;
+
+  // Boids dynamic instance test
+  bool                       _BoidsEnabled           = false;
+  BoidSettings               _BoidsSettings;
+  BoidSimulation             _BoidsSimulation;
+  BoidSceneBinding           _BoidsBinding;
 };
 
 }

@@ -558,8 +558,8 @@ int DeferredRenderer::UpdateShadowState()
     Vec3 corners[8];
     _SceneBounds.Corners(corners);
 
-    Vec3 lightSpaceLow( std::numeric_limits<float>::infinity() );
-    Vec3 lightSpaceHigh( -std::numeric_limits<float>::infinity() );
+    Vec3 lightSpaceLow( MAX_FLOAT );
+    Vec3 lightSpaceHigh( -MAX_FLOAT );
     for ( const Vec3 & corner : corners )
     {
       Vec4 lightSpaceCorner = lightView * Vec4(corner, 1.f);

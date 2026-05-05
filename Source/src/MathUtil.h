@@ -6,6 +6,7 @@
 #include <math.h>
 #include <cmath>
 #include <algorithm>
+#include <limits>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/vec2.hpp"
@@ -29,8 +30,9 @@ typedef glm::uvec4  Vec4ui;
 typedef glm::vec<4, uint8_t, glm::defaultp> Vec4b;
 typedef glm::mat4x4 Mat4x4;
 
-static constexpr float EPSILON = 1e-9f;
+static constexpr float EPSILON    = 1e-9f;
 static constexpr float RESOLUTION = 0.001f;
+static constexpr float MAX_FLOAT  = std::numeric_limits<float>::max();
 static constexpr float INV_PI     = 1 / static_cast<float>(M_PI);
 
 namespace RTRT
@@ -42,8 +44,8 @@ namespace RTRT
 template <typename T>
 struct AABB
 {
-  T _Low  =  T(std::numeric_limits<float>::infinity());
-  T _High = -T(std::numeric_limits<float>::infinity());
+  T _Low  =  T(std::numeric_limits<T>::infinity());
+  T _High = -T(std::numeric_limits<T>::infinity());
 
   void Insert(T iP)
   {
@@ -423,7 +425,7 @@ public:
   static bool IntersectRayAABB( const Vec3 & iRayOrigin, const Vec3 & iRayDir, const AABB<Vec3> & iBox, float & oHitT )
   {
     float tMin = 0.f;
-    float tMax = std::numeric_limits<float>::max();
+    float tMax = MAX_FLOAT;
 
     for ( int axis = 0; axis < 3; ++axis )
     {
