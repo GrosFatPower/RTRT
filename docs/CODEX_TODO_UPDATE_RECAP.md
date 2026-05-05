@@ -4,6 +4,8 @@
 
 Moved the transparency follow-up item into `CODEX_TODO.md`, which is the assistant-side backlog file you wanted to use for these reminders.
 
+Current status note: this recap describes an older backlog move. Deferred mesh-instance transparency has since been implemented, and `CODEX_TODO.md` no longer treats basic transparency as an open roadmap item.
+
 ## What Changed
 
 - Confirmed the transparency note is no longer present in `ToDo.txt`.

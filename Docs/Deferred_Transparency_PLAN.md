@@ -2,7 +2,9 @@
 
 ## Summary
 
-Implement transparency in the deferred `OpenGLRasterizer` as a split pipeline:
+Status: implemented in the current codebase, with the per-triangle sorting follow-up described below.
+
+Transparency in the deferred `OpenGLRasterizer` is implemented as a split pipeline:
 
 - Keep the current deferred path for opaque geometry.
 - Keep `MASK` materials in the opaque pass, with alpha-cut discard in the G-buffer shader.
@@ -12,7 +14,7 @@ Implement transparency in the deferred `OpenGLRasterizer` as a split pipeline:
   - transmissive/glass-like materials where `_SpecTrans > 0.001`, even if alpha mode is still `Opaque`
 - Do not implement screen-space refraction, primitive support, or order-independent transparency in v1.
 
-This is a conservative, shippable design aimed at mesh-instance transparency with stable behavior and explicit limitations.
+This remains a conservative design aimed at mesh-instance transparency with stable behavior and explicit limitations.
 
 ## Implementation Changes
 
@@ -32,7 +34,7 @@ Classification rule:
 
 Rebuild these lists on scene reload and on `SceneMaterials` / `SceneInstances` dirties.
 
-Sort `transparentInstances` back-to-front every frame using camera-space depth of each instance’s transformed mesh-bounds center. Do not use object insertion order or mesh ID order.
+Sort `transparentInstances` back-to-front every frame using camera-space depth of each instance’s transformed mesh-bounds center. Transparent meshes also have per-triangle metadata and sorted index buffers, described in the 2026-05-02 update below.
 
 ### 2. Keep the deferred pass opaque-only
 
@@ -53,10 +55,10 @@ Changes inside the opaque path:
 
 ### 3. Add a forward transparent pass after deferred lighting
 
-Add one new transparent shader path:
+The transparent shader path:
 
-- reuse the current deferred geometry vertex shader
-- add a new transparent fragment shader for mesh-instance transparency
+- reuses the current deferred geometry vertex shader
+- uses `Shaders/fragment_DeferredTransparent.glsl` for mesh-instance transparency
 
 Transparent pass behavior:
 
@@ -106,8 +108,8 @@ Debug modes:
 
 Settings/UI:
 
-- add `RenderSettings::_Transparency` default `true`
-- add one `Transparency` checkbox under `OpenGLRasterizer` settings in `Test5`
+- `RenderSettings::_Transparency` defaults to `true`
+- one `Transparency` checkbox exists under `OpenGLRasterizer` settings in `Test5`
 - no new scene-file syntax is required
 
 ## Test Plan

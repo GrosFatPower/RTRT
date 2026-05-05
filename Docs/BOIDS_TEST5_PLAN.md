@@ -1,23 +1,25 @@
-# Add Boids Simulation Flag To Test5
+# Boids Simulation In Test5
 
 ## Summary
 
-Add an optional CPU Boids simulation to `Test5` as an appended dynamic overlay on the currently loaded scene. Boids will use a procedural low-poly arrow mesh so movement direction is visible in all three renderers. The implementation will be split into reusable simulation and scene-binding pieces, with `Test5` only owning UI, lifecycle, and per-frame orchestration.
+Status: implemented in the current codebase.
+
+`Test5` now includes an optional CPU Boids simulation as an appended dynamic overlay on the currently loaded scene. Boids use a procedural low-poly arrow mesh so movement direction is visible in all three renderers. The implementation is split into reusable simulation and scene-binding pieces, with `Test5` owning UI, lifecycle, and per-frame orchestration.
 
 ## Key Changes
 
-- Add a reusable `BoidSimulation` module with no renderer dependency:
+- Added a reusable `BoidSimulation` module with no renderer dependency:
   - `BoidSettings`: count, seed, bounds center/radius/height, min/max speed, max force, neighbor radius, separation radius, weights, boid scale, pause flag.
   - `BoidState`: position, velocity.
   - `Initialize(settings)`, `Reset(settings)`, `Resize(settings)`, `Update(deltaTime, settings)`, `GetBoids()`.
   - Use simple O(N^2) neighbor search for v1, targeting 32-256 boids.
-- Add a reusable `BoidSceneBinding` helper that depends on `Scene` but not `Test5`:
+- Added a reusable `BoidSceneBinding` helper that depends on `Scene` but not `Test5`:
   - Creates one procedural arrow `Mesh`, one matte material, and N appended `MeshInstance`s.
   - Tracks boid-owned instance IDs.
   - `Attach(Scene&, settings)`, `Detach(Scene&)`, `SyncTransforms(Scene&, simulation, settings)`, `ContainsInstanceID(int)`.
   - Removes only boid-owned mesh instances on disable/reset/scene reload; leaves the procedural mesh/material in the scene because `Scene` has no remove APIs for those.
-- Integrate into `Test5`:
-  - Add `_BoidsEnabled`, `_BoidsSettings`, `_BoidsSimulation`, `_BoidsBinding`, and a `DrawBoidsUI()` panel.
+- Integrated into `Test5`:
+  - Added `_BoidsEnabled`, `_BoidsSettings`, `_BoidsSimulation`, `_BoidsBinding`, and a `DrawBoidsUI()` panel.
   - On scene load, detach/reset boid state; if the flag is enabled, attach boids to the new scene.
   - In `UpdateScene()`, after scene/renderer reload handling and before renderer `Update()`, advance simulation when enabled and not paused, sync transforms, then call `_Renderer->Notify(DirtyState::SceneInstances)`.
   - On disable, detach boid instances and notify `SceneInstances`.
@@ -41,17 +43,18 @@ Add an optional CPU Boids simulation to `Test5` as an appended dynamic overlay o
   - Transform basis is built from velocity direction, using world up unless nearly parallel.
   - Material uses opaque colored albedo, roughness 0.55, metallic 0.
 - UI:
-  - Add a `Boids` collapsing header in the existing `Test5` panel.
-  - Controls: enable, pause, reset, count, seed, speed range, neighbor/separation radii, rule weights, bounds radius/height, scale.
+  - A `Boids` collapsing header exists in the existing `Test5` panel.
+  - Controls: enable, pause, reset, recompute bounds, count, seed, color, speed range, neighbor/separation radii, rule weights, bounds radius/height, scale.
   - Changes that alter transforms notify `SceneInstances`; changes that recreate instances also update binding before notifying.
 - Renderer expectations:
   - Path tracer will reset accumulation every moving frame because `SceneInstances` dirties TLAS data. This is expected and useful for the dynamic-geometry test.
+  - Path tracer denoising and pass timers are now guarded so continuously dirty boid frames do not wait on denoiser GPU queries that were not issued.
   - Deferred renderer will rebuild draw lists/bounds and render moving instances.
   - Software rasterizer will reload compiled scene buffers when instances move; keep default count modest.
 
 ## Test Plan
 
-- Build: `cmake --build Build --config Debug --target RenderLab`.
+- Build: `cmake --build build --config Debug --target RenderLab`.
 - Runtime smoke test in `Test5`:
   - Enable boids on a normal loaded scene and confirm visible moving arrow meshes.
   - Toggle PathTracer, SoftwareRasterizer, and OpenGLRasterizer; confirm boids move in all three.

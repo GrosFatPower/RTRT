@@ -51,7 +51,7 @@ Updated `Shaders/fragment_DeferredLighting.glsl`:
 
 Updated `Source/src/RenderSettings.h`:
 - added `_SpecularIBL` (default `true`)
-- added `_SpecularIBLIntensity` (default `1.0f`)
+- added `_SpecularIBLIntensity` (current default `0.5f`)
 
 Updated `Source/src/Test5.cpp`:
 - added `Specular IBL` checkbox

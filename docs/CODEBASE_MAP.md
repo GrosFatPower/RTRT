@@ -37,6 +37,7 @@ Purpose:
 - Own the current scene and renderer.
 - Route UI events and camera/light/material editing.
 - Switch between renderer implementations without changing the surrounding app model.
+- Optionally run the CPU boids simulation and expose it as ordinary dynamic mesh instances.
 
 ### Shared Scene Representation
 
@@ -95,13 +96,15 @@ Main responsibilities:
 - Upload packed scene and BVH data to GPU buffers/textures.
 - Run the path tracing pass.
 - Accumulate frames across time.
-- Optionally denoise.
+- Optionally denoise. Windows uses the compute shader path; macOS and other non-Windows OpenGL 4.1 targets use a fullscreen fragment fallback.
+- Track GPU pass timings. Windows uses timestamp query pairs; macOS uses `GL_TIME_ELAPSED`.
 - Present the final output to screen.
 
 Key shader files:
 - `Shaders/fragment_PathTracer.glsl`
 - `Shaders/fragment_Accumulate.glsl`
-- `Shaders/fragment_Denoiser.glsl`
+- `Shaders/compute_Denoiser.glsl`
+- `Shaders/fragment_DenoiserPathTracer.glsl`
 - `Shaders/fragment_PostProcess.glsl`
 - Shared includes such as `Shaders/BVH.glsl`, `Shaders/Intersections.glsl`, `Shaders/DisneyBSDF.glsl`, `Shaders/Material.glsl`, `Shaders/Lights.glsl`, `Shaders/Sampling.glsl`
 
@@ -127,9 +130,10 @@ Core files:
 
 Main responsibilities:
 - Build a G-buffer from scene geometry.
-- Run shadow-map, SSAO, deferred-lighting, and fullscreen composite passes.
+- Run shadow-map, SSAO, deferred-lighting, transparent-forward, and fullscreen composite passes.
 - Support deferred debug-buffer views, visible light drawing, and wireframe overlay.
 - Manage GPU-side texture filtering, env-map mip usage, BRDF LUT generation, and anisotropy.
+- Split opaque and transparent mesh-instance rendering, including per-triangle sorting for transparent meshes.
 
 Key shader files:
 - `Shaders/vertex_DeferredGeometry.glsl`
@@ -138,6 +142,7 @@ Key shader files:
 - `Shaders/fragment_SSAO.glsl`
 - `Shaders/fragment_SSAOBlur.glsl`
 - `Shaders/fragment_BRDFLUT.glsl`
+- `Shaders/fragment_DeferredTransparent.glsl`
 - `Shaders/vertex_ShadowCubeDepth.glsl`
 - `Shaders/fragment_ShadowCubeDepth.glsl`
 - `Shaders/vertex_ShadowDirectionalDepth.glsl`
@@ -168,8 +173,10 @@ Important utility files include:
 - `Source/src/ShaderProgram.cpp`
 - `Source/src/QuadMesh.h`
 - `Source/src/QuadMesh.cpp`
+- `Source/src/Boids.h`
+- `Source/src/Boids.cpp`
 
-These provide the math aliases, GL helper wrappers, shader compilation/linking, and common fullscreen geometry used throughout the project.
+These provide the math aliases, GL helper wrappers, shader compilation/linking, common fullscreen geometry, and optional CPU-side dynamic boid scene binding used throughout the project.
 
 ## Asset And Data Areas
 
@@ -192,8 +199,10 @@ If the task is about:
 - Scene loading bugs or import behavior: start with `Source/src/Loader.cpp`
 - Shared scene data or packed render data: start with `Source/src/Scene.cpp`
 - GPU path tracing: start with `Source/src/PathTracer.cpp` and the path tracing shaders
+- Path tracer denoising/timing: start with `Source/src/PathTracer.cpp`, `Shaders/compute_Denoiser.glsl`, and `Shaders/fragment_DenoiserPathTracer.glsl`
 - CPU rasterization: start with `Source/src/SoftwareRasterizer.cpp`
 - Deferred rasterization: start with `Source/src/DeferredRenderer.cpp`
+- Dynamic boids overlay: start with `Source/src/Boids.cpp` and `Source/src/Test5.cpp`
 - Build configuration: start with root `CMakeLists.txt`, which is the source of truth for the `RenderLab` target
 
 ## Current Architectural Center
