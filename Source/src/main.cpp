@@ -3,6 +3,7 @@
 #include "Test3.h"
 #include "Test4.h"
 #include "Test5.h"
+#include "Test6.h"
 #include "PathUtils.h"
 
 #include "imgui.h"
@@ -29,7 +30,7 @@ static int ParseTestArg( const std::string & iArg )
 {
   if ( 1 == iArg.size() )
   {
-    if ( ( iArg[0] >= '1' ) && ( iArg[0] <= '5' ) )
+    if ( ( iArg[0] >= '1' ) && ( iArg[0] <= '6' ) )
       return ( iArg[0] - '0' );
     return 0;
   }
@@ -41,7 +42,7 @@ static int ParseTestArg( const std::string & iArg )
 
     if ( lowerArg.rfind("test", 0) == 0 )
     {
-      if ( ( lowerArg[4] >= '1' ) && ( lowerArg[4] <= '5' ) )
+      if ( ( lowerArg[4] >= '1' ) && ( lowerArg[4] <= '6' ) )
         return ( lowerArg[4] - '0' );
     }
   }
@@ -56,11 +57,11 @@ static void PrintUsage( const char * iExeName )
 {
   const char * exeName = ( iExeName && iExeName[0] ) ? iExeName : "RenderLab";
 
-  std::cout << "Usage: " << exeName << " [Test1|Test2|Test3|Test4|Test5|1|2|3|4|5]" << std::endl;
+  std::cout << "Usage: " << exeName << " [Test1|Test2|Test3|Test4|Test5|Test6|1|2|3|4|5|6]" << std::endl;
   std::cout << "Examples:" << std::endl;
   std::cout << "  " << exeName << std::endl;
-  std::cout << "  " << exeName << " Test5" << std::endl;
-  std::cout << "  " << exeName << " 5" << std::endl;
+  std::cout << "  " << exeName << " Test6" << std::endl;
+  std::cout << "  " << exeName << " 6" << std::endl;
 }
 
 // ----------------------------------------------------------------------------
@@ -94,6 +95,11 @@ static int RunSelectedTest( const int iSelectedTest, std::shared_ptr<GLFWwindow>
   {
     RTRT::Test5 test5(iMainWindow, g_ScreenWidth, g_ScreenHeight);
     failure = test5.Run();
+  }
+  else if ( 6 == iSelectedTest )
+  {
+    RTRT::Test6 test6(iMainWindow, g_ScreenWidth, g_ScreenHeight);
+    failure = test6.Run();
   }
 
   return failure;
@@ -141,7 +147,8 @@ int TestSelectionPanel( GLFWwindow * iMainWindow )
                                  RTRT::Test2::GetTestHeader(),
                                  RTRT::Test3::GetTestHeader(),
                                  RTRT::Test4::GetTestHeader(),
-                                 RTRT::Test5::GetTestHeader() };
+                                 RTRT::Test5::GetTestHeader(),
+                                 RTRT::Test6::GetTestHeader() };
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   while (!glfwWindowShouldClose(iMainWindow) && !selectedTest)
@@ -156,7 +163,7 @@ int TestSelectionPanel( GLFWwindow * iMainWindow )
     {
       ImGui::Begin("Test selection");
 
-      for ( int i = 0; i < 5; ++i )
+      for ( int i = 0; i < 6; ++i )
       {
         std::string buttonName = std::string( "Test " ) + std::to_string( i + 1 );
         if ( ImGui::Button( buttonName.c_str() ) )

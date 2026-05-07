@@ -1,0 +1,600 @@
+#pragma warning(disable : 4100) // unreferenced formal parameter
+
+#include "Test6.h"
+
+#include "DeferredRenderer.h"
+#include "PathTracer.h"
+#include "SoftwareRasterizer.h"
+
+#include "imgui.h"
+#include "backends/imgui_impl_glfw.h"
+#include "backends/imgui_impl_opengl3.h"
+
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
+
+#include <algorithm>
+#include <iostream>
+#include <thread>
+
+namespace RTRT
+{
+
+const char * Test6::GetTestHeader() { return "Basic FPS"; }
+
+// ----------------------------------------------------------------------------
+// Global variables
+// ----------------------------------------------------------------------------
+static int g_Test6DebugMode = 0;
+static unsigned int g_Test6NbThreadsMax = std::thread::hardware_concurrency();
+
+// ----------------------------------------------------------------------------
+// KeyCallback
+// ----------------------------------------------------------------------------
+void Test6::KeyCallback( GLFWwindow * iWindow, const int iKey, const int iScancode, const int iAction, const int iMods )
+{
+  auto * const this_ = static_cast<Test6*>(glfwGetWindowUserPointer(iWindow));
+  if ( !this_ )
+    return;
+
+  if ( ( GLFW_PRESS == iAction ) || ( GLFW_RELEASE == iAction ) )
+    this_ -> _KeyInput.AddEvent(iKey, iAction, iMods);
+}
+
+// ----------------------------------------------------------------------------
+// MouseButtonCallback
+// ----------------------------------------------------------------------------
+void Test6::MouseButtonCallback( GLFWwindow * iWindow, const int iButton, const int iAction, const int iMods )
+{
+  if ( ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) )
+    return;
+
+  auto * const this_ = static_cast<Test6*>(glfwGetWindowUserPointer(iWindow));
+  if ( !this_ )
+    return;
+
+  double mouseX = 0., mouseY = 0.;
+  glfwGetCursorPos(iWindow, &mouseX, &mouseY);
+
+  if ( ( GLFW_PRESS == iAction ) || ( GLFW_RELEASE == iAction ) )
+    this_ -> _MouseInput.AddButtonEvent(iButton, iAction, mouseX, mouseY);
+}
+
+// ----------------------------------------------------------------------------
+// MouseScrollCallback
+// ----------------------------------------------------------------------------
+void Test6::MouseScrollCallback( GLFWwindow * iWindow, const double iOffsetX, const double iOffsetY )
+{
+  if ( ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) )
+    return;
+
+  auto * const this_ = static_cast<Test6*>(glfwGetWindowUserPointer(iWindow));
+  if ( !this_ )
+    return;
+
+  this_ -> _MouseInput.AddScrollEvent(iOffsetX, iOffsetY);
+}
+
+// ----------------------------------------------------------------------------
+// FramebufferSizeCallback
+// ----------------------------------------------------------------------------
+void Test6::FramebufferSizeCallback( GLFWwindow * iWindow, const int iWidth, const int iHeight )
+{
+  auto * const this_ = static_cast<Test6*>(glfwGetWindowUserPointer(iWindow));
+  if ( !this_ )
+    return;
+
+  if ( !iWidth || !iHeight )
+    return;
+
+  this_ -> SyncFramebufferResolution(true);
+}
+
+// ----------------------------------------------------------------------------
+// CTOR
+// ----------------------------------------------------------------------------
+Test6::Test6( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iScreenHeight )
+: BaseTest(iMainWindow, iScreenWidth, iScreenHeight)
+{
+  _Settings._WindowResolution.x = iScreenWidth;
+  _Settings._WindowResolution.y = iScreenHeight;
+  _Settings._RenderResolution.x = iScreenWidth;
+  _Settings._RenderResolution.y = iScreenHeight;
+  _Settings._BackgroundColor = Vec3(0.015f, 0.018f, 0.022f);
+  _Settings._EnableSkybox = false;
+  _Settings._EnableBackGround = true;
+  _Settings._RenderScale = 100;
+  _Settings._SSAO = true;
+  _Settings._ShadowMapping = true;
+  _Settings._MaxShadowCastingLights = 3;
+}
+
+// ----------------------------------------------------------------------------
+// DTOR
+// ----------------------------------------------------------------------------
+Test6::~Test6()
+{
+  SetMouseCaptured(false);
+}
+
+// ----------------------------------------------------------------------------
+// SyncFramebufferResolution
+// ----------------------------------------------------------------------------
+void Test6::SyncFramebufferResolution( bool iNotifyRenderer )
+{
+  if ( !_MainWindow )
+    return;
+
+  int frameBufferWidth = 0;
+  int frameBufferHeight = 0;
+  glfwGetFramebufferSize(_MainWindow.get(), &frameBufferWidth, &frameBufferHeight);
+
+  if ( frameBufferWidth <= 0 || frameBufferHeight <= 0 )
+    return;
+
+  _Settings._WindowResolution.x = frameBufferWidth;
+  _Settings._WindowResolution.y = frameBufferHeight;
+  _Settings._RenderResolution.x = int(_Settings._WindowResolution.x * (_Settings._RenderScale * 0.01f));
+  _Settings._RenderResolution.y = int(_Settings._WindowResolution.y * (_Settings._RenderScale * 0.01f));
+
+  glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+
+  if ( iNotifyRenderer && _Renderer )
+    _Renderer -> Notify(DirtyState::RenderSettings);
+}
+
+// ----------------------------------------------------------------------------
+// SetMouseCaptured
+// ----------------------------------------------------------------------------
+void Test6::SetMouseCaptured( bool iCaptured )
+{
+  if ( !_MainWindow )
+    return;
+
+  _MouseCaptured = iCaptured;
+  _HasLastMousePos = false;
+  glfwSetInputMode(_MainWindow.get(), GLFW_CURSOR, _MouseCaptured ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+}
+
+// ----------------------------------------------------------------------------
+// ApplyRendererDefaults
+// ----------------------------------------------------------------------------
+void Test6::ApplyRendererDefaults()
+{
+  if ( FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode )
+  {
+    _Settings._Accumulate = true;
+    _Settings._Denoise = false;
+    _Settings._NbSamplesPerPixel = 1;
+    _Settings._Bounces = 2;
+    _Settings._LowResRatio = 1.f;
+    _Settings._TiledRendering = false;
+    SetMouseCaptured(false);
+  }
+  else if ( FpsRendererMode::Software == _GameSettings._RendererMode )
+  {
+    _Settings._NbThreads = std::max(1u, g_Test6NbThreadsMax);
+    _Settings._ShadingType = ShadingType::PBR;
+    _Settings._Sampling = SamplingMode::Bilinear;
+    _Settings._TiledRendering = true;
+  }
+  else
+  {
+    _Settings._SSAO = true;
+    _Settings._SSAOBlur = true;
+    _Settings._ShadowMapping = true;
+    _Settings._SpecularIBL = false;
+    _Settings._Transparency = false;
+    _Settings._TiledRendering = false;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// InitializeUI
+// ----------------------------------------------------------------------------
+int Test6::InitializeUI()
+{
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  ImGuiIO & io = ImGui::GetIO(); (void)io;
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+
+  ImGui::StyleColorsDark();
+  io.Fonts -> AddFontDefault();
+
+  const char * glslVersion = "#version 410";
+  ImGui_ImplGlfw_InitForOpenGL(_MainWindow.get(), true);
+  ImGui_ImplOpenGL3_Init(glslVersion);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeScene
+// ----------------------------------------------------------------------------
+int Test6::InitializeScene()
+{
+  std::unique_ptr<Scene> newScene(new Scene);
+  if ( !newScene )
+    return 1;
+
+  if ( 0 != _GameWorld.Initialize(_GameSettings) )
+    return 1;
+
+  if ( 0 != _SceneBinding.Attach(*newScene, _GameWorld, _GameSettings) )
+    return 1;
+
+  _Scene = std::move(newScene);
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeRenderer
+// ----------------------------------------------------------------------------
+int Test6::InitializeRenderer()
+{
+  if ( !_Scene )
+    return 1;
+
+  ApplyRendererDefaults();
+
+  Renderer * newRenderer = nullptr;
+  if ( FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode )
+    newRenderer = new PathTracer(*_Scene, _Settings);
+  else if ( FpsRendererMode::Software == _GameSettings._RendererMode )
+    newRenderer = new SoftwareRasterizer(*_Scene, _Settings);
+  else
+    newRenderer = new DeferredRenderer(*_Scene, _Settings);
+
+  if ( !newRenderer )
+    return 1;
+
+  _Renderer.reset(newRenderer);
+  _Renderer -> Initialize();
+
+  g_Test6DebugMode = 0;
+  _Renderer -> SetDebugMode(g_Test6DebugMode);
+  SyncFramebufferResolution(true);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ProcessInput
+// ----------------------------------------------------------------------------
+int Test6::ProcessInput()
+{
+  double curMouseX = 0., curMouseY = 0.;
+  glfwGetCursorPos(_MainWindow.get(), &curMouseX, &curMouseY);
+
+  if ( _KeyInput.IsKeyReleased(GLFW_KEY_ESCAPE) )
+  {
+    if ( _MouseCaptured )
+      SetMouseCaptured(false);
+    else
+      return 1;
+  }
+
+  if ( !_MouseCaptured && !ImGui::GetIO().WantCaptureMouse && _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1) )
+    SetMouseCaptured(true);
+
+  FpsGameInput input;
+  if ( !ImGui::GetIO().WantCaptureKeyboard )
+  {
+    input._MoveForward = _KeyInput.IsKeyDown(GLFW_KEY_W);
+    input._MoveBackward = _KeyInput.IsKeyDown(GLFW_KEY_S);
+    input._MoveLeft = _KeyInput.IsKeyDown(GLFW_KEY_A);
+    input._MoveRight = _KeyInput.IsKeyDown(GLFW_KEY_D);
+    input._Sprint = _KeyInput.IsKeyDown(GLFW_KEY_LEFT_SHIFT) || _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_SHIFT);
+    input._JumpPressed = _KeyInput.IsKeyDown(GLFW_KEY_SPACE);
+    input._ResetPressed = _KeyInput.IsKeyReleased(GLFW_KEY_R);
+  }
+
+  if ( _MouseCaptured && ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode ) )
+  {
+    if ( _HasLastMousePos )
+    {
+      input._MouseDeltaX = static_cast<float>(curMouseX - _LastMouseX);
+      input._MouseDeltaY = static_cast<float>(curMouseY - _LastMouseY);
+    }
+    _HasLastMousePos = true;
+  }
+
+  _LastMouseX = curMouseX;
+  _LastMouseY = curMouseY;
+
+  if ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode )
+  {
+    if ( 0 != _GameWorld.Update(static_cast<float>(_DeltaTime), input, _GameSettings) )
+      return 1;
+
+    if ( 0 != _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings) )
+      return 1;
+
+    if ( _Renderer )
+      _Renderer -> Notify(DirtyState::SceneCamera);
+  }
+
+  _KeyInput.ClearLastEvents();
+  _MouseInput.ClearLastEvents(curMouseX, curMouseY);
+
+  glfwPollEvents();
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateGame
+// ----------------------------------------------------------------------------
+int Test6::UpdateGame()
+{
+  if ( _ReloadRenderer )
+  {
+    _ReloadRenderer = false;
+    if ( 0 != InitializeRenderer() )
+      return 1;
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawUI
+// ----------------------------------------------------------------------------
+int Test6::DrawUI()
+{
+  ImGui_ImplOpenGL3_NewFrame();
+  ImGui_ImplGlfw_NewFrame();
+  ImGui::NewFrame();
+
+  ImGui::Begin("Test6 FPS");
+
+  static const char * Renderers[] = { "Deferred", "Software", "Photo Path Tracer" };
+  int rendererMode = (int)_GameSettings._RendererMode;
+  if ( ImGui::Combo("Renderer", &rendererMode, Renderers, 3) )
+  {
+    if ( rendererMode != (int)_GameSettings._RendererMode )
+    {
+      _GameSettings._RendererMode = (FpsRendererMode)rendererMode;
+      _ReloadRenderer = true;
+    }
+  }
+
+  if ( FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode )
+    ImGui::Text("Photo mode: gameplay paused");
+  else
+    ImGui::Text("Click viewport to capture mouse. Esc releases capture.");
+
+  const FpsPlayer & player = _GameWorld.GetPlayer();
+  ImGui::Text("Position: %.2f %.2f %.2f", player._Position.x, player._Position.y, player._Position.z);
+  ImGui::Text("Velocity: %.2f %.2f %.2f", player._Velocity.x, player._Velocity.y, player._Velocity.z);
+  ImGui::Text("Yaw/Pitch: %.1f %.1f", player._Yaw, player._Pitch);
+  ImGui::Text("Grounded: %s", player._Grounded ? "yes" : "no");
+  ImGui::Text("Frame: %.2f ms / %.1f FPS", _FrameTime * 1000., _FrameRate);
+
+  if ( ImGui::Button("Reset player") )
+  {
+    _GameWorld.Reset(_GameSettings);
+    _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings);
+    if ( _Renderer )
+      _Renderer -> Notify(DirtyState::SceneCamera);
+  }
+
+  ImGui::SameLine();
+  if ( ImGui::Button("Capture image") )
+  {
+    _CaptureOutputPath = "./Test6_" + std::to_string(_NbRenderedFrames) + "frames.png";
+    _RenderToFile = true;
+  }
+
+  DrawSettingsUI();
+
+  ImGui::End();
+
+  ImGui::Render();
+  ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawSettingsUI
+// ----------------------------------------------------------------------------
+int Test6::DrawSettingsUI()
+{
+  if ( ImGui::CollapsingHeader("Game tuning") )
+  {
+    ImGui::SliderFloat("Move speed", &_GameSettings._MoveSpeed, 1.f, 12.f);
+    ImGui::SliderFloat("Sprint speed", &_GameSettings._SprintSpeed, 1.f, 16.f);
+    ImGui::SliderFloat("Mouse sensitivity", &_GameSettings._MouseSensitivity, 0.01f, 0.25f);
+    ImGui::SliderFloat("Player radius", &_GameSettings._PlayerRadius, 0.15f, 0.8f);
+    ImGui::SliderFloat("Player height", &_GameSettings._PlayerHeight, 1.f, 2.4f);
+    ImGui::SliderFloat("Gravity", &_GameSettings._Gravity, 1.f, 35.f);
+    ImGui::SliderFloat("Jump speed", &_GameSettings._JumpSpeed, 1.f, 12.f);
+  }
+
+  if ( ImGui::CollapsingHeader("Render settings") && _Renderer )
+  {
+    int renderScale = _Settings._RenderScale;
+    if ( ImGui::SliderInt("Render scale", &renderScale, 25, 150) )
+    {
+      _Settings._RenderScale = renderScale;
+      SyncFramebufferResolution(true);
+    }
+
+    if ( ImGui::Checkbox("Tone mapping", &_Settings._ToneMapping) )
+      _Renderer -> Notify(DirtyState::RenderSettings);
+
+    if ( _Settings._ToneMapping )
+    {
+      if ( ImGui::SliderFloat("Gamma", &_Settings._Gamma, 0.5f, 3.f) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::SliderFloat("Exposure", &_Settings._Exposure, 0.1f, 5.f) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+    }
+
+    if ( FpsRendererMode::Deferred == _GameSettings._RendererMode )
+    {
+      if ( ImGui::Checkbox("Shadow mapping", &_Settings._ShadowMapping) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::Checkbox("SSAO", &_Settings._SSAO) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::SliderInt("Max shadow casting lights", &_Settings._MaxShadowCastingLights, 1, 8) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+    }
+    else if ( FpsRendererMode::Software == _GameSettings._RendererMode )
+    {
+      int numThreads = (int)_Settings._NbThreads;
+      if ( ImGui::SliderInt("Nb threads", &numThreads, 1, (int)std::max(1u, g_Test6NbThreadsMax)) )
+      {
+        _Settings._NbThreads = std::max(1, numThreads);
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      }
+    }
+    else if ( FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode )
+    {
+      if ( ImGui::SliderInt("Bounces", &_Settings._Bounces, 1, 8) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::SliderInt("SPP", &_Settings._NbSamplesPerPixel, 1, 8) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::Checkbox("Denoise", &_Settings._Denoise) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+    }
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateCPUTime
+// ----------------------------------------------------------------------------
+int Test6::UpdateCPUTime()
+{
+  double oldCpuTime = _CPUTime;
+  _CPUTime = glfwGetTime();
+  _DeltaTime = _CPUTime - oldCpuTime;
+
+  static int nbFrames = 0;
+  nbFrames++;
+
+  static double accu = 0.;
+  accu += _DeltaTime;
+
+  double nbSeconds = 0.;
+  while ( accu >= 1. )
+  {
+    accu -= 1.;
+    nbSeconds++;
+  }
+
+  if ( nbSeconds >= 1. )
+  {
+    nbSeconds += accu;
+    _FrameRate = (double)nbFrames / nbSeconds;
+    _FrameTime = ( _FrameRate ) ? ( 1. / _FrameRate ) : ( 0. );
+    nbFrames = 0;
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// Run
+// ----------------------------------------------------------------------------
+int Test6::Run()
+{
+  int ret = 0;
+
+  do
+  {
+    if ( !_MainWindow )
+    {
+      ret = 1;
+      break;
+    }
+
+    glfwSetWindowTitle(_MainWindow.get(), GetTestHeader());
+    glfwSetWindowUserPointer(_MainWindow.get(), this);
+    glfwSetFramebufferSizeCallback(_MainWindow.get(), Test6::FramebufferSizeCallback);
+    glfwSetMouseButtonCallback(_MainWindow.get(), Test6::MouseButtonCallback);
+    glfwSetScrollCallback(_MainWindow.get(), Test6::MouseScrollCallback);
+    glfwSetKeyCallback(_MainWindow.get(), Test6::KeyCallback);
+
+    glfwMakeContextCurrent(_MainWindow.get());
+    glfwSwapInterval(0);
+
+    if ( 0 != InitializeUI() )
+    {
+      ret = 1;
+      break;
+    }
+
+    glewExperimental = GL_TRUE;
+    if ( glewInit() != GLEW_OK )
+    {
+      std::cout << "Failed to initialize GLEW!" << std::endl;
+      ret = 1;
+      break;
+    }
+
+    if ( 0 != InitializeScene() )
+    {
+      std::cout << "ERROR: Test6 scene initialization failed!" << std::endl;
+      ret = 1;
+      break;
+    }
+
+    if ( 0 != InitializeRenderer() || !_Renderer )
+    {
+      std::cout << "ERROR: Test6 renderer initialization failed!" << std::endl;
+      ret = 1;
+      break;
+    }
+
+    glfwSetWindowSize(_MainWindow.get(), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+    SyncFramebufferResolution();
+    glDisable(GL_DEPTH_TEST);
+
+    while ( !glfwWindowShouldClose(_MainWindow.get()) )
+    {
+      UpdateCPUTime();
+
+      if ( 0 != UpdateGame() )
+        break;
+
+      if ( 0 != ProcessInput() )
+        break;
+
+      _Renderer -> Update();
+      _Renderer -> RenderToTexture();
+      _Renderer -> RenderToScreen();
+
+      if ( _RenderToFile )
+      {
+        _Renderer -> RenderToFile(_CaptureOutputPath);
+        _RenderToFile = false;
+      }
+
+      _Renderer -> Done();
+
+      DrawUI();
+
+      glfwSwapBuffers(_MainWindow.get());
+      _NbRenderedFrames++;
+    }
+  } while ( 0 );
+
+  SetMouseCaptured(false);
+
+  ImGui_ImplOpenGL3_Shutdown();
+  ImGui_ImplGlfw_Shutdown();
+  ImGui::DestroyContext();
+
+  glfwSetFramebufferSizeCallback(_MainWindow.get(), nullptr);
+  glfwSetMouseButtonCallback(_MainWindow.get(), nullptr);
+  glfwSetScrollCallback(_MainWindow.get(), nullptr);
+  glfwSetKeyCallback(_MainWindow.get(), nullptr);
+
+  return ret;
+}
+
+}
