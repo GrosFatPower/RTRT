@@ -915,8 +915,6 @@ int DeferredRenderer::ReloadScene()
   }
 
   ComputeSceneBounds();
-  if ( _Settings._ShadowFar <= 0.f )
-    _Settings._ShadowFar = std::max( _SceneBoundsRadius * 2.f, 25.f );
 
   // Materials
   if ( _Scene.GetTextureArrayIDs().size() )

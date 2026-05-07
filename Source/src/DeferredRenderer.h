@@ -67,6 +67,7 @@ public:
   bool GetGenerateMipMaps() const { return _GenerateMipMaps; }
   void SetAnisotropicLevel(int iLevel);
   int GetAnisotropicLevel() const { return _AnisotropicLevel; }
+  float GetEffectiveShadowFar() const { return _ShadowFar; }
 
   virtual DeferredRenderer * AsDeferredRenderer() override { return this; }
 

@@ -665,8 +665,21 @@ int Test5::DrawSettingsUI()
         if ( ImGui::SliderFloat( "Shadow bias", &_Settings._ShadowBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
-        if ( ImGui::SliderFloat( "Shadow far plane", &_Settings._ShadowFar, 1.f, 500.f ) )
+        bool autoShadowFar = _Settings._ShadowFar <= 0.f;
+        if ( ImGui::Checkbox( "Auto shadow far plane", &autoShadowFar ) )
+        {
+          _Settings._ShadowFar = autoShadowFar ? 0.f : std::max(deferredRenderer -> GetEffectiveShadowFar(), 1.f);
           _Renderer -> Notify(DirtyState::RenderSettings);
+        }
+
+        if ( autoShadowFar )
+        {
+          ImGui::Text( "Shadow far plane %.2f", deferredRenderer -> GetEffectiveShadowFar() );
+        }
+        else if ( ImGui::SliderFloat( "Shadow far plane", &_Settings._ShadowFar, 1.f, 500.f ) )
+        {
+          _Renderer -> Notify(DirtyState::RenderSettings);
+        }
 
         if ( ImGui::Checkbox( "SSAO", &_Settings._SSAO ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
