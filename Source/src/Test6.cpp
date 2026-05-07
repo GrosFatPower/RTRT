@@ -282,12 +282,12 @@ int Test6::ProcessInput()
   FpsGameInput input;
   if ( !ImGui::GetIO().WantCaptureKeyboard )
   {
-    input._MoveForward = _KeyInput.IsKeyDown(GLFW_KEY_W);
+    input._MoveForward  = _KeyInput.IsKeyDown(GLFW_KEY_W);
     input._MoveBackward = _KeyInput.IsKeyDown(GLFW_KEY_S);
-    input._MoveLeft = _KeyInput.IsKeyDown(GLFW_KEY_A);
-    input._MoveRight = _KeyInput.IsKeyDown(GLFW_KEY_D);
-    input._Sprint = _KeyInput.IsKeyDown(GLFW_KEY_LEFT_SHIFT) || _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_SHIFT);
-    input._JumpPressed = _KeyInput.IsKeyDown(GLFW_KEY_SPACE);
+    input._MoveLeft     = _KeyInput.IsKeyDown(GLFW_KEY_A);
+    input._MoveRight    = _KeyInput.IsKeyDown(GLFW_KEY_D);
+    input._Sprint       = _KeyInput.IsKeyDown(GLFW_KEY_LEFT_SHIFT) || _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_SHIFT);
+    input._JumpPressed  = _KeyInput.IsKeyDown(GLFW_KEY_SPACE);
     input._ResetPressed = _KeyInput.IsKeyReleased(GLFW_KEY_R);
   }
 
@@ -438,8 +438,49 @@ int Test6::DrawSettingsUI()
         _Renderer -> Notify(DirtyState::RenderSettings);
       if ( ImGui::Checkbox("SSAO", &_Settings._SSAO) )
         _Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::Checkbox("SSAO blur", &_Settings._SSAOBlur) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::SliderFloat("SSAO radius", &_Settings._SSAORadius, 0.05f, 5.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::SliderFloat("SSAO bias", &_Settings._SSAOBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::SliderFloat("SSAO intensity", &_Settings._SSAOIntensity, 0.f, 3.f) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      int ssaoKernelSize = _Settings._SSAOKernelSize;
+      if ( ImGui::SliderInt("SSAO kernel size", &ssaoKernelSize, 4, 32) )
+      {
+        _Settings._SSAOKernelSize = std::max(4, std::min(32, ssaoKernelSize));
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      }
       if ( ImGui::SliderInt("Max shadow casting lights", &_Settings._MaxShadowCastingLights, 1, 8) )
         _Renderer -> Notify(DirtyState::RenderSettings);
+
+      static const char * DEBUG_VIEWS[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params" };
+      static int bufferChoice = 0;
+      static bool showWires = false;
+      if ( ImGui::Combo("Debug view", &bufferChoice, DEBUG_VIEWS, 7) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::Checkbox("Show wires", &showWires) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
+      g_Test6DebugMode = 0;
+      _Settings._ShowShadowMap = ( 3 == bufferChoice );
+      if ( 1 == bufferChoice )
+        g_Test6DebugMode |= (int)DeferredDebugModes::DepthBuffer;
+      else if ( 2 == bufferChoice )
+        g_Test6DebugMode |= (int)DeferredDebugModes::Normals;
+      else if ( 3 == bufferChoice )
+        g_Test6DebugMode |= (int)DeferredDebugModes::Shadows;
+      else if ( 4 == bufferChoice )
+        g_Test6DebugMode |= (int)DeferredDebugModes::SSAO;
+      else if ( 5 == bufferChoice )
+        g_Test6DebugMode |= (int)DeferredDebugModes::SpecularIBL;
+      else if ( 6 == bufferChoice )
+        g_Test6DebugMode |= (int)DeferredDebugModes::MaterialParams;
+
+      if ( showWires )
+        g_Test6DebugMode |= (int)DeferredDebugModes::Wires;
+      _Renderer -> SetDebugMode(g_Test6DebugMode);
     }
     else if ( FpsRendererMode::Software == _GameSettings._RendererMode )
     {
@@ -449,6 +490,23 @@ int Test6::DrawSettingsUI()
         _Settings._NbThreads = std::max(1, numThreads);
         _Renderer -> Notify(DirtyState::RenderSettings);
       }
+
+      static const char * DEBUG_VIEWS[] = { "Color", "Depth", "Normals" };
+      static int bufferChoice = 0;
+      static bool showWires = false;
+      if ( ImGui::Combo("Debug view", &bufferChoice, DEBUG_VIEWS, 3) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::Checkbox("Show wires", &showWires) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
+      g_Test6DebugMode = 0;
+      if ( 1 == bufferChoice )
+        g_Test6DebugMode |= (int)RasterDebugModes::DepthBuffer;
+      else if ( 2 == bufferChoice )
+        g_Test6DebugMode |= (int)RasterDebugModes::Normals;
+      if ( showWires )
+        g_Test6DebugMode |= (int)RasterDebugModes::Wires;
+      _Renderer -> SetDebugMode(g_Test6DebugMode);
     }
     else if ( FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode )
     {
@@ -458,6 +516,13 @@ int Test6::DrawSettingsUI()
         _Renderer -> Notify(DirtyState::RenderSettings);
       if ( ImGui::Checkbox("Denoise", &_Settings._Denoise) )
         _Renderer -> Notify(DirtyState::RenderSettings);
+
+      static const char * DEBUG_VIEWS[] = { "Off", "Tiles", "Albedo", "Metalness", "Roughness", "Normals", "UV", "BLAS" };
+      if ( ImGui::Combo("Debug view", &g_Test6DebugMode, DEBUG_VIEWS, 8) )
+      {
+        _Renderer -> SetDebugMode(g_Test6DebugMode);
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      }
     }
   }
 

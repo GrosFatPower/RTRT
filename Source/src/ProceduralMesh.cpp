@@ -54,12 +54,12 @@ Mesh * CreateCube( const std::string & iName )
   {
     const int v = face * 4;
     indices.push_back(Vec3i(v + 0, face, 0));
-    indices.push_back(Vec3i(v + 1, face, 1));
     indices.push_back(Vec3i(v + 2, face, 2));
+    indices.push_back(Vec3i(v + 1, face, 1));
 
     indices.push_back(Vec3i(v + 0, face, 0));
-    indices.push_back(Vec3i(v + 2, face, 2));
     indices.push_back(Vec3i(v + 3, face, 3));
+    indices.push_back(Vec3i(v + 2, face, 2));
   }
 
   return new Mesh(iName, vertices, normals, uvs, indices);

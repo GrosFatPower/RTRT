@@ -176,6 +176,14 @@ void FpsGameWorld::MoveAxis( int iAxis, float iDelta, const FpsGameSettings & iS
     if ( !OverlapPlayerObject(object, iSettings, overlap) )
       continue;
 
+    int minAxis = 0;
+    if ( overlap.y < overlap[minAxis] )
+      minAxis = 1;
+    if ( overlap.z < overlap[minAxis] )
+      minAxis = 2;
+    if ( minAxis != iAxis )
+      continue;
+
     if ( iDelta > 0.f )
       _Player._Position[iAxis] -= overlap[iAxis];
     else
