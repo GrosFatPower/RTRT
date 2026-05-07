@@ -151,8 +151,6 @@ target_link_directories(${EXE_NAME}
 
 if(APPLE)
   target_link_libraries(${EXE_NAME}
-    glfw
-    imgui
     imguizmo
     ${GLEW_LIBRARIES}
     ${OPENGL_LIBRARIES}
@@ -162,8 +160,6 @@ if(APPLE)
   )
 else()
   target_link_libraries(${EXE_NAME}
-    glfw
-    imgui
     imguizmo
     ${GLEW_LIBRARIES}
     ${OPENGL_LIBRARIES}

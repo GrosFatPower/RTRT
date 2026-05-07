@@ -34,7 +34,7 @@ echo ""
 echo "=== Project configuration ==="
 cmake .. \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_VERBOSE_MAKEFILE=ON \
+    -DCMAKE_VERBOSE_MAKEFILE=OFF \
     -DCMAKE_OSX_ARCHITECTURES=arm64
 
 if [ $? -ne 0 ]; then
@@ -44,7 +44,8 @@ fi
 
 echo ""
 echo "=== Compilation ==="
-cmake --build . --config Release -j$(sysctl -n hw.ncpu)
+NPROC=$(sysctl -n hw.ncpu 2>/dev/null || echo 4)
+cmake --build . --config Release -j${NPROC}
 
 if [ $? -ne 0 ]; then
     echo "❌ Compilation failed"
