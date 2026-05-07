@@ -1121,6 +1121,37 @@ int Test5::DrawMaterialsUI()
     std::vector<Material>& Materials = _Scene -> GetMaterials();
     std::vector<Texture*>& Textures = _Scene -> GetTextures();
 
+    auto uploadMaterialPreviewTexture = []( Texture * iTexture, GLTexture & ioTEX )
+    {
+      if ( !iTexture )
+        return;
+
+      GLTextureDesc desc;
+      desc._Target = ioTEX._Target;
+      desc._Slot   = ioTEX._Slot;
+      desc._Width  = iTexture -> GetWidth();
+      desc._Height = iTexture -> GetHeight();
+
+      if ( iTexture -> GetUCData() )
+      {
+        desc._InternalFormat = GL_RGBA8;
+        desc._DataFormat     = GL_RGBA;
+        desc._DataType       = GL_UNSIGNED_BYTE;
+        desc._Data           = iTexture -> GetUCData();
+      }
+      else if ( iTexture -> GetFData() )
+      {
+        desc._InternalFormat = GL_RGBA32F;
+        desc._DataFormat     = GL_RGBA;
+        desc._DataType       = GL_FLOAT;
+        desc._Data           = iTexture -> GetFData();
+      }
+      else
+        return;
+
+      GLUtil::CreateTexture(desc, ioTEX);
+    };
+
     static int selectedMaterial = -1;
     if (selectedMaterial >= _MaterialNames.size())
       selectedMaterial = -1;
@@ -1223,10 +1254,7 @@ int Test5::DrawMaterialsUI()
           if (newMaterial)
           {
             GLUtil::DeleteTEX(_AlbedoTEX);
-            if (basecolorTexture -> GetUCData())
-              GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, basecolorTexture -> GetWidth(), basecolorTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, basecolorTexture -> GetUCData(), _AlbedoTEX);
-            else if (basecolorTexture -> GetFData())
-              GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, basecolorTexture -> GetWidth(), basecolorTexture -> GetHeight(), GL_RGBA, GL_FLOAT, basecolorTexture -> GetFData(), _AlbedoTEX);
+            uploadMaterialPreviewTexture(basecolorTexture, _AlbedoTEX);
           }
 
           if (_AlbedoTEX._Handle)
@@ -1246,10 +1274,7 @@ int Test5::DrawMaterialsUI()
           if (newMaterial)
           {
             GLUtil::DeleteTEX(_MetalRoughTEX);
-            if (metallicRoughnessTexture -> GetUCData())
-              GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, metallicRoughnessTexture -> GetWidth(), metallicRoughnessTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, metallicRoughnessTexture -> GetUCData(), _MetalRoughTEX);
-            else if (metallicRoughnessTexture -> GetFData())
-              GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, metallicRoughnessTexture -> GetWidth(), metallicRoughnessTexture -> GetHeight(), GL_RGBA, GL_FLOAT, metallicRoughnessTexture -> GetFData(), _MetalRoughTEX);
+            uploadMaterialPreviewTexture(metallicRoughnessTexture, _MetalRoughTEX);
           }
 
           if (_MetalRoughTEX._Handle)
@@ -1269,10 +1294,7 @@ int Test5::DrawMaterialsUI()
           if (newMaterial)
           {
             GLUtil::DeleteTEX(_NormalMapTEX);
-            if (normalMapTexture -> GetUCData())
-              GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, normalMapTexture -> GetWidth(), normalMapTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, normalMapTexture -> GetUCData(), _NormalMapTEX);
-            else if (normalMapTexture -> GetFData())
-              GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, normalMapTexture -> GetWidth(), normalMapTexture -> GetHeight(), GL_RGBA, GL_FLOAT, normalMapTexture -> GetFData(), _NormalMapTEX);
+            uploadMaterialPreviewTexture(normalMapTexture, _NormalMapTEX);
           }
 
           if (_NormalMapTEX._Handle)
@@ -1292,10 +1314,7 @@ int Test5::DrawMaterialsUI()
           if (newMaterial)
           {
             GLUtil::DeleteTEX(_EmissionMapTEX);
-            if (emissionMapTexture -> GetUCData())
-              GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, emissionMapTexture -> GetWidth(), emissionMapTexture -> GetHeight(), GL_RGBA, GL_UNSIGNED_BYTE, emissionMapTexture -> GetUCData(), _EmissionMapTEX);
-            else if (emissionMapTexture -> GetFData())
-              GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, emissionMapTexture -> GetWidth(), emissionMapTexture -> GetHeight(), GL_RGBA, GL_FLOAT, emissionMapTexture -> GetFData(), _EmissionMapTEX);
+            uploadMaterialPreviewTexture(emissionMapTexture, _EmissionMapTEX);
           }
 
           if (_EmissionMapTEX._Handle)

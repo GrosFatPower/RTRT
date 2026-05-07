@@ -156,6 +156,7 @@ protected:
   GLFrameBuffer _RenderTargetFBO;
 
   // Textures
+  GLTexture _RenderTargetTEX = { 0, GL_TEXTURE_2D, RasterTexSlot::_RenderTarget, GL_RGBA32F, GL_RGBA, GL_FLOAT };
   GLTexture _ColorBufferTEX = { 0, GL_TEXTURE_2D, RasterTexSlot::_ColorBuffer, GL_RGBA8,  GL_RGBA, GL_UNSIGNED_BYTE };
   GLTexture _EnvMapTEX      = { 0, GL_TEXTURE_2D, RasterTexSlot::_EnvMap,      GL_RGB32F, GL_RGB,  GL_FLOAT         };
 

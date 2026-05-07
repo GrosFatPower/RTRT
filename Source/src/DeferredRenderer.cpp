@@ -638,38 +638,33 @@ int DeferredRenderer::InitializeShadowMap()
   int shadowMapSize = std::clamp(_Settings._ShadowMapResolution, 256, 4096);
   _ShadowMapSize = shadowMapSize;
 
-  glGenTextures(1, &_ShadowCubeMapTEX._Handle);
-  glBindTexture(GL_TEXTURE_CUBE_MAP, _ShadowCubeMapTEX._Handle);
-  for ( int i = 0; i < 6; ++i )
-    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, _ShadowCubeMapTEX._InternalFormat, shadowMapSize, shadowMapSize, 0, _ShadowCubeMapTEX._DataFormat, _ShadowCubeMapTEX._DataType, nullptr);
+  GLTextureDesc shadowCubeDesc;
+  shadowCubeDesc._Target         = _ShadowCubeMapTEX._Target;
+  shadowCubeDesc._Slot           = _ShadowCubeMapTEX._Slot;
+  shadowCubeDesc._Width          = shadowMapSize;
+  shadowCubeDesc._Height         = shadowMapSize;
+  shadowCubeDesc._InternalFormat = _ShadowCubeMapTEX._InternalFormat;
+  shadowCubeDesc._DataFormat     = _ShadowCubeMapTEX._DataFormat;
+  shadowCubeDesc._DataType       = _ShadowCubeMapTEX._DataType;
+  shadowCubeDesc._MinFilter      = GL_LINEAR;
+  shadowCubeDesc._MagFilter      = GL_LINEAR;
+  shadowCubeDesc._WrapS          = GL_CLAMP_TO_EDGE;
+  shadowCubeDesc._WrapT          = GL_CLAMP_TO_EDGE;
+  shadowCubeDesc._WrapR          = GL_CLAMP_TO_EDGE;
+  GLUtil::CreateTexture(shadowCubeDesc, _ShadowCubeMapTEX);
 
-  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+  GLTextureDesc shadow2DDesc = shadowCubeDesc;
+  shadow2DDesc._Target = _Shadow2DMapTEX._Target;
+  shadow2DDesc._Slot   = _Shadow2DMapTEX._Slot;
+  GLUtil::CreateTexture(shadow2DDesc, _Shadow2DMapTEX);
 
-  glGenTextures(1, &_Shadow2DMapTEX._Handle);
-  glBindTexture(GL_TEXTURE_2D, _Shadow2DMapTEX._Handle);
-  glTexImage2D(GL_TEXTURE_2D, 0, _Shadow2DMapTEX._InternalFormat, shadowMapSize, shadowMapSize, 0, _Shadow2DMapTEX._DataFormat, _Shadow2DMapTEX._DataType, nullptr);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glBindTexture(GL_TEXTURE_2D, 0);
-
-  glGenFramebuffers(1, &_ShadowFBO._Handle);
-  glBindFramebuffer(GL_FRAMEBUFFER, _ShadowFBO._Handle);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, _Shadow2DMapTEX._Handle, 0);
-  glDrawBuffer(GL_NONE);
-  glReadBuffer(GL_NONE);
-  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+  GLFrameBufferDesc shadowFBODesc;
+  shadowFBODesc._Attachments.push_back({ GL_DEPTH_ATTACHMENT, &_Shadow2DMapTEX, GL_TEXTURE_2D, 0, false });
+  if ( !GLUtil::CreateFrameBuffer(shadowFBODesc, _ShadowFBO) )
   {
     std::cout << "DeferredRenderer : Shadow framebuffer not complete !" << std::endl;
     return 1;
   }
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   return 0;
 }
@@ -684,28 +679,35 @@ int DeferredRenderer::InitializeSSAO()
   GLUtil::DeleteTEX(_SSAOBlurTEX);
   GLUtil::DeleteTEX(_SSAONoiseTEX);
 
-  GLUtil::GenTexture(GL_TEXTURE_2D, _SSAOTEX._InternalFormat, RenderWidth(), RenderHeight(), _SSAOTEX._DataFormat, _SSAOTEX._DataType, nullptr, _SSAOTEX, GL_LINEAR, GL_LINEAR);
-  glGenFramebuffers(1, &_SSAOFBO._Handle);
-  glBindFramebuffer(GL_FRAMEBUFFER, _SSAOFBO._Handle);
-  _SSAOFBO._Tex.clear();
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _SSAOTEX._Handle, 0);
-  _SSAOFBO._Tex.push_back(_SSAOTEX);
-  GLenum ssaoDrawBuffers[] = { GL_COLOR_ATTACHMENT0 };
-  glDrawBuffers(1, ssaoDrawBuffers);
-  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+  GLTextureDesc ssaoDesc;
+  ssaoDesc._Target         = _SSAOTEX._Target;
+  ssaoDesc._Slot           = _SSAOTEX._Slot;
+  ssaoDesc._Width          = RenderWidth();
+  ssaoDesc._Height         = RenderHeight();
+  ssaoDesc._InternalFormat = _SSAOTEX._InternalFormat;
+  ssaoDesc._DataFormat     = _SSAOTEX._DataFormat;
+  ssaoDesc._DataType       = _SSAOTEX._DataType;
+  ssaoDesc._MinFilter      = GL_LINEAR;
+  ssaoDesc._MagFilter      = GL_LINEAR;
+  GLUtil::CreateTexture(ssaoDesc, _SSAOTEX);
+
+  GLFrameBufferDesc ssaoFBODesc;
+  ssaoFBODesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_SSAOTEX });
+  if ( !GLUtil::CreateFrameBuffer(ssaoFBODesc, _SSAOFBO) )
   {
     std::cout << "DeferredRenderer : SSAO framebuffer not complete !" << std::endl;
     return 1;
   }
 
-  GLUtil::GenTexture(GL_TEXTURE_2D, _SSAOBlurTEX._InternalFormat, RenderWidth(), RenderHeight(), _SSAOBlurTEX._DataFormat, _SSAOBlurTEX._DataType, nullptr, _SSAOBlurTEX, GL_LINEAR, GL_LINEAR);
-  glGenFramebuffers(1, &_SSAOBlurFBO._Handle);
-  glBindFramebuffer(GL_FRAMEBUFFER, _SSAOBlurFBO._Handle);
-  _SSAOBlurFBO._Tex.clear();
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _SSAOBlurTEX._Handle, 0);
-  _SSAOBlurFBO._Tex.push_back(_SSAOBlurTEX);
-  glDrawBuffers(1, ssaoDrawBuffers);
-  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+  ssaoDesc._Slot           = _SSAOBlurTEX._Slot;
+  ssaoDesc._InternalFormat = _SSAOBlurTEX._InternalFormat;
+  ssaoDesc._DataFormat     = _SSAOBlurTEX._DataFormat;
+  ssaoDesc._DataType       = _SSAOBlurTEX._DataType;
+  GLUtil::CreateTexture(ssaoDesc, _SSAOBlurTEX);
+
+  GLFrameBufferDesc ssaoBlurFBODesc;
+  ssaoBlurFBODesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_SSAOBlurTEX });
+  if ( !GLUtil::CreateFrameBuffer(ssaoBlurFBODesc, _SSAOBlurFBO) )
   {
     std::cout << "DeferredRenderer : SSAO blur framebuffer not complete !" << std::endl;
     return 1;
@@ -737,16 +739,20 @@ int DeferredRenderer::InitializeSSAO()
     noiseData.push_back(Vec4(noise, 1.f));
   }
 
-  glGenTextures(1, &_SSAONoiseTEX._Handle);
-  glBindTexture(GL_TEXTURE_2D, _SSAONoiseTEX._Handle);
-  glTexImage2D(GL_TEXTURE_2D, 0, _SSAONoiseTEX._InternalFormat, 4, 4, 0, _SSAONoiseTEX._DataFormat, _SSAONoiseTEX._DataType, noiseData.data());
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  glBindTexture(GL_TEXTURE_2D, 0);
-
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  GLTextureDesc noiseDesc;
+  noiseDesc._Target         = _SSAONoiseTEX._Target;
+  noiseDesc._Slot           = _SSAONoiseTEX._Slot;
+  noiseDesc._Width          = 4;
+  noiseDesc._Height         = 4;
+  noiseDesc._InternalFormat = _SSAONoiseTEX._InternalFormat;
+  noiseDesc._DataFormat     = _SSAONoiseTEX._DataFormat;
+  noiseDesc._DataType       = _SSAONoiseTEX._DataType;
+  noiseDesc._Data           = noiseData.data();
+  noiseDesc._MinFilter      = GL_NEAREST;
+  noiseDesc._MagFilter      = GL_NEAREST;
+  noiseDesc._WrapS          = GL_REPEAT;
+  noiseDesc._WrapT          = GL_REPEAT;
+  GLUtil::CreateTexture(noiseDesc, _SSAONoiseTEX);
 
   return 0;
 }
@@ -760,17 +766,21 @@ int DeferredRenderer::InitializeBRDFLUT()
   GLUtil::DeleteTEX(_BRDFLUTTEX);
 
   const int lutSize = 256;
-  GLUtil::GenTexture(GL_TEXTURE_2D, _BRDFLUTTEX._InternalFormat, lutSize, lutSize, _BRDFLUTTEX._DataFormat, _BRDFLUTTEX._DataType, nullptr, _BRDFLUTTEX, GL_LINEAR, GL_LINEAR);
+  GLTextureDesc lutDesc;
+  lutDesc._Target         = _BRDFLUTTEX._Target;
+  lutDesc._Slot           = _BRDFLUTTEX._Slot;
+  lutDesc._Width          = lutSize;
+  lutDesc._Height         = lutSize;
+  lutDesc._InternalFormat = _BRDFLUTTEX._InternalFormat;
+  lutDesc._DataFormat     = _BRDFLUTTEX._DataFormat;
+  lutDesc._DataType       = _BRDFLUTTEX._DataType;
+  lutDesc._MinFilter      = GL_LINEAR;
+  lutDesc._MagFilter      = GL_LINEAR;
+  GLUtil::CreateTexture(lutDesc, _BRDFLUTTEX);
 
-  glGenFramebuffers(1, &_BRDFFBO._Handle);
-  glBindFramebuffer(GL_FRAMEBUFFER, _BRDFFBO._Handle);
-  _BRDFFBO._Tex.clear();
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _BRDFLUTTEX._Handle, 0);
-  _BRDFFBO._Tex.push_back(_BRDFLUTTEX);
-
-  GLenum drawBuffers[] = { GL_COLOR_ATTACHMENT0 };
-  glDrawBuffers(1, drawBuffers);
-  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+  GLFrameBufferDesc lutFBODesc;
+  lutFBODesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_BRDFLUTTEX });
+  if ( !GLUtil::CreateFrameBuffer(lutFBODesc, _BRDFFBO) )
   {
     std::cout << "DeferredRenderer : BRDF LUT framebuffer not complete !" << std::endl;
     return 1;
@@ -778,6 +788,7 @@ int DeferredRenderer::InitializeBRDFLUT()
 
   if ( _BRDFLUTShader )
   {
+    glBindFramebuffer(GL_FRAMEBUFFER, _BRDFFBO._Handle);
     glViewport(0, 0, lutSize, lutSize);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
@@ -912,27 +923,37 @@ int DeferredRenderer::ReloadScene()
   {
     GLUtil::InitializeTBO(_TexIndTBO, sizeof(int) * _Scene.GetTextureArrayIDs().size(), &_Scene.GetTextureArrayIDs()[0], GL_R32I);
 
-    glGenTextures(1, &_TexArrayTEX._Handle);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTEX._Handle);
-    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, _Settings._TextureSize.x, _Settings._TextureSize.y, _Scene.GetNbCompiledTex(), 0, GL_RGBA, GL_UNSIGNED_BYTE, &_Scene.GetTextureArray()[0]);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    if ( _GenerateMipMaps )
-      glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    else
-      glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    GLTextureDesc texArrayDesc;
+    texArrayDesc._Target         = _TexArrayTEX._Target;
+    texArrayDesc._Slot           = _TexArrayTEX._Slot;
+    texArrayDesc._Width          = _Settings._TextureSize.x;
+    texArrayDesc._Height         = _Settings._TextureSize.y;
+    texArrayDesc._Depth          = _Scene.GetNbCompiledTex();
+    texArrayDesc._InternalFormat = _TexArrayTEX._InternalFormat;
+    texArrayDesc._DataFormat     = _TexArrayTEX._DataFormat;
+    texArrayDesc._DataType       = _TexArrayTEX._DataType;
+    texArrayDesc._Data           = &_Scene.GetTextureArray()[0];
+    texArrayDesc._MinFilter      = _GenerateMipMaps ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR;
+    texArrayDesc._MagFilter      = GL_LINEAR;
+    texArrayDesc._GenerateMipMap = true;
+    GLUtil::CreateTexture(texArrayDesc, _TexArrayTEX);
 
     if ( _GenerateMipMaps && _AnisotropicLevel )
       GLUtil::EnableAnisotropyIfAvailable(_TexArrayTEX, (float)_AnisotropicLevel);
   }
 
-  glGenTextures(1, &_MaterialsTEX._Handle);
-  glBindTexture(GL_TEXTURE_2D, _MaterialsTEX._Handle);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>((sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size()), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetMaterials()[0]);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glBindTexture(GL_TEXTURE_2D, 0);
+  GLTextureDesc materialsDesc;
+  materialsDesc._Target         = _MaterialsTEX._Target;
+  materialsDesc._Slot           = _MaterialsTEX._Slot;
+  materialsDesc._Width          = static_cast<GLsizei>((sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size());
+  materialsDesc._Height         = 1;
+  materialsDesc._InternalFormat = _MaterialsTEX._InternalFormat;
+  materialsDesc._DataFormat     = _MaterialsTEX._DataFormat;
+  materialsDesc._DataType       = _MaterialsTEX._DataType;
+  materialsDesc._Data           = &_Scene.GetMaterials()[0];
+  materialsDesc._MinFilter      = GL_NEAREST;
+  materialsDesc._MagFilter      = GL_NEAREST;
+  GLUtil::CreateTexture(materialsDesc, _MaterialsTEX);
 
   BuildDeferredDrawLists();
 
@@ -966,15 +987,21 @@ int DeferredRenderer::ReloadEnvMap()
 
   if ( _Scene.GetEnvMap().IsInitialized() )
   {
-    glGenTextures(1, &_EnvMapTEX._Handle);
-    glBindTexture(GL_TEXTURE_2D, _EnvMapTEX._Handle);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, _Scene.GetEnvMap().GetWidth(), _Scene.GetEnvMap().GetHeight(), 0, GL_RGB, GL_FLOAT, _Scene.GetEnvMap().GetRawData());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    GLTextureDesc envDesc;
+    envDesc._Target         = _EnvMapTEX._Target;
+    envDesc._Slot           = _EnvMapTEX._Slot;
+    envDesc._Width          = _Scene.GetEnvMap().GetWidth();
+    envDesc._Height         = _Scene.GetEnvMap().GetHeight();
+    envDesc._InternalFormat = _EnvMapTEX._InternalFormat;
+    envDesc._DataFormat     = _EnvMapTEX._DataFormat;
+    envDesc._DataType       = _EnvMapTEX._DataType;
+    envDesc._Data           = _Scene.GetEnvMap().GetRawData();
+    envDesc._MinFilter      = GL_LINEAR_MIPMAP_LINEAR;
+    envDesc._MagFilter      = GL_LINEAR;
+    envDesc._WrapS          = GL_REPEAT;
+    envDesc._WrapT          = GL_CLAMP_TO_EDGE;
+    envDesc._GenerateMipMap = true;
+    GLUtil::CreateTexture(envDesc, _EnvMapTEX);
 
     _Scene.GetEnvMap().SetHandle(_EnvMapTEX._Handle);
   }
@@ -992,65 +1019,72 @@ int DeferredRenderer::InitializeFrameBuffers()
   _Settings._RenderResolution.x = int(_Settings._WindowResolution.x * RenderScale());
   _Settings._RenderResolution.y = int(_Settings._WindowResolution.y * RenderScale());
 
-  // Albedo (8-bit RGBA)
-  GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, RenderWidth(), RenderHeight(), GL_RGBA, GL_UNSIGNED_BYTE, nullptr, _GAlbedoTEX);
+  GLTextureDesc targetDesc;
+  targetDesc._Target = GL_TEXTURE_2D;
+  targetDesc._Width  = RenderWidth();
+  targetDesc._Height = RenderHeight();
 
-  // Normals (high precision)
-  GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA16F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _GNormalTEX);
+  targetDesc._Slot           = _GAlbedoTEX._Slot;
+  targetDesc._InternalFormat = _GAlbedoTEX._InternalFormat;
+  targetDesc._DataFormat     = _GAlbedoTEX._DataFormat;
+  targetDesc._DataType       = _GAlbedoTEX._DataType;
+  GLUtil::CreateTexture(targetDesc, _GAlbedoTEX);
 
-  // World positions (high precision)
-  GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA16F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _GPositionTEX);
+  targetDesc._Slot           = _GNormalTEX._Slot;
+  targetDesc._InternalFormat = _GNormalTEX._InternalFormat;
+  targetDesc._DataFormat     = _GNormalTEX._DataFormat;
+  targetDesc._DataType       = _GNormalTEX._DataType;
+  GLUtil::CreateTexture(targetDesc, _GNormalTEX);
 
-  // Material params (roughness, metallic, reflectance)
-  GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA16F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _GMaterialTEX);
+  targetDesc._Slot           = _GPositionTEX._Slot;
+  targetDesc._InternalFormat = _GPositionTEX._InternalFormat;
+  targetDesc._DataFormat     = _GPositionTEX._DataFormat;
+  targetDesc._DataType       = _GPositionTEX._DataType;
+  GLUtil::CreateTexture(targetDesc, _GPositionTEX);
 
-  // Depth
-  GLUtil::GenTexture(GL_TEXTURE_2D, GL_DEPTH_COMPONENT24, RenderWidth(), RenderHeight(), GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr, _GDepthTEX, GL_NEAREST, GL_NEAREST);
+  targetDesc._Slot           = _GMaterialTEX._Slot;
+  targetDesc._InternalFormat = _GMaterialTEX._InternalFormat;
+  targetDesc._DataFormat     = _GMaterialTEX._DataFormat;
+  targetDesc._DataType       = _GMaterialTEX._DataType;
+  GLUtil::CreateTexture(targetDesc, _GMaterialTEX);
 
-  // Create / configure G-buffer FBO
-  glGenFramebuffers(1, &_GBufferFBO._Handle);
-  glBindFramebuffer(GL_FRAMEBUFFER, _GBufferFBO._Handle);
+  targetDesc._Slot           = _GDepthTEX._Slot;
+  targetDesc._InternalFormat = _GDepthTEX._InternalFormat;
+  targetDesc._DataFormat     = _GDepthTEX._DataFormat;
+  targetDesc._DataType       = _GDepthTEX._DataType;
+  targetDesc._MinFilter      = GL_NEAREST;
+  targetDesc._MagFilter      = GL_NEAREST;
+  GLUtil::CreateTexture(targetDesc, _GDepthTEX);
 
-  _GBufferFBO._Tex.clear();
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _GAlbedoTEX._Handle, 0);
-  _GBufferFBO._Tex.push_back(_GAlbedoTEX);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, _GNormalTEX._Handle, 0);
-  _GBufferFBO._Tex.push_back(_GNormalTEX);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, _GPositionTEX._Handle, 0);
-  _GBufferFBO._Tex.push_back(_GPositionTEX);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, _GMaterialTEX._Handle, 0);
-  _GBufferFBO._Tex.push_back(_GMaterialTEX);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,  GL_TEXTURE_2D, _GDepthTEX._Handle, 0);
-  _GBufferFBO._Tex.push_back(_GDepthTEX);
-
-  GLenum DrawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3 };
-  glDrawBuffers(4, DrawBuffers);
-  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+  GLFrameBufferDesc gBufferDesc;
+  gBufferDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_GAlbedoTEX });
+  gBufferDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT1, &_GNormalTEX });
+  gBufferDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT2, &_GPositionTEX });
+  gBufferDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT3, &_GMaterialTEX });
+  gBufferDesc._Attachments.push_back({ GL_DEPTH_ATTACHMENT, &_GDepthTEX });
+  if ( !GLUtil::CreateFrameBuffer(gBufferDesc, _GBufferFBO) )
   {
     std::cout << "DeferredRenderer : G-buffer framebuffer not complete !" << std::endl;
     return 1;
   }
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   // Lighting target (single HDR target)
-  GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _LightingTEX);
+  targetDesc._Slot           = _LightingTEX._Slot;
+  targetDesc._InternalFormat = _LightingTEX._InternalFormat;
+  targetDesc._DataFormat     = _LightingTEX._DataFormat;
+  targetDesc._DataType       = _LightingTEX._DataType;
+  targetDesc._MinFilter      = GL_LINEAR;
+  targetDesc._MagFilter      = GL_LINEAR;
+  GLUtil::CreateTexture(targetDesc, _LightingTEX);
 
-  glGenFramebuffers(1, &_LightingFBO._Handle);
-  glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
-
-  _LightingFBO._Tex.clear();
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _LightingTEX._Handle, 0);
-  _LightingFBO._Tex.push_back(_LightingTEX);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, _GDepthTEX._Handle, 0);
-
-  GLenum LightDrawBuffers[] = { GL_COLOR_ATTACHMENT0 };
-  glDrawBuffers(1, LightDrawBuffers);
-  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+  GLFrameBufferDesc lightingDesc;
+  lightingDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_LightingTEX });
+  lightingDesc._Attachments.push_back({ GL_DEPTH_ATTACHMENT, &_GDepthTEX, GL_TEXTURE_2D, 0, false });
+  if ( !GLUtil::CreateFrameBuffer(lightingDesc, _LightingFBO) )
   {
     std::cout << "DeferredRenderer : Lighting framebuffer not complete !" << std::endl;
     return 1;
   }
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   return 0;
 }
@@ -1219,9 +1253,18 @@ int DeferredRenderer::UpdateUniforms()
 
   if ( _DirtyStates & (unsigned long)DirtyState::SceneMaterials )
   {
-    glBindTexture(GL_TEXTURE_2D, _MaterialsTEX._Handle);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>((sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size()), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetMaterials()[0]);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    GLTextureDesc materialsDesc;
+    materialsDesc._Target         = _MaterialsTEX._Target;
+    materialsDesc._Slot           = _MaterialsTEX._Slot;
+    materialsDesc._Width          = static_cast<GLsizei>((sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size());
+    materialsDesc._Height         = 1;
+    materialsDesc._InternalFormat = _MaterialsTEX._InternalFormat;
+    materialsDesc._DataFormat     = _MaterialsTEX._DataFormat;
+    materialsDesc._DataType       = _MaterialsTEX._DataType;
+    materialsDesc._Data           = &_Scene.GetMaterials()[0];
+    materialsDesc._MinFilter      = GL_NEAREST;
+    materialsDesc._MagFilter      = GL_NEAREST;
+    GLUtil::CreateTexture(materialsDesc, _MaterialsTEX);
   }
 
   if ( _GeometryShader )
@@ -1716,7 +1759,9 @@ int DeferredRenderer::RenderToTexture()
 
     _GeometryShader -> Use();
 
-    this -> BindGBufferTextures();
+    GLUtil::ActivateTexture(_TexIndTBO._Tex);
+    GLUtil::ActivateTexture(_TexArrayTEX);
+    GLUtil::ActivateTexture(_MaterialsTEX);
 
     const std::vector<MeshInstance> & instances = _Scene.GetMeshInstances();
     for ( int instID : _OpaqueMeshInstanceIDs )
@@ -1872,26 +1917,29 @@ int DeferredRenderer::RenderToFile(const std::filesystem::path& iFilePath)
   // Render current lighting texture to an intermediary FBO bound to a temporary texture,
   // then read back pixels similar to PathTracer::RenderToFile
   GLFrameBuffer temporaryFBO;
-  temporaryFBO._Tex.push_back({0, GL_TEXTURE_2D, 5});
+  GLTexture temporaryTEX = { 0, GL_TEXTURE_2D, 5 };
 
   int w = _Settings._WindowResolution.x;
   int h = _Settings._WindowResolution.y;
 
   // Create temp texture and FBO
-  glGenTextures(1, &temporaryFBO._Tex[0]._Handle);
-  glActiveTexture(GL_TEX_UNIT(temporaryFBO._Tex[0]));
-  glBindTexture(GL_TEXTURE_2D, temporaryFBO._Tex[0]._Handle);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, w, h, 0, GL_RGBA, GL_FLOAT, nullptr);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glBindTexture(GL_TEXTURE_2D, 0);
+  GLTextureDesc tempDesc;
+  tempDesc._Target         = temporaryTEX._Target;
+  tempDesc._Slot           = temporaryTEX._Slot;
+  tempDesc._Width          = w;
+  tempDesc._Height         = h;
+  tempDesc._InternalFormat = GL_RGBA32F;
+  tempDesc._DataFormat     = GL_RGBA;
+  tempDesc._DataType       = GL_FLOAT;
+  tempDesc._MinFilter      = GL_LINEAR;
+  tempDesc._MagFilter      = GL_LINEAR;
+  GLUtil::CreateTexture(tempDesc, temporaryTEX);
 
-  glGenFramebuffers(1, &temporaryFBO._Handle);
-  glBindFramebuffer(GL_FRAMEBUFFER, temporaryFBO._Handle);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, temporaryFBO._Tex[0]._Handle, 0);
-  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+  GLFrameBufferDesc tempFBODesc;
+  tempFBODesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &temporaryTEX });
+  if ( !GLUtil::CreateFrameBuffer(tempFBODesc, temporaryFBO) )
   {
-    GLUtil::DeleteTEX(temporaryFBO._Tex[0]);
+    GLUtil::DeleteTEX(temporaryTEX);
     return 1;
   }
 
@@ -1912,7 +1960,7 @@ int DeferredRenderer::RenderToFile(const std::filesystem::path& iFilePath)
 
   // Readback and save
   unsigned char* frameData = new unsigned char[w * h * 4];
-  glBindTexture(GL_TEXTURE_2D, temporaryFBO._Tex[0]._Handle);
+  glBindTexture(GL_TEXTURE_2D, temporaryTEX._Handle);
   glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, frameData);
 
   stbi_flip_vertically_on_write(true);
@@ -1920,6 +1968,7 @@ int DeferredRenderer::RenderToFile(const std::filesystem::path& iFilePath)
   delete[] frameData;
 
   GLUtil::DeleteFBO(temporaryFBO);
+  GLUtil::DeleteTEX(temporaryTEX);
 
   if ( saved && std::filesystem::exists(iFilePath) )
     std::cout << "Frame saved in " << std::filesystem::absolute(iFilePath) << std::endl;

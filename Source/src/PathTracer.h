@@ -155,6 +155,25 @@ protected:
   GLTextureBuffer _BLASPackedUVsTBO           = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_BLASPackedUVs          } };
 
   // Textures
+  GLTexture _RenderTargetTEX[3] =
+  {
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTarget,        GL_RGBA32F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetPos,     GL_RGBA32F, GL_RGBA, GL_FLOAT }
+  };
+  GLTexture _RenderTargetTileTEX[3] =
+  {
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetTile,    GL_RGBA32F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetPos,     GL_RGBA32F, GL_RGBA, GL_FLOAT }
+  };
+  GLTexture _RenderTargetLowResTEX = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetLowRes, GL_RGBA32F, GL_RGBA, GL_FLOAT };
+  GLTexture _AccumulateTEX[3] =
+  {
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Accumulate,        GL_RGBA32F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulateNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulatePos,     GL_RGBA32F, GL_RGBA, GL_FLOAT }
+  };
   GLTexture _DenoisedTEX         = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Denoised,         GL_RGBA32F, GL_RGBA, GL_FLOAT };
   GLTexture _TexArrayTEX         = { 0, GL_TEXTURE_2D_ARRAY, PathTracerTexSlot::_TexArray,   GL_RGBA8,   GL_RGBA, GL_UNSIGNED_BYTE };
   GLTexture _MaterialsTEX        = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Materials,        GL_RGBA32F, GL_RGBA, GL_FLOAT };
