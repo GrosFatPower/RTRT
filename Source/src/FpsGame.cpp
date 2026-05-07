@@ -55,6 +55,7 @@ Vec3 FpsPlayer::EyePosition( const FpsGameSettings & iSettings ) const
 int FpsGameWorld::Initialize( const FpsGameSettings & iSettings )
 {
   BuildDefaultArena();
+  ResizeProjectilePool(iSettings);
   return Reset(iSettings);
 }
 
@@ -69,6 +70,9 @@ int FpsGameWorld::Reset( const FpsGameSettings & iSettings )
   _Player._Pitch = 0.f;
   _Player._Grounded = false;
   _Player._Health = 100;
+  _ProjectileCooldownTimer = 0.f;
+  _PendingProjectileShots = 0;
+  ClearProjectiles();
 
   return 0;
 }
@@ -78,10 +82,22 @@ int FpsGameWorld::Reset( const FpsGameSettings & iSettings )
 // ----------------------------------------------------------------------------
 int FpsGameWorld::Update( float iDeltaTime, const FpsGameInput & iInput, const FpsGameSettings & iSettings )
 {
+  _ProjectilesDirty = false;
+
   if ( iInput._ResetPressed )
     Reset(iSettings);
 
+  const float realDt = MathUtil::Clamp(iDeltaTime, 0.f, 0.25f);
   const float dt = MathUtil::Clamp(iDeltaTime, 0.f, 0.05f);
+  if ( realDt <= 0.f )
+    return 0;
+
+  ResizeProjectilePool(iSettings);
+  const float cooldown = std::max(0.001f, iSettings._ProjectileCooldown);
+  const float maxCooldownDebt = -cooldown * static_cast<float>(std::max(1, std::min(_PendingProjectileShots + iInput._FireCount + 1, iSettings._MaxProjectiles)));
+  _ProjectileCooldownTimer = std::max(maxCooldownDebt, _ProjectileCooldownTimer - realDt);
+  _PendingProjectileShots += std::max(0, iInput._FireCount);
+
   if ( dt <= 0.f )
     return 0;
 
@@ -131,7 +147,213 @@ int FpsGameWorld::Update( float iDeltaTime, const FpsGameInput & iInput, const F
   _Player._Grounded = false;
   MoveAxis(1, _Player._Velocity.y * dt, iSettings);
 
+  while ( ( _PendingProjectileShots > 0 ) && ( _ProjectileCooldownTimer <= 0.f ) )
+  {
+    FireProjectile(iSettings);
+    _PendingProjectileShots--;
+    _ProjectileCooldownTimer += cooldown;
+  }
+  if ( ( 0 == _PendingProjectileShots ) && ( _ProjectileCooldownTimer < 0.f ) )
+    _ProjectileCooldownTimer = 0.f;
+
+  UpdateProjectiles(dt, iSettings);
+
   return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ResizeProjectilePool
+// ----------------------------------------------------------------------------
+int FpsGameWorld::ResizeProjectilePool( const FpsGameSettings & iSettings )
+{
+  const int maxProjectiles = std::max(1, iSettings._MaxProjectiles);
+  if ( static_cast<int>(_Projectiles.size()) == maxProjectiles )
+    return 0;
+
+  _Projectiles.resize(maxProjectiles);
+  _ProjectilesDirty = true;
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ClearProjectiles
+// ----------------------------------------------------------------------------
+void FpsGameWorld::ClearProjectiles()
+{
+  for ( FpsProjectile & projectile : _Projectiles )
+  {
+    projectile._Active = false;
+    projectile._Position = Vec3(0.f);
+    projectile._Velocity = Vec3(0.f);
+    projectile._Age = 0.f;
+  }
+  _ProjectilesDirty = true;
+}
+
+// ----------------------------------------------------------------------------
+// GetActiveProjectileCount
+// ----------------------------------------------------------------------------
+int FpsGameWorld::GetActiveProjectileCount() const
+{
+  int count = 0;
+  for ( const FpsProjectile & projectile : _Projectiles )
+  {
+    if ( projectile._Active )
+      count++;
+  }
+  return count;
+}
+
+// ----------------------------------------------------------------------------
+// ConsumeProjectilesDirty
+// ----------------------------------------------------------------------------
+bool FpsGameWorld::ConsumeProjectilesDirty()
+{
+  const bool dirty = _ProjectilesDirty;
+  _ProjectilesDirty = false;
+  return dirty;
+}
+
+// ----------------------------------------------------------------------------
+// PlayerForward
+// ----------------------------------------------------------------------------
+Vec3 FpsGameWorld::PlayerForward() const
+{
+  const float yawRad = MathUtil::ToRadians(_Player._Yaw);
+  const float pitchRad = MathUtil::ToRadians(_Player._Pitch);
+  Vec3 forward(std::cos(yawRad) * std::cos(pitchRad),
+               std::sin(pitchRad),
+               std::sin(yawRad) * std::cos(pitchRad));
+  return glm::normalize(forward);
+}
+
+// ----------------------------------------------------------------------------
+// FireProjectile
+// ----------------------------------------------------------------------------
+void FpsGameWorld::FireProjectile( const FpsGameSettings & iSettings )
+{
+  if ( _Projectiles.empty() )
+    ResizeProjectilePool(iSettings);
+
+  int projectileID = -1;
+  float oldestAge = -1.f;
+  for ( int i = 0; i < static_cast<int>(_Projectiles.size()); ++i )
+  {
+    if ( !_Projectiles[i]._Active )
+    {
+      projectileID = i;
+      break;
+    }
+
+    if ( _Projectiles[i]._Age > oldestAge )
+    {
+      oldestAge = _Projectiles[i]._Age;
+      projectileID = i;
+    }
+  }
+
+  if ( projectileID < 0 )
+    return;
+
+  const float radius = std::max(0.02f, iSettings._ProjectileRadius);
+  const Vec3 forward = PlayerForward();
+  FpsProjectile & projectile = _Projectiles[projectileID];
+  projectile._Active = true;
+  projectile._Position = _Player.EyePosition(iSettings) + forward * (iSettings._PlayerRadius + radius + 0.08f);
+  projectile._Velocity = forward * std::max(0.f, iSettings._ProjectileSpeed);
+  projectile._Age = 0.f;
+
+  _ProjectilesDirty = true;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateProjectiles
+// ----------------------------------------------------------------------------
+void FpsGameWorld::UpdateProjectiles( float iDeltaTime, const FpsGameSettings & iSettings )
+{
+  const float radius = std::max(0.02f, iSettings._ProjectileRadius);
+  const float maxMovePerStep = std::max(0.05f, radius * 0.75f);
+
+  for ( FpsProjectile & projectile : _Projectiles )
+  {
+    if ( !projectile._Active )
+      continue;
+
+    projectile._Age += iDeltaTime;
+    if ( projectile._Age >= std::max(0.1f, iSettings._ProjectileLifetime) )
+    {
+      projectile._Active = false;
+      _ProjectilesDirty = true;
+      continue;
+    }
+
+    const float moveLen = glm::length(projectile._Velocity) * iDeltaTime;
+    const int nbSteps = std::max(1, std::min(16, static_cast<int>(std::ceil(moveLen / maxMovePerStep))));
+    const float stepDt = iDeltaTime / static_cast<float>(nbSteps);
+
+    for ( int step = 0; step < nbSteps; ++step )
+    {
+      projectile._Velocity.y -= std::max(0.f, iSettings._ProjectileGravity) * stepDt;
+      MoveProjectileAxis(projectile, 0, projectile._Velocity.x * stepDt, iSettings);
+      MoveProjectileAxis(projectile, 1, projectile._Velocity.y * stepDt, iSettings);
+      MoveProjectileAxis(projectile, 2, projectile._Velocity.z * stepDt, iSettings);
+    }
+
+    _ProjectilesDirty = true;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// MoveProjectileAxis
+// ----------------------------------------------------------------------------
+void FpsGameWorld::MoveProjectileAxis( FpsProjectile & ioProjectile, int iAxis, float iDelta, const FpsGameSettings & iSettings )
+{
+  if ( fabs(iDelta) <= EPSILON )
+    return;
+
+  ioProjectile._Position[iAxis] += iDelta;
+
+  const float radius = std::max(0.02f, iSettings._ProjectileRadius);
+  const float bounciness = MathUtil::Clamp(iSettings._ProjectileBounciness, 0.f, 1.f);
+
+  for ( const FpsSceneObject & object : _Objects )
+  {
+    if ( !object._Collidable )
+      continue;
+
+    const Vec3 delta = ioProjectile._Position - object._Center;
+    const Vec3 sumHalf = object._HalfExtents + Vec3(radius);
+    if ( ( std::abs(delta.x) >= sumHalf.x )
+      || ( std::abs(delta.y) >= sumHalf.y )
+      || ( std::abs(delta.z) >= sumHalf.z ) )
+      continue;
+
+    const Vec3 overlap = sumHalf - Vec3(std::abs(delta.x), std::abs(delta.y), std::abs(delta.z));
+    int minAxis = 0;
+    if ( overlap.y < overlap[minAxis] )
+      minAxis = 1;
+    if ( overlap.z < overlap[minAxis] )
+      minAxis = 2;
+    if ( minAxis != iAxis )
+      continue;
+
+    if ( iDelta > 0.f )
+      ioProjectile._Position[iAxis] -= overlap[iAxis];
+    else
+      ioProjectile._Position[iAxis] += overlap[iAxis];
+
+    ioProjectile._Velocity[iAxis] = -ioProjectile._Velocity[iAxis] * bounciness;
+    if ( std::abs(ioProjectile._Velocity[iAxis]) < 0.15f )
+      ioProjectile._Velocity[iAxis] = 0.f;
+
+    for ( int axis = 0; axis < 3; ++axis )
+    {
+      if ( axis != iAxis )
+        ioProjectile._Velocity[axis] *= 0.96f;
+    }
+
+    _ProjectilesDirty = true;
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -222,9 +444,12 @@ bool FpsGameWorld::OverlapPlayerObject( const FpsSceneObject & iObject, const Fp
 void FpsGameSceneBinding::Reset()
 {
   _CubeMeshID = -1;
+  _SphereMeshID = -1;
+  _ProjectileMaterialID = -1;
   for ( int i = 0; i < (int)FpsMaterialSlot::Count; ++i )
     _MaterialIDs[i] = -1;
   _ObjectInstanceIDs.clear();
+  _ProjectileInstanceIDs.clear();
 }
 
 // ----------------------------------------------------------------------------
@@ -253,6 +478,17 @@ int FpsGameSceneBinding::Attach( Scene & iScene, const FpsGameWorld & iWorld, co
     _ObjectInstanceIDs.push_back(iScene.AddMeshInstance(instance));
   }
 
+  const std::vector<FpsProjectile> & projectiles = iWorld.GetProjectiles();
+  _ProjectileInstanceIDs.reserve(projectiles.size());
+  for ( int i = 0; i < static_cast<int>(projectiles.size()); ++i )
+  {
+    if ( ( _SphereMeshID < 0 ) || ( _ProjectileMaterialID < 0 ) )
+      return 1;
+
+    MeshInstance instance("Projectile " + std::to_string(i), _SphereMeshID, _ProjectileMaterialID, BuildProjectileTransform(projectiles[i], iSettings));
+    _ProjectileInstanceIDs.push_back(iScene.AddMeshInstance(instance));
+  }
+
   return SyncCamera(iScene, iWorld, iSettings);
 }
 
@@ -272,10 +508,14 @@ int FpsGameSceneBinding::SyncCamera( Scene & iScene, const FpsGameWorld & iWorld
 // ----------------------------------------------------------------------------
 // SyncTransforms
 // ----------------------------------------------------------------------------
-int FpsGameSceneBinding::SyncTransforms( Scene & iScene, const FpsGameWorld & iWorld )
+int FpsGameSceneBinding::SyncTransforms( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings )
 {
   const std::vector<FpsSceneObject> & objects = iWorld.GetObjects();
   if ( objects.size() != _ObjectInstanceIDs.size() )
+    return 1;
+
+  const std::vector<FpsProjectile> & projectiles = iWorld.GetProjectiles();
+  if ( projectiles.size() != _ProjectileInstanceIDs.size() )
     return 1;
 
   std::vector<MeshInstance> & instances = iScene.GetMeshInstances();
@@ -286,6 +526,15 @@ int FpsGameSceneBinding::SyncTransforms( Scene & iScene, const FpsGameWorld & iW
       return 1;
 
     instances[instanceID]._Transform = BuildObjectTransform(objects[i]);
+  }
+
+  for ( int i = 0; i < static_cast<int>(_ProjectileInstanceIDs.size()); ++i )
+  {
+    const int instanceID = _ProjectileInstanceIDs[i];
+    if ( ( instanceID < 0 ) || ( instanceID >= static_cast<int>(instances.size()) ) )
+      return 1;
+
+    instances[instanceID]._Transform = BuildProjectileTransform(projectiles[i], iSettings);
   }
 
   return 0;
@@ -304,23 +553,35 @@ int FpsGameSceneBinding::EnsureResources( Scene & iScene )
     return 1;
   }
 
+  Mesh * sphereMesh = ProceduralMesh::CreateUVSphere("__FpsProjectileSphere", 8, 16);
+  _SphereMeshID = iScene.AddMesh(sphereMesh);
+  if ( _SphereMeshID < 0 )
+  {
+    delete sphereMesh;
+    return 1;
+  }
+
   Material floor = MakeMaterial(Vec3(0.48f, 0.46f, 0.40f), 0.72f);
   Material wall = MakeMaterial(Vec3(0.34f, 0.37f, 0.42f), 0.65f);
   Material pillar = MakeMaterial(Vec3(0.58f, 0.55f, 0.49f), 0.55f);
   Material crate = MakeMaterial(Vec3(0.80f, 0.24f, 0.13f), 0.45f);
   Material accent = MakeMaterial(Vec3(0.14f, 0.45f, 0.62f), 0.50f);
+  Material projectile = MakeMaterial(Vec3(1.0f, 0.04f, 0.02f), 0.35f);
 
   _MaterialIDs[(int)FpsMaterialSlot::Floor] = iScene.AddMaterial(floor, "__FpsFloor");
   _MaterialIDs[(int)FpsMaterialSlot::Wall] = iScene.AddMaterial(wall, "__FpsWall");
   _MaterialIDs[(int)FpsMaterialSlot::Pillar] = iScene.AddMaterial(pillar, "__FpsPillar");
   _MaterialIDs[(int)FpsMaterialSlot::Crate] = iScene.AddMaterial(crate, "__FpsCrate");
   _MaterialIDs[(int)FpsMaterialSlot::Accent] = iScene.AddMaterial(accent, "__FpsAccent");
+  _ProjectileMaterialID = iScene.AddMaterial(projectile, "__FpsProjectile");
 
   for ( int i = 0; i < (int)FpsMaterialSlot::Count; ++i )
   {
     if ( _MaterialIDs[i] < 0 )
       return 1;
   }
+  if ( _ProjectileMaterialID < 0 )
+    return 1;
 
   return 0;
 }
@@ -368,6 +629,18 @@ int FpsGameSceneBinding::AddLights( Scene & iScene )
 Mat4x4 FpsGameSceneBinding::BuildObjectTransform( const FpsSceneObject & iObject ) const
 {
   return glm::translate(iObject._Center) * glm::scale(iObject._HalfExtents * 2.f);
+}
+
+// ----------------------------------------------------------------------------
+// BuildProjectileTransform
+// ----------------------------------------------------------------------------
+Mat4x4 FpsGameSceneBinding::BuildProjectileTransform( const FpsProjectile & iProjectile, const FpsGameSettings & iSettings ) const
+{
+  if ( !iProjectile._Active )
+    return glm::translate(Vec3(0.f, -4.f, 0.f)) * glm::scale(Vec3(0.001f));
+
+  const float radius = std::max(0.02f, iSettings._ProjectileRadius);
+  return glm::translate(iProjectile._Position) * glm::scale(Vec3(radius * 2.f));
 }
 
 // ----------------------------------------------------------------------------

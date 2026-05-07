@@ -267,6 +267,7 @@ int Test6::ProcessInput()
 {
   double curMouseX = 0., curMouseY = 0.;
   glfwGetCursorPos(_MainWindow.get(), &curMouseX, &curMouseY);
+  const bool wasMouseCaptured = _MouseCaptured;
 
   if ( _KeyInput.IsKeyReleased(GLFW_KEY_ESCAPE) )
   {
@@ -282,6 +283,20 @@ int Test6::ProcessInput()
   FpsGameInput input;
   if ( !ImGui::GetIO().WantCaptureKeyboard )
   {
+    FpsRendererMode requestedRendererMode = _GameSettings._RendererMode;
+    if ( _KeyInput.IsKeyDown(GLFW_KEY_J) )
+      requestedRendererMode = FpsRendererMode::Deferred;
+    else if ( _KeyInput.IsKeyDown(GLFW_KEY_K) )
+      requestedRendererMode = FpsRendererMode::Software;
+    else if ( _KeyInput.IsKeyDown(GLFW_KEY_L) )
+      requestedRendererMode = FpsRendererMode::PhotoPathTracer;
+
+    if ( requestedRendererMode != _GameSettings._RendererMode )
+    {
+      _GameSettings._RendererMode = requestedRendererMode;
+      _ReloadRenderer = true;
+    }
+
     input._MoveForward  = _KeyInput.IsKeyDown(GLFW_KEY_W);
     input._MoveBackward = _KeyInput.IsKeyDown(GLFW_KEY_S);
     input._MoveLeft     = _KeyInput.IsKeyDown(GLFW_KEY_A);
@@ -289,6 +304,7 @@ int Test6::ProcessInput()
     input._Sprint       = _KeyInput.IsKeyDown(GLFW_KEY_LEFT_SHIFT) || _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_SHIFT);
     input._JumpPressed  = _KeyInput.IsKeyDown(GLFW_KEY_SPACE);
     input._ResetPressed = _KeyInput.IsKeyReleased(GLFW_KEY_R);
+    input._FireCount    = wasMouseCaptured && !ImGui::GetIO().WantCaptureMouse ? _MouseInput.CountButtonPressed(GLFW_MOUSE_BUTTON_1) : 0;
   }
 
   if ( _MouseCaptured && ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode ) )
@@ -314,6 +330,15 @@ int Test6::ProcessInput()
 
     if ( _Renderer )
       _Renderer -> Notify(DirtyState::SceneCamera);
+
+    if ( _GameWorld.ConsumeProjectilesDirty() )
+    {
+      if ( 0 != _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings) )
+        return 1;
+
+      if ( _Renderer )
+        _Renderer -> Notify(DirtyState::SceneInstances);
+    }
   }
 
   _KeyInput.ClearLastEvents();
@@ -328,6 +353,15 @@ int Test6::ProcessInput()
 // ----------------------------------------------------------------------------
 int Test6::UpdateGame()
 {
+  if ( _ReloadScene )
+  {
+    _ReloadScene = false;
+    _Renderer.reset();
+    if ( 0 != InitializeScene() )
+      return 1;
+    _ReloadRenderer = true;
+  }
+
   if ( _ReloadRenderer )
   {
     _ReloadRenderer = false;
@@ -364,6 +398,7 @@ int Test6::DrawUI()
     ImGui::Text("Photo mode: gameplay paused");
   else
     ImGui::Text("Click viewport to capture mouse. Esc releases capture.");
+  ImGui::Text("Renderer shortcuts: J Deferred, K Software, L Photo");
 
   const FpsPlayer & player = _GameWorld.GetPlayer();
   ImGui::Text("Position: %.2f %.2f %.2f", player._Position.x, player._Position.y, player._Position.z);
@@ -376,8 +411,12 @@ int Test6::DrawUI()
   {
     _GameWorld.Reset(_GameSettings);
     _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings);
+    _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings);
     if ( _Renderer )
+    {
       _Renderer -> Notify(DirtyState::SceneCamera);
+      _Renderer -> Notify(DirtyState::SceneInstances);
+    }
   }
 
   ImGui::SameLine();
@@ -410,6 +449,32 @@ int Test6::DrawSettingsUI()
     ImGui::SliderFloat("Player height", &_GameSettings._PlayerHeight, 1.f, 2.4f);
     ImGui::SliderFloat("Gravity", &_GameSettings._Gravity, 1.f, 35.f);
     ImGui::SliderFloat("Jump speed", &_GameSettings._JumpSpeed, 1.f, 12.f);
+  }
+
+  if ( ImGui::CollapsingHeader("Projectiles") )
+  {
+    ImGui::Text("Active: %d / %d", _GameWorld.GetActiveProjectileCount(), (int)_GameWorld.GetProjectiles().size());
+    ImGui::SliderFloat("Projectile speed", &_GameSettings._ProjectileSpeed, 1.f, 40.f);
+    ImGui::SliderFloat("Projectile radius", &_GameSettings._ProjectileRadius, 0.04f, 0.35f);
+    ImGui::SliderFloat("Projectile bounciness", &_GameSettings._ProjectileBounciness, 0.f, 1.f);
+    ImGui::SliderFloat("Projectile lifetime", &_GameSettings._ProjectileLifetime, 0.5f, 20.f);
+    ImGui::SliderFloat("Projectile cooldown", &_GameSettings._ProjectileCooldown, 0.02f, 1.f);
+    ImGui::SliderFloat("Projectile gravity", &_GameSettings._ProjectileGravity, 0.f, 30.f);
+
+    int maxProjectiles = _GameSettings._MaxProjectiles;
+    if ( ImGui::SliderInt("Max projectiles", &maxProjectiles, 1, 128) )
+    {
+      _GameSettings._MaxProjectiles = std::max(1, maxProjectiles);
+      _ReloadScene = true;
+    }
+
+    if ( ImGui::Button("Clear projectiles") )
+    {
+      _GameWorld.ClearProjectiles();
+      _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings);
+      if ( _Renderer )
+        _Renderer -> Notify(DirtyState::SceneInstances);
+    }
   }
 
   if ( ImGui::CollapsingHeader("Render settings") && _Renderer )

@@ -52,6 +52,25 @@ bool MouseInput::IsButtonReleased( const int iButton ) const
   return IsButtonReleased(iButton, mouseX, mouseY);
 }
 
+int MouseInput::CountButtonPressed( const int iButton ) const
+{
+  int count = 0;
+  auto it = _ButtonEvents.find(iButton);
+  if ( it != _ButtonEvents.end() )
+  {
+    std::queue<MouseEvent> pendingEvents = it -> second;
+    while ( pendingEvents.size() )
+    {
+      const MouseEvent & event = pendingEvents.front();
+      if ( ( event._Action == GLFW_PRESS ) && !event._Persistent )
+        count++;
+      pendingEvents.pop();
+    }
+  }
+
+  return count;
+}
+
 bool MouseInput::IsButtonReleased( const int iButton, double & oMouseX, double & oMouseY ) const
 {
   auto it = _ButtonEvents.find(iButton);
@@ -94,6 +113,7 @@ void MouseInput::ClearLastEvents( const double iCurMouseX, const double iCurMous
       {
         lastEvent._MouseX = iCurMouseX;
         lastEvent._MouseY = iCurMouseY;
+        lastEvent._Persistent = true;
         events.push(lastEvent);
       }
     }

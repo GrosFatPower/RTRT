@@ -50,6 +50,7 @@ protected:
   std::unique_ptr<Scene>    _Scene;
   RenderSettings            _Settings;
   std::unique_ptr<Renderer> _Renderer;
+  bool                      _ReloadScene = false;
   bool                      _ReloadRenderer = false;
 
   FpsGameSettings           _GameSettings;

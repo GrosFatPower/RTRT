@@ -12,6 +12,7 @@ namespace ProceduralMesh
 {
 
 Mesh * CreateCube( const std::string & iName );
+Mesh * CreateUVSphere( const std::string & iName, int iRings = 8, int iSegments = 16 );
 
 }
 
