@@ -57,7 +57,17 @@ void Test6::MouseButtonCallback( GLFWwindow * iWindow, const int iButton, const 
   glfwGetCursorPos(iWindow, &mouseX, &mouseY);
 
   if ( ( GLFW_PRESS == iAction ) || ( GLFW_RELEASE == iAction ) )
+  {
+    if ( ( GLFW_PRESS == iAction )
+      && ( GLFW_MOUSE_BUTTON_1 == iButton )
+      && this_ -> _MouseCaptured
+      && ( FpsRendererMode::PhotoPathTracer != this_ -> _GameSettings._RendererMode ) )
+    {
+      this_ -> _PendingFireCount++;
+    }
+
     this_ -> _MouseInput.AddButtonEvent(iButton, iAction, mouseX, mouseY);
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -153,6 +163,8 @@ void Test6::SetMouseCaptured( bool iCaptured )
 
   _MouseCaptured = iCaptured;
   _HasLastMousePos = false;
+  if ( !_MouseCaptured )
+    _PendingFireCount = 0;
   glfwSetInputMode(_MainWindow.get(), GLFW_CURSOR, _MouseCaptured ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
 }
 
@@ -267,7 +279,6 @@ int Test6::ProcessInput()
 {
   double curMouseX = 0., curMouseY = 0.;
   glfwGetCursorPos(_MainWindow.get(), &curMouseX, &curMouseY);
-  const bool wasMouseCaptured = _MouseCaptured;
 
   if ( _KeyInput.IsKeyReleased(GLFW_KEY_ESCAPE) )
   {
@@ -304,7 +315,8 @@ int Test6::ProcessInput()
     input._Sprint       = _KeyInput.IsKeyDown(GLFW_KEY_LEFT_SHIFT) || _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_SHIFT);
     input._JumpPressed  = _KeyInput.IsKeyDown(GLFW_KEY_SPACE);
     input._ResetPressed = _KeyInput.IsKeyReleased(GLFW_KEY_R);
-    input._FireCount    = wasMouseCaptured && !ImGui::GetIO().WantCaptureMouse ? _MouseInput.CountButtonPressed(GLFW_MOUSE_BUTTON_1) : 0;
+    input._FireCount    = _PendingFireCount;
+    _PendingFireCount = 0;
   }
 
   if ( _MouseCaptured && ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode ) )

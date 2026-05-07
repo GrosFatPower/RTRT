@@ -62,6 +62,7 @@ protected:
 
   bool                      _MouseCaptured = false;
   bool                      _HasLastMousePos = false;
+  int                       _PendingFireCount = 0;
   double                    _LastMouseX = 0.;
   double                    _LastMouseY = 0.;
 

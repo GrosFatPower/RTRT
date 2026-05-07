@@ -12,7 +12,6 @@ struct MouseEvent
   int _Action = 0;
   union { double _MouseX = 0., _OffsetX; };
   union { double _MouseY = 0., _OffsetY; };
-  bool _Persistent = false;
 };
 
 class MouseInput
@@ -23,7 +22,6 @@ virtual ~MouseInput();
 
 bool IsButtonPressed(const int iButton) const;
 bool IsButtonReleased(const int iButton) const;
-int CountButtonPressed(const int iButton) const;
 bool IsButtonPressed(const int iButton, double & oMouseX, double & oMouseY) const;
 bool IsButtonReleased(const int iButton, double & oMouseX, double & oMouseY) const;
 bool IsScrolled(double & oOffsetX, double & oOffsetY) const;
