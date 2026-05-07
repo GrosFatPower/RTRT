@@ -255,7 +255,7 @@ int main(int iArgc, char** iArgv)
       if ( !selectedTest )
         selectedTest = TestSelectionPanel(mainWindow.get());
 
-      if ( selectedTest < 1 || selectedTest > 5 )
+      if ( selectedTest < 1 || selectedTest > 6 )
       {
         break;
       }
