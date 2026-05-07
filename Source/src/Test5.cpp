@@ -662,6 +662,9 @@ int Test5::DrawSettingsUI()
           _Renderer -> Notify(DirtyState::RenderSettings);
         }
 
+        if ( ImGui::SliderInt( "Max shadow casting lights", &_Settings._MaxShadowCastingLights, 1, 8 ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
         if ( ImGui::SliderFloat( "Shadow bias", &_Settings._ShadowBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
@@ -1433,6 +1436,9 @@ int Test5::DrawLightsUI()
         if ( ImGui::SliderFloat( "Intensity", &curLight -> _Intensity, 0.001f, 100.f ) )
           NotifyLightEdited();
 
+        if ( ImGui::Checkbox( "Cast shadow", &curLight -> _CastShadow ) )
+          NotifyLightEdited();
+
         float rgb[3] = { curLight -> _Emission.r, curLight -> _Emission.g, curLight -> _Emission.b };
         if ( ImGui::ColorEdit3("Emission", rgb) )
         {
@@ -1469,6 +1475,12 @@ int Test5::DrawLightsUI()
             curLight -> _Area = glm::length(glm::cross(curLight -> _DirU, curLight -> _DirV));
             NotifyLightEdited();
           }
+        }
+
+        if ( LightType::DistantLight != (LightType) lightType )
+        {
+          if ( ImGui::SliderFloat("Shadow radius", &curLight -> _ShadowRadius, 0.f, 500.f) )
+            NotifyLightEdited();
         }
       }
     }

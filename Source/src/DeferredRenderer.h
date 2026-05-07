@@ -17,6 +17,8 @@
 namespace RTRT
 {
 
+static const int S_MaxDeferredShadowCasters = 8;
+
 struct DeferredTexSlot
 {
   static const TextureSlot _GAlbedo       = 0;
@@ -105,6 +107,18 @@ protected:
   void ComputeSceneBounds();
   float ComputeAutoShadowFar(const Vec3 & iLightPos) const;
 
+  struct ShadowCaster
+  {
+    int _LightIndex = -1;
+    LightType _Type = LightType::SphereLight;
+    int _Layer = 0;
+    Vec3 _Pos = Vec3(0.f);
+    Vec3 _Dir = Vec3(0.f, 1.f, 0.f);
+    float _Far = 25.f;
+    Mat4x4 _DirectionalViewProj = Mat4x4(1.f);
+    std::array<Mat4x4, 6> _CubeViewProj;
+  };
+
   QuadMesh _Quad;
 
   // G-buffer FBO and attachments
@@ -132,8 +146,8 @@ protected:
 
   // Shadow target
   GLFrameBuffer _ShadowFBO;
-  GLTexture     _ShadowCubeMapTEX = { 0, GL_TEXTURE_CUBE_MAP, DeferredTexSlot::_ShadowCubeMap, GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT };
-  GLTexture     _Shadow2DMapTEX   = { 0, GL_TEXTURE_2D, DeferredTexSlot::_Shadow2DMap, GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT };
+  GLTexture     _ShadowCubeMapTEX = { 0, GL_TEXTURE_CUBE_MAP_ARRAY, DeferredTexSlot::_ShadowCubeMap, GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT };
+  GLTexture     _Shadow2DMapTEX   = { 0, GL_TEXTURE_2D_ARRAY, DeferredTexSlot::_Shadow2DMap, GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT };
 
   // Scene data
   GLTextureBuffer _TexIndTBO     = { 0, { 0, GL_TEXTURE_BUFFER, DeferredTexSlot::_TexInd } };
@@ -174,16 +188,15 @@ protected:
   float      _SceneBoundsRadius = 1.f;
 
   // Shadow state
-  int _ShadowLightIndex      = -1;
-  LightType _ShadowLightType = LightType::SphereLight;
-  Vec3 _ShadowLightPos       = Vec3(0.f);
-  Vec3 _ShadowLightDir       = Vec3(0.f, 1.f, 0.f);
   float _ShadowNear          = 0.1f;
   float _ShadowFar           = 25.f;
   int _ShadowMapSize         = -1;
+  int _ShadowLocalCapacity   = -1;
+  int _ShadowDirectionalCapacity = -1;
+  int _LocalShadowCasterCount = 0;
+  int _DirectionalShadowCasterCount = 0;
   bool _HasShadowLight       = false;
-  std::array<Mat4x4, 6> _ShadowViewProj;
-  Mat4x4 _ShadowDirectionalViewProj = Mat4x4(1.f);
+  std::vector<ShadowCaster> _ShadowCasters;
 
   // SSAO state
   std::array<Vec3, 32> _SSAOKernel;

@@ -52,6 +52,7 @@ struct RenderSettings
   int          _NbSamplesPerPixel     = 1;                      // PathTracer
   int          _RenderScale           = 100;
   int          _ShadowMapResolution   = 1024;                   // Deferred renderer
+  int          _MaxShadowCastingLights = 4;                     // Deferred renderer
   int          _SSAOKernelSize        = 16;                     // Deferred renderer
   float        _LowResRatio           = 0.1f;                   // PathTracer
   float        _TargetFPS             = 60.f;

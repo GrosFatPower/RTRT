@@ -140,6 +140,7 @@ int DeferredRenderer::Initialize()
     return 1;
   }
 
+  UpdateShadowState();
   if ( 0 != InitializeShadowMap() )
   {
     std::cout << "DeferredRenderer : Failed to initialize shadow map !" << std::endl;
@@ -157,9 +158,6 @@ int DeferredRenderer::Update()
   if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
   {
     this -> ResizeRenderTarget();
-
-    if ( _ShadowMapSize != _Settings._ShadowMapResolution )
-      this -> InitializeShadowMap();
   }
 
   if ( _DirtyStates & (unsigned long)DirtyState::Textures )
@@ -183,6 +181,15 @@ int DeferredRenderer::Update()
     ComputeSceneBounds();
 
   UpdateShadowState();
+  int shadowMapSize = std::clamp(_Settings._ShadowMapResolution, 256, 4096);
+  if ( ( _ShadowMapSize != shadowMapSize )
+    || ( _ShadowLocalCapacity != _LocalShadowCasterCount )
+    || ( _ShadowDirectionalCapacity != _DirectionalShadowCasterCount ) )
+  {
+    if ( 0 != InitializeShadowMap() )
+      return 1;
+  }
+
   UpdateUniforms();
  
   return 0;
@@ -228,9 +235,10 @@ int DeferredRenderer::UnloadScene()
   _OpaqueMeshInstanceIDs.clear();
   _TransparentMeshInstanceIDs.clear();
 
-  _ShadowLightIndex = -1;
-  _ShadowLightType = LightType::SphereLight;
   _HasShadowLight = false;
+  _ShadowCasters.clear();
+  _LocalShadowCasterCount = 0;
+  _DirectionalShadowCasterCount = 0;
 
   return 0;
 }
@@ -502,20 +510,29 @@ bool DeferredRenderer::UpdateSortedTransparentMeshIndices( int iMeshID, const Ma
 // ----------------------------------------------------------------------------
 int DeferredRenderer::UpdateShadowState()
 {
-  _ShadowLightIndex = -1;
-  _ShadowLightType = LightType::SphereLight;
+  _ShadowCasters.clear();
+  _LocalShadowCasterCount = 0;
+  _DirectionalShadowCasterCount = 0;
   _HasShadowLight = false;
+  _ShadowFar = ( _Settings._ShadowFar > 0.f ) ? ( _Settings._ShadowFar ) : ( std::max( _SceneBoundsRadius * 2.f, 25.f ) );
 
   if ( !_Settings._ShadowMapping )
     return 0;
 
-  int distantLightIndex = -1;
-  Vec3 distantLightDir(0.f, 1.f, 0.f);
-  int sphereLightIndex = -1;
-  Vec3 sphereLightPos(0.f);
-  int rectLightIndex = -1;
-  Vec3 rectLightPos(0.f);
+  struct ShadowCandidate
+  {
+    int _LightIndex = -1;
+    LightType _Type = LightType::SphereLight;
+    Vec3 _Pos = Vec3(0.f);
+    Vec3 _Dir = Vec3(0.f, 1.f, 0.f);
+    float _Far = 25.f;
+    float _Score = 0.f;
+  };
 
+  std::vector<ShadowCandidate> candidates;
+  candidates.reserve(_Scene.GetNbLights());
+  Vec3 cameraPos = _Scene.GetCamera().GetPos();
+  Vec3 sceneCenter = _SceneBounds.Center();
   for ( int i = 0; i < _Scene.GetNbLights(); ++i )
   {
     Light * curLight = _Scene.GetLight(i);
@@ -523,82 +540,50 @@ int DeferredRenderer::UpdateShadowState()
       continue;
 
     LightType lightType = (LightType) curLight -> _Type;
-    if ( ( distantLightIndex < 0 ) && ( LightType::DistantLight == lightType ) )
-    {
-      distantLightIndex = i;
-      if ( glm::length(curLight -> _Pos) > 0.f )
-        distantLightDir = glm::normalize(curLight -> _Pos);
+    if ( ( LightType::DistantLight != lightType )
+      && ( LightType::SphereLight != lightType )
+      && ( LightType::RectLight != lightType ) )
       continue;
-    }
-    if ( ( sphereLightIndex < 0 ) && ( LightType::SphereLight == lightType ) )
-    {
-      sphereLightIndex = i;
-      sphereLightPos = curLight -> _Pos;
+
+    if ( !curLight -> _CastShadow || ( curLight -> _Intensity <= 0.f ) )
       continue;
-    }
-    if ( ( rectLightIndex < 0 ) && ( LightType::RectLight == lightType ) )
+
+    float emittedPower = glm::length(curLight -> _Emission * curLight -> _Intensity);
+    if ( emittedPower <= 0.f )
+      continue;
+
+    ShadowCandidate candidate;
+    candidate._LightIndex = i;
+    candidate._Type = lightType;
+    candidate._Pos = curLight -> _Pos;
+    candidate._Far = ( curLight -> _ShadowRadius > 0.f ) ? ( curLight -> _ShadowRadius ) : ( _Settings._ShadowFar );
+
+    if ( LightType::DistantLight == lightType )
     {
-      rectLightIndex = i;
-      rectLightPos = curLight -> _Pos;
+      candidate._Dir = ( glm::length(curLight -> _Pos) > 0.f ) ? ( glm::normalize(curLight -> _Pos) ) : ( Vec3(0.f, 1.f, 0.f) );
+      candidate._Score = 1000000.f + emittedPower;
     }
-  }
-
-  if ( distantLightIndex >= 0 )
-  {
-    _ShadowLightIndex = distantLightIndex;
-    _ShadowLightType = LightType::DistantLight;
-    _ShadowLightDir = distantLightDir;
-    _HasShadowLight = true;
-
-    float lightDistance = std::max( _SceneBoundsRadius * 2.f, 10.f );
-    Vec3 lightPos = _SceneBounds.Center() + _ShadowLightDir * lightDistance;
-    Vec3 up = ( std::abs(glm::dot(_ShadowLightDir, Vec3(0.f, 1.f, 0.f))) > 0.99f ) ? ( Vec3(0.f, 0.f, 1.f) ) : ( Vec3(0.f, 1.f, 0.f) );
-    Mat4x4 lightView = glm::lookAt(lightPos, _SceneBounds.Center(), up);
-
-    Vec3 corners[8];
-    _SceneBounds.Corners(corners);
-
-    Vec3 lightSpaceLow( MAX_FLOAT );
-    Vec3 lightSpaceHigh( -MAX_FLOAT );
-    for ( const Vec3 & corner : corners )
+    else
     {
-      Vec4 lightSpaceCorner = lightView * Vec4(corner, 1.f);
-      MathUtil::Minimize(lightSpaceLow, Vec3(lightSpaceCorner));
-      MathUtil::Maximize(lightSpaceHigh, Vec3(lightSpaceCorner));
+      if ( candidate._Far <= 0.f )
+        candidate._Far = ComputeAutoShadowFar(candidate._Pos);
+
+      float cameraDistance = glm::length(candidate._Pos - cameraPos);
+      float sceneDistance = glm::length(candidate._Pos - sceneCenter);
+      float relevanceDistance = std::min(cameraDistance, sceneDistance);
+      float effectiveRadius = std::max(candidate._Far, 1.f);
+      candidate._Score = emittedPower / ( 1.f + relevanceDistance / effectiveRadius );
     }
 
-    float padXY = std::max( _SceneBoundsRadius * 0.1f, 1.f );
-    float nearPlane = 0.1f;
-    float farPlane = lightDistance + _SceneBoundsRadius * 4.f;
-    Mat4x4 shadowProj = glm::ortho(lightSpaceLow.x - padXY, lightSpaceHigh.x + padXY,
-                                   lightSpaceLow.y - padXY, lightSpaceHigh.y + padXY,
-                                   nearPlane, farPlane);
-    _ShadowDirectionalViewProj = shadowProj * lightView;
-
-    return 0;
+    candidates.push_back(candidate);
   }
 
-  if ( sphereLightIndex >= 0 )
+  std::stable_sort(candidates.begin(), candidates.end(), []( const ShadowCandidate & iA, const ShadowCandidate & iB )
   {
-    _ShadowLightIndex = sphereLightIndex;
-    _ShadowLightType = LightType::SphereLight;
-    _ShadowLightPos = sphereLightPos;
-    _HasShadowLight = true;
-  }
-  else if ( rectLightIndex >= 0 )
-  {
-    _ShadowLightIndex = rectLightIndex;
-    _ShadowLightType = LightType::RectLight;
-    _ShadowLightPos = rectLightPos;
-    _HasShadowLight = true;
-  }
-
-  if ( !_HasShadowLight )
-    return 0;
-
-  _ShadowFar = ( _Settings._ShadowFar > 0.f ) ? ( _Settings._ShadowFar ) : ( ComputeAutoShadowFar( _ShadowLightPos ) );
-
-  Mat4x4 shadowProj = glm::perspective(MathUtil::ToRadians(90.f), 1.0f, _ShadowNear, _ShadowFar);
+    if ( iA._Score == iB._Score )
+      return iA._LightIndex < iB._LightIndex;
+    return iA._Score > iB._Score;
+  });
 
   const Vec3 lookDirs[6] = {
     Vec3( 1.f,  0.f,  0.f),
@@ -617,12 +602,64 @@ int DeferredRenderer::UpdateShadowState()
     Vec3(0.f, -1.f,  0.f)
   };
 
-  for ( int i = 0; i < 6; ++i )
+  int maxShadowCasters = std::clamp(_Settings._MaxShadowCastingLights, 1, S_MaxDeferredShadowCasters);
+  int selectedCount = std::min(maxShadowCasters, static_cast<int>(candidates.size()));
+  _ShadowCasters.reserve(selectedCount);
+  for ( int i = 0; i < selectedCount; ++i )
   {
-    Mat4x4 view = glm::lookAt(_ShadowLightPos, _ShadowLightPos + lookDirs[i], upDirs[i]);
-    _ShadowViewProj[i] = shadowProj * view;
+    const ShadowCandidate & candidate = candidates[i];
+    ShadowCaster caster;
+    caster._LightIndex = candidate._LightIndex;
+    caster._Type = candidate._Type;
+    caster._Pos = candidate._Pos;
+    caster._Dir = candidate._Dir;
+    caster._Far = candidate._Far;
+
+    if ( LightType::DistantLight == caster._Type )
+    {
+      caster._Layer = _DirectionalShadowCasterCount++;
+
+      float lightDistance = std::max( _SceneBoundsRadius * 2.f, 10.f );
+      Vec3 lightPos = _SceneBounds.Center() + caster._Dir * lightDistance;
+      Vec3 up = ( std::abs(glm::dot(caster._Dir, Vec3(0.f, 1.f, 0.f))) > 0.99f ) ? ( Vec3(0.f, 0.f, 1.f) ) : ( Vec3(0.f, 1.f, 0.f) );
+      Mat4x4 lightView = glm::lookAt(lightPos, _SceneBounds.Center(), up);
+
+      Vec3 corners[8];
+      _SceneBounds.Corners(corners);
+
+      Vec3 lightSpaceLow( MAX_FLOAT );
+      Vec3 lightSpaceHigh( -MAX_FLOAT );
+      for ( const Vec3 & corner : corners )
+      {
+        Vec4 lightSpaceCorner = lightView * Vec4(corner, 1.f);
+        MathUtil::Minimize(lightSpaceLow, Vec3(lightSpaceCorner));
+        MathUtil::Maximize(lightSpaceHigh, Vec3(lightSpaceCorner));
+      }
+
+      float padXY = std::max( _SceneBoundsRadius * 0.1f, 1.f );
+      float nearPlane = 0.1f;
+      float farPlane = lightDistance + _SceneBoundsRadius * 4.f;
+      Mat4x4 shadowProj = glm::ortho(lightSpaceLow.x - padXY, lightSpaceHigh.x + padXY,
+                                     lightSpaceLow.y - padXY, lightSpaceHigh.y + padXY,
+                                     nearPlane, farPlane);
+      caster._DirectionalViewProj = shadowProj * lightView;
+    }
+    else
+    {
+      caster._Layer = _LocalShadowCasterCount++;
+      _ShadowFar = std::max(_ShadowFar, caster._Far);
+      Mat4x4 shadowProj = glm::perspective(MathUtil::ToRadians(90.f), 1.0f, _ShadowNear, caster._Far);
+      for ( int face = 0; face < 6; ++face )
+      {
+        Mat4x4 view = glm::lookAt(caster._Pos, caster._Pos + lookDirs[face], upDirs[face]);
+        caster._CubeViewProj[face] = shadowProj * view;
+      }
+    }
+
+    _ShadowCasters.push_back(caster);
   }
 
+  _HasShadowLight = !_ShadowCasters.empty();
   return 0;
 }
 
@@ -637,12 +674,18 @@ int DeferredRenderer::InitializeShadowMap()
 
   int shadowMapSize = std::clamp(_Settings._ShadowMapResolution, 256, 4096);
   _ShadowMapSize = shadowMapSize;
+  _ShadowLocalCapacity = _LocalShadowCasterCount;
+  _ShadowDirectionalCapacity = _DirectionalShadowCasterCount;
+
+  if ( !_HasShadowLight )
+    return 0;
 
   GLTextureDesc shadowCubeDesc;
   shadowCubeDesc._Target         = _ShadowCubeMapTEX._Target;
   shadowCubeDesc._Slot           = _ShadowCubeMapTEX._Slot;
   shadowCubeDesc._Width          = shadowMapSize;
   shadowCubeDesc._Height         = shadowMapSize;
+  shadowCubeDesc._Depth          = std::max(1, _ShadowLocalCapacity * 6);
   shadowCubeDesc._InternalFormat = _ShadowCubeMapTEX._InternalFormat;
   shadowCubeDesc._DataFormat     = _ShadowCubeMapTEX._DataFormat;
   shadowCubeDesc._DataType       = _ShadowCubeMapTEX._DataType;
@@ -651,21 +694,34 @@ int DeferredRenderer::InitializeShadowMap()
   shadowCubeDesc._WrapS          = GL_CLAMP_TO_EDGE;
   shadowCubeDesc._WrapT          = GL_CLAMP_TO_EDGE;
   shadowCubeDesc._WrapR          = GL_CLAMP_TO_EDGE;
-  GLUtil::CreateTexture(shadowCubeDesc, _ShadowCubeMapTEX);
+  if ( _ShadowLocalCapacity > 0 )
+    GLUtil::CreateTexture(shadowCubeDesc, _ShadowCubeMapTEX);
 
   GLTextureDesc shadow2DDesc = shadowCubeDesc;
   shadow2DDesc._Target = _Shadow2DMapTEX._Target;
   shadow2DDesc._Slot   = _Shadow2DMapTEX._Slot;
-  GLUtil::CreateTexture(shadow2DDesc, _Shadow2DMapTEX);
+  shadow2DDesc._Depth  = std::max(1, _ShadowDirectionalCapacity);
+  if ( _ShadowDirectionalCapacity > 0 )
+    GLUtil::CreateTexture(shadow2DDesc, _Shadow2DMapTEX);
 
-  GLFrameBufferDesc shadowFBODesc;
-  shadowFBODesc._Attachments.push_back({ GL_DEPTH_ATTACHMENT, &_Shadow2DMapTEX, GL_TEXTURE_2D, 0, false });
-  if ( !GLUtil::CreateFrameBuffer(shadowFBODesc, _ShadowFBO) )
+  glGenFramebuffers(1, &_ShadowFBO._Handle);
+  glBindFramebuffer(GL_FRAMEBUFFER, _ShadowFBO._Handle);
+  if ( _ShadowDirectionalCapacity > 0 )
+    glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, _Shadow2DMapTEX._Handle, 0, 0);
+  else
+    glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, _ShadowCubeMapTEX._Handle, 0, 0);
+  glDrawBuffer(GL_NONE);
+  glReadBuffer(GL_NONE);
+
+  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
   {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    GLUtil::DeleteFBO(_ShadowFBO);
     std::cout << "DeferredRenderer : Shadow framebuffer not complete !" << std::endl;
     return 1;
   }
 
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
   return 0;
 }
 // ----------------------------------------------------------------------------
@@ -1321,6 +1377,7 @@ int DeferredRenderer::UpdateUniforms()
 
     if ( ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
       || ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
+      || ( _DirtyStates & (unsigned long)DirtyState::SceneCamera )
       || ( _DirtyStates & (unsigned long)DirtyState::Textures )
       || ( _DirtyStates & (unsigned long)DirtyState::SceneInstances ) )
     {
@@ -1336,16 +1393,24 @@ int DeferredRenderer::UpdateUniforms()
       _LightingShader -> SetUniform("u_EnableSSAO", _Settings._SSAO ? 1 : 0);
       _LightingShader -> SetUniform("u_SSAOIntensity", _Settings._SSAOIntensity);
 
-      _LightingShader -> SetUniform("u_ShadowCubeMap", (int)DeferredTexSlot::_ShadowCubeMap);
-      _LightingShader -> SetUniform("u_Shadow2DMap", (int)DeferredTexSlot::_Shadow2DMap);
+      _LightingShader -> SetUniform("u_ShadowCubeMaps", (int)DeferredTexSlot::_ShadowCubeMap);
+      _LightingShader -> SetUniform("u_Shadow2DMaps", (int)DeferredTexSlot::_Shadow2DMap);
       _LightingShader -> SetUniform("u_EnableShadowMapping", ( _Settings._ShadowMapping && _HasShadowLight ) ? ( 1 ) : ( 0 ));
-      _LightingShader -> SetUniform("u_ShadowLightIndex", _ShadowLightIndex);
-      _LightingShader -> SetUniform("u_ShadowLightType", (int)_ShadowLightType);
-      _LightingShader -> SetUniform("u_ShadowLightPos", _ShadowLightPos);
-      _LightingShader -> SetUniform("u_ShadowLightDir", _ShadowLightDir);
-      _LightingShader -> SetUniform("u_ShadowLightViewProj", _ShadowDirectionalViewProj);
+      _LightingShader -> SetUniform("u_NbShadowCasters", static_cast<int>(_ShadowCasters.size()));
       _LightingShader -> SetUniform("u_ShadowBias", _Settings._ShadowBias);
-      _LightingShader -> SetUniform("u_ShadowFar", _ShadowFar);
+      for ( int i = 0; i < static_cast<int>(_ShadowCasters.size()); ++i )
+      {
+        const ShadowCaster & caster = _ShadowCasters[i];
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_LightIndex"), caster._LightIndex);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Type"), (int)caster._Type);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Layer"), caster._Layer);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Far"), caster._Far);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Pos"), caster._Pos);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Dir"), caster._Dir);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_DirectionalViewProj"), caster._DirectionalViewProj);
+        for ( int face = 0; face < 6; ++face )
+          _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_CubeViewProj[" + std::to_string(face) + "]"), caster._CubeViewProj[face]);
+      }
 
       _LightingShader -> SetUniform("u_BRDFLUT", (int)DeferredTexSlot::_BRDFLUT);
       _LightingShader -> SetUniform("u_EnableSpecularIBL", _Settings._SpecularIBL ? 1 : 0);
@@ -1398,21 +1463,6 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> SetUniform("u_DebugMode" , _DebugMode);
 
     _LightingShader -> StopUsing();
-  }
-
-  if ( _ShadowCubeShader )
-  {
-    _ShadowCubeShader -> Use();
-    _ShadowCubeShader -> SetUniform("u_LightPos", _ShadowLightPos);
-    _ShadowCubeShader -> SetUniform("u_FarPlane", _ShadowFar);
-    _ShadowCubeShader -> StopUsing();
-  }
-
-  if ( _ShadowDirectionalShader )
-  {
-    _ShadowDirectionalShader -> Use();
-    _ShadowDirectionalShader -> SetUniform("u_LightViewProj", _ShadowDirectionalViewProj);
-    _ShadowDirectionalShader -> StopUsing();
   }
 
   if ( _WireframeShader )
@@ -1483,19 +1533,28 @@ int DeferredRenderer::UpdateUniforms()
 
     if ( ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
       || ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
+      || ( _DirtyStates & (unsigned long)DirtyState::SceneCamera )
       || ( _DirtyStates & (unsigned long)DirtyState::Textures )
       || ( _DirtyStates & (unsigned long)DirtyState::SceneInstances ) )
     {
-      _TransparentShader -> SetUniform("u_ShadowCubeMap", (int)DeferredTexSlot::_ShadowCubeMap);
-      _TransparentShader -> SetUniform("u_Shadow2DMap", (int)DeferredTexSlot::_Shadow2DMap);
+      _TransparentShader -> SetUniform("u_ShadowCubeMaps", (int)DeferredTexSlot::_ShadowCubeMap);
+      _TransparentShader -> SetUniform("u_Shadow2DMaps", (int)DeferredTexSlot::_Shadow2DMap);
       _TransparentShader -> SetUniform("u_EnableShadowMapping", ( _Settings._ShadowMapping && _HasShadowLight ) ? ( 1 ) : ( 0 ));
-      _TransparentShader -> SetUniform("u_ShadowLightIndex", _ShadowLightIndex);
-      _TransparentShader -> SetUniform("u_ShadowLightType", (int)_ShadowLightType);
-      _TransparentShader -> SetUniform("u_ShadowLightPos", _ShadowLightPos);
-      _TransparentShader -> SetUniform("u_ShadowLightDir", _ShadowLightDir);
-      _TransparentShader -> SetUniform("u_ShadowLightViewProj", _ShadowDirectionalViewProj);
+      _TransparentShader -> SetUniform("u_NbShadowCasters", static_cast<int>(_ShadowCasters.size()));
       _TransparentShader -> SetUniform("u_ShadowBias", _Settings._ShadowBias);
-      _TransparentShader -> SetUniform("u_ShadowFar", _ShadowFar);
+      for ( int i = 0; i < static_cast<int>(_ShadowCasters.size()); ++i )
+      {
+        const ShadowCaster & caster = _ShadowCasters[i];
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_LightIndex"), caster._LightIndex);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Type"), (int)caster._Type);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Layer"), caster._Layer);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Far"), caster._Far);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Pos"), caster._Pos);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Dir"), caster._Dir);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_DirectionalViewProj"), caster._DirectionalViewProj);
+        for ( int face = 0; face < 6; ++face )
+          _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_CubeViewProj[" + std::to_string(face) + "]"), caster._CubeViewProj[face]);
+      }
     }
 
     _TransparentShader -> StopUsing();
@@ -1526,6 +1585,9 @@ int DeferredRenderer::RenderShadowMap()
   if ( !_Settings._ShadowMapping || !_HasShadowLight || !_ShadowFBO._Handle )
     return 0;
 
+  if ( !_ShadowDirectionalShader || !_ShadowCubeShader )
+    return 0;
+
   glViewport(0, 0, _ShadowMapSize, _ShadowMapSize);
   glBindFramebuffer(GL_FRAMEBUFFER, _ShadowFBO._Handle);
   glEnable(GL_DEPTH_TEST);
@@ -1535,18 +1597,8 @@ int DeferredRenderer::RenderShadowMap()
   glDisable(GL_CULL_FACE);
 
   const std::vector<MeshInstance> & instances = _Scene.GetMeshInstances();
-
-  if ( LightType::DistantLight == _ShadowLightType )
+  auto renderOpaqueInstances = [&]( ShaderProgram * iShader )
   {
-    if ( !_ShadowDirectionalShader || !_Shadow2DMapTEX._Handle )
-      return 0;
-
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, _Shadow2DMapTEX._Handle, 0);
-    glClear(GL_DEPTH_BUFFER_BIT);
-
-    _ShadowDirectionalShader -> Use();
-    _ShadowDirectionalShader -> SetUniform("u_LightViewProj", _ShadowDirectionalViewProj);
-
     for ( int instID : _OpaqueMeshInstanceIDs )
     {
       if ( ( instID < 0 ) || ( static_cast<size_t>(instID) >= instances.size() ) )
@@ -1562,55 +1614,49 @@ int DeferredRenderer::RenderShadowMap()
       if ( !vao || idxCount <= 0 )
         continue;
 
-      _ShadowDirectionalShader -> SetUniform("u_Model", inst._Transform);
+      iShader -> SetUniform("u_Model", inst._Transform);
       glBindVertexArray(vao);
       glDrawElements(GL_TRIANGLES, idxCount, GL_UNSIGNED_INT, 0);
     }
+  };
 
-    _ShadowDirectionalShader -> StopUsing();
-    glBindVertexArray(0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    return 0;
-  }
-
-  if ( !_ShadowCubeShader || !_ShadowCubeMapTEX._Handle )
-    return 0;
-
-  _ShadowCubeShader -> Use();
-  _ShadowCubeShader -> SetUniform("u_LightPos", _ShadowLightPos);
-  _ShadowCubeShader -> SetUniform("u_FarPlane", _ShadowFar);
-
-  for ( int face = 0; face < 6; ++face )
+  for ( const ShadowCaster & caster : _ShadowCasters )
   {
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, _ShadowCubeMapTEX._Handle, 0);
-    glClear(GL_DEPTH_BUFFER_BIT);
-
-    _ShadowCubeShader -> SetUniform("u_LightViewProj", _ShadowViewProj[face]);
-
-    for ( int instID : _OpaqueMeshInstanceIDs )
+    if ( LightType::DistantLight == caster._Type )
     {
-      if ( ( instID < 0 ) || ( static_cast<size_t>(instID) >= instances.size() ) )
+      if ( !_Shadow2DMapTEX._Handle )
         continue;
 
-      const MeshInstance & inst = instances[instID];
-      int meshID = inst._MeshID;
-      if ( ( meshID < 0 ) || ( static_cast<size_t>(meshID) >= _MeshVAOs.size() ) )
+      glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, _Shadow2DMapTEX._Handle, 0, caster._Layer);
+      glClear(GL_DEPTH_BUFFER_BIT);
+
+      _ShadowDirectionalShader -> Use();
+      _ShadowDirectionalShader -> SetUniform("u_LightViewProj", caster._DirectionalViewProj);
+      renderOpaqueInstances(_ShadowDirectionalShader.get());
+      _ShadowDirectionalShader -> StopUsing();
+    }
+    else
+    {
+      if ( !_ShadowCubeMapTEX._Handle )
         continue;
 
-      GLuint vao = _MeshVAOs[meshID];
-      int idxCount = _MeshIndexCount[meshID];
-      if ( !vao || idxCount <= 0 )
-        continue;
+      _ShadowCubeShader -> Use();
+      _ShadowCubeShader -> SetUniform("u_LightPos", caster._Pos);
+      _ShadowCubeShader -> SetUniform("u_FarPlane", caster._Far);
 
-      _ShadowCubeShader -> SetUniform("u_Model", inst._Transform);
-      glBindVertexArray(vao);
-      glDrawElements(GL_TRIANGLES, idxCount, GL_UNSIGNED_INT, 0);
+      for ( int face = 0; face < 6; ++face )
+      {
+        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, _ShadowCubeMapTEX._Handle, 0, caster._Layer * 6 + face);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        _ShadowCubeShader -> SetUniform("u_LightViewProj", caster._CubeViewProj[face]);
+        renderOpaqueInstances(_ShadowCubeShader.get());
+      }
+
+      _ShadowCubeShader -> StopUsing();
     }
   }
 
   glBindVertexArray(0);
-  _ShadowCubeShader -> StopUsing();
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   return 0;

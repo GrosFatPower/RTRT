@@ -1195,6 +1195,27 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
       else
         parsingError++;
     }
+    else if ( IsEqual("castshadow", tokens[0]) )
+    {
+      if ( 2 == nbTokens )
+      {
+        if ( IsEqual("true", tokens[1]) || IsEqual("1", tokens[1]) )
+          newLight._CastShadow = true;
+        else if ( IsEqual("false", tokens[1]) || IsEqual("0", tokens[1]) )
+          newLight._CastShadow = false;
+        else
+          parsingError++;
+      }
+      else
+        parsingError++;
+    }
+    else if ( IsEqual("shadowradius", tokens[0]) )
+    {
+      if ( 2 == nbTokens )
+        newLight._ShadowRadius = std::max(0.f, std::stof(tokens[1]));
+      else
+        parsingError++;
+    }
     else if ( IsEqual("type", tokens[0]) )
     {
       if ( 2 == nbTokens )

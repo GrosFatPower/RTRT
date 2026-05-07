@@ -217,7 +217,7 @@ static void UploadTexture( const GLTextureDesc & iDesc, GLTexture & ioTex )
 
   glBindTexture(ioTex._Target, ioTex._Handle);
 
-  if ( GL_TEXTURE_2D_ARRAY == ioTex._Target )
+  if ( ( GL_TEXTURE_2D_ARRAY == ioTex._Target ) || ( GL_TEXTURE_CUBE_MAP_ARRAY == ioTex._Target ) )
     glTexImage3D(ioTex._Target, 0, ioTex._InternalFormat, iDesc._Width, iDesc._Height, iDesc._Depth, 0, ioTex._DataFormat, ioTex._DataType, iDesc._Data);
   else if ( GL_TEXTURE_CUBE_MAP == ioTex._Target )
   {
@@ -231,12 +231,12 @@ static void UploadTexture( const GLTextureDesc & iDesc, GLTexture & ioTex )
   glTexParameteri(ioTex._Target, GL_TEXTURE_MAG_FILTER, iDesc._MagFilter);
   glTexParameteri(ioTex._Target, GL_TEXTURE_WRAP_S, iDesc._WrapS);
   glTexParameteri(ioTex._Target, GL_TEXTURE_WRAP_T, iDesc._WrapT);
-  if ( ( GL_TEXTURE_2D_ARRAY == ioTex._Target ) || ( GL_TEXTURE_CUBE_MAP == ioTex._Target ) )
+  if ( ( GL_TEXTURE_2D_ARRAY == ioTex._Target ) || ( GL_TEXTURE_CUBE_MAP_ARRAY == ioTex._Target ) || ( GL_TEXTURE_CUBE_MAP == ioTex._Target ) )
     glTexParameteri(ioTex._Target, GL_TEXTURE_WRAP_R, iDesc._WrapR);
 
   if ( iDesc._GenerateMipMap )
     glGenerateMipmap(ioTex._Target);
-  else if ( ( GL_TEXTURE_2D == ioTex._Target ) || ( GL_TEXTURE_2D_ARRAY == ioTex._Target ) || ( GL_TEXTURE_CUBE_MAP == ioTex._Target ) )
+  else if ( ( GL_TEXTURE_2D == ioTex._Target ) || ( GL_TEXTURE_2D_ARRAY == ioTex._Target ) || ( GL_TEXTURE_CUBE_MAP_ARRAY == ioTex._Target ) || ( GL_TEXTURE_CUBE_MAP == ioTex._Target ) )
     glTexParameteri(ioTex._Target, GL_TEXTURE_MAX_LEVEL, 0);
 
   glBindTexture(ioTex._Target, 0);
@@ -401,7 +401,7 @@ static void SetMinFilter( const GLTexture & iTex, GLint iTexMinFilter )
 }
 
 // UniformArrayElementName
-static std::string UniformArrayElementName( const char * iUniformArrayName, int iIndex, const char * iAttributeName )
+static std::string UniformArrayElementName( const std::string & iUniformArrayName, int iIndex, const std::string & iAttributeName )
 {
   return std::string(iUniformArrayName).append("[").append(std::to_string(iIndex)).append("].").append(iAttributeName);
 }
