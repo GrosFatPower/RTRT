@@ -544,9 +544,6 @@ int SoftwareRasterizer::ReloadScene()
   const std::vector<MeshInstance> & meshInstances = _Scene.GetMeshInstances();
   const std::vector<Mesh*>        & meshes        = _Scene.GetMeshes();
 
-  std::unordered_map<rd::Vertex, int> VertexIDs;
-  VertexIDs.reserve(1024);
-
   _CachedMeshInstanceCount = static_cast<int>(meshInstances.size());
 
   for ( int instID = 0; instID < static_cast<int>(meshInstances.size()); ++instID )
@@ -564,6 +561,9 @@ int SoftwareRasterizer::ReloadScene()
     const std::vector<Vec2>  & curUVs      = curMesh -> GetUVs();
     const std::vector<Vec3i> & curIndices  = curMesh -> GetIndices();
     const Mat4x4 trInvTransfo = glm::transpose(glm::inverse(meshInst._Transform));
+
+    std::unordered_map<rd::Vertex, int> VertexIDs;
+    VertexIDs.reserve(curVertices.size());
 
     const int nbTris = static_cast<int>(curIndices.size() / 3);
     for ( int i = 0; i < nbTris; ++i )
