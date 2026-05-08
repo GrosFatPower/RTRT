@@ -106,7 +106,8 @@ Test6::Test6( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iSc
   _Settings._RenderScale = 100;
   _Settings._SSAO = true;
   _Settings._ShadowMapping = true;
-  _Settings._MaxShadowCastingLights = 3;
+  _Settings._ShadowBias = 0.002f;
+  _Settings._MaxShadowCastingLights = 4;
 }
 
 // ----------------------------------------------------------------------------
@@ -496,6 +497,9 @@ int Test6::DrawSettingsUI()
       SyncFramebufferResolution(true);
     }
 
+    if ( ImGui::Checkbox("Show lights", &_Settings._ShowLights) )
+      _Renderer -> Notify(DirtyState::SceneLights);
+
     if ( ImGui::Checkbox("Tone mapping", &_Settings._ToneMapping) )
       _Renderer -> Notify(DirtyState::RenderSettings);
 
@@ -511,6 +515,16 @@ int Test6::DrawSettingsUI()
     {
       if ( ImGui::Checkbox("Shadow mapping", &_Settings._ShadowMapping) )
         _Renderer -> Notify(DirtyState::RenderSettings);
+      int shadowMapResolution = _Settings._ShadowMapResolution;
+      if ( ImGui::SliderInt( "Shadow map resolution", &shadowMapResolution, 256, 4096 ) )
+      {
+        shadowMapResolution = std::max(256, ( shadowMapResolution / 64 ) * 64);
+        _Settings._ShadowMapResolution = shadowMapResolution;
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      }
+      if ( ImGui::SliderFloat( "Shadow bias", &_Settings._ShadowBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic ) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
       if ( ImGui::Checkbox("SSAO", &_Settings._SSAO) )
         _Renderer -> Notify(DirtyState::RenderSettings);
       if ( ImGui::Checkbox("SSAO blur", &_Settings._SSAOBlur) )
