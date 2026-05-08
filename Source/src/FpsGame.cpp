@@ -32,12 +32,13 @@ static FpsSceneObject MakeBox( const std::string & iName,
   return object;
 }
 
-static Material MakeMaterial( const Vec3 & iAlbedo, float iRoughness, float iMetallic = 0.f )
+static Material MakeMaterial( const Vec3 & iAlbedo, float iRoughness, float iMetallic = 0.f, float iReflectance = 0.5f )
 {
   Material material;
   material._Albedo = iAlbedo;
   material._Roughness = iRoughness;
   material._Metallic = iMetallic;
+  material._Reflectance = iReflectance;
   return material;
 }
 
@@ -564,12 +565,12 @@ int FpsGameSceneBinding::EnsureResources( Scene & iScene )
     return 1;
   }
 
-  Material floor = MakeMaterial(Vec3(0.48f, 0.46f, 0.40f), 0.72f);
+  Material floor = MakeMaterial(Vec3(0.42f, 0.43f, 0.44f), 0.18f, 0.f, 0.9f);
   Material wall = MakeMaterial(Vec3(0.34f, 0.37f, 0.42f), 0.65f);
   Material pillar = MakeMaterial(Vec3(0.58f, 0.55f, 0.49f), 0.55f);
   Material crate = MakeMaterial(Vec3(0.80f, 0.24f, 0.13f), 0.45f);
-  Material accent = MakeMaterial(Vec3(0.14f, 0.45f, 0.62f), 0.50f);
-  Material projectile = MakeMaterial(Vec3(1.0f, 0.04f, 0.02f), 0.35f);
+  Material accent = MakeMaterial(Vec3(0.12f, 0.42f, 0.68f), 0.16f, 0.f, 0.85f);
+  Material projectile = MakeMaterial(Vec3(1.0f, 0.04f, 0.02f), 0.28f, 0.f, 0.75f);
 
   _MaterialIDs[(int)FpsMaterialSlot::Floor] = iScene.AddMaterial(floor, "__FpsFloor");
   _MaterialIDs[(int)FpsMaterialSlot::Wall] = iScene.AddMaterial(wall, "__FpsWall");

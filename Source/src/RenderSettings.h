@@ -43,6 +43,7 @@ struct RenderSettings
   bool         _ShowShadowMap         = false;                  // Deferred renderer debug
   bool         _SSAO                  = true;                   // Deferred renderer
   bool         _SSAOBlur              = true;                   // Deferred renderer
+  bool         _SSR                   = false;                  // Deferred renderer
   bool         _SpecularIBL           = true;                   // Deferred renderer
   bool         _Transparency          = true;                   // Deferred renderer
   SamplingMode _Sampling              = SamplingMode::Bilinear; // Raster
@@ -54,6 +55,7 @@ struct RenderSettings
   int          _ShadowMapResolution   = 1024;                   // Deferred renderer
   int          _MaxShadowCastingLights = 4;                     // Deferred renderer
   int          _SSAOKernelSize        = 16;                     // Deferred renderer
+  int          _SSRMaxSteps           = 48;                     // Deferred renderer
   float        _LowResRatio           = 0.1f;                   // PathTracer
   float        _TargetFPS             = 60.f;
   float        _Gamma                 = 2.f;
@@ -64,6 +66,12 @@ struct RenderSettings
   float        _SSAORadius            = 0.5f;                   // Deferred renderer
   float        _SSAOBias              = 0.025f;                 // Deferred renderer
   float        _SSAOIntensity         = 1.0f;                   // Deferred renderer
+  float        _SSRStepSize           = 0.18f;                  // Deferred renderer
+  float        _SSRMaxDistance        = 35.f;                   // Deferred renderer
+  float        _SSRThickness          = 0.25f;                  // Deferred renderer
+  float        _SSRIntensity          = 0.6f;                   // Deferred renderer
+  float        _SSRMaxRoughness       = 0.55f;                  // Deferred renderer
+  float        _SSRFade               = 0.18f;                  // Deferred renderer
   float        _SpecularIBLIntensity  = 0.5f;                   // Deferred renderer
   float        _DenoiserThreshold     = 0.05f;                  // PathTracer
   float        _DenoiserSigmaSpatial  = 2.0f;                   // PathTracer

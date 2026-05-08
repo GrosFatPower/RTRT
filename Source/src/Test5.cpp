@@ -706,6 +706,34 @@ int Test5::DrawSettingsUI()
           _Renderer -> Notify(DirtyState::RenderSettings);
         }
 
+        if ( ImGui::Checkbox( "SSR", &_Settings._SSR ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "SSR intensity", &_Settings._SSRIntensity, 0.f, 2.f ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "SSR max roughness", &_Settings._SSRMaxRoughness, 0.05f, 1.f ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        int ssrMaxSteps = _Settings._SSRMaxSteps;
+        if ( ImGui::SliderInt( "SSR max steps", &ssrMaxSteps, 4, 128 ) )
+        {
+          _Settings._SSRMaxSteps = std::max(4, std::min(128, ssrMaxSteps));
+          _Renderer -> Notify(DirtyState::RenderSettings);
+        }
+
+        if ( ImGui::SliderFloat( "SSR step size", &_Settings._SSRStepSize, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_Logarithmic ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "SSR max distance", &_Settings._SSRMaxDistance, 1.f, 100.f ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "SSR thickness", &_Settings._SSRThickness, 0.01f, 2.f, "%.3f", ImGuiSliderFlags_Logarithmic ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "SSR edge fade", &_Settings._SSRFade, 0.01f, 0.5f ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
         if ( ImGui::Checkbox( "Specular IBL", &_Settings._SpecularIBL ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
@@ -744,10 +772,10 @@ int Test5::DrawSettingsUI()
       g_DebugMode = 0;
 
       static const char * COLORorDEPTHorNORMALS[] = { "Color", "Depth", "Normals" };
-      static const char * COLORorDEPTHorNORMALSorSHADOWSorSSAO[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params" };
+      static const char * COLORorDEPTHorNORMALSorSHADOWSorSSAO[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params", "SSR" };
 
       static int bufferChoice = 0;
-      int maxBufferChoice = ( RendererType::OpenGLRasterizer == _RendererType ) ? ( 7 ) : ( 3 );
+      int maxBufferChoice = ( RendererType::OpenGLRasterizer == _RendererType ) ? ( 8 ) : ( 3 );
       if ( ( RendererType::SoftwareRasterizer == _RendererType ) && ( bufferChoice > 2 ) )
         bufferChoice = 0;
 
@@ -788,6 +816,8 @@ int Test5::DrawSettingsUI()
           g_DebugMode |= (int)DeferredDebugModes::SpecularIBL;
         else if ( 6 == bufferChoice )
           g_DebugMode |= (int)DeferredDebugModes::MaterialParams;
+        else if ( 7 == bufferChoice )
+          g_DebugMode |= (int)DeferredDebugModes::SSR;
 
         if ( showWires )
           g_DebugMode |= (int)DeferredDebugModes::Wires;

@@ -105,6 +105,7 @@ Test6::Test6( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iSc
   _Settings._EnableBackGround = true;
   _Settings._RenderScale = 100;
   _Settings._SSAO = true;
+  _Settings._SSR = true;
   _Settings._ShadowMapping = true;
   _Settings._ShadowBias = 0.002f;
   _Settings._MaxShadowCastingLights = 4;
@@ -183,6 +184,7 @@ void Test6::ApplyRendererDefaults()
   {
     _Settings._SSAO = true;
     _Settings._SSAOBlur = true;
+    _Settings._SSR = true;
     _Settings._ShadowMapping = true;
     _Settings._SpecularIBL = false;
     _Settings._Transparency = false;
@@ -544,10 +546,31 @@ int Test6::DrawSettingsUI()
       if ( ImGui::SliderInt("Max shadow casting lights", &_Settings._MaxShadowCastingLights, 1, 8) )
         _Renderer -> Notify(DirtyState::RenderSettings);
 
-      static const char * DEBUG_VIEWS[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params" };
+      if ( ImGui::Checkbox("SSR", &_Settings._SSR) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::SliderFloat("SSR intensity", &_Settings._SSRIntensity, 0.f, 2.f) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::SliderFloat("SSR max roughness", &_Settings._SSRMaxRoughness, 0.05f, 1.f) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      int ssrMaxSteps = _Settings._SSRMaxSteps;
+      if ( ImGui::SliderInt("SSR max steps", &ssrMaxSteps, 4, 128) )
+      {
+        _Settings._SSRMaxSteps = std::max(4, std::min(128, ssrMaxSteps));
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      }
+      if ( ImGui::SliderFloat("SSR step size", &_Settings._SSRStepSize, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::SliderFloat("SSR max distance", &_Settings._SSRMaxDistance, 1.f, 100.f) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::SliderFloat("SSR thickness", &_Settings._SSRThickness, 0.01f, 2.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::SliderFloat("SSR edge fade", &_Settings._SSRFade, 0.01f, 0.5f) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
+      static const char * DEBUG_VIEWS[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params", "SSR" };
       static int bufferChoice = 0;
       static bool showWires = false;
-      if ( ImGui::Combo("Debug view", &bufferChoice, DEBUG_VIEWS, 7) )
+      if ( ImGui::Combo("Debug view", &bufferChoice, DEBUG_VIEWS, 8) )
         _Renderer -> Notify(DirtyState::RenderSettings);
       if ( ImGui::Checkbox("Show wires", &showWires) )
         _Renderer -> Notify(DirtyState::RenderSettings);
@@ -566,6 +589,8 @@ int Test6::DrawSettingsUI()
         g_Test6DebugMode |= (int)DeferredDebugModes::SpecularIBL;
       else if ( 6 == bufferChoice )
         g_Test6DebugMode |= (int)DeferredDebugModes::MaterialParams;
+      else if ( 7 == bufferChoice )
+        g_Test6DebugMode |= (int)DeferredDebugModes::SSR;
 
       if ( showWires )
         g_Test6DebugMode |= (int)DeferredDebugModes::Wires;

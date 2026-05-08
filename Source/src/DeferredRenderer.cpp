@@ -84,6 +84,8 @@ DeferredRenderer::~DeferredRenderer()
   GLUtil::DeleteFBO(_ShadowFBO);
   GLUtil::DeleteFBO(_SSAOFBO);
   GLUtil::DeleteFBO(_SSAOBlurFBO);
+  GLUtil::DeleteFBO(_SSRFBO);
+  GLUtil::DeleteFBO(_SSRSourceFBO);
 
   GLUtil::DeleteTEX(_GAlbedoTEX);
   GLUtil::DeleteTEX(_GNormalTEX);
@@ -93,6 +95,8 @@ DeferredRenderer::~DeferredRenderer()
   GLUtil::DeleteTEX(_SSAOTEX);
   GLUtil::DeleteTEX(_SSAOBlurTEX);
   GLUtil::DeleteTEX(_SSAONoiseTEX);
+  GLUtil::DeleteTEX(_SSRTEX);
+  GLUtil::DeleteTEX(_SSRSourceTEX);
   GLUtil::DeleteTEX(_ShadowCubeMapTEX);
   GLUtil::DeleteTEX(_Shadow2DMapTEX);
   GLUtil::DeleteTEX(_BRDFLUTTEX);
@@ -137,6 +141,12 @@ int DeferredRenderer::Initialize()
   if ( 0 != InitializeSSAO() )
   {
     std::cout << "DeferredRenderer : Failed to initialize SSAO !" << std::endl;
+    return 1;
+  }
+
+  if ( 0 != InitializeSSR() )
+  {
+    std::cout << "DeferredRenderer : Failed to initialize SSR !" << std::endl;
     return 1;
   }
 
@@ -814,6 +824,61 @@ int DeferredRenderer::InitializeSSAO()
 }
 
 // ----------------------------------------------------------------------------
+// InitializeSSR
+// ----------------------------------------------------------------------------
+int DeferredRenderer::InitializeSSR()
+{
+  GLUtil::DeleteFBO(_SSRFBO);
+  GLUtil::DeleteFBO(_SSRSourceFBO);
+  GLUtil::DeleteTEX(_SSRTEX);
+  GLUtil::DeleteTEX(_SSRSourceTEX);
+
+  GLTextureDesc ssrDesc;
+  ssrDesc._Target         = _SSRTEX._Target;
+  ssrDesc._Slot           = _SSRTEX._Slot;
+  ssrDesc._Width          = RenderWidth();
+  ssrDesc._Height         = RenderHeight();
+  ssrDesc._InternalFormat = _SSRTEX._InternalFormat;
+  ssrDesc._DataFormat     = _SSRTEX._DataFormat;
+  ssrDesc._DataType       = _SSRTEX._DataType;
+  ssrDesc._MinFilter      = GL_LINEAR;
+  ssrDesc._MagFilter      = GL_LINEAR;
+  ssrDesc._WrapS          = GL_CLAMP_TO_EDGE;
+  ssrDesc._WrapT          = GL_CLAMP_TO_EDGE;
+  GLUtil::CreateTexture(ssrDesc, _SSRTEX);
+
+  GLFrameBufferDesc ssrFBODesc;
+  ssrFBODesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_SSRTEX });
+  if ( !GLUtil::CreateFrameBuffer(ssrFBODesc, _SSRFBO) )
+  {
+    std::cout << "DeferredRenderer : SSR framebuffer not complete !" << std::endl;
+    return 1;
+  }
+
+  ssrDesc._Slot           = _SSRSourceTEX._Slot;
+  ssrDesc._InternalFormat = _SSRSourceTEX._InternalFormat;
+  ssrDesc._DataFormat     = _SSRSourceTEX._DataFormat;
+  ssrDesc._DataType       = _SSRSourceTEX._DataType;
+  GLUtil::CreateTexture(ssrDesc, _SSRSourceTEX);
+
+  GLFrameBufferDesc ssrSourceFBODesc;
+  ssrSourceFBODesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_SSRSourceTEX });
+  if ( !GLUtil::CreateFrameBuffer(ssrSourceFBODesc, _SSRSourceFBO) )
+  {
+    std::cout << "DeferredRenderer : SSR source framebuffer not complete !" << std::endl;
+    return 1;
+  }
+
+  glBindFramebuffer(GL_FRAMEBUFFER, _SSRSourceFBO._Handle);
+  glViewport(0, 0, RenderWidth(), RenderHeight());
+  glClearColor(0.f, 0.f, 0.f, 1.f);
+  glClear(GL_COLOR_BUFFER_BIT);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // InitializeBRDFLUT
 // ----------------------------------------------------------------------------
 int DeferredRenderer::InitializeBRDFLUT()
@@ -1155,6 +1220,8 @@ int DeferredRenderer::ResizeRenderTarget()
   GLUtil::ResizeFBO(_LightingFBO, RenderWidth(), RenderHeight());
   GLUtil::ResizeFBO(_SSAOFBO, RenderWidth(), RenderHeight());
   GLUtil::ResizeFBO(_SSAOBlurFBO, RenderWidth(), RenderHeight());
+  GLUtil::ResizeFBO(_SSRFBO, RenderWidth(), RenderHeight());
+  GLUtil::ResizeFBO(_SSRSourceFBO, RenderWidth(), RenderHeight());
 
   return 0;
 }
@@ -1190,6 +1257,12 @@ int DeferredRenderer::RecompileShaders()
   if (!ssaoBlurProg)
     return 1;
   _SSAOBlurShader.reset(ssaoBlurProg);
+
+  ShaderSource ssrFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_SSR.glsl"));
+  ShaderProgram* ssrProg = ShaderProgram::LoadShaders(defaultVert, ssrFrag);
+  if (!ssrProg)
+    return 1;
+  _SSRShader.reset(ssrProg);
 
   ShaderSource brdfLutFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_BRDFLUT.glsl"));
   ShaderProgram* brdfLutProg = ShaderProgram::LoadShaders(defaultVert, brdfLutFrag);
@@ -1256,6 +1329,18 @@ int DeferredRenderer::BindSSAOPassTextures()
 }
 
 // ----------------------------------------------------------------------------
+// BindSSRPassTextures
+// ----------------------------------------------------------------------------
+int DeferredRenderer::BindSSRPassTextures()
+{
+  GLUtil::ActivateTextures(_GBufferFBO);
+  GLUtil::ActivateTexture(_SSRSourceTEX);
+  GLUtil::ActivateTexture(_EnvMapTEX);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // BindLightingTextures
 // ----------------------------------------------------------------------------
 int DeferredRenderer::BindLightingTextures()
@@ -1271,6 +1356,7 @@ int DeferredRenderer::BindLightingTextures()
   GLUtil::ActivateTexture(_ShadowCubeMapTEX);
   GLUtil::ActivateTexture(_Shadow2DMapTEX);
   GLUtil::ActivateTexture(_SSAOBlurTEX);
+  GLUtil::ActivateTexture(_SSRTEX);
 
   return 0;
 }
@@ -1366,6 +1452,39 @@ int DeferredRenderer::UpdateUniforms()
     _SSAOBlurShader -> StopUsing();
   }
 
+  if ( _SSRShader )
+  {
+    _SSRShader -> Use();
+    _SSRShader -> SetUniform("u_GNormal", (int)DeferredTexSlot::_GNormal);
+    _SSRShader -> SetUniform("u_GPosition", (int)DeferredTexSlot::_GPosition);
+    _SSRShader -> SetUniform("u_GMaterial", (int)DeferredTexSlot::_GMaterial);
+    _SSRShader -> SetUniform("u_GDepth", (int)DeferredTexSlot::_GDepth);
+    _SSRShader -> SetUniform("u_SSRSource", (int)DeferredTexSlot::_SSRSource);
+    _SSRShader -> SetUniform("u_EnvMap", (int)DeferredTexSlot::_EnvMap);
+    _SSRShader -> SetUniform("u_View", V);
+    _SSRShader -> SetUniform("u_Proj", P);
+    _SSRShader -> SetUniform("u_Camera._Pos", camPos);
+    _SSRShader -> SetUniform("u_Camera._Up", camUp);
+    _SSRShader -> SetUniform("u_Camera._Right", camRight);
+    _SSRShader -> SetUniform("u_Camera._Forward", camForward);
+    _SSRShader -> SetUniform("u_Camera._FOV", camFov);
+    if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
+    {
+      _SSRShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
+      _SSRShader -> SetUniform("u_EnableSSR", _Settings._SSR ? 1 : 0);
+      _SSRShader -> SetUniform("u_SSRMaxSteps", std::min(std::max(_Settings._SSRMaxSteps, 4), 128));
+      _SSRShader -> SetUniform("u_SSRStepSize", _Settings._SSRStepSize);
+      _SSRShader -> SetUniform("u_SSRMaxDistance", _Settings._SSRMaxDistance);
+      _SSRShader -> SetUniform("u_SSRThickness", _Settings._SSRThickness);
+      _SSRShader -> SetUniform("u_SSRMaxRoughness", _Settings._SSRMaxRoughness);
+      _SSRShader -> SetUniform("u_SSRFade", _Settings._SSRFade);
+      _SSRShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
+      _SSRShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
+      _SSRShader -> SetUniform("u_EnvMapRes", (float)_Scene.GetEnvMap().GetWidth(), (float)_Scene.GetEnvMap().GetHeight());
+    }
+    _SSRShader -> StopUsing();
+  }
+
   if ( _LightingShader )
   {
     _LightingShader -> Use();
@@ -1392,6 +1511,10 @@ int DeferredRenderer::UpdateUniforms()
       _LightingShader -> SetUniform("u_SSAOMap", (int)DeferredTexSlot::_SSAOBlur);
       _LightingShader -> SetUniform("u_EnableSSAO", _Settings._SSAO ? 1 : 0);
       _LightingShader -> SetUniform("u_SSAOIntensity", _Settings._SSAOIntensity);
+      _LightingShader -> SetUniform("u_SSRMap", (int)DeferredTexSlot::_SSR);
+      _LightingShader -> SetUniform("u_EnableSSR", _Settings._SSR ? 1 : 0);
+      _LightingShader -> SetUniform("u_SSRIntensity", _Settings._SSRIntensity);
+      _LightingShader -> SetUniform("u_SSRMaxRoughness", _Settings._SSRMaxRoughness);
 
       _LightingShader -> SetUniform("u_ShadowCubeMaps", (int)DeferredTexSlot::_ShadowCubeMap);
       _LightingShader -> SetUniform("u_Shadow2DMaps", (int)DeferredTexSlot::_Shadow2DMap);
@@ -1703,6 +1826,53 @@ int DeferredRenderer::RenderSSAO()
 }
 
 // ----------------------------------------------------------------------------
+// RenderSSR
+// ----------------------------------------------------------------------------
+int DeferredRenderer::RenderSSR()
+{
+  if ( !_SSRFBO._Handle || !_SSRShader )
+    return 1;
+
+  glBindFramebuffer(GL_FRAMEBUFFER, _SSRFBO._Handle);
+  glViewport(0, 0, RenderWidth(), RenderHeight());
+
+  glDisable(GL_DEPTH_TEST);
+  glDepthMask(GL_FALSE);
+  glDisable(GL_CULL_FACE);
+  glDisable(GL_BLEND);
+  glClearColor(0.f, 0.f, 0.f, 0.f);
+  glClear(GL_COLOR_BUFFER_BIT);
+
+  _SSRShader -> Use();
+  BindSSRPassTextures();
+  _Quad.Render(*_SSRShader);
+  _SSRShader -> StopUsing();
+
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateSSRSource
+// ----------------------------------------------------------------------------
+int DeferredRenderer::UpdateSSRSource()
+{
+  if ( !_LightingFBO._Handle || !_SSRSourceFBO._Handle )
+    return 1;
+
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, _LightingFBO._Handle);
+  glReadBuffer(GL_COLOR_ATTACHMENT0);
+  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, _SSRSourceFBO._Handle);
+  glDrawBuffer(GL_COLOR_ATTACHMENT0);
+  glBlitFramebuffer(0, 0, RenderWidth(), RenderHeight(),
+                    0, 0, RenderWidth(), RenderHeight(),
+                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // RenderTransparent
 // ----------------------------------------------------------------------------
 int DeferredRenderer::RenderTransparent()
@@ -1843,6 +2013,7 @@ int DeferredRenderer::RenderToTexture()
   }
 
   RenderSSAO();
+  RenderSSR();
 
   if (_LightingShader)
   {
@@ -1924,6 +2095,9 @@ int DeferredRenderer::RenderToTexture()
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
   }
+
+  if ( 0 == ( _DebugMode & ~(int)DeferredDebugModes::Wires ) )
+    UpdateSSRSource();
 
   return 0;
 }

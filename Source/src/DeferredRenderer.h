@@ -37,6 +37,8 @@ struct DeferredTexSlot
   static const TextureSlot _SSAOBlur      = 13;
   static const TextureSlot _SSAONoise     = 14;
   static const TextureSlot _BRDFLUT       = 15;
+  static const TextureSlot _SSR           = 14; // Reuses the SSAO noise slot outside the SSAO pass.
+  static const TextureSlot _SSRSource     = 5;  // Reuses the lighting slot outside the lighting/composite passes.
 };
 
 enum class DeferredDebugModes
@@ -48,7 +50,8 @@ enum class DeferredDebugModes
   Shadows     = 0x08,
   SSAO        = 0x10,
   SpecularIBL = 0x20,
-  MaterialParams = 0x40
+  MaterialParams = 0x40,
+  SSR         = 0x80
 };
 
 class DeferredRenderer : public Renderer
@@ -83,12 +86,14 @@ protected:
   int ResizeRenderTarget();
   int InitializeShadowMap();
   int InitializeSSAO();
+  int InitializeSSR();
   int InitializeBRDFLUT();
 
   int RecompileShaders();
 
   int BindGBufferTextures();
   int BindSSAOPassTextures();
+  int BindSSRPassTextures();
   int BindLightingTextures();
   int BindRenderToScreenTextures();
 
@@ -96,7 +101,9 @@ protected:
   int UpdateShadowState();
   int RenderShadowMap();
   int RenderSSAO();
+  int RenderSSR();
   int RenderTransparent();
+  int UpdateSSRSource();
 
   void BuildDeferredDrawLists();
   void SortTransparentInstances();
@@ -140,6 +147,12 @@ protected:
   GLTexture     _SSAOBlurTEX  = { 0, GL_TEXTURE_2D, DeferredTexSlot::_SSAOBlur, GL_R16F, GL_RED, GL_FLOAT };
   GLTexture     _SSAONoiseTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_SSAONoise, GL_RGBA16F, GL_RGBA, GL_FLOAT };
 
+  // SSR targets
+  GLFrameBuffer _SSRFBO;
+  GLFrameBuffer _SSRSourceFBO;
+  GLTexture     _SSRTEX       = { 0, GL_TEXTURE_2D, DeferredTexSlot::_SSR, GL_RGBA16F, GL_RGBA, GL_FLOAT };
+  GLTexture     _SSRSourceTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_SSRSource, GL_RGBA32F, GL_RGBA, GL_FLOAT };
+
   // BRDF LUT target
   GLFrameBuffer _BRDFFBO;
   GLTexture     _BRDFLUTTEX   = { 0, GL_TEXTURE_2D, DeferredTexSlot::_BRDFLUT, GL_RG16F, GL_RG, GL_FLOAT };
@@ -164,6 +177,7 @@ protected:
   std::unique_ptr<ShaderProgram> _ShadowDirectionalShader;
   std::unique_ptr<ShaderProgram> _SSAOShader;
   std::unique_ptr<ShaderProgram> _SSAOBlurShader;
+  std::unique_ptr<ShaderProgram> _SSRShader;
   std::unique_ptr<ShaderProgram> _BRDFLUTShader;
   std::unique_ptr<ShaderProgram> _TransparentShader;
 

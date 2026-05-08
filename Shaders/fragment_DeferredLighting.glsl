@@ -16,6 +16,7 @@ uniform sampler2D   u_GPosition;
 uniform sampler2D   u_GMaterial;
 uniform sampler2D   u_GDepth;
 uniform sampler2D   u_SSAOMap;
+uniform sampler2D   u_SSRMap;
 
 uniform vec3 u_Ambient = vec3(0.001, 0.001, 0.001);
 uniform vec3 u_BackgroundColor = vec3(1.0, 1.0, 1.0);
@@ -32,6 +33,9 @@ uniform float     u_EnvMapMipCount = 1.0;
 
 uniform int   u_EnableSSAO          = 0;
 uniform float u_SSAOIntensity       = 1.0;
+uniform int   u_EnableSSR           = 0;
+uniform float u_SSRIntensity        = 0.6;
+uniform float u_SSRMaxRoughness     = 0.55;
 uniform int   u_EnableSpecularIBL   = 0;
 uniform float u_SpecularIBLIntensity = 1.0;
 
@@ -113,11 +117,18 @@ void main()
   float roughness = clamp(material.r, 0.001, 1.0);
   float metallic = clamp(material.g, 0.0, 1.0);
   float reflectance = clamp(material.b, 0.0, 1.0);
+  vec4 ssrSample = texture(u_SSRMap, fragUV);
 
   vec3 cameraRayDir = GetCameraRayDir();
 
   if ( depth >= 1.0 )
   {
+    if ( ( u_DebugMode & 0x80 ) != 0 )
+    {
+      fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+      return;
+    }
+
     if ( u_ShowLights != 0 )
     {
       Ray lightRay = Ray( u_Camera._Pos, cameraRayDir );
@@ -165,6 +176,7 @@ void main()
   float NdotV = max(dot(N, V), 0.0);
   vec3 F0 = mix(vec3(0.16 * reflectance * reflectance), albedo, metallic);
   vec3 specularIBL = vec3(0.0);
+  vec3 specularSSR = vec3(0.0);
 
   if ( ( u_EnableSpecularIBL != 0 ) && ( u_EnableEnvMap > 0 ) )
   {
@@ -175,6 +187,14 @@ void main()
     specularIBL = prefiltered * (F0 * brdf.x + brdf.y);
     specularIBL *= u_SpecularIBLIntensity;
     specularIBL *= mix(1.0, ao, 0.2);
+  }
+
+  if ( u_EnableSSR != 0 )
+  {
+    float roughnessFade = 1.0 - smoothstep(u_SSRMaxRoughness * 0.65, u_SSRMaxRoughness, roughness);
+    vec3 F = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
+    specularSSR = ssrSample.rgb * F * ssrSample.a * roughnessFade * u_SSRIntensity;
+    specularSSR *= mix(1.0, ao, 0.2);
   }
 
   vec4 alpha = vec4(0.);
@@ -236,7 +256,14 @@ void main()
     fragColor = vec4(roughness, metallic, reflectance, 1.0);
     return;
   }
+  else if ( ( u_DebugMode & 0x80 ) != 0 )
+  {
+    float confidence = clamp(ssrSample.a, 0.0, 1.0);
+    vec3 debugColor = max(ssrSample.rgb, vec3(confidence));
+    fragColor = vec4(debugColor, 1.0);
+    return;
+  }
 
-  vec3 outColor = albedo * alpha.rgb + specularIBL;
+  vec3 outColor = albedo * alpha.rgb + specularIBL + specularSSR;
   fragColor = vec4(min(outColor, vec3(1.0)), 1.0);
 }
