@@ -57,7 +57,7 @@ struct FpsGameInput
   bool  _Sprint = false;
   bool  _JumpPressed = false;
   bool  _ResetPressed = false;
-  int   _FireCount = 0;
+  bool   _FirePressed = false;
   float _MouseDeltaX = 0.f;
   float _MouseDeltaY = 0.f;
 };

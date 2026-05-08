@@ -94,9 +94,15 @@ int FpsGameWorld::Update( float iDeltaTime, const FpsGameInput & iInput, const F
 
   ResizeProjectilePool(iSettings);
   const float cooldown = std::max(0.001f, iSettings._ProjectileCooldown);
-  const float maxCooldownDebt = -cooldown * static_cast<float>(std::max(1, std::min(_PendingProjectileShots + iInput._FireCount + 1, iSettings._MaxProjectiles)));
-  _ProjectileCooldownTimer = std::max(maxCooldownDebt, _ProjectileCooldownTimer - realDt);
-  _PendingProjectileShots += std::max(0, iInput._FireCount);
+  _ProjectileCooldownTimer += iDeltaTime;
+  if ( iInput._FirePressed )
+  {
+    if ( _ProjectileCooldownTimer > cooldown )
+    {
+      _PendingProjectileShots += 1;
+      _ProjectileCooldownTimer = 0;
+    }
+  }
 
   if ( dt <= 0.f )
     return 0;
@@ -147,14 +153,11 @@ int FpsGameWorld::Update( float iDeltaTime, const FpsGameInput & iInput, const F
   _Player._Grounded = false;
   MoveAxis(1, _Player._Velocity.y * dt, iSettings);
 
-  while ( ( _PendingProjectileShots > 0 ) && ( _ProjectileCooldownTimer <= 0.f ) )
+  while ( _PendingProjectileShots > 0 )
   {
     FireProjectile(iSettings);
     _PendingProjectileShots--;
-    _ProjectileCooldownTimer += cooldown;
   }
-  if ( ( 0 == _PendingProjectileShots ) && ( _ProjectileCooldownTimer < 0.f ) )
-    _ProjectileCooldownTimer = 0.f;
 
   UpdateProjectiles(dt, iSettings);
 
