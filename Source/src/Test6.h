@@ -40,7 +40,10 @@ protected:
   int ProcessInput();
   int UpdateGame();
   int DrawUI();
+  void DrawDebugPanel();
+  void DrawHUD();
   int DrawSettingsUI();
+  void DrawCrosshair();
   int UpdateCPUTime();
   void SyncFramebufferResolution( bool iNotifyRenderer = false );
   void SetMouseCaptured( bool iCaptured );
@@ -61,6 +64,7 @@ protected:
   MouseInput                _MouseInput;
 
   bool                      _MouseCaptured = false;
+  bool                      _ShowDebugPanel = true;
   bool                      _HasLastMousePos = false;
   double                    _LastMouseX = 0.;
   double                    _LastMouseY = 0.;

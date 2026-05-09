@@ -70,8 +70,11 @@ int FpsGameWorld::Reset( const FpsGameSettings & iSettings )
   _Player._Yaw = 90.f;
   _Player._Pitch = 0.f;
   _Player._Grounded = false;
-  _Player._Health = 100;
+  _Player._Health = std::max(0, iSettings._MaxHealth);
+  _Player._Armor = std::max(0, iSettings._MaxArmor);
   _ProjectileCooldownTimer = 0.f;
+  _ProjectileAmmoRefillTimer = 0.f;
+  _ProjectileAmmo = std::max(0, iSettings._MaxProjectileAmmo);
   _PendingProjectileShots = 0;
   ClearProjectiles();
 
@@ -95,12 +98,29 @@ int FpsGameWorld::Update( float iDeltaTime, const FpsGameInput & iInput, const F
 
   ResizeProjectilePool(iSettings);
   const float cooldown = std::max(0.001f, iSettings._ProjectileCooldown);
+  const int maxAmmo = std::max(0, iSettings._MaxProjectileAmmo);
+  _ProjectileAmmo = MathUtil::Clamp(_ProjectileAmmo, 0, maxAmmo);
+
+  if ( _ProjectileAmmo < maxAmmo )
+  {
+    const float refillTime = std::max(0.001f, iSettings._ProjectileAmmoRefillTime);
+    _ProjectileAmmoRefillTimer += realDt;
+    while ( ( _ProjectileAmmoRefillTimer >= refillTime ) && ( _ProjectileAmmo < maxAmmo ) )
+    {
+      _ProjectileAmmoRefillTimer -= refillTime;
+      _ProjectileAmmo++;
+    }
+  }
+  else
+    _ProjectileAmmoRefillTimer = 0.f;
+
   _ProjectileCooldownTimer += iDeltaTime;
   if ( iInput._FirePressed )
   {
-    if ( _ProjectileCooldownTimer > cooldown )
+    if ( ( _ProjectileAmmo > 0 ) && ( _ProjectileCooldownTimer > cooldown ) )
     {
       _PendingProjectileShots += 1;
+      _ProjectileAmmo--;
       _ProjectileCooldownTimer = 0;
     }
   }

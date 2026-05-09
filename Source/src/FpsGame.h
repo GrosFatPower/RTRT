@@ -46,6 +46,10 @@ struct FpsGameSettings
   float           _ProjectileLifetime = 8.f;
   int             _MaxProjectiles = 32;
   float           _ProjectileCooldown = 0.12f;
+  int             _MaxHealth = 100;
+  int             _MaxArmor = 50;
+  int             _MaxProjectileAmmo = 32;
+  float           _ProjectileAmmoRefillTime = 0.5f;
 };
 
 struct FpsGameInput
@@ -70,6 +74,7 @@ struct FpsPlayer
   float _Pitch = 0.f;
   bool  _Grounded = false;
   int   _Health = 100;
+  int   _Armor = 50;
 
   Vec3 EyePosition( const FpsGameSettings & iSettings ) const;
 };
@@ -105,6 +110,7 @@ public:
   const std::vector<FpsSceneObject> & GetObjects() const { return _Objects; }
   const std::vector<FpsProjectile> & GetProjectiles() const { return _Projectiles; }
   int GetActiveProjectileCount() const;
+  int GetProjectileAmmo() const { return _ProjectileAmmo; }
   bool ConsumeProjectilesDirty();
 
 protected:
@@ -121,6 +127,8 @@ protected:
   std::vector<FpsSceneObject> _Objects;
   std::vector<FpsProjectile> _Projectiles;
   float                      _ProjectileCooldownTimer = 0.f;
+  float                      _ProjectileAmmoRefillTimer = 0.f;
+  int                        _ProjectileAmmo = 32;
   int                        _PendingProjectileShots = 0;
   bool                       _ProjectilesDirty = false;
 };
