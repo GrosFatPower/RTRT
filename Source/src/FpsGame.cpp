@@ -2,14 +2,18 @@
 
 #include "Camera.h"
 #include "Light.h"
+#include "Loader.h"
 #include "Material.h"
 #include "Mesh.h"
 #include "MeshInstance.h"
+#include "PathUtils.h"
 #include "ProceduralMesh.h"
+#include "RenderSettings.h"
 #include "Scene.h"
 
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 
 namespace RTRT
 {
@@ -474,6 +478,8 @@ void FpsGameSceneBinding::Reset()
     _MaterialIDs[i] = -1;
   _ObjectInstanceIDs.clear();
   _ProjectileInstanceIDs.clear();
+  _WeaponInstanceIDs.clear();
+  _WeaponBaseTransforms.clear();
 }
 
 // ----------------------------------------------------------------------------
@@ -488,6 +494,9 @@ int FpsGameSceneBinding::Attach( Scene & iScene, const FpsGameWorld & iWorld, co
 
   if ( 0 != AddLights(iScene) )
     return 1;
+
+  if ( 0 != LoadViewWeapon(iScene) )
+    std::cout << "FpsGameSceneBinding : failed to load view weapon model" << std::endl;
 
   const std::vector<FpsSceneObject> & objects = iWorld.GetObjects();
   _ObjectInstanceIDs.reserve(objects.size());
@@ -561,6 +570,19 @@ int FpsGameSceneBinding::SyncTransforms( Scene & iScene, const FpsGameWorld & iW
     instances[instanceID]._Transform = BuildProjectileTransform(projectiles[i], iSettings);
   }
 
+  if ( _WeaponInstanceIDs.size() != _WeaponBaseTransforms.size() )
+    return 1;
+
+  const Mat4x4 weaponTransform = BuildViewWeaponTransform(iWorld.GetPlayer(), iSettings);
+  for ( int i = 0; i < static_cast<int>(_WeaponInstanceIDs.size()); ++i )
+  {
+    const int instanceID = _WeaponInstanceIDs[i];
+    if ( ( instanceID < 0 ) || ( instanceID >= static_cast<int>(instances.size()) ) )
+      return 1;
+
+    instances[instanceID]._Transform = weaponTransform * _WeaponBaseTransforms[i];
+  }
+
   return 0;
 }
 
@@ -608,6 +630,27 @@ int FpsGameSceneBinding::EnsureResources( Scene & iScene )
     return 1;
 
   return 0;
+}
+
+// ----------------------------------------------------------------------------
+// LoadViewWeapon
+// ----------------------------------------------------------------------------
+int FpsGameSceneBinding::LoadViewWeapon( Scene & iScene )
+{
+  const int firstInstanceID = iScene.GetNbMeshInstances();
+  RenderSettings loaderSettings;
+
+  if ( !Loader::LoadScene(PathUtils::GetAssetPath("overwatch_junkrats_grenade_launcher/scene.gltf"), iScene, loaderSettings) )
+    return 1;
+
+  std::vector<MeshInstance> & instances = iScene.GetMeshInstances();
+  for ( int instanceID = firstInstanceID; instanceID < static_cast<int>(instances.size()); ++instanceID )
+  {
+    _WeaponInstanceIDs.push_back(instanceID);
+    _WeaponBaseTransforms.push_back(instances[instanceID]._Transform);
+  }
+
+  return _WeaponInstanceIDs.empty() ? 1 : 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -665,6 +708,44 @@ Mat4x4 FpsGameSceneBinding::BuildProjectileTransform( const FpsProjectile & iPro
 
   const float radius = std::max(0.02f, iSettings._ProjectileRadius);
   return glm::translate(iProjectile._Position) * glm::scale(Vec3(radius * 2.f));
+}
+
+// ----------------------------------------------------------------------------
+// BuildViewWeaponTransform
+// ----------------------------------------------------------------------------
+Mat4x4 FpsGameSceneBinding::BuildViewWeaponTransform( const FpsPlayer & iPlayer, const FpsGameSettings & iSettings ) const
+{
+  if ( !iSettings._ShowViewWeapon )
+    return glm::translate(Vec3(0.f, -1000.f, 0.f)) * glm::scale(Vec3(0.001f));
+
+  const float yawRad = MathUtil::ToRadians(iPlayer._Yaw);
+  const float pitchRad = MathUtil::ToRadians(iPlayer._Pitch);
+  Vec3 forward(std::cos(yawRad) * std::cos(pitchRad),
+               std::sin(pitchRad),
+               std::sin(yawRad) * std::cos(pitchRad));
+  forward = glm::normalize(forward);
+
+  const Vec3 worldUp(0.f, 1.f, 0.f);
+  const Vec3 right = glm::normalize(glm::cross(forward, worldUp));
+  const Vec3 up = glm::normalize(glm::cross(right, forward));
+
+  Mat4x4 cameraTransform(1.f);
+  cameraTransform[0] = Vec4(right, 0.f);
+  cameraTransform[1] = Vec4(up, 0.f);
+  cameraTransform[2] = Vec4(forward, 0.f);
+  cameraTransform[3] = Vec4(iPlayer.EyePosition(iSettings), 1.f);
+
+  const Vec3 rotRad(MathUtil::ToRadians(iSettings._ViewWeaponRotation.x),
+                    MathUtil::ToRadians(iSettings._ViewWeaponRotation.y),
+                    MathUtil::ToRadians(iSettings._ViewWeaponRotation.z));
+
+  Mat4x4 localTransform = glm::translate(iSettings._ViewWeaponOffset);
+  localTransform = localTransform * glm::rotate(rotRad.y, Vec3(0.f, 1.f, 0.f));
+  localTransform = localTransform * glm::rotate(rotRad.x, Vec3(1.f, 0.f, 0.f));
+  localTransform = localTransform * glm::rotate(rotRad.z, Vec3(0.f, 0.f, 1.f));
+  localTransform = localTransform * glm::scale(Vec3(std::max(0.001f, iSettings._ViewWeaponScale)));
+
+  return cameraTransform * localTransform;
 }
 
 // ----------------------------------------------------------------------------

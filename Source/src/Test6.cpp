@@ -15,6 +15,7 @@
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <iostream>
 #include <thread>
 
@@ -351,7 +352,8 @@ int Test6::ProcessInput()
     if ( _Renderer )
       _Renderer -> Notify(DirtyState::SceneCamera);
 
-    if ( _GameWorld.ConsumeProjectilesDirty() )
+    const bool projectilesDirty = _GameWorld.ConsumeProjectilesDirty();
+    if ( projectilesDirty || ( _GameSettings._ShowViewWeapon && _SceneBinding.HasViewWeapon() ) )
     {
       if ( 0 != _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings) )
         return 1;
@@ -578,6 +580,60 @@ int Test6::DrawSettingsUI()
     if ( ImGui::Button("Clear projectiles") )
     {
       _GameWorld.ClearProjectiles();
+      _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings);
+      if ( _Renderer )
+        _Renderer -> Notify(DirtyState::SceneInstances);
+    }
+  }
+
+  if ( ImGui::CollapsingHeader("View weapon debug", ImGuiTreeNodeFlags_DefaultOpen) )
+  {
+    constexpr Vec3 defaultOffset(0.44f, -0.33f, 0.83f);
+    constexpr Vec3 defaultRotation(-6.5f, -10.5f, 3.f);
+    constexpr float defaultScale = 1.24f;
+
+    bool weaponDirty = false;
+    weaponDirty |= ImGui::Checkbox("Show weapon", &_GameSettings._ShowViewWeapon);
+
+    ImGui::Text("Camera-local transform");
+    ImGui::PushItemWidth(260.f);
+    weaponDirty |= ImGui::DragFloat3("Translation XYZ", &_GameSettings._ViewWeaponOffset.x, 0.01f, -3.f, 3.f, "%.3f");
+    weaponDirty |= ImGui::DragFloat3("Rotation XYZ deg", &_GameSettings._ViewWeaponRotation.x, 0.5f, -360.f, 360.f, "%.2f");
+    weaponDirty |= ImGui::DragFloat("Scale", &_GameSettings._ViewWeaponScale, 0.01f, 0.01f, 8.f, "%.3f");
+    ImGui::PopItemWidth();
+
+    ImGui::SameLine();
+    if ( ImGui::SmallButton("Reset weapon pose") )
+    {
+      _GameSettings._ViewWeaponOffset = defaultOffset;
+      _GameSettings._ViewWeaponRotation = defaultRotation;
+      _GameSettings._ViewWeaponScale = defaultScale;
+      weaponDirty = true;
+    }
+
+    if ( ImGui::SmallButton("Copy weapon pose") )
+    {
+      char buffer[256];
+      std::snprintf(buffer, sizeof(buffer),
+                    "Offset = Vec3(%.3ff, %.3ff, %.3ff), Rotation = Vec3(%.2ff, %.2ff, %.2ff), Scale = %.3ff",
+                    _GameSettings._ViewWeaponOffset.x, _GameSettings._ViewWeaponOffset.y, _GameSettings._ViewWeaponOffset.z,
+                    _GameSettings._ViewWeaponRotation.x, _GameSettings._ViewWeaponRotation.y, _GameSettings._ViewWeaponRotation.z,
+                    _GameSettings._ViewWeaponScale);
+      ImGui::SetClipboardText(buffer);
+    }
+
+    ImGui::Text("Offset %.3f %.3f %.3f",
+                _GameSettings._ViewWeaponOffset.x,
+                _GameSettings._ViewWeaponOffset.y,
+                _GameSettings._ViewWeaponOffset.z);
+    ImGui::Text("Rotation %.2f %.2f %.2f, Scale %.3f",
+                _GameSettings._ViewWeaponRotation.x,
+                _GameSettings._ViewWeaponRotation.y,
+                _GameSettings._ViewWeaponRotation.z,
+                _GameSettings._ViewWeaponScale);
+
+    if ( weaponDirty )
+    {
       _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings);
       if ( _Renderer )
         _Renderer -> Notify(DirtyState::SceneInstances);

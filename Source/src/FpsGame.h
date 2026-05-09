@@ -50,6 +50,10 @@ struct FpsGameSettings
   int             _MaxArmor = 50;
   int             _MaxProjectileAmmo = 32;
   float           _ProjectileAmmoRefillTime = 0.5f;
+  bool            _ShowViewWeapon = true;
+  Vec3            _ViewWeaponOffset = Vec3(0.44f, -0.33f, 0.83f);
+  Vec3            _ViewWeaponRotation = Vec3(-6.5f, -10.5f, 3.f);
+  float           _ViewWeaponScale = 1.24f;
 };
 
 struct FpsGameInput
@@ -139,13 +143,16 @@ public:
   int Attach( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
   int SyncCamera( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
   int SyncTransforms( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
+  bool HasViewWeapon() const { return !_WeaponInstanceIDs.empty(); }
   void Reset();
 
 protected:
   int EnsureResources( Scene & iScene );
+  int LoadViewWeapon( Scene & iScene );
   int AddLights( Scene & iScene );
   Mat4x4 BuildObjectTransform( const FpsSceneObject & iObject ) const;
   Mat4x4 BuildProjectileTransform( const FpsProjectile & iProjectile, const FpsGameSettings & iSettings ) const;
+  Mat4x4 BuildViewWeaponTransform( const FpsPlayer & iPlayer, const FpsGameSettings & iSettings ) const;
   int MaterialID( FpsMaterialSlot iMaterial ) const;
 
 protected:
@@ -155,6 +162,8 @@ protected:
   int              _MaterialIDs[(int)FpsMaterialSlot::Count] = { -1, -1, -1, -1, -1 };
   std::vector<int> _ObjectInstanceIDs;
   std::vector<int> _ProjectileInstanceIDs;
+  std::vector<int> _WeaponInstanceIDs;
+  std::vector<Mat4x4> _WeaponBaseTransforms;
 };
 
 }
