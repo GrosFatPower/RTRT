@@ -161,7 +161,7 @@ void SetupMaterial(const RasterData::Fragment& iFrag, const RasterData::DefaultU
       //else
         metallicRoughness = Vec3(tex->Sample(iFrag._Attrib._UV));
 
-      oMat._Metallic = metallicRoughness.x;
+      oMat._Metallic = metallicRoughness.z;
       oMat._Roughness = metallicRoughness.y;
     }
   }

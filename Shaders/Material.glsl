@@ -120,9 +120,9 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
     int texArrayID = texelFetch(u_TexIndTexture, metallicRoughnessTexID).x;
     if ( texArrayID >= 0 )
     {  
-      vec2 metalRoughness = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rg;
-      oMat._Metallic = metalRoughness.x;
-      oMat._Roughness = metalRoughness.y;
+      vec3 metalRoughness = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rgb;
+      oMat._Metallic = metalRoughness.b;
+      oMat._Roughness = metalRoughness.g;
     }
   }
 
