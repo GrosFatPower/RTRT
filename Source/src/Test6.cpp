@@ -567,10 +567,15 @@ int Test6::DrawSettingsUI()
       if ( ImGui::SliderFloat("SSR edge fade", &_Settings._SSRFade, 0.01f, 0.5f) )
         _Renderer -> Notify(DirtyState::RenderSettings);
 
-      static const char * DEBUG_VIEWS[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params", "SSR" };
+      if ( ImGui::Checkbox("PBR direct lighting", &_Settings._PBRDirectLighting) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::SliderFloat("Direct light intensity", &_Settings._DirectLightIntensity, 0.f, 8.f) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
+      static const char * DEBUG_VIEWS[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params", "SSR", "Direct diffuse", "Direct specular" };
       static int bufferChoice = 0;
       static bool showWires = false;
-      if ( ImGui::Combo("Debug view", &bufferChoice, DEBUG_VIEWS, 8) )
+      if ( ImGui::Combo("Debug view", &bufferChoice, DEBUG_VIEWS, 10) )
         _Renderer -> Notify(DirtyState::RenderSettings);
       if ( ImGui::Checkbox("Show wires", &showWires) )
         _Renderer -> Notify(DirtyState::RenderSettings);
@@ -591,6 +596,10 @@ int Test6::DrawSettingsUI()
         g_Test6DebugMode |= (int)DeferredDebugModes::MaterialParams;
       else if ( 7 == bufferChoice )
         g_Test6DebugMode |= (int)DeferredDebugModes::SSR;
+      else if ( 8 == bufferChoice )
+        g_Test6DebugMode |= (int)DeferredDebugModes::DirectDiffuse;
+      else if ( 9 == bufferChoice )
+        g_Test6DebugMode |= (int)DeferredDebugModes::DirectSpecular;
 
       if ( showWires )
         g_Test6DebugMode |= (int)DeferredDebugModes::Wires;

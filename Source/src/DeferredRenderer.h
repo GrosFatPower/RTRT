@@ -26,6 +26,8 @@ struct DeferredTexSlot
   static const TextureSlot _GPosition     = 2;
   static const TextureSlot _GMaterial     = 3;
   static const TextureSlot _GDepth        = 4;
+  // Reuses the lighting slot while the lighting target is not sampled.
+  static const TextureSlot _GEmission     = 5;
   static const TextureSlot _Lighting      = 5;
   static const TextureSlot _TexInd        = 6;
   static const TextureSlot _TexArray      = 7;
@@ -51,7 +53,9 @@ enum class DeferredDebugModes
   SSAO        = 0x10,
   SpecularIBL = 0x20,
   MaterialParams = 0x40,
-  SSR         = 0x80
+  SSR         = 0x80,
+  DirectDiffuse = 0x100,
+  DirectSpecular = 0x200
 };
 
 class DeferredRenderer : public Renderer
@@ -134,6 +138,7 @@ protected:
   GLTexture     _GNormalTEX   = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GNormal, GL_RGBA16F, GL_RGBA, GL_FLOAT };
   GLTexture     _GPositionTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GPosition, GL_RGBA16F, GL_RGBA, GL_FLOAT };
   GLTexture     _GMaterialTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GMaterial, GL_RGBA16F, GL_RGBA, GL_FLOAT };
+  GLTexture     _GEmissionTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GEmission, GL_RGBA16F, GL_RGBA, GL_FLOAT };
   GLTexture     _GDepthTEX    = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GDepth, GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT };
 
   // Lighting target (single texture)

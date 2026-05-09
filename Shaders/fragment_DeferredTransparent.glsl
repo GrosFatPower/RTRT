@@ -5,6 +5,7 @@
 #include Shadows.glsl
 #include Structures.glsl
 #include Material.glsl
+#include DeferredPBRLighting.glsl
 
 in vec3 fragWorldPos;
 in vec3 fragNormal;
@@ -20,6 +21,8 @@ uniform vec2        u_EnvMapRes = vec2(1.0);
 uniform float       u_EnvMapRotation = 0.f;
 uniform float       u_EnvMapMipCount = 1.0;
 uniform int         u_EnableEnvMap = 0;
+uniform int         u_EnablePBRDirectLighting = 1;
+uniform float       u_DirectLightIntensity = 1.0;
 
 uniform Camera      u_Camera;
 
@@ -73,13 +76,18 @@ void main()
 
   vec3 diffuseColor = mat._Albedo * ( 1.0 - metallic ) * ( 1.0 - specTrans );
   vec3 F0 = mix(vec3(0.16 * reflectance * reflectance), mat._Albedo, metallic);
+  PBRSurface pbrSurface = MakePBRSurface(mat._Albedo, roughness, metallic, reflectance);
 
   vec3 directDiffuse = vec3(0.0);
   vec3 directSpecular = vec3(0.0);
-  float specPower = mix(128.0, 6.0, roughness);
+  vec3 legacyDiffuse = vec3(0.0);
+  vec3 legacySpecular = vec3(0.0);
 
   for ( int i = 0; i < u_NbLights; ++i )
   {
+    DeferredLightSample lightSample;
+    bool hasLightSample = BuildDeferredLightSample(u_Lights[i], hitPoint._Pos, N, u_DirectLightIntensity, lightSample);
+
     vec3 L;
     if ( u_Lights[i]._Type == DISTANT_LIGHT )
       L = normalize(u_Lights[i]._Pos);
@@ -87,20 +95,30 @@ void main()
       L = normalize(u_Lights[i]._Pos - hitPoint._Pos);
 
     float NdotL = max(dot(N, L), 0.0);
-    if ( NdotL <= 0.0 )
-      continue;
 
     float visibility = 1.0;
     bool hasShadow = false;
-    visibility = ComputeShadowForLight(i, int(u_Lights[i]._Type), hitPoint._Pos, N, L, hasShadow);
+    visibility = ComputeShadowForLight(i, int(u_Lights[i]._Type), hitPoint._Pos, N, hasLightSample ? lightSample._L : L, hasShadow);
 
-    vec3 radiance = u_Lights[i]._Emission * visibility;
-    directDiffuse += diffuseColor * radiance * NdotL;
+    if ( hasLightSample )
+    {
+      vec3 lightDiffuse;
+      vec3 lightSpecular;
+      EvaluateDeferredPBRLight(pbrSurface, N, V, lightSample, lightDiffuse, lightSpecular);
+      directDiffuse += lightDiffuse * visibility * ( 1.0 - specTrans );
+      directSpecular += lightSpecular * visibility;
+    }
 
-    vec3 H = normalize(L + V);
-    float NdotH = max(dot(N, H), 0.0);
-    float specFactor = pow(NdotH, specPower);
-    directSpecular += F0 * radiance * specFactor * NdotL;
+    if ( NdotL > 0.0 )
+    {
+      float specPower = mix(128.0, 6.0, roughness);
+      vec3 H = normalize(L + V);
+      float NdotH = max(dot(N, H), 0.0);
+      float specFactor = pow(NdotH, specPower);
+      vec3 radiance = u_Lights[i]._Emission * visibility * u_DirectLightIntensity;
+      legacyDiffuse += diffuseColor * radiance * NdotL;
+      legacySpecular += F0 * radiance * specFactor * NdotL;
+    }
   }
 
   vec3 envSpecular = vec3(0.0);
@@ -114,8 +132,12 @@ void main()
     envSpecular = prefiltered * (F0 * brdf.x + brdf.y);
   }
 
-  vec3 premultipliedColor = ( directDiffuse + mat._Emission ) * alpha;
-  premultipliedColor += directSpecular + envSpecular;
+  vec3 premultipliedColor = mat._Emission * alpha;
+  if ( u_EnablePBRDirectLighting != 0 )
+    premultipliedColor += directDiffuse * alpha + directSpecular;
+  else
+    premultipliedColor += legacyDiffuse * alpha + legacySpecular;
+  premultipliedColor += envSpecular;
 
   // Keep purely transmissive surfaces (alpha near 0) visible through additive specular/reflection.
   if ( ( alpha <= 0.001 ) && ( max(max(premultipliedColor.r, premultipliedColor.g), premultipliedColor.b) <= 0.001 ) )

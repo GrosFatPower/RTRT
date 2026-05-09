@@ -91,6 +91,7 @@ DeferredRenderer::~DeferredRenderer()
   GLUtil::DeleteTEX(_GNormalTEX);
   GLUtil::DeleteTEX(_GPositionTEX);
   GLUtil::DeleteTEX(_GMaterialTEX);
+  GLUtil::DeleteTEX(_GEmissionTEX);
   GLUtil::DeleteTEX(_GDepthTEX);
   GLUtil::DeleteTEX(_SSAOTEX);
   GLUtil::DeleteTEX(_SSAOBlurTEX);
@@ -1167,6 +1168,12 @@ int DeferredRenderer::InitializeFrameBuffers()
   targetDesc._DataType       = _GMaterialTEX._DataType;
   GLUtil::CreateTexture(targetDesc, _GMaterialTEX);
 
+  targetDesc._Slot           = _GEmissionTEX._Slot;
+  targetDesc._InternalFormat = _GEmissionTEX._InternalFormat;
+  targetDesc._DataFormat     = _GEmissionTEX._DataFormat;
+  targetDesc._DataType       = _GEmissionTEX._DataType;
+  GLUtil::CreateTexture(targetDesc, _GEmissionTEX);
+
   targetDesc._Slot           = _GDepthTEX._Slot;
   targetDesc._InternalFormat = _GDepthTEX._InternalFormat;
   targetDesc._DataFormat     = _GDepthTEX._DataFormat;
@@ -1180,6 +1187,7 @@ int DeferredRenderer::InitializeFrameBuffers()
   gBufferDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT1, &_GNormalTEX });
   gBufferDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT2, &_GPositionTEX });
   gBufferDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT3, &_GMaterialTEX });
+  gBufferDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT4, &_GEmissionTEX });
   gBufferDesc._Attachments.push_back({ GL_DEPTH_ATTACHMENT, &_GDepthTEX });
   if ( !GLUtil::CreateFrameBuffer(gBufferDesc, _GBufferFBO) )
   {
@@ -1506,6 +1514,7 @@ int DeferredRenderer::UpdateUniforms()
       _LightingShader -> SetUniform("u_GNormal",   (int)DeferredTexSlot::_GNormal);
       _LightingShader -> SetUniform("u_GPosition", (int)DeferredTexSlot::_GPosition);
       _LightingShader -> SetUniform("u_GMaterial", (int)DeferredTexSlot::_GMaterial);
+      _LightingShader -> SetUniform("u_GEmission", (int)DeferredTexSlot::_GEmission);
       _LightingShader -> SetUniform("u_GDepth",    (int)DeferredTexSlot::_GDepth);
 
       _LightingShader -> SetUniform("u_SSAOMap", (int)DeferredTexSlot::_SSAOBlur);
@@ -1538,6 +1547,8 @@ int DeferredRenderer::UpdateUniforms()
       _LightingShader -> SetUniform("u_BRDFLUT", (int)DeferredTexSlot::_BRDFLUT);
       _LightingShader -> SetUniform("u_EnableSpecularIBL", _Settings._SpecularIBL ? 1 : 0);
       _LightingShader -> SetUniform("u_SpecularIBLIntensity", _Settings._SpecularIBLIntensity);
+      _LightingShader -> SetUniform("u_EnablePBRDirectLighting", _Settings._PBRDirectLighting ? 1 : 0);
+      _LightingShader -> SetUniform("u_DirectLightIntensity", _Settings._DirectLightIntensity);
     }
 
     if ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
@@ -1569,6 +1580,7 @@ int DeferredRenderer::UpdateUniforms()
     if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
     {
       _LightingShader -> SetUniform("u_BackgroundColor", _Settings._BackgroundColor);
+      _LightingShader -> SetUniform("u_Ambient", _Settings._EnableUniformLight ? ( _Settings._UniformLightCol * 0.01f ) : Vec3(0.f));
       _LightingShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
       _LightingShader -> SetUniform("u_EnableBackground" , (int)_Settings._EnableBackGround);
       _LightingShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
@@ -1645,6 +1657,8 @@ int DeferredRenderer::UpdateUniforms()
       _TransparentShader -> SetUniform("u_BRDFLUT", (int)DeferredTexSlot::_BRDFLUT);
       _TransparentShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
       _TransparentShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
+      _TransparentShader -> SetUniform("u_EnablePBRDirectLighting", _Settings._PBRDirectLighting ? 1 : 0);
+      _TransparentShader -> SetUniform("u_DirectLightIntensity", _Settings._DirectLightIntensity);
       float transparentEnvMipCount = 1.f;
       if ( _Scene.GetEnvMap().GetWidth() > 0 && _Scene.GetEnvMap().GetHeight() > 0 )
       {

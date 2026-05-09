@@ -740,6 +740,12 @@ int Test5::DrawSettingsUI()
         if ( ImGui::SliderFloat( "IBL intensity", &_Settings._SpecularIBLIntensity, 0.f, 3.f ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
+        if ( ImGui::Checkbox( "PBR direct lighting", &_Settings._PBRDirectLighting ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "Direct light intensity", &_Settings._DirectLightIntensity, 0.f, 8.f ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
         if ( ImGui::Checkbox( "Transparency", &_Settings._Transparency ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
@@ -772,10 +778,10 @@ int Test5::DrawSettingsUI()
       g_DebugMode = 0;
 
       static const char * COLORorDEPTHorNORMALS[] = { "Color", "Depth", "Normals" };
-      static const char * COLORorDEPTHorNORMALSorSHADOWSorSSAO[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params", "SSR" };
+      static const char * COLORorDEPTHorNORMALSorSHADOWSorSSAO[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params", "SSR", "Direct diffuse", "Direct specular" };
 
       static int bufferChoice = 0;
-      int maxBufferChoice = ( RendererType::OpenGLRasterizer == _RendererType ) ? ( 8 ) : ( 3 );
+      int maxBufferChoice = ( RendererType::OpenGLRasterizer == _RendererType ) ? ( 10 ) : ( 3 );
       if ( ( RendererType::SoftwareRasterizer == _RendererType ) && ( bufferChoice > 2 ) )
         bufferChoice = 0;
 
@@ -818,6 +824,10 @@ int Test5::DrawSettingsUI()
           g_DebugMode |= (int)DeferredDebugModes::MaterialParams;
         else if ( 7 == bufferChoice )
           g_DebugMode |= (int)DeferredDebugModes::SSR;
+        else if ( 8 == bufferChoice )
+          g_DebugMode |= (int)DeferredDebugModes::DirectDiffuse;
+        else if ( 9 == bufferChoice )
+          g_DebugMode |= (int)DeferredDebugModes::DirectSpecular;
 
         if ( showWires )
           g_DebugMode |= (int)DeferredDebugModes::Wires;

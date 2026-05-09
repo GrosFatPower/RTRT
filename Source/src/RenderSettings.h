@@ -45,6 +45,7 @@ struct RenderSettings
   bool         _SSAOBlur              = true;                   // Deferred renderer
   bool         _SSR                   = false;                  // Deferred renderer
   bool         _SpecularIBL           = true;                   // Deferred renderer
+  bool         _PBRDirectLighting     = true;                   // Deferred renderer
   bool         _Transparency          = true;                   // Deferred renderer
   SamplingMode _Sampling              = SamplingMode::Bilinear; // Raster
   bool         _WBuffer               = true;                   // Raster
@@ -73,6 +74,7 @@ struct RenderSettings
   float        _SSRMaxRoughness       = 0.55f;                  // Deferred renderer
   float        _SSRFade               = 0.18f;                  // Deferred renderer
   float        _SpecularIBLIntensity  = 0.5f;                   // Deferred renderer
+  float        _DirectLightIntensity  = 1.0f;                   // Deferred renderer
   float        _DenoiserThreshold     = 0.05f;                  // PathTracer
   float        _DenoiserSigmaSpatial  = 2.0f;                   // PathTracer
   float        _DenoiserSigmaRange    = 0.1f;                   // PathTracer
