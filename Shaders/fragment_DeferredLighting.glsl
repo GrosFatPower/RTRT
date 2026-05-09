@@ -183,6 +183,7 @@ void main()
   PBRSurface pbrSurface = MakePBRSurface(albedo, roughness, metallic, reflectance);
   vec3 specularIBL = vec3(0.0);
   vec3 specularSSR = vec3(0.0);
+  vec3 diffuseIBL = vec3(0.0);
 
   if ( ( u_EnableSpecularIBL != 0 ) && ( u_EnableEnvMap > 0 ) )
   {
@@ -193,6 +194,12 @@ void main()
     specularIBL = prefiltered * (F0 * brdf.x + brdf.y);
     specularIBL *= u_SpecularIBLIntensity;
     specularIBL *= mix(1.0, ao, 0.2);
+  }
+
+  if ( u_EnableEnvMap > 0 )
+  {
+    vec3 envDiffuse = SampleEnvMapNoSeamLod(N, min(4.0, max(u_EnvMapMipCount - 1.0, 0.0)));
+    diffuseIBL = envDiffuse * albedo * (1.0 - metallic) * ao * 0.35;
   }
 
   if ( u_EnableSSR != 0 )
@@ -290,6 +297,6 @@ void main()
   }
 
   vec3 directLighting = ( u_EnablePBRDirectLighting != 0 ) ? ( directDiffuse + directSpecular ) : ( albedo * legacyLighting );
-  vec3 outColor = emission + ambient + directLighting + specularIBL + specularSSR;
+  vec3 outColor = emission + ambient + diffuseIBL + directLighting + specularIBL + specularSSR;
   fragColor = vec4(max(outColor, vec3(0.0)), 1.0);
 }

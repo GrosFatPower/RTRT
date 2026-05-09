@@ -1580,7 +1580,7 @@ int DeferredRenderer::UpdateUniforms()
     if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
     {
       _LightingShader -> SetUniform("u_BackgroundColor", _Settings._BackgroundColor);
-      _LightingShader -> SetUniform("u_Ambient", _Settings._EnableUniformLight ? ( _Settings._UniformLightCol * 0.01f ) : Vec3(0.f));
+      _LightingShader -> SetUniform("u_Ambient", _Settings._EnableUniformLight ? ( _Settings._UniformLightCol * 0.08f ) : Vec3(0.f));
       _LightingShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
       _LightingShader -> SetUniform("u_EnableBackground" , (int)_Settings._EnableBackGround);
       _LightingShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
