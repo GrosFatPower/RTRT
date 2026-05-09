@@ -4,6 +4,7 @@
 
 #include "DeferredRenderer.h"
 #include "PathTracer.h"
+#include "PathUtils.h"
 #include "SoftwareRasterizer.h"
 
 #include "imgui.h"
@@ -101,7 +102,7 @@ Test6::Test6( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iSc
   _Settings._RenderResolution.x = iScreenWidth;
   _Settings._RenderResolution.y = iScreenHeight;
   _Settings._BackgroundColor = Vec3(0.015f, 0.018f, 0.022f);
-  _Settings._EnableSkybox = false;
+  _Settings._EnableSkybox = true;
   _Settings._EnableBackGround = true;
   _Settings._RenderScale = 100;
   _Settings._SSAO = true;
@@ -227,6 +228,9 @@ int Test6::InitializeScene()
 
   if ( 0 != _SceneBinding.Attach(*newScene, _GameWorld, _GameSettings) )
     return 1;
+
+  if ( !newScene -> LoadEnvMap(PathUtils::GetEnvMapPath("syferfontein_18d_clear_1k.hdr")) )
+    std::cout << "Test6 : Failed to load default environment map" << std::endl;
 
   _Scene = std::move(newScene);
   return 0;
