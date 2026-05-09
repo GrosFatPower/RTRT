@@ -43,7 +43,7 @@ struct RenderSettings
   bool         _ShowShadowMap         = false;                  // Deferred renderer debug
   bool         _SSAO                  = true;                   // Deferred renderer
   bool         _SSAOBlur              = true;                   // Deferred renderer
-  bool         _SSR                   = false;                  // Deferred renderer
+  bool         _SSR                   = true;                   // Deferred renderer
   bool         _SpecularIBL           = true;                   // Deferred renderer
   bool         _PBRDirectLighting     = true;                   // Deferred renderer
   bool         _Transparency          = true;                   // Deferred renderer
