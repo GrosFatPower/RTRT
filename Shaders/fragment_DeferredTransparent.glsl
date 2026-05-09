@@ -23,6 +23,7 @@ uniform float       u_EnvMapMipCount = 1.0;
 uniform int         u_EnableEnvMap = 0;
 uniform int         u_EnablePBRDirectLighting = 1;
 uniform float       u_DirectLightIntensity = 1.0;
+uniform float       u_SpecularIBLMaxRoughness = 0.5;
 
 uniform Camera      u_Camera;
 
@@ -124,12 +125,14 @@ void main()
   vec3 envSpecular = vec3(0.0);
   if ( u_EnableEnvMap > 0 )
   {
-    float lod = roughness * roughness * max(u_EnvMapMipCount - 1.0, 0.0);
+    float lod = roughness * max(u_EnvMapMipCount - 1.0, 0.0);
     vec3 R = reflect(-V, N);
     vec3 prefiltered = SampleEnvMapNoSeamLod(R, lod);
     float NdotV = max(dot(N, V), 0.0);
+    vec3 roughFresnel = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - NdotV, 5.0);
     vec2 brdf = texture(u_BRDFLUT, vec2(NdotV, roughness)).rg;
-    envSpecular = prefiltered * (F0 * brdf.x + brdf.y);
+    float roughnessFade = 1.0 - smoothstep(u_SpecularIBLMaxRoughness * 0.75, u_SpecularIBLMaxRoughness, roughness);
+    envSpecular = prefiltered * (roughFresnel * brdf.x + brdf.y) * roughnessFade;
   }
 
   vec3 premultipliedColor = mat._Emission * alpha;

@@ -1547,6 +1547,7 @@ int DeferredRenderer::UpdateUniforms()
       _LightingShader -> SetUniform("u_BRDFLUT", (int)DeferredTexSlot::_BRDFLUT);
       _LightingShader -> SetUniform("u_EnableSpecularIBL", _Settings._SpecularIBL ? 1 : 0);
       _LightingShader -> SetUniform("u_SpecularIBLIntensity", _Settings._SpecularIBLIntensity);
+      _LightingShader -> SetUniform("u_SpecularIBLMaxRoughness", _Settings._SpecularIBLMaxRoughness);
       _LightingShader -> SetUniform("u_EnablePBRDirectLighting", _Settings._PBRDirectLighting ? 1 : 0);
       _LightingShader -> SetUniform("u_DirectLightIntensity", _Settings._DirectLightIntensity);
     }
@@ -1659,6 +1660,7 @@ int DeferredRenderer::UpdateUniforms()
       _TransparentShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
       _TransparentShader -> SetUniform("u_EnablePBRDirectLighting", _Settings._PBRDirectLighting ? 1 : 0);
       _TransparentShader -> SetUniform("u_DirectLightIntensity", _Settings._DirectLightIntensity);
+      _TransparentShader -> SetUniform("u_SpecularIBLMaxRoughness", _Settings._SpecularIBLMaxRoughness);
       float transparentEnvMipCount = 1.f;
       if ( _Scene.GetEnvMap().GetWidth() > 0 && _Scene.GetEnvMap().GetHeight() > 0 )
       {

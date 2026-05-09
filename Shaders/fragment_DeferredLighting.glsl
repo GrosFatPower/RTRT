@@ -40,6 +40,7 @@ uniform float u_SSRIntensity        = 0.6;
 uniform float u_SSRMaxRoughness     = 0.55;
 uniform int   u_EnableSpecularIBL   = 0;
 uniform float u_SpecularIBLIntensity = 1.0;
+uniform float u_SpecularIBLMaxRoughness = 0.5;
 uniform int   u_EnablePBRDirectLighting = 1;
 uniform float u_DirectLightIntensity = 1.0;
 
@@ -187,11 +188,13 @@ void main()
 
   if ( ( u_EnableSpecularIBL != 0 ) && ( u_EnableEnvMap > 0 ) )
   {
-    float lod = roughness * roughness * max(u_EnvMapMipCount - 1.0, 0.0);
+    float lod = roughness * max(u_EnvMapMipCount - 1.0, 0.0);
     vec3 R = reflect(-V, N);
     vec3 prefiltered = SampleEnvMapNoSeamLod(R, lod);
+    vec3 roughFresnel = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - NdotV, 5.0);
     vec2 brdf = texture(u_BRDFLUT, vec2(NdotV, roughness)).rg;
-    specularIBL = prefiltered * (F0 * brdf.x + brdf.y);
+    float roughnessFade = 1.0 - smoothstep(u_SpecularIBLMaxRoughness * 0.75, u_SpecularIBLMaxRoughness, roughness);
+    specularIBL = prefiltered * (roughFresnel * brdf.x + brdf.y) * roughnessFade;
     specularIBL *= u_SpecularIBLIntensity;
     specularIBL *= mix(1.0, ao, 0.2);
   }

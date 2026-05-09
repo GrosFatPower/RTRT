@@ -740,6 +740,9 @@ int Test5::DrawSettingsUI()
         if ( ImGui::SliderFloat( "IBL intensity", &_Settings._SpecularIBLIntensity, 0.f, 3.f ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
+        if ( ImGui::SliderFloat( "IBL max roughness", &_Settings._SpecularIBLMaxRoughness, 0.05f, 1.f ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
         if ( ImGui::Checkbox( "PBR direct lighting", &_Settings._PBRDirectLighting ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 

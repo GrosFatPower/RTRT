@@ -571,6 +571,8 @@ int Test6::DrawSettingsUI()
         _Renderer -> Notify(DirtyState::RenderSettings);
       if ( ImGui::SliderFloat("Direct light intensity", &_Settings._DirectLightIntensity, 0.f, 8.f) )
         _Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::SliderFloat("IBL max roughness", &_Settings._SpecularIBLMaxRoughness, 0.05f, 1.f) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
 
       static const char * DEBUG_VIEWS[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params", "SSR", "Direct diffuse", "Direct specular" };
       static int bufferChoice = 0;

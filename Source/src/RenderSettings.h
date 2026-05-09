@@ -74,6 +74,7 @@ struct RenderSettings
   float        _SSRMaxRoughness       = 0.55f;                  // Deferred renderer
   float        _SSRFade               = 0.18f;                  // Deferred renderer
   float        _SpecularIBLIntensity  = 0.5f;                   // Deferred renderer
+  float        _SpecularIBLMaxRoughness = 0.5f;                 // Deferred renderer
   float        _DirectLightIntensity  = 1.0f;                   // Deferred renderer
   float        _DenoiserThreshold     = 0.05f;                  // PathTracer
   float        _DenoiserSigmaSpatial  = 2.0f;                   // PathTracer
