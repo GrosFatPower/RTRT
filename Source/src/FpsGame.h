@@ -10,6 +10,8 @@ namespace RTRT
 {
 
 class Scene;
+struct FpsGameMap;
+struct FpsMapProp;
 
 enum class FpsRendererMode
 {
@@ -90,6 +92,7 @@ struct FpsSceneObject
   Vec3            _HalfExtents = Vec3(0.5f);
   FpsMaterialSlot _Material = FpsMaterialSlot::Wall;
   bool            _Collidable = true;
+  bool            _Visible = true;
 };
 
 struct FpsProjectile
@@ -104,6 +107,7 @@ class FpsGameWorld
 {
 public:
   int Initialize( const FpsGameSettings & iSettings );
+  int Initialize( const FpsGameSettings & iSettings, const FpsGameMap & iMap );
   int Reset( const FpsGameSettings & iSettings );
   int Update( float iDeltaTime, const FpsGameInput & iInput, const FpsGameSettings & iSettings );
   int ResizeProjectilePool( const FpsGameSettings & iSettings );
@@ -119,6 +123,7 @@ public:
 
 protected:
   void BuildDefaultArena();
+  void BuildFromMap( const FpsGameMap & iMap );
   void MoveAxis( int iAxis, float iDelta, const FpsGameSettings & iSettings );
   bool OverlapPlayerObject( const FpsSceneObject & iObject, const FpsGameSettings & iSettings, Vec3 & oOverlap ) const;
   void FireProjectile( const FpsGameSettings & iSettings );
@@ -135,12 +140,18 @@ protected:
   int                        _ProjectileAmmo = 32;
   int                        _PendingProjectileShots = 0;
   bool                       _ProjectilesDirty = false;
+  Vec3                       _SpawnPosition = Vec3(0.f, 0.05f, -8.f);
+  float                      _SpawnYaw = 90.f;
+  float                      _SpawnPitch = 0.f;
+  int                        _SpawnHealth = -1;
+  int                        _SpawnArmor = -1;
 };
 
 class FpsGameSceneBinding
 {
 public:
   int Attach( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
+  int Attach( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, const FpsGameMap & iMap );
   int SyncCamera( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
   int SyncTransforms( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
   bool HasViewWeapon() const { return !_WeaponInstanceIDs.empty(); }
@@ -148,11 +159,13 @@ public:
 
 protected:
   int EnsureResources( Scene & iScene );
-  int LoadViewWeapon( Scene & iScene );
-  int AddLights( Scene & iScene );
+  int LoadViewWeapon( Scene & iScene, const std::string & iPath );
+  int LoadProps( Scene & iScene, const FpsGameMap & iMap );
+  int AddLights( Scene & iScene, const FpsGameMap * iMap );
   Mat4x4 BuildObjectTransform( const FpsSceneObject & iObject ) const;
   Mat4x4 BuildProjectileTransform( const FpsProjectile & iProjectile, const FpsGameSettings & iSettings ) const;
   Mat4x4 BuildViewWeaponTransform( const FpsPlayer & iPlayer, const FpsGameSettings & iSettings ) const;
+  Mat4x4 BuildPropTransform( const FpsMapProp & iProp ) const;
   int MaterialID( FpsMaterialSlot iMaterial ) const;
 
 protected:
