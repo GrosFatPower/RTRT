@@ -21,40 +21,39 @@ static const int S_MaxDeferredShadowCasters = 8;
 
 struct DeferredTexSlot
 {
-  static const TextureSlot _GAlbedo       = 0;
-  static const TextureSlot _GNormal       = 1;
-  static const TextureSlot _GPosition     = 2;
-  static const TextureSlot _GMaterial     = 3;
-  static const TextureSlot _GDepth        = 4;
-  // Reuses the lighting slot while the lighting target is not sampled.
-  static const TextureSlot _GEmission     = 5;
-  static const TextureSlot _Lighting      = 5;
-  static const TextureSlot _TexInd        = 6;
-  static const TextureSlot _TexArray      = 7;
-  static const TextureSlot _Materials     = 8;
-  static const TextureSlot _EnvMap        = 9;
-  static const TextureSlot _ShadowCubeMap = 10;
-  static const TextureSlot _Shadow2DMap   = 11;
-  static const TextureSlot _SSAO          = 12;
-  static const TextureSlot _SSAOBlur      = 13;
-  static const TextureSlot _SSAONoise     = 14;
-  static const TextureSlot _BRDFLUT       = 15;
-  static const TextureSlot _SSR           = 14; // Reuses the SSAO noise slot outside the SSAO pass.
-  static const TextureSlot _SSRSource     = 5;  // Reuses the lighting slot outside the lighting/composite passes.
+  static constexpr TextureSlot _GAlbedo       = 0;
+  static constexpr TextureSlot _GNormal       = 1;
+  static constexpr TextureSlot _GPosition     = 2;
+  static constexpr TextureSlot _GMaterial     = 3;
+  static constexpr TextureSlot _GDepth        = 4;
+  static constexpr TextureSlot _GEmission     = 5; // Reuses the lighting slot while the lighting target is not sampled.
+  static constexpr TextureSlot _Lighting      = 5;
+  static constexpr TextureSlot _TexInd        = 6;
+  static constexpr TextureSlot _TexArray      = 7;
+  static constexpr TextureSlot _Materials     = 8;
+  static constexpr TextureSlot _EnvMap        = 9;
+  static constexpr TextureSlot _ShadowCubeMap = 10;
+  static constexpr TextureSlot _Shadow2DMap   = 11;
+  static constexpr TextureSlot _SSAO          = 12;
+  static constexpr TextureSlot _SSAOBlur      = 13;
+  static constexpr TextureSlot _SSAONoise     = 14;
+  static constexpr TextureSlot _SSR           = 14; // Reuses the SSAO noise slot outside the SSAO pass.
+  static constexpr TextureSlot _SSRSource     = 5;  // Reuses the lighting slot outside the lighting/composite passes.
+  static constexpr TextureSlot _BRDFLUT       = 15;
 };
 
 enum class DeferredDebugModes
 {
-  ColorBuffer = 0x00,
-  DepthBuffer = 0x01,
-  Normals     = 0x02,
-  Wires       = 0x04,
-  Shadows     = 0x08,
-  SSAO        = 0x10,
-  SpecularIBL = 0x20,
-  MaterialParams = 0x40,
-  SSR         = 0x80,
-  DirectDiffuse = 0x100,
+  ColorBuffer    = 0x000,
+  DepthBuffer    = 0x001,
+  Normals        = 0x002,
+  Wires          = 0x004,
+  Shadows        = 0x008,
+  SSAO           = 0x010,
+  SpecularIBL    = 0x020,
+  MaterialParams = 0x040,
+  SSR            = 0x080,
+  DirectDiffuse  = 0x100,
   DirectSpecular = 0x200
 };
 
@@ -120,13 +119,13 @@ protected:
 
   struct ShadowCaster
   {
-    int _LightIndex = -1;
+    int       _LightIndex = -1;
     LightType _Type = LightType::SphereLight;
-    int _Layer = 0;
-    Vec3 _Pos = Vec3(0.f);
-    Vec3 _Dir = Vec3(0.f, 1.f, 0.f);
-    float _Far = 25.f;
-    Mat4x4 _DirectionalViewProj = Mat4x4(1.f);
+    int       _Layer = 0;
+    Vec3      _Pos = Vec3(0.f);
+    Vec3      _Dir = Vec3(0.f, 1.f, 0.f);
+    float     _Far = 25.f;
+    Mat4x4    _DirectionalViewProj = Mat4x4(1.f);
     std::array<Mat4x4, 6> _CubeViewProj;
   };
 
@@ -169,7 +168,7 @@ protected:
 
   // Scene data
   GLTextureBuffer _TexIndTBO     = { 0, { 0, GL_TEXTURE_BUFFER, DeferredTexSlot::_TexInd } };
-  GLTexture       _TexArrayTEX   = { 0, GL_TEXTURE_2D_ARRAY, DeferredTexSlot::_TexArray, GL_RGBA8,   GL_RGBA, GL_UNSIGNED_BYTE };
+  GLTexture       _TexArrayTEX   = { 0, GL_TEXTURE_2D_ARRAY, DeferredTexSlot::_TexArray, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE };
   GLTexture       _MaterialsTEX  = { 0, GL_TEXTURE_2D, DeferredTexSlot::_Materials, GL_RGBA32F, GL_RGBA, GL_FLOAT };
   GLTexture       _EnvMapTEX     = { 0, GL_TEXTURE_2D, DeferredTexSlot::_EnvMap, GL_RGB32F,  GL_RGB,  GL_FLOAT };
 
@@ -207,14 +206,14 @@ protected:
   float      _SceneBoundsRadius = 1.f;
 
   // Shadow state
-  float _ShadowNear          = 0.1f;
-  float _ShadowFar           = 25.f;
-  int _ShadowMapSize         = -1;
-  int _ShadowLocalCapacity   = -1;
-  int _ShadowDirectionalCapacity = -1;
-  int _LocalShadowCasterCount = 0;
+  float _ShadowNear                 = 0.1f;
+  float _ShadowFar                  = 25.f;
+  int _ShadowMapSize                = -1;
+  int _ShadowLocalCapacity          = -1;
+  int _ShadowDirectionalCapacity    = -1;
+  int _LocalShadowCasterCount       = 0;
   int _DirectionalShadowCasterCount = 0;
-  bool _HasShadowLight       = false;
+  bool _HasShadowLight              = false;
   std::vector<ShadowCaster> _ShadowCasters;
 
   // SSAO state

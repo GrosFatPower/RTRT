@@ -363,6 +363,12 @@ int Test6::ProcessInput()
     }
   }
 
+  if ( _KeyInput.IsKeyReleased(GLFW_KEY_C) )
+  {
+    _CaptureOutputPath = "./Test6_" + std::to_string(_NbRenderedFrames) + "frames.png";
+    _RenderToFile = true;
+  }
+
   _KeyInput.ClearLastEvents();
   _MouseInput.ClearLastEvents(curMouseX, curMouseY);
 
@@ -518,7 +524,7 @@ void Test6::DrawHUD()
     drawList -> AddRectFilled(barMin, barMax, bgColor, 2.f);
     drawList -> AddRectFilled(barMin, fillMax, bar._Color, 2.f);
     drawList -> AddRect(barMin, barMax, IM_COL32(255, 255, 255, 90), 2.f);
-    drawList -> AddText(ImVec2(origin.x + 8.f, y + 3.f), textColor, label.c_str());
+    drawList -> AddText(ImVec2(origin.x + 8.f, y + 5.f), textColor, label.c_str());
   }
 
   DrawCrosshair();
