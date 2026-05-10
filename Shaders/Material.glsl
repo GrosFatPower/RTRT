@@ -5,6 +5,7 @@
 #ifndef _MATERIAL_GLSL_
 #define _MATERIAL_GLSL_
 
+#include Constants.glsl
 #include Structures.glsl
 #include Textures.glsl
 #include RNG.glsl
@@ -120,9 +121,10 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
     int texArrayID = texelFetch(u_TexIndTexture, metallicRoughnessTexID).x;
     if ( texArrayID >= 0 )
     {  
-      vec3 metalRoughness = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rgb;
-      oMat._Metallic = metalRoughness.b;
-      oMat._Roughness = metalRoughness.g;
+      vec2 metalRoughness = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).bg;
+      oMat._Metallic = metalRoughness.x;
+      //oMat._Roughness = metalRoughness.y;
+      oMat._Roughness = max(metalRoughness.y * metalRoughness.y, EPSILON);
     }
   }
 
