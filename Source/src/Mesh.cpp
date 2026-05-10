@@ -12,12 +12,8 @@ Mesh::Mesh()
 {
   _Bvh = std::make_shared<GpuBLAS>();
 
-  _BoundingBox._Low  = Vec3( std::numeric_limits<float>::max(),
-                             std::numeric_limits<float>::max(),
-                             std::numeric_limits<float>::max());
-  _BoundingBox._High = Vec3(-std::numeric_limits<float>::max(),
-                            -std::numeric_limits<float>::max(),
-                            -std::numeric_limits<float>::max());
+  _BoundingBox._Low  = Vec3(MAX_FLOAT);
+  _BoundingBox._High = Vec3(-MAX_FLOAT);
 }
 
 Mesh::Mesh(const std::string        & iName,
@@ -35,12 +31,8 @@ Mesh::Mesh(const std::string        & iName,
 
   _Bvh = std::make_shared<GpuBLAS>();
 
-  _BoundingBox._Low = Vec3( std::numeric_limits<float>::max(),
-                             std::numeric_limits<float>::max(),
-                             std::numeric_limits<float>::max() );
-  _BoundingBox._High = Vec3( -std::numeric_limits<float>::max(),
-                            -std::numeric_limits<float>::max(),
-                            -std::numeric_limits<float>::max() );
+  _BoundingBox._Low = Vec3(MAX_FLOAT);
+  _BoundingBox._High = Vec3(-MAX_FLOAT);
 
   for ( Vec3 vert : _Vertices )
   {

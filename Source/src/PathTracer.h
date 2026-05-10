@@ -82,9 +82,14 @@ protected:
   int InitializeFrameBuffers();
   int RecompileShaders();
 
-  int UnloadScene();
+  int UnloadScene( bool iDeleteOutputTextures = false );
   int ReloadScene();
+  int ReloadSceneInstances();
   int ReloadEnvMap();
+
+  int UploadTLASData();
+  int UploadTLASTransforms();
+  int UploadOrCreateTBO( GLTextureBuffer & ioTBO, GLsizeiptr iSize, const void * iData, GLenum iInternalformat );
 
   int UpdatePathTraceUniforms();
   int UpdateAccumulateUniforms();
@@ -94,10 +99,14 @@ protected:
   int BindPathTraceTextures();
   int BindAccumulateTextures();
   int BindDenoiserTextures();
+  int BindDenoiserImageTextures();
   int BindRenderToScreenTextures();
 
   int InitializeStats();
   int UpdateStats();
+  void BeginTimer( GLuint iTimerId[2] );
+  void EndTimer( GLuint iTimerId[2] );
+  double ReadTimer( GLuint iTimerId[2] );
 
   float LowResRenderScale() const { return ( RenderScale() * _Settings._LowResRatio ); }
 
@@ -105,7 +114,7 @@ protected:
   int LowResRenderWidth()   const { return std::max(int( _Settings._RenderResolution.x * LowResRenderScale() ), 32); }
   int LowResRenderHeight()  const { return std::max(int( _Settings._RenderResolution.y * LowResRenderScale() ), 32); }
 
-  bool Denoise()            const { return (_Settings._Denoise && !LowResPass());}
+  bool Denoise()            const { return (_Settings._Denoise); }// && !LowResPass());}
 
   bool TiledRendering()     const { return _Settings._TiledRendering; }
   int TileWidth()           const { return ( _Settings._TileResolution.x > 0 ) ? ( _Settings._TileResolution.x ) : ( 64 ); }
@@ -125,6 +134,7 @@ protected:
   GLFrameBuffer _RenderTargetLowResFBO;
   GLFrameBuffer _RenderTargetTileFBO;
   GLFrameBuffer _AccumulateFBO;
+  GLFrameBuffer _DenoiseFBO;
 
   // Texture buffers
   GLTextureBuffer _VtxTBO                     = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_Vertices               } };
@@ -145,6 +155,25 @@ protected:
   GLTextureBuffer _BLASPackedUVsTBO           = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_BLASPackedUVs          } };
 
   // Textures
+  GLTexture _RenderTargetTEX[3] =
+  {
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTarget,        GL_RGBA32F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetPos,     GL_RGBA32F, GL_RGBA, GL_FLOAT }
+  };
+  GLTexture _RenderTargetTileTEX[3] =
+  {
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetTile,    GL_RGBA32F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetPos,     GL_RGBA32F, GL_RGBA, GL_FLOAT }
+  };
+  GLTexture _RenderTargetLowResTEX = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetLowRes, GL_RGBA32F, GL_RGBA, GL_FLOAT };
+  GLTexture _AccumulateTEX[3] =
+  {
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Accumulate,        GL_RGBA32F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulateNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulatePos,     GL_RGBA32F, GL_RGBA, GL_FLOAT }
+  };
   GLTexture _DenoisedTEX         = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Denoised,         GL_RGBA32F, GL_RGBA, GL_FLOAT };
   GLTexture _TexArrayTEX         = { 0, GL_TEXTURE_2D_ARRAY, PathTracerTexSlot::_TexArray,   GL_RGBA8,   GL_RGBA, GL_UNSIGNED_BYTE };
   GLTexture _MaterialsTEX        = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Materials,        GL_RGBA32F, GL_RGBA, GL_FLOAT };
@@ -165,6 +194,7 @@ protected:
   // Accumulate
   unsigned int _FrameNum          = 1;
   unsigned int _NbCompleteFrames  = 0;
+  bool         _DenoisedThisFrame = false;
 
   // Scene data
   int _NbTriangles     = 0;

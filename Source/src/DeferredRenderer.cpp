@@ -4,13 +4,20 @@
 #include "EnvMap.h"
 #include "PathUtils.h"
 #include "Mesh.h"
+#include "Material.h"
+#include "MathUtil.h"
+#include "Light.h"
 
 #include <iostream>
 #include <vector>
 #include <unordered_map>
 #include <tuple>
+#include <algorithm>
+#include <numeric>
+#include <cfloat>
 #include <cstdint>
 #include <cstring>
+#include <random>
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -22,6 +29,7 @@ namespace RTRT
 
 static Vec3 S_WireColor = Vec3(1.f, 0.f, 0.f);
 static float S_WireWidth = 3.0f;
+static const float S_TransparentSpecTransThreshold = 0.001f;
 
 // ----------------------------------------------------------------------------
 // HELPER TYPES
@@ -70,15 +78,29 @@ DeferredRenderer::DeferredRenderer(Scene& iScene, RenderSettings& iSettings)
 // ----------------------------------------------------------------------------
 DeferredRenderer::~DeferredRenderer()
 {
-  // Delete framebuffers and textures
   GLUtil::DeleteFBO(_GBufferFBO);
   GLUtil::DeleteFBO(_LightingFBO);
+  GLUtil::DeleteFBO(_BRDFFBO);
+  GLUtil::DeleteFBO(_ShadowFBO);
+  GLUtil::DeleteFBO(_SSAOFBO);
+  GLUtil::DeleteFBO(_SSAOBlurFBO);
+  GLUtil::DeleteFBO(_SSRFBO);
+  GLUtil::DeleteFBO(_SSRSourceFBO);
 
   GLUtil::DeleteTEX(_GAlbedoTEX);
   GLUtil::DeleteTEX(_GNormalTEX);
   GLUtil::DeleteTEX(_GPositionTEX);
+  GLUtil::DeleteTEX(_GMaterialTEX);
+  GLUtil::DeleteTEX(_GEmissionTEX);
   GLUtil::DeleteTEX(_GDepthTEX);
-  GLUtil::DeleteTEX(_LightingTEX);
+  GLUtil::DeleteTEX(_SSAOTEX);
+  GLUtil::DeleteTEX(_SSAOBlurTEX);
+  GLUtil::DeleteTEX(_SSAONoiseTEX);
+  GLUtil::DeleteTEX(_SSRTEX);
+  GLUtil::DeleteTEX(_SSRSourceTEX);
+  GLUtil::DeleteTEX(_ShadowCubeMapTEX);
+  GLUtil::DeleteTEX(_Shadow2DMapTEX);
+  GLUtil::DeleteTEX(_BRDFLUTTEX);
 
   GLUtil::DeleteTBO(_TexIndTBO);
   GLUtil::DeleteTEX(_TexArrayTEX);
@@ -111,6 +133,31 @@ int DeferredRenderer::Initialize()
     return 1;
   }
 
+  if ( 0 != InitializeBRDFLUT() )
+  {
+    std::cout << "DeferredRenderer : Failed to initialize BRDF LUT !" << std::endl;
+    return 1;
+  }
+
+  if ( 0 != InitializeSSAO() )
+  {
+    std::cout << "DeferredRenderer : Failed to initialize SSAO !" << std::endl;
+    return 1;
+  }
+
+  if ( 0 != InitializeSSR() )
+  {
+    std::cout << "DeferredRenderer : Failed to initialize SSR !" << std::endl;
+    return 1;
+  }
+
+  UpdateShadowState();
+  if ( 0 != InitializeShadowMap() )
+  {
+    std::cout << "DeferredRenderer : Failed to initialize shadow map !" << std::endl;
+    return 1;
+  }
+
   return 0;
 }
 
@@ -120,7 +167,9 @@ int DeferredRenderer::Initialize()
 int DeferredRenderer::Update()
 {
   if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
+  {
     this -> ResizeRenderTarget();
+  }
 
   if ( _DirtyStates & (unsigned long)DirtyState::Textures )
   {
@@ -135,6 +184,22 @@ int DeferredRenderer::Update()
 
   if ( _DirtyStates & (unsigned long)DirtyState::SceneEnvMap )
     this -> ReloadEnvMap();
+
+  if ( _DirtyStates & ( (unsigned long)DirtyState::SceneMaterials | (unsigned long)DirtyState::SceneInstances ) )
+    BuildDeferredDrawLists();
+
+  if ( _DirtyStates & (unsigned long)DirtyState::SceneInstances )
+    ComputeSceneBounds();
+
+  UpdateShadowState();
+  int shadowMapSize = std::clamp(_Settings._ShadowMapResolution, 256, 4096);
+  if ( ( _ShadowMapSize != shadowMapSize )
+    || ( _ShadowLocalCapacity != _LocalShadowCasterCount )
+    || ( _ShadowDirectionalCapacity != _DirectionalShadowCasterCount ) )
+  {
+    if ( 0 != InitializeShadowMap() )
+      return 1;
+  }
 
   UpdateUniforms();
  
@@ -160,9 +225,8 @@ int DeferredRenderer::UnloadScene()
 {
   _FrameNum = 0;
 
-  // Delete any GPU mesh buffers we created
   const size_t nb = _MeshVAOs.size();
-  for (size_t i = 0; i < nb; ++i)
+  for ( size_t i = 0; i < nb; ++i )
   {
     GLuint vao = _MeshVAOs[i];
     GLuint vbo = _MeshVBOs[i];
@@ -174,6 +238,690 @@ int DeferredRenderer::UnloadScene()
   _MeshVBOs.clear();
   _MeshEBOs.clear();
   _MeshIndexCount.clear();
+  _TransparentMeshBaseIndices.clear();
+  _TransparentMeshLocalTriCenters.clear();
+  _TransparentMeshSortedIndices.clear();
+  _TransparentMeshSortedTriOrder.clear();
+  _TransparentMeshTriDepths.clear();
+  _OpaqueMeshInstanceIDs.clear();
+  _TransparentMeshInstanceIDs.clear();
+
+  _HasShadowLight = false;
+  _ShadowCasters.clear();
+  _LocalShadowCasterCount = 0;
+  _DirectionalShadowCasterCount = 0;
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ComputeSceneBounds
+// ----------------------------------------------------------------------------
+void DeferredRenderer::ComputeSceneBounds()
+{
+  bool initialized = false;
+  Vec3 low(-10.f), high(10.f);
+
+  const auto & instances = _Scene.GetMeshInstances();
+  const auto & meshes = _Scene.GetMeshes();
+  for ( const MeshInstance & inst : instances )
+  {
+    if ( ( inst._MeshID < 0 ) || ( inst._MeshID >= (int)meshes.size() ) )
+      continue;
+
+    Mesh * mesh = meshes[inst._MeshID];
+    if ( !mesh )
+      continue;
+
+    const AABB<Vec3> & bbox = mesh -> GetBoundingBox();
+    Vec3 corners[8];
+    bbox.Corners(corners);
+
+    for ( const Vec3 & corner : corners )
+    {
+      Vec3 worldCorner = MathUtil::TransformPoint(corner, inst._Transform);
+      if ( !initialized )
+      {
+        low = high = worldCorner;
+        initialized = true;
+      }
+      else
+      {
+        MathUtil::Minimize(low, worldCorner);
+        MathUtil::Maximize(high, worldCorner);
+      }
+    }
+  }
+
+  _SceneBounds._Low = low;
+  _SceneBounds._High = high;
+  _SceneBoundsRadius = std::max( glm::length( high - low ) * 0.5f, 1.f );
+}
+
+// ----------------------------------------------------------------------------
+// ComputeAutoShadowFar
+// ----------------------------------------------------------------------------
+float DeferredRenderer::ComputeAutoShadowFar( const Vec3 & iLightPos ) const
+{
+  Vec3 corners[8];
+  _SceneBounds.Corners(corners);
+
+  float maxDistance = 1.f;
+  for ( const Vec3 & corner : corners )
+    maxDistance = std::max( maxDistance, glm::length( corner - iLightPos ) );
+
+  return maxDistance * 1.05f;
+}
+
+// ----------------------------------------------------------------------------
+// IsTransparentMaterial
+// ----------------------------------------------------------------------------
+bool DeferredRenderer::IsTransparentMaterial( int iMaterialID )
+{
+  const std::vector<Material> & materials = _Scene.GetMaterials();
+  if ( ( iMaterialID < 0 ) || ( static_cast<size_t>(iMaterialID) >= materials.size() ) )
+    return false;
+
+  const Material & mat = materials[iMaterialID];
+  AlphaMode alphaMode = MaterialAlphaMode(mat);
+
+  if ( AlphaMode::Blend == alphaMode )
+    return true;
+
+  if ( mat._SpecTrans > S_TransparentSpecTransThreshold )
+    return true;
+
+  return false;
+}
+
+// ----------------------------------------------------------------------------
+// BuildDeferredDrawLists
+// ----------------------------------------------------------------------------
+void DeferredRenderer::BuildDeferredDrawLists()
+{
+  _OpaqueMeshInstanceIDs.clear();
+  _TransparentMeshInstanceIDs.clear();
+
+  const std::vector<MeshInstance> & instances = _Scene.GetMeshInstances();
+  _OpaqueMeshInstanceIDs.reserve(instances.size());
+  _TransparentMeshInstanceIDs.reserve(instances.size());
+
+  for ( int i = 0; i < static_cast<int>(instances.size()); ++i )
+  {
+    const MeshInstance & inst = instances[i];
+    if ( IsTransparentMaterial( inst._MaterialID ) )
+      _TransparentMeshInstanceIDs.push_back(i);
+    else
+      _OpaqueMeshInstanceIDs.push_back(i);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// SortTransparentInstances
+// ----------------------------------------------------------------------------
+void DeferredRenderer::SortTransparentInstances()
+{
+  if ( _TransparentMeshInstanceIDs.size() < 2 )
+    return;
+
+  Mat4x4 view;
+  _Scene.GetCamera().ComputeLookAtMatrix(view);
+
+  const std::vector<MeshInstance> & instances = _Scene.GetMeshInstances();
+  const std::vector<Mesh*> & meshes = _Scene.GetMeshes();
+
+  std::sort( _TransparentMeshInstanceIDs.begin(), _TransparentMeshInstanceIDs.end(),
+    [&]( int iLhsIdx, int iRhsIdx )
+    {
+      if ( ( iLhsIdx < 0 ) || ( static_cast<size_t>(iLhsIdx) >= instances.size() )
+        || ( iRhsIdx < 0 ) || ( static_cast<size_t>(iRhsIdx) >= instances.size() ) )
+        return iLhsIdx > iRhsIdx;
+
+      const MeshInstance & lhsInst = instances[iLhsIdx];
+      const MeshInstance & rhsInst = instances[iRhsIdx];
+
+      Vec3 lhsWorldCenter(0.f);
+      Vec3 rhsWorldCenter(0.f);
+
+      if ( ( lhsInst._MeshID >= 0 ) && ( static_cast<size_t>(lhsInst._MeshID) < meshes.size() ) && meshes[lhsInst._MeshID] )
+        lhsWorldCenter = MathUtil::TransformPoint( meshes[lhsInst._MeshID] -> GetBoundingBox().Center(), lhsInst._Transform );
+
+      if ( ( rhsInst._MeshID >= 0 ) && ( static_cast<size_t>(rhsInst._MeshID) < meshes.size() ) && meshes[rhsInst._MeshID] )
+        rhsWorldCenter = MathUtil::TransformPoint( meshes[rhsInst._MeshID] -> GetBoundingBox().Center(), rhsInst._Transform );
+
+      float lhsViewZ = ( view * Vec4(lhsWorldCenter, 1.f) ).z;
+      float rhsViewZ = ( view * Vec4(rhsWorldCenter, 1.f) ).z;
+
+      return lhsViewZ < rhsViewZ;
+    } );
+}
+
+// ----------------------------------------------------------------------------
+// BuildTransparentMeshTriangleData
+// ----------------------------------------------------------------------------
+void DeferredRenderer::BuildTransparentMeshTriangleData( size_t iMeshID, const std::vector<Vec3> & iPositions, const std::vector<uint32_t> & iIndices )
+{
+  if ( iMeshID >= _TransparentMeshBaseIndices.size() )
+    return;
+
+  std::vector<uint32_t> & baseIndices = _TransparentMeshBaseIndices[iMeshID];
+  std::vector<Vec3> & localCenters = _TransparentMeshLocalTriCenters[iMeshID];
+  std::vector<uint32_t> & sortedIndices = _TransparentMeshSortedIndices[iMeshID];
+  std::vector<int> & sortedTriOrder = _TransparentMeshSortedTriOrder[iMeshID];
+  std::vector<float> & triDepths = _TransparentMeshTriDepths[iMeshID];
+
+  baseIndices.clear();
+  localCenters.clear();
+  sortedIndices.clear();
+  sortedTriOrder.clear();
+  triDepths.clear();
+
+  if ( iIndices.size() < 3 )
+    return;
+
+  const size_t triCount = iIndices.size() / 3;
+  baseIndices.reserve(triCount * 3);
+  localCenters.reserve(triCount);
+
+  for ( size_t ti = 0; ti < triCount; ++ti )
+  {
+    size_t base = ti * 3;
+    uint32_t i0 = iIndices[base + 0];
+    uint32_t i1 = iIndices[base + 1];
+    uint32_t i2 = iIndices[base + 2];
+
+    if ( ( static_cast<size_t>(i0) >= iPositions.size() )
+      || ( static_cast<size_t>(i1) >= iPositions.size() )
+      || ( static_cast<size_t>(i2) >= iPositions.size() ) )
+      continue;
+
+    baseIndices.push_back(i0);
+    baseIndices.push_back(i1);
+    baseIndices.push_back(i2);
+
+    Vec3 center = ( iPositions[i0] + iPositions[i1] + iPositions[i2] ) * (1.f / 3.f);
+    localCenters.push_back(center);
+  }
+
+  sortedIndices = baseIndices;
+  sortedTriOrder.resize(localCenters.size(), 0);
+  triDepths.resize(localCenters.size(), 0.f);
+  std::iota(sortedTriOrder.begin(), sortedTriOrder.end(), 0);
+}
+
+// ----------------------------------------------------------------------------
+// UpdateSortedTransparentMeshIndices
+// ----------------------------------------------------------------------------
+bool DeferredRenderer::UpdateSortedTransparentMeshIndices( int iMeshID, const Mat4x4 & iModel, const Mat4x4 & iView )
+{
+  if ( ( iMeshID < 0 ) || ( static_cast<size_t>(iMeshID) >= _MeshEBOs.size() ) )
+    return false;
+  if ( static_cast<size_t>(iMeshID) >= _MeshVAOs.size() )
+    return false;
+  if ( ( static_cast<size_t>(iMeshID) >= _TransparentMeshBaseIndices.size() )
+    || ( static_cast<size_t>(iMeshID) >= _TransparentMeshLocalTriCenters.size() )
+    || ( static_cast<size_t>(iMeshID) >= _TransparentMeshSortedIndices.size() )
+    || ( static_cast<size_t>(iMeshID) >= _TransparentMeshSortedTriOrder.size() )
+    || ( static_cast<size_t>(iMeshID) >= _TransparentMeshTriDepths.size() ) )
+    return false;
+
+  const std::vector<uint32_t> & baseIndices = _TransparentMeshBaseIndices[iMeshID];
+  const std::vector<Vec3> & localCenters = _TransparentMeshLocalTriCenters[iMeshID];
+  std::vector<uint32_t> & sortedIndices = _TransparentMeshSortedIndices[iMeshID];
+  std::vector<int> & sortedTriOrder = _TransparentMeshSortedTriOrder[iMeshID];
+  std::vector<float> & triDepths = _TransparentMeshTriDepths[iMeshID];
+
+  if ( localCenters.empty() || baseIndices.empty() )
+    return false;
+
+  if ( ( baseIndices.size() % 3 ) != 0 )
+    return false;
+
+  const size_t triCount = localCenters.size();
+  if ( triCount != ( baseIndices.size() / 3 ) )
+    return false;
+
+  if ( sortedTriOrder.size() != triCount )
+  {
+    sortedTriOrder.resize(triCount, 0);
+    std::iota(sortedTriOrder.begin(), sortedTriOrder.end(), 0);
+  }
+  if ( triDepths.size() != triCount )
+    triDepths.resize(triCount, 0.f);
+  if ( sortedIndices.size() != baseIndices.size() )
+    sortedIndices.resize(baseIndices.size(), 0u);
+
+  for ( size_t ti = 0; ti < triCount; ++ti )
+  {
+    Vec3 worldCenter = MathUtil::TransformPoint(localCenters[ti], iModel);
+    triDepths[ti] = ( iView * Vec4(worldCenter, 1.f) ).z;
+  }
+
+  std::sort( sortedTriOrder.begin(), sortedTriOrder.end(),
+    [&]( int iLhs, int iRhs )
+    {
+      return triDepths[iLhs] < triDepths[iRhs];
+    } );
+
+  for ( size_t sortedIdx = 0; sortedIdx < triCount; ++sortedIdx )
+  {
+    size_t srcTri = static_cast<size_t>(sortedTriOrder[sortedIdx]);
+    size_t srcBase = srcTri * 3;
+    size_t dstBase = sortedIdx * 3;
+    sortedIndices[dstBase + 0] = baseIndices[srcBase + 0];
+    sortedIndices[dstBase + 1] = baseIndices[srcBase + 1];
+    sortedIndices[dstBase + 2] = baseIndices[srcBase + 2];
+  }
+
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateShadowState
+// ----------------------------------------------------------------------------
+int DeferredRenderer::UpdateShadowState()
+{
+  _ShadowCasters.clear();
+  _LocalShadowCasterCount = 0;
+  _DirectionalShadowCasterCount = 0;
+  _HasShadowLight = false;
+  _ShadowFar = ( _Settings._ShadowFar > 0.f ) ? ( _Settings._ShadowFar ) : ( std::max( _SceneBoundsRadius * 2.f, 25.f ) );
+
+  if ( !_Settings._ShadowMapping )
+    return 0;
+
+  struct ShadowCandidate
+  {
+    int _LightIndex = -1;
+    LightType _Type = LightType::SphereLight;
+    Vec3 _Pos = Vec3(0.f);
+    Vec3 _Dir = Vec3(0.f, 1.f, 0.f);
+    float _Far = 25.f;
+    float _Score = 0.f;
+  };
+
+  std::vector<ShadowCandidate> candidates;
+  candidates.reserve(_Scene.GetNbLights());
+  Vec3 cameraPos = _Scene.GetCamera().GetPos();
+  Vec3 sceneCenter = _SceneBounds.Center();
+  for ( int i = 0; i < _Scene.GetNbLights(); ++i )
+  {
+    Light * curLight = _Scene.GetLight(i);
+    if ( !curLight )
+      continue;
+
+    LightType lightType = (LightType) curLight -> _Type;
+    if ( ( LightType::DistantLight != lightType )
+      && ( LightType::SphereLight != lightType )
+      && ( LightType::RectLight != lightType ) )
+      continue;
+
+    if ( !curLight -> _CastShadow || ( curLight -> _Intensity <= 0.f ) )
+      continue;
+
+    float emittedPower = glm::length(curLight -> _Emission * curLight -> _Intensity);
+    if ( emittedPower <= 0.f )
+      continue;
+
+    ShadowCandidate candidate;
+    candidate._LightIndex = i;
+    candidate._Type = lightType;
+    candidate._Pos = curLight -> _Pos;
+    candidate._Far = ( curLight -> _ShadowRadius > 0.f ) ? ( curLight -> _ShadowRadius ) : ( _Settings._ShadowFar );
+
+    if ( LightType::DistantLight == lightType )
+    {
+      candidate._Dir = ( glm::length(curLight -> _Pos) > 0.f ) ? ( glm::normalize(curLight -> _Pos) ) : ( Vec3(0.f, 1.f, 0.f) );
+      candidate._Score = 1000000.f + emittedPower;
+    }
+    else
+    {
+      if ( candidate._Far <= 0.f )
+        candidate._Far = ComputeAutoShadowFar(candidate._Pos);
+
+      float cameraDistance = glm::length(candidate._Pos - cameraPos);
+      float sceneDistance = glm::length(candidate._Pos - sceneCenter);
+      float relevanceDistance = std::min(cameraDistance, sceneDistance);
+      float effectiveRadius = std::max(candidate._Far, 1.f);
+      candidate._Score = emittedPower / ( 1.f + relevanceDistance / effectiveRadius );
+    }
+
+    candidates.push_back(candidate);
+  }
+
+  std::stable_sort(candidates.begin(), candidates.end(), []( const ShadowCandidate & iA, const ShadowCandidate & iB )
+  {
+    if ( iA._Score == iB._Score )
+      return iA._LightIndex < iB._LightIndex;
+    return iA._Score > iB._Score;
+  });
+
+  const Vec3 lookDirs[6] = {
+    Vec3( 1.f,  0.f,  0.f),
+    Vec3(-1.f,  0.f,  0.f),
+    Vec3( 0.f,  1.f,  0.f),
+    Vec3( 0.f, -1.f,  0.f),
+    Vec3( 0.f,  0.f,  1.f),
+    Vec3( 0.f,  0.f, -1.f)
+  };
+  const Vec3 upDirs[6] = {
+    Vec3(0.f, -1.f,  0.f),
+    Vec3(0.f, -1.f,  0.f),
+    Vec3(0.f,  0.f,  1.f),
+    Vec3(0.f,  0.f, -1.f),
+    Vec3(0.f, -1.f,  0.f),
+    Vec3(0.f, -1.f,  0.f)
+  };
+
+  int maxShadowCasters = std::clamp(_Settings._MaxShadowCastingLights, 1, S_MaxDeferredShadowCasters);
+  int selectedCount = std::min(maxShadowCasters, static_cast<int>(candidates.size()));
+  _ShadowCasters.reserve(selectedCount);
+  for ( int i = 0; i < selectedCount; ++i )
+  {
+    const ShadowCandidate & candidate = candidates[i];
+    ShadowCaster caster;
+    caster._LightIndex = candidate._LightIndex;
+    caster._Type = candidate._Type;
+    caster._Pos = candidate._Pos;
+    caster._Dir = candidate._Dir;
+    caster._Far = candidate._Far;
+
+    if ( LightType::DistantLight == caster._Type )
+    {
+      caster._Layer = _DirectionalShadowCasterCount++;
+
+      float lightDistance = std::max( _SceneBoundsRadius * 2.f, 10.f );
+      Vec3 lightPos = _SceneBounds.Center() + caster._Dir * lightDistance;
+      Vec3 up = ( std::abs(glm::dot(caster._Dir, Vec3(0.f, 1.f, 0.f))) > 0.99f ) ? ( Vec3(0.f, 0.f, 1.f) ) : ( Vec3(0.f, 1.f, 0.f) );
+      Mat4x4 lightView = glm::lookAt(lightPos, _SceneBounds.Center(), up);
+
+      Vec3 corners[8];
+      _SceneBounds.Corners(corners);
+
+      Vec3 lightSpaceLow( MAX_FLOAT );
+      Vec3 lightSpaceHigh( -MAX_FLOAT );
+      for ( const Vec3 & corner : corners )
+      {
+        Vec4 lightSpaceCorner = lightView * Vec4(corner, 1.f);
+        MathUtil::Minimize(lightSpaceLow, Vec3(lightSpaceCorner));
+        MathUtil::Maximize(lightSpaceHigh, Vec3(lightSpaceCorner));
+      }
+
+      float padXY = std::max( _SceneBoundsRadius * 0.1f, 1.f );
+      float nearPlane = 0.1f;
+      float farPlane = lightDistance + _SceneBoundsRadius * 4.f;
+      Mat4x4 shadowProj = glm::ortho(lightSpaceLow.x - padXY, lightSpaceHigh.x + padXY,
+                                     lightSpaceLow.y - padXY, lightSpaceHigh.y + padXY,
+                                     nearPlane, farPlane);
+      caster._DirectionalViewProj = shadowProj * lightView;
+    }
+    else
+    {
+      caster._Layer = _LocalShadowCasterCount++;
+      _ShadowFar = std::max(_ShadowFar, caster._Far);
+      Mat4x4 shadowProj = glm::perspective(MathUtil::ToRadians(90.f), 1.0f, _ShadowNear, caster._Far);
+      for ( int face = 0; face < 6; ++face )
+      {
+        Mat4x4 view = glm::lookAt(caster._Pos, caster._Pos + lookDirs[face], upDirs[face]);
+        caster._CubeViewProj[face] = shadowProj * view;
+      }
+    }
+
+    _ShadowCasters.push_back(caster);
+  }
+
+  _HasShadowLight = !_ShadowCasters.empty();
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeShadowMap
+// ----------------------------------------------------------------------------
+int DeferredRenderer::InitializeShadowMap()
+{
+  GLUtil::DeleteFBO(_ShadowFBO);
+  GLUtil::DeleteTEX(_ShadowCubeMapTEX);
+  GLUtil::DeleteTEX(_Shadow2DMapTEX);
+
+  int shadowMapSize = std::clamp(_Settings._ShadowMapResolution, 256, 4096);
+  _ShadowMapSize = shadowMapSize;
+  _ShadowLocalCapacity = _LocalShadowCasterCount;
+  _ShadowDirectionalCapacity = _DirectionalShadowCasterCount;
+
+  if ( !_HasShadowLight )
+    return 0;
+
+  GLTextureDesc shadowCubeDesc;
+  shadowCubeDesc._Target         = _ShadowCubeMapTEX._Target;
+  shadowCubeDesc._Slot           = _ShadowCubeMapTEX._Slot;
+  shadowCubeDesc._Width          = shadowMapSize;
+  shadowCubeDesc._Height         = shadowMapSize;
+  shadowCubeDesc._Depth          = std::max(1, _ShadowLocalCapacity * 6);
+  shadowCubeDesc._InternalFormat = _ShadowCubeMapTEX._InternalFormat;
+  shadowCubeDesc._DataFormat     = _ShadowCubeMapTEX._DataFormat;
+  shadowCubeDesc._DataType       = _ShadowCubeMapTEX._DataType;
+  shadowCubeDesc._MinFilter      = GL_LINEAR;
+  shadowCubeDesc._MagFilter      = GL_LINEAR;
+  shadowCubeDesc._WrapS          = GL_CLAMP_TO_EDGE;
+  shadowCubeDesc._WrapT          = GL_CLAMP_TO_EDGE;
+  shadowCubeDesc._WrapR          = GL_CLAMP_TO_EDGE;
+  if ( _ShadowLocalCapacity > 0 )
+    GLUtil::CreateTexture(shadowCubeDesc, _ShadowCubeMapTEX);
+
+  GLTextureDesc shadow2DDesc = shadowCubeDesc;
+  shadow2DDesc._Target = _Shadow2DMapTEX._Target;
+  shadow2DDesc._Slot   = _Shadow2DMapTEX._Slot;
+  shadow2DDesc._Depth  = std::max(1, _ShadowDirectionalCapacity);
+  if ( _ShadowDirectionalCapacity > 0 )
+    GLUtil::CreateTexture(shadow2DDesc, _Shadow2DMapTEX);
+
+  glGenFramebuffers(1, &_ShadowFBO._Handle);
+  glBindFramebuffer(GL_FRAMEBUFFER, _ShadowFBO._Handle);
+  if ( _ShadowDirectionalCapacity > 0 )
+    glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, _Shadow2DMapTEX._Handle, 0, 0);
+  else
+    glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, _ShadowCubeMapTEX._Handle, 0, 0);
+  glDrawBuffer(GL_NONE);
+  glReadBuffer(GL_NONE);
+
+  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+  {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    GLUtil::DeleteFBO(_ShadowFBO);
+    std::cout << "DeferredRenderer : Shadow framebuffer not complete !" << std::endl;
+    return 1;
+  }
+
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  return 0;
+}
+// ----------------------------------------------------------------------------
+// InitializeSSAO
+// ----------------------------------------------------------------------------
+int DeferredRenderer::InitializeSSAO()
+{
+  GLUtil::DeleteFBO(_SSAOFBO);
+  GLUtil::DeleteFBO(_SSAOBlurFBO);
+  GLUtil::DeleteTEX(_SSAOTEX);
+  GLUtil::DeleteTEX(_SSAOBlurTEX);
+  GLUtil::DeleteTEX(_SSAONoiseTEX);
+
+  GLTextureDesc ssaoDesc;
+  ssaoDesc._Target         = _SSAOTEX._Target;
+  ssaoDesc._Slot           = _SSAOTEX._Slot;
+  ssaoDesc._Width          = RenderWidth();
+  ssaoDesc._Height         = RenderHeight();
+  ssaoDesc._InternalFormat = _SSAOTEX._InternalFormat;
+  ssaoDesc._DataFormat     = _SSAOTEX._DataFormat;
+  ssaoDesc._DataType       = _SSAOTEX._DataType;
+  ssaoDesc._MinFilter      = GL_LINEAR;
+  ssaoDesc._MagFilter      = GL_LINEAR;
+  GLUtil::CreateTexture(ssaoDesc, _SSAOTEX);
+
+  GLFrameBufferDesc ssaoFBODesc;
+  ssaoFBODesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_SSAOTEX });
+  if ( !GLUtil::CreateFrameBuffer(ssaoFBODesc, _SSAOFBO) )
+  {
+    std::cout << "DeferredRenderer : SSAO framebuffer not complete !" << std::endl;
+    return 1;
+  }
+
+  ssaoDesc._Slot           = _SSAOBlurTEX._Slot;
+  ssaoDesc._InternalFormat = _SSAOBlurTEX._InternalFormat;
+  ssaoDesc._DataFormat     = _SSAOBlurTEX._DataFormat;
+  ssaoDesc._DataType       = _SSAOBlurTEX._DataType;
+  GLUtil::CreateTexture(ssaoDesc, _SSAOBlurTEX);
+
+  GLFrameBufferDesc ssaoBlurFBODesc;
+  ssaoBlurFBODesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_SSAOBlurTEX });
+  if ( !GLUtil::CreateFrameBuffer(ssaoBlurFBODesc, _SSAOBlurFBO) )
+  {
+    std::cout << "DeferredRenderer : SSAO blur framebuffer not complete !" << std::endl;
+    return 1;
+  }
+
+  std::mt19937 rng(1337u);
+  std::uniform_real_distribution<float> dist01(0.f, 1.f);
+  std::uniform_real_distribution<float> dist11(-1.f, 1.f);
+
+  for ( int i = 0; i < (int)_SSAOKernel.size(); ++i )
+  {
+    Vec3 sample(dist11(rng), dist11(rng), dist01(rng));
+    if ( glm::length(sample) > 0.f )
+      sample = glm::normalize(sample);
+
+    sample *= dist01(rng);
+    float scale = float(i) / float(_SSAOKernel.size());
+    scale = MathUtil::Lerp(0.1f, 1.0f, scale * scale);
+    _SSAOKernel[i] = sample * scale;
+  }
+
+  std::vector<Vec4> noiseData;
+  noiseData.reserve(16);
+  for ( int i = 0; i < 16; ++i )
+  {
+    Vec3 noise(dist11(rng), dist11(rng), 0.f);
+    if ( glm::length(noise) > 0.f )
+      noise = glm::normalize(noise);
+    noiseData.push_back(Vec4(noise, 1.f));
+  }
+
+  GLTextureDesc noiseDesc;
+  noiseDesc._Target         = _SSAONoiseTEX._Target;
+  noiseDesc._Slot           = _SSAONoiseTEX._Slot;
+  noiseDesc._Width          = 4;
+  noiseDesc._Height         = 4;
+  noiseDesc._InternalFormat = _SSAONoiseTEX._InternalFormat;
+  noiseDesc._DataFormat     = _SSAONoiseTEX._DataFormat;
+  noiseDesc._DataType       = _SSAONoiseTEX._DataType;
+  noiseDesc._Data           = noiseData.data();
+  noiseDesc._MinFilter      = GL_NEAREST;
+  noiseDesc._MagFilter      = GL_NEAREST;
+  noiseDesc._WrapS          = GL_REPEAT;
+  noiseDesc._WrapT          = GL_REPEAT;
+  GLUtil::CreateTexture(noiseDesc, _SSAONoiseTEX);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeSSR
+// ----------------------------------------------------------------------------
+int DeferredRenderer::InitializeSSR()
+{
+  GLUtil::DeleteFBO(_SSRFBO);
+  GLUtil::DeleteFBO(_SSRSourceFBO);
+  GLUtil::DeleteTEX(_SSRTEX);
+  GLUtil::DeleteTEX(_SSRSourceTEX);
+
+  GLTextureDesc ssrDesc;
+  ssrDesc._Target         = _SSRTEX._Target;
+  ssrDesc._Slot           = _SSRTEX._Slot;
+  ssrDesc._Width          = RenderWidth();
+  ssrDesc._Height         = RenderHeight();
+  ssrDesc._InternalFormat = _SSRTEX._InternalFormat;
+  ssrDesc._DataFormat     = _SSRTEX._DataFormat;
+  ssrDesc._DataType       = _SSRTEX._DataType;
+  ssrDesc._MinFilter      = GL_LINEAR;
+  ssrDesc._MagFilter      = GL_LINEAR;
+  ssrDesc._WrapS          = GL_CLAMP_TO_EDGE;
+  ssrDesc._WrapT          = GL_CLAMP_TO_EDGE;
+  GLUtil::CreateTexture(ssrDesc, _SSRTEX);
+
+  GLFrameBufferDesc ssrFBODesc;
+  ssrFBODesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_SSRTEX });
+  if ( !GLUtil::CreateFrameBuffer(ssrFBODesc, _SSRFBO) )
+  {
+    std::cout << "DeferredRenderer : SSR framebuffer not complete !" << std::endl;
+    return 1;
+  }
+
+  ssrDesc._Slot           = _SSRSourceTEX._Slot;
+  ssrDesc._InternalFormat = _SSRSourceTEX._InternalFormat;
+  ssrDesc._DataFormat     = _SSRSourceTEX._DataFormat;
+  ssrDesc._DataType       = _SSRSourceTEX._DataType;
+  GLUtil::CreateTexture(ssrDesc, _SSRSourceTEX);
+
+  GLFrameBufferDesc ssrSourceFBODesc;
+  ssrSourceFBODesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_SSRSourceTEX });
+  if ( !GLUtil::CreateFrameBuffer(ssrSourceFBODesc, _SSRSourceFBO) )
+  {
+    std::cout << "DeferredRenderer : SSR source framebuffer not complete !" << std::endl;
+    return 1;
+  }
+
+  glBindFramebuffer(GL_FRAMEBUFFER, _SSRSourceFBO._Handle);
+  glViewport(0, 0, RenderWidth(), RenderHeight());
+  glClearColor(0.f, 0.f, 0.f, 1.f);
+  glClear(GL_COLOR_BUFFER_BIT);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeBRDFLUT
+// ----------------------------------------------------------------------------
+int DeferredRenderer::InitializeBRDFLUT()
+{
+  GLUtil::DeleteFBO(_BRDFFBO);
+  GLUtil::DeleteTEX(_BRDFLUTTEX);
+
+  const int lutSize = 256;
+  GLTextureDesc lutDesc;
+  lutDesc._Target         = _BRDFLUTTEX._Target;
+  lutDesc._Slot           = _BRDFLUTTEX._Slot;
+  lutDesc._Width          = lutSize;
+  lutDesc._Height         = lutSize;
+  lutDesc._InternalFormat = _BRDFLUTTEX._InternalFormat;
+  lutDesc._DataFormat     = _BRDFLUTTEX._DataFormat;
+  lutDesc._DataType       = _BRDFLUTTEX._DataType;
+  lutDesc._MinFilter      = GL_LINEAR;
+  lutDesc._MagFilter      = GL_LINEAR;
+  GLUtil::CreateTexture(lutDesc, _BRDFLUTTEX);
+
+  GLFrameBufferDesc lutFBODesc;
+  lutFBODesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_BRDFLUTTEX });
+  if ( !GLUtil::CreateFrameBuffer(lutFBODesc, _BRDFFBO) )
+  {
+    std::cout << "DeferredRenderer : BRDF LUT framebuffer not complete !" << std::endl;
+    return 1;
+  }
+
+  if ( _BRDFLUTShader )
+  {
+    glBindFramebuffer(GL_FRAMEBUFFER, _BRDFFBO._Handle);
+    glViewport(0, 0, lutSize, lutSize);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    glClearColor(0.f, 0.f, 0.f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    _Quad.Render(*_BRDFLUTShader);
+  }
+
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   return 0;
 }
@@ -196,6 +944,11 @@ int DeferredRenderer::ReloadScene()
   _MeshVBOs.assign(meshCount, 0u);
   _MeshEBOs.assign(meshCount, 0u);
   _MeshIndexCount.assign(meshCount, 0);
+  _TransparentMeshBaseIndices.assign(meshCount, {});
+  _TransparentMeshLocalTriCenters.assign(meshCount, {});
+  _TransparentMeshSortedIndices.assign(meshCount, {});
+  _TransparentMeshSortedTriOrder.assign(meshCount, {});
+  _TransparentMeshTriDepths.assign(meshCount, {});
 
   for ( size_t mi = 0; mi < meshCount; ++mi )
   {
@@ -275,34 +1028,54 @@ int DeferredRenderer::ReloadScene()
     _MeshVBOs[mi] = vbo;
     _MeshEBOs[mi] = ebo;
     _MeshIndexCount[mi] = static_cast<int>(outIndices.size());
+
+    std::vector<Vec3> gpuPositions;
+    gpuPositions.reserve(outVertices.size());
+    for ( const GPUMeshVertex & vertex : outVertices )
+      gpuPositions.push_back(vertex._Pos);
+    BuildTransparentMeshTriangleData(mi, gpuPositions, outIndices);
   }
+
+  ComputeSceneBounds();
 
   // Materials
   if ( _Scene.GetTextureArrayIDs().size() )
   {
     GLUtil::InitializeTBO(_TexIndTBO, sizeof(int) * _Scene.GetTextureArrayIDs().size(), &_Scene.GetTextureArrayIDs()[0], GL_R32I);
 
-    glGenTextures(1, &_TexArrayTEX._Handle);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTEX._Handle);
-    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, _Settings._TextureSize.x, _Settings._TextureSize.y, _Scene.GetNbCompiledTex(), 0, GL_RGBA, GL_UNSIGNED_BYTE, &_Scene.GetTextureArray()[0]);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    if ( _GenerateMipMaps )
-      glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    else
-      glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    GLTextureDesc texArrayDesc;
+    texArrayDesc._Target         = _TexArrayTEX._Target;
+    texArrayDesc._Slot           = _TexArrayTEX._Slot;
+    texArrayDesc._Width          = _Settings._TextureSize.x;
+    texArrayDesc._Height         = _Settings._TextureSize.y;
+    texArrayDesc._Depth          = _Scene.GetNbCompiledTex();
+    texArrayDesc._InternalFormat = _TexArrayTEX._InternalFormat;
+    texArrayDesc._DataFormat     = _TexArrayTEX._DataFormat;
+    texArrayDesc._DataType       = _TexArrayTEX._DataType;
+    texArrayDesc._Data           = &_Scene.GetTextureArray()[0];
+    texArrayDesc._MinFilter      = _GenerateMipMaps ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR;
+    texArrayDesc._MagFilter      = GL_LINEAR;
+    texArrayDesc._GenerateMipMap = true;
+    GLUtil::CreateTexture(texArrayDesc, _TexArrayTEX);
 
     if ( _GenerateMipMaps && _AnisotropicLevel )
       GLUtil::EnableAnisotropyIfAvailable(_TexArrayTEX, (float)_AnisotropicLevel);
   }
 
-  glGenTextures(1, &_MaterialsTEX._Handle);
-  glBindTexture(GL_TEXTURE_2D, _MaterialsTEX._Handle);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>((sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size()), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetMaterials()[0]);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glBindTexture(GL_TEXTURE_2D, 0);
+  GLTextureDesc materialsDesc;
+  materialsDesc._Target         = _MaterialsTEX._Target;
+  materialsDesc._Slot           = _MaterialsTEX._Slot;
+  materialsDesc._Width          = static_cast<GLsizei>((sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size());
+  materialsDesc._Height         = 1;
+  materialsDesc._InternalFormat = _MaterialsTEX._InternalFormat;
+  materialsDesc._DataFormat     = _MaterialsTEX._DataFormat;
+  materialsDesc._DataType       = _MaterialsTEX._DataType;
+  materialsDesc._Data           = &_Scene.GetMaterials()[0];
+  materialsDesc._MinFilter      = GL_NEAREST;
+  materialsDesc._MagFilter      = GL_NEAREST;
+  GLUtil::CreateTexture(materialsDesc, _MaterialsTEX);
+
+  BuildDeferredDrawLists();
 
   return 0;
 }
@@ -334,12 +1107,21 @@ int DeferredRenderer::ReloadEnvMap()
 
   if ( _Scene.GetEnvMap().IsInitialized() )
   {
-    glGenTextures(1, &_EnvMapTEX._Handle);
-    glBindTexture(GL_TEXTURE_2D, _EnvMapTEX._Handle);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, _Scene.GetEnvMap().GetWidth(), _Scene.GetEnvMap().GetHeight(), 0, GL_RGB, GL_FLOAT, _Scene.GetEnvMap().GetRawData());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    GLTextureDesc envDesc;
+    envDesc._Target         = _EnvMapTEX._Target;
+    envDesc._Slot           = _EnvMapTEX._Slot;
+    envDesc._Width          = _Scene.GetEnvMap().GetWidth();
+    envDesc._Height         = _Scene.GetEnvMap().GetHeight();
+    envDesc._InternalFormat = _EnvMapTEX._InternalFormat;
+    envDesc._DataFormat     = _EnvMapTEX._DataFormat;
+    envDesc._DataType       = _EnvMapTEX._DataType;
+    envDesc._Data           = _Scene.GetEnvMap().GetRawData();
+    envDesc._MinFilter      = GL_LINEAR_MIPMAP_LINEAR;
+    envDesc._MagFilter      = GL_LINEAR;
+    envDesc._WrapS          = GL_REPEAT;
+    envDesc._WrapT          = GL_CLAMP_TO_EDGE;
+    envDesc._GenerateMipMap = true;
+    GLUtil::CreateTexture(envDesc, _EnvMapTEX);
 
     _Scene.GetEnvMap().SetHandle(_EnvMapTEX._Handle);
   }
@@ -357,59 +1139,79 @@ int DeferredRenderer::InitializeFrameBuffers()
   _Settings._RenderResolution.x = int(_Settings._WindowResolution.x * RenderScale());
   _Settings._RenderResolution.y = int(_Settings._WindowResolution.y * RenderScale());
 
-  // Albedo (8-bit RGBA)
-  GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA8, RenderWidth(), RenderHeight(), GL_RGBA, GL_UNSIGNED_BYTE, nullptr, _GAlbedoTEX);
+  GLTextureDesc targetDesc;
+  targetDesc._Target = GL_TEXTURE_2D;
+  targetDesc._Width  = RenderWidth();
+  targetDesc._Height = RenderHeight();
 
-  // Normals (high precision)
-  GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA16F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _GNormalTEX);
+  targetDesc._Slot           = _GAlbedoTEX._Slot;
+  targetDesc._InternalFormat = _GAlbedoTEX._InternalFormat;
+  targetDesc._DataFormat     = _GAlbedoTEX._DataFormat;
+  targetDesc._DataType       = _GAlbedoTEX._DataType;
+  GLUtil::CreateTexture(targetDesc, _GAlbedoTEX);
 
-  // World positions (high precision)
-  GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA16F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _GPositionTEX);
+  targetDesc._Slot           = _GNormalTEX._Slot;
+  targetDesc._InternalFormat = _GNormalTEX._InternalFormat;
+  targetDesc._DataFormat     = _GNormalTEX._DataFormat;
+  targetDesc._DataType       = _GNormalTEX._DataType;
+  GLUtil::CreateTexture(targetDesc, _GNormalTEX);
 
-  // Depth
-  GLUtil::GenTexture(GL_TEXTURE_2D, GL_DEPTH_COMPONENT24, RenderWidth(), RenderHeight(), GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr, _GDepthTEX, GL_NEAREST, GL_NEAREST);
+  targetDesc._Slot           = _GPositionTEX._Slot;
+  targetDesc._InternalFormat = _GPositionTEX._InternalFormat;
+  targetDesc._DataFormat     = _GPositionTEX._DataFormat;
+  targetDesc._DataType       = _GPositionTEX._DataType;
+  GLUtil::CreateTexture(targetDesc, _GPositionTEX);
 
-  // Create / configure G-buffer FBO
-  glGenFramebuffers(1, &_GBufferFBO._Handle);
-  glBindFramebuffer(GL_FRAMEBUFFER, _GBufferFBO._Handle);
+  targetDesc._Slot           = _GMaterialTEX._Slot;
+  targetDesc._InternalFormat = _GMaterialTEX._InternalFormat;
+  targetDesc._DataFormat     = _GMaterialTEX._DataFormat;
+  targetDesc._DataType       = _GMaterialTEX._DataType;
+  GLUtil::CreateTexture(targetDesc, _GMaterialTEX);
 
-  _GBufferFBO._Tex.clear();
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _GAlbedoTEX._Handle, 0);
-  _GBufferFBO._Tex.push_back(_GAlbedoTEX);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, _GNormalTEX._Handle, 0);
-  _GBufferFBO._Tex.push_back(_GNormalTEX);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, _GPositionTEX._Handle, 0);
-  _GBufferFBO._Tex.push_back(_GPositionTEX);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,  GL_TEXTURE_2D, _GDepthTEX._Handle, 0);
-  _GBufferFBO._Tex.push_back(_GDepthTEX);
+  targetDesc._Slot           = _GEmissionTEX._Slot;
+  targetDesc._InternalFormat = _GEmissionTEX._InternalFormat;
+  targetDesc._DataFormat     = _GEmissionTEX._DataFormat;
+  targetDesc._DataType       = _GEmissionTEX._DataType;
+  GLUtil::CreateTexture(targetDesc, _GEmissionTEX);
 
-  GLenum DrawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
-  glDrawBuffers(3, DrawBuffers);
-  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+  targetDesc._Slot           = _GDepthTEX._Slot;
+  targetDesc._InternalFormat = _GDepthTEX._InternalFormat;
+  targetDesc._DataFormat     = _GDepthTEX._DataFormat;
+  targetDesc._DataType       = _GDepthTEX._DataType;
+  targetDesc._MinFilter      = GL_NEAREST;
+  targetDesc._MagFilter      = GL_NEAREST;
+  GLUtil::CreateTexture(targetDesc, _GDepthTEX);
+
+  GLFrameBufferDesc gBufferDesc;
+  gBufferDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_GAlbedoTEX });
+  gBufferDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT1, &_GNormalTEX });
+  gBufferDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT2, &_GPositionTEX });
+  gBufferDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT3, &_GMaterialTEX });
+  gBufferDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT4, &_GEmissionTEX });
+  gBufferDesc._Attachments.push_back({ GL_DEPTH_ATTACHMENT, &_GDepthTEX });
+  if ( !GLUtil::CreateFrameBuffer(gBufferDesc, _GBufferFBO) )
   {
     std::cout << "DeferredRenderer : G-buffer framebuffer not complete !" << std::endl;
     return 1;
   }
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   // Lighting target (single HDR target)
-  GLUtil::GenTexture(GL_TEXTURE_2D, GL_RGBA32F, RenderWidth(), RenderHeight(), GL_RGBA, GL_FLOAT, nullptr, _LightingTEX);
+  targetDesc._Slot           = _LightingTEX._Slot;
+  targetDesc._InternalFormat = _LightingTEX._InternalFormat;
+  targetDesc._DataFormat     = _LightingTEX._DataFormat;
+  targetDesc._DataType       = _LightingTEX._DataType;
+  targetDesc._MinFilter      = GL_LINEAR;
+  targetDesc._MagFilter      = GL_LINEAR;
+  GLUtil::CreateTexture(targetDesc, _LightingTEX);
 
-  glGenFramebuffers(1, &_LightingFBO._Handle);
-  glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
-
-  _LightingFBO._Tex.clear();
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _LightingTEX._Handle, 0);
-  _LightingFBO._Tex.push_back(_LightingTEX);
-
-  GLenum LightDrawBuffers[] = { GL_COLOR_ATTACHMENT0 };
-  glDrawBuffers(1, LightDrawBuffers);
-  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+  GLFrameBufferDesc lightingDesc;
+  lightingDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_LightingTEX });
+  lightingDesc._Attachments.push_back({ GL_DEPTH_ATTACHMENT, &_GDepthTEX, GL_TEXTURE_2D, 0, false });
+  if ( !GLUtil::CreateFrameBuffer(lightingDesc, _LightingFBO) )
   {
     std::cout << "DeferredRenderer : Lighting framebuffer not complete !" << std::endl;
     return 1;
   }
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   return 0;
 }
@@ -424,10 +1226,13 @@ int DeferredRenderer::ResizeRenderTarget()
 
   GLUtil::ResizeFBO(_GBufferFBO, RenderWidth(), RenderHeight());
   GLUtil::ResizeFBO(_LightingFBO, RenderWidth(), RenderHeight());
+  GLUtil::ResizeFBO(_SSAOFBO, RenderWidth(), RenderHeight());
+  GLUtil::ResizeFBO(_SSAOBlurFBO, RenderWidth(), RenderHeight());
+  GLUtil::ResizeFBO(_SSRFBO, RenderWidth(), RenderHeight());
+  GLUtil::ResizeFBO(_SSRSourceFBO, RenderWidth(), RenderHeight());
 
   return 0;
 }
-
 // ----------------------------------------------------------------------------
 // RecompileShaders
 // ----------------------------------------------------------------------------
@@ -449,6 +1254,30 @@ int DeferredRenderer::RecompileShaders()
     return 1;
   _LightingShader.reset(lightProg);
 
+  ShaderSource ssaoFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_SSAO.glsl"));
+  ShaderProgram* ssaoProg = ShaderProgram::LoadShaders(defaultVert, ssaoFrag);
+  if (!ssaoProg)
+    return 1;
+  _SSAOShader.reset(ssaoProg);
+
+  ShaderSource ssaoBlurFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_SSAOBlur.glsl"));
+  ShaderProgram* ssaoBlurProg = ShaderProgram::LoadShaders(defaultVert, ssaoBlurFrag);
+  if (!ssaoBlurProg)
+    return 1;
+  _SSAOBlurShader.reset(ssaoBlurProg);
+
+  ShaderSource ssrFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_SSR.glsl"));
+  ShaderProgram* ssrProg = ShaderProgram::LoadShaders(defaultVert, ssrFrag);
+  if (!ssrProg)
+    return 1;
+  _SSRShader.reset(ssrProg);
+
+  ShaderSource brdfLutFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_BRDFLUT.glsl"));
+  ShaderProgram* brdfLutProg = ShaderProgram::LoadShaders(defaultVert, brdfLutFrag);
+  if (!brdfLutProg)
+    return 1;
+  _BRDFLUTShader.reset(brdfLutProg);
+
   // Optional post-process/composite (reuse existing postprocess if desired)
   ShaderSource postFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Postprocess.glsl"));
   ShaderProgram* postProg = ShaderProgram::LoadShaders(defaultVert, postFrag);
@@ -458,10 +1287,30 @@ int DeferredRenderer::RecompileShaders()
 
   // DEBUG : Wireframe shader
   ShaderSource wireFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Wireframe.glsl"));
-  ShaderProgram* wireProg = ShaderProgram::LoadShaders(geomVert, wireFrag); // reuse geometry vertex shader
+  ShaderProgram* wireProg = ShaderProgram::LoadShaders(geomVert, wireFrag);
   if (!wireProg)
     return 1;
   _WireframeShader.reset(wireProg);
+
+  ShaderSource shadowCubeVert = Shader::LoadShader(PathUtils::GetShaderPath("vertex_ShadowCubeDepth.glsl"));
+  ShaderSource shadowCubeFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_ShadowCubeDepth.glsl"));
+  ShaderProgram* shadowCubeProg = ShaderProgram::LoadShaders(shadowCubeVert, shadowCubeFrag);
+  if (!shadowCubeProg)
+    return 1;
+  _ShadowCubeShader.reset(shadowCubeProg);
+
+  ShaderSource shadowDirVert = Shader::LoadShader(PathUtils::GetShaderPath("vertex_ShadowDirectionalDepth.glsl"));
+  ShaderSource shadowDirFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_ShadowDirectionalDepth.glsl"));
+  ShaderProgram* shadowDirProg = ShaderProgram::LoadShaders(shadowDirVert, shadowDirFrag);
+  if (!shadowDirProg)
+    return 1;
+  _ShadowDirectionalShader.reset(shadowDirProg);
+
+  ShaderSource transparentFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_DeferredTransparent.glsl"));
+  ShaderProgram* transparentProg = ShaderProgram::LoadShaders(geomVert, transparentFrag);
+  if ( !transparentProg )
+    return 1;
+  _TransparentShader.reset(transparentProg);
  
   return 0;
 }
@@ -472,6 +1321,29 @@ int DeferredRenderer::RecompileShaders()
 int DeferredRenderer::BindGBufferTextures()
 {
   GLUtil::ActivateTextures(_GBufferFBO); 
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// BindSSAOPassTextures
+// ----------------------------------------------------------------------------
+int DeferredRenderer::BindSSAOPassTextures()
+{
+  GLUtil::ActivateTextures(_GBufferFBO);
+  GLUtil::ActivateTexture(_SSAONoiseTEX);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// BindSSRPassTextures
+// ----------------------------------------------------------------------------
+int DeferredRenderer::BindSSRPassTextures()
+{
+  GLUtil::ActivateTextures(_GBufferFBO);
+  GLUtil::ActivateTexture(_SSRSourceTEX);
+  GLUtil::ActivateTexture(_EnvMapTEX);
 
   return 0;
 }
@@ -488,6 +1360,11 @@ int DeferredRenderer::BindLightingTextures()
   GLUtil::ActivateTexture(_MaterialsTEX);
 
   GLUtil::ActivateTexture(_EnvMapTEX);
+  GLUtil::ActivateTexture(_BRDFLUTTEX);
+  GLUtil::ActivateTexture(_ShadowCubeMapTEX);
+  GLUtil::ActivateTexture(_Shadow2DMapTEX);
+  GLUtil::ActivateTexture(_SSAOBlurTEX);
+  GLUtil::ActivateTexture(_SSRTEX);
 
   return 0;
 }
@@ -508,7 +1385,6 @@ int DeferredRenderer::BindRenderToScreenTextures()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::UpdateUniforms()
 {
-  // Build camera matrices and common camera params
   Mat4x4 V;
   _Scene.GetCamera().ComputeLookAtMatrix(V);
 
@@ -517,40 +1393,106 @@ int DeferredRenderer::UpdateUniforms()
   Mat4x4 P;
   _Scene.GetCamera().ComputePerspectiveProjMatrix(ratio, P, &top, &right);
 
-  float zNear = 0.0f, zFar = 0.0f;
-  _Scene.GetCamera().GetZNearFar(zNear, zFar);
-
   Vec3 camPos = _Scene.GetCamera().GetPos();
   Vec3 camUp = _Scene.GetCamera().GetUp();
   Vec3 camRight = _Scene.GetCamera().GetRight();
   Vec3 camForward = _Scene.GetCamera().GetForward();
   float camFov = _Scene.GetCamera().GetFOV();
 
-  // Update Scene data
   if ( _DirtyStates & (unsigned long)DirtyState::SceneMaterials )
   {
-    glBindTexture(GL_TEXTURE_2D, _MaterialsTEX._Handle);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>((sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size()), 1, 0, GL_RGBA, GL_FLOAT, &_Scene.GetMaterials()[0]);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    GLTextureDesc materialsDesc;
+    materialsDesc._Target         = _MaterialsTEX._Target;
+    materialsDesc._Slot           = _MaterialsTEX._Slot;
+    materialsDesc._Width          = static_cast<GLsizei>((sizeof(Material) / sizeof(Vec4)) * _Scene.GetMaterials().size());
+    materialsDesc._Height         = 1;
+    materialsDesc._InternalFormat = _MaterialsTEX._InternalFormat;
+    materialsDesc._DataFormat     = _MaterialsTEX._DataFormat;
+    materialsDesc._DataType       = _MaterialsTEX._DataType;
+    materialsDesc._Data           = &_Scene.GetMaterials()[0];
+    materialsDesc._MinFilter      = GL_NEAREST;
+    materialsDesc._MagFilter      = GL_NEAREST;
+    GLUtil::CreateTexture(materialsDesc, _MaterialsTEX);
   }
 
-  // Geometry shader
   if ( _GeometryShader )
   {
     _GeometryShader -> Use();
     _GeometryShader -> SetUniform("u_CameraPos", camPos);
     _GeometryShader -> SetUniform("u_View", V);
     _GeometryShader -> SetUniform("u_Proj", P);
-
-    // Scene data
     _GeometryShader -> SetUniform("u_TexIndTexture",    (int)DeferredTexSlot::_TexInd);
     _GeometryShader -> SetUniform("u_TexArrayTexture",  (int)DeferredTexSlot::_TexArray);
     _GeometryShader -> SetUniform("u_MaterialsTexture", (int)DeferredTexSlot::_Materials);
-
     _GeometryShader -> StopUsing();
   }
 
-  // Lighting shader
+  if ( _SSAOShader )
+  {
+    _SSAOShader -> Use();
+    _SSAOShader -> SetUniform("u_GNormal", (int)DeferredTexSlot::_GNormal);
+    _SSAOShader -> SetUniform("u_GPosition", (int)DeferredTexSlot::_GPosition);
+    _SSAOShader -> SetUniform("u_GDepth", (int)DeferredTexSlot::_GDepth);
+    _SSAOShader -> SetUniform("u_SSAONoise", (int)DeferredTexSlot::_SSAONoise);
+    _SSAOShader -> SetUniform("u_View", V);
+    _SSAOShader -> SetUniform("u_Proj", P);
+    if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
+    {
+      _SSAOShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
+      _SSAOShader -> SetUniform("u_EnableSSAO", _Settings._SSAO ? 1 : 0);
+      _SSAOShader -> SetUniform("u_SSAORadius", _Settings._SSAORadius);
+      _SSAOShader -> SetUniform("u_SSAOBias", _Settings._SSAOBias);
+      _SSAOShader -> SetUniform("u_KernelSize", std::min(std::max(_Settings._SSAOKernelSize, 1), 32));
+      for ( int i = 0; i < (int)_SSAOKernel.size(); ++i )
+        _SSAOShader -> SetUniform("u_KernelSamples[" + std::to_string(i) + "]", _SSAOKernel[i]);
+    }
+    _SSAOShader -> StopUsing();
+  }
+
+  if ( _SSAOBlurShader && ( _DirtyStates & (unsigned long)DirtyState::RenderSettings ) ) 
+  {
+    _SSAOBlurShader -> Use();
+    _SSAOBlurShader -> SetUniform("u_SSAOInput", (int)DeferredTexSlot::_SSAO);
+    _SSAOBlurShader -> SetUniform("u_GDepth", (int)DeferredTexSlot::_GDepth);
+    _SSAOBlurShader -> SetUniform("u_GNormal", (int)DeferredTexSlot::_GNormal);
+    _SSAOBlurShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
+    _SSAOBlurShader -> SetUniform("u_EnableBlur", _Settings._SSAOBlur ? 1 : 0);
+    _SSAOBlurShader -> StopUsing();
+  }
+
+  if ( _SSRShader )
+  {
+    _SSRShader -> Use();
+    _SSRShader -> SetUniform("u_GNormal", (int)DeferredTexSlot::_GNormal);
+    _SSRShader -> SetUniform("u_GPosition", (int)DeferredTexSlot::_GPosition);
+    _SSRShader -> SetUniform("u_GMaterial", (int)DeferredTexSlot::_GMaterial);
+    _SSRShader -> SetUniform("u_GDepth", (int)DeferredTexSlot::_GDepth);
+    _SSRShader -> SetUniform("u_SSRSource", (int)DeferredTexSlot::_SSRSource);
+    _SSRShader -> SetUniform("u_EnvMap", (int)DeferredTexSlot::_EnvMap);
+    _SSRShader -> SetUniform("u_View", V);
+    _SSRShader -> SetUniform("u_Proj", P);
+    _SSRShader -> SetUniform("u_Camera._Pos", camPos);
+    _SSRShader -> SetUniform("u_Camera._Up", camUp);
+    _SSRShader -> SetUniform("u_Camera._Right", camRight);
+    _SSRShader -> SetUniform("u_Camera._Forward", camForward);
+    _SSRShader -> SetUniform("u_Camera._FOV", camFov);
+    if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
+    {
+      _SSRShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
+      _SSRShader -> SetUniform("u_EnableSSR", _Settings._SSR ? 1 : 0);
+      _SSRShader -> SetUniform("u_SSRMaxSteps", std::min(std::max(_Settings._SSRMaxSteps, 4), 128));
+      _SSRShader -> SetUniform("u_SSRStepSize", _Settings._SSRStepSize);
+      _SSRShader -> SetUniform("u_SSRMaxDistance", _Settings._SSRMaxDistance);
+      _SSRShader -> SetUniform("u_SSRThickness", _Settings._SSRThickness);
+      _SSRShader -> SetUniform("u_SSRMaxRoughness", _Settings._SSRMaxRoughness);
+      _SSRShader -> SetUniform("u_SSRFade", _Settings._SSRFade);
+      _SSRShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
+      _SSRShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
+      _SSRShader -> SetUniform("u_EnvMapRes", (float)_Scene.GetEnvMap().GetWidth(), (float)_Scene.GetEnvMap().GetHeight());
+    }
+    _SSRShader -> StopUsing();
+  }
+
   if ( _LightingShader )
   {
     _LightingShader -> Use();
@@ -560,17 +1502,59 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> SetUniform("u_Camera._Forward", camForward);
     _LightingShader -> SetUniform("u_Camera._FOV", camFov);
 
-    // The lighting shader expects samplers named u_GAlbedo, u_GNormal, u_GPosition, u_GDepth
-    _LightingShader -> SetUniform("u_GAlbedo",   (int)DeferredTexSlot::_GAlbedo);
-    _LightingShader -> SetUniform("u_GNormal",   (int)DeferredTexSlot::_GNormal);
-    _LightingShader -> SetUniform("u_GPosition", (int)DeferredTexSlot::_GPosition);
-    _LightingShader -> SetUniform("u_GDepth",    (int)DeferredTexSlot::_GDepth);
-    _LightingShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
+    if ( ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
+      || ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
+      || ( _DirtyStates & (unsigned long)DirtyState::SceneCamera )
+      || ( _DirtyStates & (unsigned long)DirtyState::Textures )
+      || ( _DirtyStates & (unsigned long)DirtyState::SceneInstances ) )
+    {
+      _LightingShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
+
+      _LightingShader -> SetUniform("u_GAlbedo",   (int)DeferredTexSlot::_GAlbedo);
+      _LightingShader -> SetUniform("u_GNormal",   (int)DeferredTexSlot::_GNormal);
+      _LightingShader -> SetUniform("u_GPosition", (int)DeferredTexSlot::_GPosition);
+      _LightingShader -> SetUniform("u_GMaterial", (int)DeferredTexSlot::_GMaterial);
+      _LightingShader -> SetUniform("u_GEmission", (int)DeferredTexSlot::_GEmission);
+      _LightingShader -> SetUniform("u_GDepth",    (int)DeferredTexSlot::_GDepth);
+
+      _LightingShader -> SetUniform("u_SSAOMap", (int)DeferredTexSlot::_SSAOBlur);
+      _LightingShader -> SetUniform("u_EnableSSAO", _Settings._SSAO ? 1 : 0);
+      _LightingShader -> SetUniform("u_SSAOIntensity", _Settings._SSAOIntensity);
+      _LightingShader -> SetUniform("u_SSRMap", (int)DeferredTexSlot::_SSR);
+      _LightingShader -> SetUniform("u_EnableSSR", _Settings._SSR ? 1 : 0);
+      _LightingShader -> SetUniform("u_SSRIntensity", _Settings._SSRIntensity);
+      _LightingShader -> SetUniform("u_SSRMaxRoughness", _Settings._SSRMaxRoughness);
+
+      _LightingShader -> SetUniform("u_ShadowCubeMaps", (int)DeferredTexSlot::_ShadowCubeMap);
+      _LightingShader -> SetUniform("u_Shadow2DMaps", (int)DeferredTexSlot::_Shadow2DMap);
+      _LightingShader -> SetUniform("u_EnableShadowMapping", ( _Settings._ShadowMapping && _HasShadowLight ) ? ( 1 ) : ( 0 ));
+      _LightingShader -> SetUniform("u_NbShadowCasters", static_cast<int>(_ShadowCasters.size()));
+      _LightingShader -> SetUniform("u_ShadowBias", _Settings._ShadowBias);
+      for ( int i = 0; i < static_cast<int>(_ShadowCasters.size()); ++i )
+      {
+        const ShadowCaster & caster = _ShadowCasters[i];
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_LightIndex"), caster._LightIndex);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Type"), (int)caster._Type);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Layer"), caster._Layer);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Far"), caster._Far);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Pos"), caster._Pos);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Dir"), caster._Dir);
+        _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_DirectionalViewProj"), caster._DirectionalViewProj);
+        for ( int face = 0; face < 6; ++face )
+          _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_CubeViewProj[" + std::to_string(face) + "]"), caster._CubeViewProj[face]);
+      }
+
+      _LightingShader -> SetUniform("u_BRDFLUT", (int)DeferredTexSlot::_BRDFLUT);
+      _LightingShader -> SetUniform("u_EnableSpecularIBL", _Settings._SpecularIBL ? 1 : 0);
+      _LightingShader -> SetUniform("u_SpecularIBLIntensity", _Settings._SpecularIBLIntensity);
+      _LightingShader -> SetUniform("u_SpecularIBLMaxRoughness", _Settings._SpecularIBLMaxRoughness);
+      _LightingShader -> SetUniform("u_EnablePBRDirectLighting", _Settings._PBRDirectLighting ? 1 : 0);
+      _LightingShader -> SetUniform("u_DirectLightIntensity", _Settings._DirectLightIntensity);
+    }
 
     if ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
     {
       int nbLights = 0;
-
       for ( int i = 0; i < _Scene.GetNbLights(); ++i )
       {
         Light * curLight = _Scene.GetLight(i);
@@ -594,21 +1578,29 @@ int DeferredRenderer::UpdateUniforms()
       _LightingShader -> SetUniform("u_ShowLights", (int)_Settings._ShowLights);
     }
 
-    // Scene data
-    _LightingShader -> SetUniform("u_BackgroundColor", _Settings._BackgroundColor);
-    _LightingShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
-    _LightingShader -> SetUniform("u_EnableBackground" , (int)_Settings._EnableBackGround);
-    _LightingShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
-    _LightingShader -> SetUniform("u_EnvMapRes", (float)_Scene.GetEnvMap().GetWidth(), (float)_Scene.GetEnvMap().GetHeight());
-    _LightingShader -> SetUniform("u_EnvMap", (int)DeferredTexSlot::_EnvMap);
+    if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
+    {
+      _LightingShader -> SetUniform("u_BackgroundColor", _Settings._BackgroundColor);
+      _LightingShader -> SetUniform("u_Ambient", _Settings._EnableUniformLight ? ( _Settings._UniformLightCol * 0.08f ) : Vec3(0.f));
+      _LightingShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
+      _LightingShader -> SetUniform("u_EnableBackground" , (int)_Settings._EnableBackGround);
+      _LightingShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
+      _LightingShader -> SetUniform("u_EnvMapRes", (float)_Scene.GetEnvMap().GetWidth(), (float)_Scene.GetEnvMap().GetHeight());
+      _LightingShader -> SetUniform("u_EnvMap", (int)DeferredTexSlot::_EnvMap);
+      float envMipCount = 1.f;
+      if ( _Scene.GetEnvMap().GetWidth() > 0 && _Scene.GetEnvMap().GetHeight() > 0 )
+      {
+        int maxDim = std::max(_Scene.GetEnvMap().GetWidth(), _Scene.GetEnvMap().GetHeight());
+        envMipCount = std::floor(std::log2((float)maxDim)) + 1.0f;
+      }
+      _LightingShader -> SetUniform("u_EnvMapMipCount", envMipCount);
+    }
 
-    // Debug
     _LightingShader -> SetUniform("u_DebugMode" , _DebugMode);
 
     _LightingShader -> StopUsing();
   }
 
-  // DEBUG : Wireframe shader
   if ( _WireframeShader )
   {
     _WireframeShader -> Use();
@@ -619,7 +1611,94 @@ int DeferredRenderer::UpdateUniforms()
     _WireframeShader -> StopUsing();
   }
 
-  // Composite shader
+  if ( _TransparentShader )
+  {
+    _TransparentShader -> Use();
+    _TransparentShader -> SetUniform("u_Camera._Pos", camPos);
+    _TransparentShader -> SetUniform("u_Camera._Up", camUp);
+    _TransparentShader -> SetUniform("u_Camera._Right", camRight);
+    _TransparentShader -> SetUniform("u_Camera._Forward", camForward);
+    _TransparentShader -> SetUniform("u_Camera._FOV", camFov);
+
+    _TransparentShader -> SetUniform("u_View", V);
+    _TransparentShader -> SetUniform("u_Proj", P);
+    _TransparentShader -> SetUniform("u_TexIndTexture",    (int)DeferredTexSlot::_TexInd);
+    _TransparentShader -> SetUniform("u_TexArrayTexture",  (int)DeferredTexSlot::_TexArray);
+    _TransparentShader -> SetUniform("u_MaterialsTexture", (int)DeferredTexSlot::_Materials);
+    _TransparentShader -> SetUniform("u_GDepth", (int)DeferredTexSlot::_GDepth);
+
+    if ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
+    {
+      int transparentNbLights = 0;
+      for ( int i = 0; i < _Scene.GetNbLights(); ++i )
+      {
+        Light * curLight = _Scene.GetLight(i);
+        if ( !curLight )
+          continue;
+
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Pos"),      curLight -> _Pos);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Emission"), curLight -> _Emission * curLight -> _Intensity);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_DirU"),     curLight -> _DirU);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_DirV"),     curLight -> _DirV);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Radius"),   curLight -> _Radius);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Area"),     curLight -> _Area);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_Lights", i, "_Type"),     curLight -> _Type);
+
+        transparentNbLights++;
+        if ( transparentNbLights >= 32 )
+          break;
+      }
+      _TransparentShader -> SetUniform("u_NbLights", transparentNbLights);
+    }
+
+    if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
+    {
+      _TransparentShader -> SetUniform("u_EnvMapRes", (float)_Scene.GetEnvMap().GetWidth(), (float)_Scene.GetEnvMap().GetHeight());
+      _TransparentShader -> SetUniform("u_EnvMap", (int)DeferredTexSlot::_EnvMap);
+      _TransparentShader -> SetUniform("u_BRDFLUT", (int)DeferredTexSlot::_BRDFLUT);
+      _TransparentShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
+      _TransparentShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
+      _TransparentShader -> SetUniform("u_EnablePBRDirectLighting", _Settings._PBRDirectLighting ? 1 : 0);
+      _TransparentShader -> SetUniform("u_DirectLightIntensity", _Settings._DirectLightIntensity);
+      _TransparentShader -> SetUniform("u_SpecularIBLMaxRoughness", _Settings._SpecularIBLMaxRoughness);
+      float transparentEnvMipCount = 1.f;
+      if ( _Scene.GetEnvMap().GetWidth() > 0 && _Scene.GetEnvMap().GetHeight() > 0 )
+      {
+        int maxDim = std::max(_Scene.GetEnvMap().GetWidth(), _Scene.GetEnvMap().GetHeight());
+        transparentEnvMipCount = std::floor(std::log2((float)maxDim)) + 1.0f;
+      }
+      _TransparentShader -> SetUniform("u_EnvMapMipCount", transparentEnvMipCount);
+    }
+
+    if ( ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
+      || ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
+      || ( _DirtyStates & (unsigned long)DirtyState::SceneCamera )
+      || ( _DirtyStates & (unsigned long)DirtyState::Textures )
+      || ( _DirtyStates & (unsigned long)DirtyState::SceneInstances ) )
+    {
+      _TransparentShader -> SetUniform("u_ShadowCubeMaps", (int)DeferredTexSlot::_ShadowCubeMap);
+      _TransparentShader -> SetUniform("u_Shadow2DMaps", (int)DeferredTexSlot::_Shadow2DMap);
+      _TransparentShader -> SetUniform("u_EnableShadowMapping", ( _Settings._ShadowMapping && _HasShadowLight ) ? ( 1 ) : ( 0 ));
+      _TransparentShader -> SetUniform("u_NbShadowCasters", static_cast<int>(_ShadowCasters.size()));
+      _TransparentShader -> SetUniform("u_ShadowBias", _Settings._ShadowBias);
+      for ( int i = 0; i < static_cast<int>(_ShadowCasters.size()); ++i )
+      {
+        const ShadowCaster & caster = _ShadowCasters[i];
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_LightIndex"), caster._LightIndex);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Type"), (int)caster._Type);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Layer"), caster._Layer);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Far"), caster._Far);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Pos"), caster._Pos);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_Dir"), caster._Dir);
+        _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_DirectionalViewProj"), caster._DirectionalViewProj);
+        for ( int face = 0; face < 6; ++face )
+          _TransparentShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_CubeViewProj[" + std::to_string(face) + "]"), caster._CubeViewProj[face]);
+      }
+    }
+
+    _TransparentShader -> StopUsing();
+  }
+
   if ( _CompositeShader )
   {
     _CompositeShader -> Use();
@@ -638,10 +1717,261 @@ int DeferredRenderer::UpdateUniforms()
 }
 
 // ----------------------------------------------------------------------------
+// RenderShadowMap
+// ----------------------------------------------------------------------------
+int DeferredRenderer::RenderShadowMap()
+{
+  if ( !_Settings._ShadowMapping || !_HasShadowLight || !_ShadowFBO._Handle )
+    return 0;
+
+  if ( !_ShadowDirectionalShader || !_ShadowCubeShader )
+    return 0;
+
+  glViewport(0, 0, _ShadowMapSize, _ShadowMapSize);
+  glBindFramebuffer(GL_FRAMEBUFFER, _ShadowFBO._Handle);
+  glEnable(GL_DEPTH_TEST);
+  glDepthFunc(GL_LESS);
+  glDepthMask(GL_TRUE);
+  glDisable(GL_BLEND);
+  glDisable(GL_CULL_FACE);
+
+  const std::vector<MeshInstance> & instances = _Scene.GetMeshInstances();
+  auto renderOpaqueInstances = [&]( ShaderProgram * iShader )
+  {
+    for ( int instID : _OpaqueMeshInstanceIDs )
+    {
+      if ( ( instID < 0 ) || ( static_cast<size_t>(instID) >= instances.size() ) )
+        continue;
+
+      const MeshInstance & inst = instances[instID];
+      int meshID = inst._MeshID;
+      if ( ( meshID < 0 ) || ( static_cast<size_t>(meshID) >= _MeshVAOs.size() ) )
+        continue;
+
+      GLuint vao = _MeshVAOs[meshID];
+      int idxCount = _MeshIndexCount[meshID];
+      if ( !vao || idxCount <= 0 )
+        continue;
+
+      iShader -> SetUniform("u_Model", inst._Transform);
+      glBindVertexArray(vao);
+      glDrawElements(GL_TRIANGLES, idxCount, GL_UNSIGNED_INT, 0);
+    }
+  };
+
+  for ( const ShadowCaster & caster : _ShadowCasters )
+  {
+    if ( LightType::DistantLight == caster._Type )
+    {
+      if ( !_Shadow2DMapTEX._Handle )
+        continue;
+
+      glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, _Shadow2DMapTEX._Handle, 0, caster._Layer);
+      glClear(GL_DEPTH_BUFFER_BIT);
+
+      _ShadowDirectionalShader -> Use();
+      _ShadowDirectionalShader -> SetUniform("u_LightViewProj", caster._DirectionalViewProj);
+      renderOpaqueInstances(_ShadowDirectionalShader.get());
+      _ShadowDirectionalShader -> StopUsing();
+    }
+    else
+    {
+      if ( !_ShadowCubeMapTEX._Handle )
+        continue;
+
+      _ShadowCubeShader -> Use();
+      _ShadowCubeShader -> SetUniform("u_LightPos", caster._Pos);
+      _ShadowCubeShader -> SetUniform("u_FarPlane", caster._Far);
+
+      for ( int face = 0; face < 6; ++face )
+      {
+        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, _ShadowCubeMapTEX._Handle, 0, caster._Layer * 6 + face);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        _ShadowCubeShader -> SetUniform("u_LightViewProj", caster._CubeViewProj[face]);
+        renderOpaqueInstances(_ShadowCubeShader.get());
+      }
+
+      _ShadowCubeShader -> StopUsing();
+    }
+  }
+
+  glBindVertexArray(0);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// RenderSSAO
+// ----------------------------------------------------------------------------
+int DeferredRenderer::RenderSSAO()
+{
+  if ( !_SSAOFBO._Handle || !_SSAOBlurFBO._Handle || !_SSAOShader || !_SSAOBlurShader )
+    return 0;
+
+  glDisable(GL_DEPTH_TEST);
+  glDepthMask(GL_FALSE);
+  glDisable(GL_CULL_FACE);
+  glDisable(GL_BLEND);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, _SSAOFBO._Handle);
+  glViewport(0, 0, RenderWidth(), RenderHeight());
+  glClearColor(1.f, 1.f, 1.f, 1.f);
+  glClear(GL_COLOR_BUFFER_BIT);
+
+  _SSAOShader -> Use();
+  BindSSAOPassTextures();
+  _Quad.Render(*_SSAOShader);
+  _SSAOShader -> StopUsing();
+
+  glBindFramebuffer(GL_FRAMEBUFFER, _SSAOBlurFBO._Handle);
+  glViewport(0, 0, RenderWidth(), RenderHeight());
+  glClearColor(1.f, 1.f, 1.f, 1.f);
+  glClear(GL_COLOR_BUFFER_BIT);
+
+  _SSAOBlurShader -> Use();
+  GLUtil::ActivateTexture(_SSAOTEX);
+  GLUtil::ActivateTexture(_GDepthTEX);
+  GLUtil::ActivateTexture(_GNormalTEX);
+  _Quad.Render(*_SSAOBlurShader);
+  _SSAOBlurShader -> StopUsing();
+
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// RenderSSR
+// ----------------------------------------------------------------------------
+int DeferredRenderer::RenderSSR()
+{
+  if ( !_SSRFBO._Handle || !_SSRShader )
+    return 1;
+
+  glBindFramebuffer(GL_FRAMEBUFFER, _SSRFBO._Handle);
+  glViewport(0, 0, RenderWidth(), RenderHeight());
+
+  glDisable(GL_DEPTH_TEST);
+  glDepthMask(GL_FALSE);
+  glDisable(GL_CULL_FACE);
+  glDisable(GL_BLEND);
+  glClearColor(0.f, 0.f, 0.f, 0.f);
+  glClear(GL_COLOR_BUFFER_BIT);
+
+  _SSRShader -> Use();
+  BindSSRPassTextures();
+  _Quad.Render(*_SSRShader);
+  _SSRShader -> StopUsing();
+
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateSSRSource
+// ----------------------------------------------------------------------------
+int DeferredRenderer::UpdateSSRSource()
+{
+  if ( !_LightingFBO._Handle || !_SSRSourceFBO._Handle )
+    return 1;
+
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, _LightingFBO._Handle);
+  glReadBuffer(GL_COLOR_ATTACHMENT0);
+  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, _SSRSourceFBO._Handle);
+  glDrawBuffer(GL_COLOR_ATTACHMENT0);
+  glBlitFramebuffer(0, 0, RenderWidth(), RenderHeight(),
+                    0, 0, RenderWidth(), RenderHeight(),
+                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// RenderTransparent
+// ----------------------------------------------------------------------------
+int DeferredRenderer::RenderTransparent()
+{
+  if ( !_Settings._Transparency || !_TransparentShader || !_LightingFBO._Handle || !_GDepthTEX._Handle )
+    return 0;
+
+  const std::vector<MeshInstance> & instances = _Scene.GetMeshInstances();
+  if ( _TransparentMeshInstanceIDs.empty() || instances.empty() )
+    return 0;
+
+  SortTransparentInstances();
+  
+  Mat4x4 view;
+  _Scene.GetCamera().ComputeLookAtMatrix(view);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
+  glViewport(0, 0, RenderWidth(), RenderHeight());
+
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, _GDepthTEX._Handle, 0);
+  glEnable(GL_DEPTH_TEST);
+  glDepthFunc(GL_LEQUAL);
+  glDepthMask(GL_FALSE);
+  glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+  _TransparentShader -> Use();
+  BindLightingTextures();
+
+  // Per-instance sorting is not enough for transparent shell meshes. Re-sorting
+  // triangles back-to-front per draw stabilizes intra-mesh blending order.
+  for ( int instID : _TransparentMeshInstanceIDs )
+  {
+    if ( ( instID < 0 ) || ( static_cast<size_t>(instID) >= instances.size() ) )
+      continue;
+
+    const MeshInstance & inst = instances[instID];
+    int meshID = inst._MeshID;
+    if ( ( meshID < 0 ) || ( static_cast<size_t>(meshID) >= _MeshVAOs.size() ) )
+      continue;
+
+    GLuint vao = _MeshVAOs[meshID];
+    GLuint ebo = _MeshEBOs[meshID];
+    int idxCount = _MeshIndexCount[meshID];
+    if ( !vao || !ebo || ( idxCount <= 0 ) )
+      continue;
+
+    this -> UpdateSortedTransparentMeshIndices(meshID, inst._Transform, view);
+
+    std::vector<uint32_t> & sortedIndices = _TransparentMeshSortedIndices[meshID];
+
+    glBindVertexArray(vao);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(sortedIndices.size() * sizeof(uint32_t)), sortedIndices.data());
+
+    _TransparentShader -> SetUniform("u_Model", inst._Transform);
+    _TransparentShader -> SetUniform("u_MaterialID", inst._MaterialID);
+    glDrawElements(GL_TRIANGLES, idxCount, GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
+  }
+
+  glBindVertexArray(0);
+  _TransparentShader -> StopUsing();
+
+  glDisable(GL_BLEND);
+  glDepthMask(GL_TRUE);
+  glDisable(GL_DEPTH_TEST);
+  glDisable(GL_CULL_FACE);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // RenderToTexture
 // ----------------------------------------------------------------------------
 int DeferredRenderer::RenderToTexture()
 {
+  if ( _Settings._ShadowMapping && _HasShadowLight )
+    RenderShadowMap();
+
   if (_GeometryShader)
   {
     // Geometry pass: render scene into G-buffer
@@ -653,18 +1983,23 @@ int DeferredRenderer::RenderToTexture()
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
     glDepthMask(GL_TRUE);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
+    glDisable(GL_CULL_FACE);
     glClearColor(0.f, 0.f, 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // now actually clears depth
 
     _GeometryShader -> Use();
 
-    this -> BindGBufferTextures();
+    GLUtil::ActivateTexture(_TexIndTBO._Tex);
+    GLUtil::ActivateTexture(_TexArrayTEX);
+    GLUtil::ActivateTexture(_MaterialsTEX);
 
-    const auto & instances = _Scene.GetMeshInstances();
-    for ( const MeshInstance& inst : instances )
+    const std::vector<MeshInstance> & instances = _Scene.GetMeshInstances();
+    for ( int instID : _OpaqueMeshInstanceIDs )
     {
+      if ( ( instID < 0 ) || ( static_cast<size_t>(instID) >= instances.size() ) )
+        continue;
+
+      const MeshInstance & inst = instances[instID];
       int meshID = inst._MeshID;
       if ( ( meshID < 0 ) || ( static_cast<size_t>(meshID) >= _MeshVAOs.size() ) )
         continue;
@@ -693,6 +2028,9 @@ int DeferredRenderer::RenderToTexture()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
   }
 
+  RenderSSAO();
+  RenderSSR();
+
   if (_LightingShader)
   {
     // Lighting pass: sample G-buffer and compute shading into lighting FBO
@@ -714,6 +2052,8 @@ int DeferredRenderer::RenderToTexture()
     // At this point _LightingTEX contains the shaded image
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
   }
+
+  RenderTransparent();
 
   // DEBUG : Wireframe overlay. Render lines into lighting target on top of shaded image
   if ( ( _DebugMode & (int)DeferredDebugModes::Wires ) && _WireframeShader )
@@ -738,9 +2078,13 @@ int DeferredRenderer::RenderToTexture()
 
     this -> BindLightingTextures();
 
-    const auto & instances2 = _Scene.GetMeshInstances();
-    for ( const MeshInstance& inst : instances2 )
+    const std::vector<MeshInstance> & instances2 = _Scene.GetMeshInstances();
+    for ( int instID : _OpaqueMeshInstanceIDs )
     {
+      if ( ( instID < 0 ) || ( static_cast<size_t>(instID) >= instances2.size() ) )
+        continue;
+
+      const MeshInstance& inst = instances2[instID];
       int meshID = inst._MeshID;
       if ( ( meshID < 0 ) || ( static_cast<size_t>(meshID) >= _MeshVAOs.size() ) )
         continue;
@@ -767,6 +2111,9 @@ int DeferredRenderer::RenderToTexture()
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
   }
+
+  if ( 0 == ( _DebugMode & ~(int)DeferredDebugModes::Wires ) )
+    UpdateSSRSource();
 
   return 0;
 }
@@ -804,26 +2151,29 @@ int DeferredRenderer::RenderToFile(const std::filesystem::path& iFilePath)
   // Render current lighting texture to an intermediary FBO bound to a temporary texture,
   // then read back pixels similar to PathTracer::RenderToFile
   GLFrameBuffer temporaryFBO;
-  temporaryFBO._Tex.push_back({0, GL_TEXTURE_2D, 5});
+  GLTexture temporaryTEX = { 0, GL_TEXTURE_2D, 5 };
 
   int w = _Settings._WindowResolution.x;
   int h = _Settings._WindowResolution.y;
 
   // Create temp texture and FBO
-  glGenTextures(1, &temporaryFBO._Tex[0]._Handle);
-  glActiveTexture(GL_TEX_UNIT(temporaryFBO._Tex[0]));
-  glBindTexture(GL_TEXTURE_2D, temporaryFBO._Tex[0]._Handle);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, w, h, 0, GL_RGBA, GL_FLOAT, nullptr);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glBindTexture(GL_TEXTURE_2D, 0);
+  GLTextureDesc tempDesc;
+  tempDesc._Target         = temporaryTEX._Target;
+  tempDesc._Slot           = temporaryTEX._Slot;
+  tempDesc._Width          = w;
+  tempDesc._Height         = h;
+  tempDesc._InternalFormat = GL_RGBA32F;
+  tempDesc._DataFormat     = GL_RGBA;
+  tempDesc._DataType       = GL_FLOAT;
+  tempDesc._MinFilter      = GL_LINEAR;
+  tempDesc._MagFilter      = GL_LINEAR;
+  GLUtil::CreateTexture(tempDesc, temporaryTEX);
 
-  glGenFramebuffers(1, &temporaryFBO._Handle);
-  glBindFramebuffer(GL_FRAMEBUFFER, temporaryFBO._Handle);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, temporaryFBO._Tex[0]._Handle, 0);
-  if ( glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE )
+  GLFrameBufferDesc tempFBODesc;
+  tempFBODesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &temporaryTEX });
+  if ( !GLUtil::CreateFrameBuffer(tempFBODesc, temporaryFBO) )
   {
-    GLUtil::DeleteTEX(temporaryFBO._Tex[0]);
+    GLUtil::DeleteTEX(temporaryTEX);
     return 1;
   }
 
@@ -844,7 +2194,7 @@ int DeferredRenderer::RenderToFile(const std::filesystem::path& iFilePath)
 
   // Readback and save
   unsigned char* frameData = new unsigned char[w * h * 4];
-  glBindTexture(GL_TEXTURE_2D, temporaryFBO._Tex[0]._Handle);
+  glBindTexture(GL_TEXTURE_2D, temporaryTEX._Handle);
   glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, frameData);
 
   stbi_flip_vertically_on_write(true);
@@ -852,6 +2202,7 @@ int DeferredRenderer::RenderToFile(const std::filesystem::path& iFilePath)
   delete[] frameData;
 
   GLUtil::DeleteFBO(temporaryFBO);
+  GLUtil::DeleteTEX(temporaryTEX);
 
   if ( saved && std::filesystem::exists(iFilePath) )
     std::cout << "Frame saved in " << std::filesystem::absolute(iFilePath) << std::endl;

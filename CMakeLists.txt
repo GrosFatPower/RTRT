@@ -72,17 +72,17 @@ add_subdirectory(Source)
 add_subdirectory(Dependencies)
 add_subdirectory(Shaders)
 
-file(GLOB_RECURSE CORE_SOURCE ./Source/src/*.cpp)
-file(GLOB_RECURSE CORE_HEADER ./Source/src/*.h ./Source/src/*.hxx)
-file(GLOB_RECURSE EXT_SOURCE ./Dependencies/RadeonRays/*.cpp)
-file(GLOB_RECURSE EXT_HEADER ./Dependencies/RadeonRays/*.h)
-file(GLOB_RECURSE SHADERS ./Shaders/*.glsl)
+file(GLOB_RECURSE CORE_SOURCE CONFIGURE_DEPENDS ./Source/src/*.cpp)
+file(GLOB_RECURSE CORE_HEADER CONFIGURE_DEPENDS ./Source/src/*.h ./Source/src/*.hxx)
+file(GLOB_RECURSE EXT_SOURCE CONFIGURE_DEPENDS ./Dependencies/RadeonRays/*.cpp)
+file(GLOB_RECURSE EXT_HEADER CONFIGURE_DEPENDS ./Dependencies/RadeonRays/*.h)
+file(GLOB_RECURSE SHADERS CONFIGURE_DEPENDS ./Shaders/*.glsl)
 
 source_group("src"    FILES ${CORE_SOURCE} ${EXT_SOURCE})
 source_group("header" FILES ${CORE_HEADER} ${EXT_HEADER})
 source_group("shaders" FILES ${SHADERS})
 
-SET(EXE_NAME "RT_renderer")
+SET(EXE_NAME "RenderLab")
 add_executable(${EXE_NAME} ${CORE_SOURCE} ${CORE_HEADER} ${EXT_SOURCE} ${EXT_HEADER} ${SHADERS})
 
 # OpenGL
@@ -134,6 +134,7 @@ target_include_directories(${EXE_NAME}
   PUBLIC ${CMAKE_SOURCE_DIR}/Source/src
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glfw/include
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/imgui
+  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/imguizmo
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/stb
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glm
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinyobjloader
@@ -150,8 +151,7 @@ target_link_directories(${EXE_NAME}
 
 if(APPLE)
   target_link_libraries(${EXE_NAME}
-    glfw
-    imgui
+    imguizmo
     ${GLEW_LIBRARIES}
     ${OPENGL_LIBRARIES}
     ${COCOA_LIBRARY} 
@@ -160,8 +160,7 @@ if(APPLE)
   )
 else()
   target_link_libraries(${EXE_NAME}
-    glfw
-    imgui
+    imguizmo
     ${GLEW_LIBRARIES}
     ${OPENGL_LIBRARIES}
   )

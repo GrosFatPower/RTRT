@@ -55,6 +55,7 @@ public:
   void Walk(float iDz);
 
   void LookAt( Vec3 iPivot );
+  void SetFreeLookPose( const Vec3 & iPos, float iYaw, float iPitch );
 
   // Model view matrix, column-major
   void ComputeLookAtMatrix( Mat4x4 & oM );

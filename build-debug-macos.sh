@@ -34,7 +34,7 @@ echo ""
 echo "=== Project configuration ==="
 cmake .. \
     -DCMAKE_BUILD_TYPE=Debug \
-    -DCMAKE_VERBOSE_MAKEFILE=ON \
+    -DCMAKE_VERBOSE_MAKEFILE=OFF \
     -DCMAKE_OSX_ARCHITECTURES=arm64
 
 if [ $? -ne 0 ]; then
@@ -44,7 +44,8 @@ fi
 
 echo ""
 echo "=== Compilation ==="
-cmake --build . --config Debug -j$(sysctl -n hw.ncpu)
+NPROC=$(sysctl -n hw.ncpu 2>/dev/null || echo 4)
+cmake --build . --config Debug -j${NPROC}
 
 if [ $? -ne 0 ]; then
     echo "❌ Compilation failed"
@@ -55,16 +56,16 @@ echo ""
 echo "✅ Compilation succeeded!"
 echo ""
 
-if [ -f "Debug/RT_renderer" ]; then
-    echo "✅ Executable found: Debug/RT_renderer"
+if [ -f "Debug/RenderLab" ]; then
+    echo "✅ Executable found: Debug/RenderLab"
     
     echo ""
     echo "=== Informations sur l'exécutable ==="
-    file Debug/RT_renderer
+    file Debug/RenderLab
     
     echo ""
     echo "=== Dynamic dependencies ==="
-    otool -L Debug/RT_renderer   
+    otool -L Debug/RenderLab   
 else
     echo "❌ Executable non found in Debug"
     exit 1

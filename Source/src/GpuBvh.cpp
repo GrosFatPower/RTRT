@@ -97,7 +97,7 @@ int GpuTLAS::Build( std::vector<Mesh*> & iMeshes, std::vector<MeshInstance> & iM
     if ( !curMesh )
       return 1;
 
-    Box boundingBox = curMesh -> GetBoundingBox();
+    AABB<Vec3> boundingBox = curMesh -> GetBoundingBox();
 
     Vec3 right, up, forward, pos;
     MathUtil::Decompose(iMeshInstances[i]._Transform, right, up, forward, pos);

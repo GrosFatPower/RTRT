@@ -29,7 +29,6 @@ static double g_MouseY       = 0.;
 static bool   g_LeftClick    = false;
 static bool   g_RightClick   = false;
 
-static std::string g_AssetsDir = PathUtils::GetAssetPath("");
 static int         g_CurSceneIndex = 0;
 static int         g_LoadingState = 0;
 
@@ -80,7 +79,7 @@ static int LoadScene( const std::string & iFilename, Scene *& ioScene, RenderSet
 {
   ioScene = new Scene;
 
-  if ( !Loader::LoadScene(g_AssetsDir + iFilename, *ioScene, oSettings) || !ioScene )
+  if ( !Loader::LoadScene(PathUtils::GetAssetPath(iFilename), *ioScene, oSettings) || !ioScene )
     return 1;
 
   return 0;
@@ -101,8 +100,10 @@ Test2::~Test2()
 
 void Test2::InitializeSceneFile()
 {
+  const std::string assetsDir = PathUtils::GetAssetPath("");
+
   tinydir_dir dir;
-  tinydir_open_sorted(&dir, g_AssetsDir.c_str());
+  tinydir_open_sorted(&dir, assetsDir.c_str());
 
   for ( int i = 0; i < dir.n_files; ++i )
   {

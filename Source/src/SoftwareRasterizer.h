@@ -77,6 +77,8 @@ protected:
 
   int UnloadScene();
   int ReloadScene();
+  int RefreshSceneInstanceTransforms();
+  bool CanRefreshSceneInstanceTransforms() const;
   int ReloadEnvMap();
 
   int UpdateTextures();
@@ -140,12 +142,21 @@ protected:
 
 protected:
 
+  struct RasterSourceVertex
+  {
+    int _MeshInstanceID = -1;
+    int _MeshID         = -1;
+    int _VertexID       = -1;
+    int _NormalID       = -1;
+  };
+
   QuadMesh _Quad;
 
   // Frame buffers
   GLFrameBuffer _RenderTargetFBO;
 
   // Textures
+  GLTexture _RenderTargetTEX = { 0, GL_TEXTURE_2D, RasterTexSlot::_RenderTarget, GL_RGBA32F, GL_RGBA, GL_FLOAT };
   GLTexture _ColorBufferTEX = { 0, GL_TEXTURE_2D, RasterTexSlot::_ColorBuffer, GL_RGBA8,  GL_RGBA, GL_UNSIGNED_BYTE };
   GLTexture _EnvMapTEX      = { 0, GL_TEXTURE_2D, RasterTexSlot::_EnvMap,      GL_RGB32F, GL_RGB,  GL_FLOAT         };
 
@@ -173,7 +184,9 @@ protected:
   RasterData::FrameBuffer _ImageBuffer;
 
   // Scene data
+  int                                                  _CachedMeshInstanceCount = 0;
   std::vector<RasterData::Vertex>                      _VertexBuffer;
+  std::vector<RasterSourceVertex>                      _VertexSources;
   std::vector<RasterData::Triangle>                    _Triangles;
   std::vector<RasterData::ProjectedVertex>             _ProjVerticesBuf;
   std::mutex                                           _ProjVerticesMutex;

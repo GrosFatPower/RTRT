@@ -4,6 +4,8 @@
 
 #include "Scene.h"
 #include "EnvMap.h"
+#include "Mesh.h"
+#include "MeshInstance.h"
 #include "ShaderProgram.h"
 #include "SoftwareVertexShader.h"
 #include "SoftwareFragmentShader.h"
@@ -58,7 +60,6 @@ namespace rd = RTRT::RasterData;
 namespace RTRT
 {
 
-static constexpr float EPSILON = 1e-9f;
 static constexpr RGBA8 S_DefaultColor(0, 0, 0, (uint8_t)255);
 
 
@@ -111,6 +112,7 @@ SoftwareRasterizer::~SoftwareRasterizer()
 {
   GLUtil::DeleteFBO(_RenderTargetFBO);
 
+  GLUtil::DeleteTEX(_RenderTargetTEX);
   GLUtil::DeleteTEX(_ColorBufferTEX);
 
   UnloadScene();
@@ -184,6 +186,17 @@ int SoftwareRasterizer::Update()
 
   if (_DirtyStates & (unsigned long)DirtyState::SceneEnvMap)
     this->ReloadEnvMap();
+
+  if (_DirtyStates & (unsigned long)DirtyState::SceneInstances)
+  {
+    if ( CanRefreshSceneInstanceTransforms() )
+    {
+      if ( 0 != this->RefreshSceneInstanceTransforms() )
+        return 1;
+    }
+    else if ( 0 != this->ReloadScene() )
+      return 1;
+  }
 
   this->UpdateImageBuffer();
 
@@ -339,23 +352,26 @@ int SoftwareRasterizer::RenderToScreen()
 int SoftwareRasterizer::RenderToFile(const fs::path& iFilePath)
 {
   GLFrameBuffer temporaryFBO;
-  temporaryFBO._Tex.push_back({ 0, GL_TEXTURE_2D, RasterTexSlot::_Temporary });
+  GLTexture temporaryTEX = { 0, GL_TEXTURE_2D, RasterTexSlot::_Temporary };
 
   // Temporary frame buffer
-  glGenTextures(1, &temporaryFBO._Tex[0]._Handle);
-  glActiveTexture(GL_TEX_UNIT(temporaryFBO._Tex[0]));
-  glBindTexture(GL_TEXTURE_2D, temporaryFBO._Tex[0]._Handle);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._WindowResolution.x, _Settings._WindowResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glBindTexture(GL_TEXTURE_2D, 0);
+  GLTextureDesc tempDesc;
+  tempDesc._Target         = temporaryTEX._Target;
+  tempDesc._Slot           = temporaryTEX._Slot;
+  tempDesc._Width          = _Settings._WindowResolution.x;
+  tempDesc._Height         = _Settings._WindowResolution.y;
+  tempDesc._InternalFormat = GL_RGBA32F;
+  tempDesc._DataFormat     = GL_RGBA;
+  tempDesc._DataType       = GL_FLOAT;
+  tempDesc._MinFilter      = GL_LINEAR;
+  tempDesc._MagFilter      = GL_LINEAR;
+  GLUtil::CreateTexture(tempDesc, temporaryTEX);
 
-  glGenFramebuffers(1, &temporaryFBO._Handle);
-  glBindFramebuffer(GL_FRAMEBUFFER, temporaryFBO._Handle);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, temporaryFBO._Tex[0]._Handle, 0);
-  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+  GLFrameBufferDesc tempFBODesc;
+  tempFBODesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &temporaryTEX });
+  if (!GLUtil::CreateFrameBuffer(tempFBODesc, temporaryFBO))
   {
-    GLUtil::DeleteTEX(temporaryFBO._Tex[0]);
+    GLUtil::DeleteTEX(temporaryTEX);
     return 1;
   }
 
@@ -364,8 +380,8 @@ int SoftwareRasterizer::RenderToFile(const fs::path& iFilePath)
     glBindFramebuffer(GL_FRAMEBUFFER, temporaryFBO._Handle);
     glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
 
-    glActiveTexture(GL_TEX_UNIT(temporaryFBO._Tex[0]));
-    glBindTexture(GL_TEXTURE_2D, temporaryFBO._Tex[0]._Handle);
+    glActiveTexture(GL_TEX_UNIT(temporaryTEX));
+    glBindTexture(GL_TEXTURE_2D, temporaryTEX._Handle);
     this->BindRenderToScreenTextures();
 
     _Quad.Render(*_RenderToScreenShader);
@@ -378,8 +394,8 @@ int SoftwareRasterizer::RenderToFile(const fs::path& iFilePath)
     int h = _Settings._WindowResolution.y;
     unsigned char* frameData = new unsigned char[w * h * 4];
 
-    glActiveTexture(GL_TEX_UNIT(temporaryFBO._Tex[0]));
-    glBindTexture(GL_TEXTURE_2D, temporaryFBO._Tex[0]._Handle);
+    glActiveTexture(GL_TEX_UNIT(temporaryTEX));
+    glBindTexture(GL_TEXTURE_2D, temporaryTEX._Handle);
     glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, frameData);
     stbi_flip_vertically_on_write(true);
     saved = stbi_write_png(iFilePath.string().c_str(), w, h, 4, frameData, w * 4);
@@ -394,6 +410,7 @@ int SoftwareRasterizer::RenderToFile(const fs::path& iFilePath)
 
   // Clean
   GLUtil::DeleteFBO(temporaryFBO);
+  GLUtil::DeleteTEX(temporaryTEX);
 
   return 0;
 }
@@ -433,32 +450,36 @@ int SoftwareRasterizer::InitializeFrameBuffers()
 {
   UpdateRenderResolution();
 
-  // Render target textures
-  _RenderTargetFBO._Tex.clear();
-  _RenderTargetFBO._Tex.push_back({ 0, GL_TEXTURE_2D, RasterTexSlot::_RenderTarget });
-  glGenTextures(1, &_RenderTargetFBO._Tex[0]._Handle);
-  glActiveTexture(GL_TEX_UNIT(_RenderTargetFBO._Tex[0]));
-  glBindTexture(GL_TEXTURE_2D, _RenderTargetFBO._Tex[0]._Handle);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glBindTexture(GL_TEXTURE_2D, 0);
+  GLTextureDesc renderTargetDesc;
+  renderTargetDesc._Target         = _RenderTargetTEX._Target;
+  renderTargetDesc._Slot           = _RenderTargetTEX._Slot;
+  renderTargetDesc._Width          = RenderWidth();
+  renderTargetDesc._Height         = RenderHeight();
+  renderTargetDesc._InternalFormat = _RenderTargetTEX._InternalFormat;
+  renderTargetDesc._DataFormat     = _RenderTargetTEX._DataFormat;
+  renderTargetDesc._DataType       = _RenderTargetTEX._DataType;
+  renderTargetDesc._MinFilter      = GL_LINEAR;
+  renderTargetDesc._MagFilter      = GL_LINEAR;
+  GLUtil::CreateTexture(renderTargetDesc, _RenderTargetTEX);
 
-  // Render target Frame buffers
-  glGenFramebuffers(1, &_RenderTargetFBO._Handle);
-  glBindFramebuffer(GL_FRAMEBUFFER, _RenderTargetFBO._Handle);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _RenderTargetFBO._Tex[0]._Handle, 0);
-  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+  GLFrameBufferDesc renderTargetFBODesc;
+  renderTargetFBODesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_RenderTargetTEX });
+  if (!GLUtil::CreateFrameBuffer(renderTargetFBODesc, _RenderTargetFBO))
     return 1;
 
   // Color buffer Texture
-  glGenTextures(1, &_ColorBufferTEX._Handle);
-  glActiveTexture(GL_TEX_UNIT(_ColorBufferTEX));
-  glBindTexture(GL_TEXTURE_2D, _ColorBufferTEX._Handle);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, &_ImageBuffer._ColorBuffer[0]);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glBindTexture(GL_TEXTURE_2D, 0);
+  GLTextureDesc colorBufferDesc;
+  colorBufferDesc._Target         = _ColorBufferTEX._Target;
+  colorBufferDesc._Slot           = _ColorBufferTEX._Slot;
+  colorBufferDesc._Width          = RenderWidth();
+  colorBufferDesc._Height         = RenderHeight();
+  colorBufferDesc._InternalFormat = _ColorBufferTEX._InternalFormat;
+  colorBufferDesc._DataFormat     = _ColorBufferTEX._DataFormat;
+  colorBufferDesc._DataType       = _ColorBufferTEX._DataType;
+  colorBufferDesc._Data           = &_ImageBuffer._ColorBuffer[0];
+  colorBufferDesc._MinFilter      = GL_LINEAR;
+  colorBufferDesc._MagFilter      = GL_LINEAR;
+  GLUtil::CreateTexture(colorBufferDesc, _ColorBufferTEX);
 
   return 0;
 }
@@ -495,9 +516,20 @@ int SoftwareRasterizer::UnloadScene()
 
   _FrameNum = 0;
 
+  _CachedMeshInstanceCount = 0;
   _VertexBuffer.clear();
+  _VertexSources.clear();
   _Triangles.clear();
   _ProjVerticesBuf.clear();
+  for ( auto & rasterTriangles : _RasterTrianglesBuf )
+    rasterTriangles.clear();
+  for ( auto & fragments : _Fragments )
+    fragments.clear();
+  for ( auto & tile : _Tiles )
+  {
+    for ( auto & bin : tile._RasterTrisBins )
+      bin.clear();
+  }
 
   return 0;
 }
@@ -509,75 +541,176 @@ int SoftwareRasterizer::ReloadScene()
 {
   UnloadScene();
 
-  if ((_Settings._TextureSize.x > 0) && (_Settings._TextureSize.y > 0))
-    _Scene.CompileMeshData(_Settings._TextureSize, false, false);
-  else
-    return 1;
+  const std::vector<MeshInstance> & meshInstances = _Scene.GetMeshInstances();
+  const std::vector<Mesh*>        & meshes        = _Scene.GetMeshes();
 
-  // Load _Triangles
-  const std::vector<Vec3i>& Indices = _Scene.GetIndices();
-  const std::vector<Vec3>& Vertices = _Scene.GetVertices();
-  const std::vector<Vec3>& Normals = _Scene.GetNormals();
-  const std::vector<Vec3>& UVMatIDs = _Scene.GetUVMatID();
-  //const std::vector<Material> & Materials = _Scene.GetMaterials();
-  //const std::vector<Texture*> & Textures  = _Scene.GetTextures();
-  const int nbTris = static_cast<int>(Indices.size() / 3);
+  _CachedMeshInstanceCount = static_cast<int>(meshInstances.size());
 
-  std::unordered_map<rd::Vertex, int> VertexIDs;
-  VertexIDs.reserve(Vertices.size());
-
-  _Triangles.resize(nbTris);
-  for (int i = 0; i < nbTris; ++i)
+  for ( int instID = 0; instID < static_cast<int>(meshInstances.size()); ++instID )
   {
-    rd::Triangle& tri = _Triangles[i];
+    const MeshInstance & meshInst = meshInstances[instID];
+    if ( ( meshInst._MeshID < 0 ) || ( meshInst._MeshID >= static_cast<int>(meshes.size()) ) )
+      continue;
 
-    Vec3i Index[3];
-    Index[0] = Indices[i * 3];
-    Index[1] = Indices[i * 3 + 1];
-    Index[2] = Indices[i * 3 + 2];
+    Mesh * curMesh = meshes[meshInst._MeshID];
+    if ( !curMesh || !curMesh -> GetNbFaces() )
+      continue;
 
-    rd::Vertex Vert[3];
-    for (int j = 0; j < 3; ++j)
+    const std::vector<Vec3>  & curVertices = curMesh -> GetVertices();
+    const std::vector<Vec3>  & curNormals  = curMesh -> GetNormals();
+    const std::vector<Vec2>  & curUVs      = curMesh -> GetUVs();
+    const std::vector<Vec3i> & curIndices  = curMesh -> GetIndices();
+    const Mat4x4 trInvTransfo = glm::transpose(glm::inverse(meshInst._Transform));
+
+    std::unordered_map<rd::Vertex, int> VertexIDs;
+    VertexIDs.reserve(curVertices.size());
+
+    const int nbTris = static_cast<int>(curIndices.size() / 3);
+    for ( int i = 0; i < nbTris; ++i )
     {
-      Vert[j]._WorldPos = Vertices[Index[j].x];
-      Vert[j]._UV = Vec2(0.f);
-      Vert[j]._Normal = Vec3(0.f);
-    }
+      rd::Triangle tri;
 
-    Vec3 vec1(Vert[1]._WorldPos.x - Vert[0]._WorldPos.x, Vert[1]._WorldPos.y - Vert[0]._WorldPos.y, Vert[1]._WorldPos.z - Vert[0]._WorldPos.z);
-    Vec3 vec2(Vert[2]._WorldPos.x - Vert[0]._WorldPos.x, Vert[2]._WorldPos.y - Vert[0]._WorldPos.y, Vert[2]._WorldPos.z - Vert[0]._WorldPos.z);
-    tri._Normal = glm::normalize(glm::cross(vec1, vec2));
+      Vec3i Index[3];
+      Index[0] = curIndices[i * 3];
+      Index[1] = curIndices[i * 3 + 1];
+      Index[2] = curIndices[i * 3 + 2];
 
-    for (int j = 0; j < 3; ++j)
-    {
-      if (Index[j].y >= 0)
-        Vert[j]._Normal = Normals[Index[j].y];
-      else
-        Vert[j]._Normal = tri._Normal;
-
-      if (Index[j].z >= 0)
-        Vert[j]._UV = Vec2(UVMatIDs[Index[j].z].x, UVMatIDs[Index[j].z].y);
-    }
-
-    tri._MatID = (int)UVMatIDs[Index[0].z].z;
-
-    for (int j = 0; j < 3; ++j)
-    {
-      int idx = 0;
-      if (0 == VertexIDs.count(Vert[j]))
+      rd::Vertex Vert[3];
+      for ( int j = 0; j < 3; ++j )
       {
-        idx = (int)_VertexBuffer.size();
-        VertexIDs[Vert[j]] = idx;
-        _VertexBuffer.push_back(Vert[j]);
-      }
-      else
-        idx = VertexIDs[Vert[j]];
+        Vec4 transformedVtx = meshInst._Transform * Vec4(curVertices[Index[j].x], 1.f);
+        Vert[j]._WorldPos = Vec3(transformedVtx);
 
-      tri._Indices[j] = idx;
+        if ( ( Index[j].z >= 0 ) && ( Index[j].z < static_cast<int>(curUVs.size()) ) )
+          Vert[j]._UV = curUVs[Index[j].z];
+        else
+          Vert[j]._UV = Vec2(0.f);
+
+        Vert[j]._Normal = Vec3(0.f);
+      }
+
+      const Vec3 vec1(Vert[1]._WorldPos - Vert[0]._WorldPos);
+      const Vec3 vec2(Vert[2]._WorldPos - Vert[0]._WorldPos);
+      tri._Normal = glm::normalize(glm::cross(vec1, vec2));
+
+      for ( int j = 0; j < 3; ++j )
+      {
+        if ( ( Index[j].y >= 0 ) && ( Index[j].y < static_cast<int>(curNormals.size()) ) )
+        {
+          Vec4 transformedNormal = trInvTransfo * Vec4(curNormals[Index[j].y], 0.f);
+          Vert[j]._Normal = glm::normalize(Vec3(transformedNormal));
+        }
+        else
+          Vert[j]._Normal = tri._Normal;
+      }
+
+      tri._MatID = meshInst._MaterialID;
+
+      for ( int j = 0; j < 3; ++j )
+      {
+        int idx = 0;
+        if (0 == VertexIDs.count(Vert[j]))
+        {
+          idx = (int)_VertexBuffer.size();
+          VertexIDs[Vert[j]] = idx;
+          _VertexBuffer.push_back(Vert[j]);
+
+          RasterSourceVertex sourceVertex;
+          sourceVertex._MeshInstanceID = instID;
+          sourceVertex._MeshID = meshInst._MeshID;
+          sourceVertex._VertexID = Index[j].x;
+          sourceVertex._NormalID = Index[j].y;
+          _VertexSources.push_back(sourceVertex);
+        }
+        else
+          idx = VertexIDs[Vert[j]];
+
+        tri._Indices[j] = idx;
+      }
+
+      _Triangles.push_back(tri);
     }
   }
 
   this -> UpdateMipMaps();
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// CanRefreshSceneInstanceTransforms
+// ----------------------------------------------------------------------------
+bool SoftwareRasterizer::CanRefreshSceneInstanceTransforms() const
+{
+  if ( _VertexSources.size() != _VertexBuffer.size() )
+    return false;
+
+  if ( _CachedMeshInstanceCount != _Scene.GetNbMeshInstances() )
+    return false;
+
+  const std::vector<MeshInstance> & meshInstances = _Scene.GetMeshInstances();
+  const std::vector<Mesh*>        & meshes        = _Scene.GetMeshes();
+
+  for ( const RasterSourceVertex & sourceVertex : _VertexSources )
+  {
+    if ( ( sourceVertex._MeshInstanceID < 0 ) || ( sourceVertex._MeshInstanceID >= static_cast<int>(meshInstances.size()) ) )
+      return false;
+
+    const MeshInstance & meshInst = meshInstances[sourceVertex._MeshInstanceID];
+    if ( meshInst._MeshID != sourceVertex._MeshID )
+      return false;
+
+    if ( ( sourceVertex._MeshID < 0 ) || ( sourceVertex._MeshID >= static_cast<int>(meshes.size()) ) )
+      return false;
+
+    Mesh * curMesh = meshes[sourceVertex._MeshID];
+    if ( !curMesh )
+      return false;
+
+    if ( ( sourceVertex._VertexID < 0 ) || ( sourceVertex._VertexID >= static_cast<int>(curMesh -> GetVertices().size()) ) )
+      return false;
+  }
+
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// RefreshSceneInstanceTransforms
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::RefreshSceneInstanceTransforms()
+{
+  const std::vector<MeshInstance> & meshInstances = _Scene.GetMeshInstances();
+  const std::vector<Mesh*>        & meshes        = _Scene.GetMeshes();
+
+  for ( int i = 0; i < static_cast<int>(_VertexBuffer.size()); ++i )
+  {
+    const RasterSourceVertex & sourceVertex = _VertexSources[i];
+    const MeshInstance & meshInst = meshInstances[sourceVertex._MeshInstanceID];
+    Mesh * curMesh = meshes[sourceVertex._MeshID];
+
+    const std::vector<Vec3> & vertices = curMesh -> GetVertices();
+    const std::vector<Vec3> & normals = curMesh -> GetNormals();
+
+    Vec4 transformedVtx = meshInst._Transform * Vec4(vertices[sourceVertex._VertexID], 1.f);
+    _VertexBuffer[i]._WorldPos = Vec3(transformedVtx);
+
+    if ( ( sourceVertex._NormalID >= 0 ) && ( sourceVertex._NormalID < static_cast<int>(normals.size()) ) )
+    {
+      Mat4x4 trInvTransfo = glm::transpose(glm::inverse(meshInst._Transform));
+      Vec4 transformedNormal = trInvTransfo * Vec4(normals[sourceVertex._NormalID], 0.f);
+      _VertexBuffer[i]._Normal = glm::normalize(Vec3(transformedNormal));
+    }
+  }
+
+  for ( RasterData::Triangle & tri : _Triangles )
+  {
+    const Vec3 & p0 = _VertexBuffer[tri._Indices[0]]._WorldPos;
+    const Vec3 & p1 = _VertexBuffer[tri._Indices[1]]._WorldPos;
+    const Vec3 & p2 = _VertexBuffer[tri._Indices[2]]._WorldPos;
+    tri._Normal = glm::normalize(glm::cross(p1 - p0, p2 - p0));
+  }
+
+  _FrameNum = 0;
 
   return 0;
 }
@@ -695,7 +828,7 @@ void SoftwareRasterizer::ResetTiles()
     std::fill(policy, tile._CoveredPixels.begin(), tile._CoveredPixels.end(), false);
 
     std::fill(policy, tile._LocalFB._ColorBuffer.begin(), tile._LocalFB._ColorBuffer.end(), S_DefaultColor);
-    std::fill(policy, tile._LocalFB._DepthBuffer.begin(), tile._LocalFB._DepthBuffer.end(), std::numeric_limits<float>::max());
+    std::fill(policy, tile._LocalFB._DepthBuffer.begin(), tile._LocalFB._DepthBuffer.end(), MAX_FLOAT);
   }
 }
 
@@ -810,12 +943,18 @@ int SoftwareRasterizer::ReloadEnvMap()
 
   if (_Scene.GetEnvMap().IsInitialized())
   {
-    glGenTextures(1, &_EnvMapTEX._Handle);
-    glBindTexture(GL_TEXTURE_2D, _EnvMapTEX._Handle);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, _Scene.GetEnvMap().GetWidth(), _Scene.GetEnvMap().GetHeight(), 0, GL_RGB, GL_FLOAT, _Scene.GetEnvMap().GetRawData());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    GLTextureDesc envDesc;
+    envDesc._Target         = _EnvMapTEX._Target;
+    envDesc._Slot           = _EnvMapTEX._Slot;
+    envDesc._Width          = _Scene.GetEnvMap().GetWidth();
+    envDesc._Height         = _Scene.GetEnvMap().GetHeight();
+    envDesc._InternalFormat = _EnvMapTEX._InternalFormat;
+    envDesc._DataFormat     = _EnvMapTEX._DataFormat;
+    envDesc._DataType       = _EnvMapTEX._DataType;
+    envDesc._Data           = _Scene.GetEnvMap().GetRawData();
+    envDesc._MinFilter      = GL_LINEAR;
+    envDesc._MagFilter      = GL_LINEAR;
+    GLUtil::CreateTexture(envDesc, _EnvMapTEX);
 
     _Scene.GetEnvMap().SetHandle(_EnvMapTEX._Handle);
   }
@@ -1045,6 +1184,9 @@ int SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM)
 {
   int nbTriangles = static_cast<int>(_Triangles.size());
 
+  for ( unsigned int i = 0; i < _NbJobs; ++i )
+    _RasterTrianglesBuf[i].clear();
+
   for (unsigned int i = 0; i < _NbJobs; ++i)
   {
     int startInd = (nbTriangles / _NbJobs) * i;
@@ -1066,7 +1208,6 @@ int SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM)
 // ----------------------------------------------------------------------------
 void SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, int iStartInd, int iEndInd)
 {
-  _RasterTrianglesBuf[iThreadBin].clear();
   if ( _RasterTrianglesBuf[iThreadBin].capacity() < static_cast<size_t>(iEndInd - iStartInd) )
     _RasterTrianglesBuf[iThreadBin].reserve(iEndInd - iStartInd);
 

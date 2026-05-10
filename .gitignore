@@ -51,6 +51,7 @@ Assets/*.glb
 Assets/*.bin
 Assets/ball*
 Assets/helmet*
+Assets/.DS_Store
 
 
 # Files

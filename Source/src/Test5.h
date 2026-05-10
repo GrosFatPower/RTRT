@@ -6,6 +6,7 @@
 #include "Camera.h"
 #include "RenderSettings.h"
 #include "Renderer.h"
+#include "Boids.h"
 #include "KeyInput.h"
 #include "MouseInput.h"
 #include "GLUtil.h"
@@ -52,17 +53,39 @@ protected:
 
   int InitializeUI();
   int DrawUI();
+  int DrawRenderStatsUI();
+  int DrawSettingsUI();
+  int DrawCameraUI();
+  int DrawMeshInstanceUI();
+  int DrawBoidsUI();
+  int DrawBackgroundUI();
+  int DrawMaterialsUI();
+  int DrawLightsUI();
+  int DrawSelectedMeshInstanceBBox();
 
   int ProcessInput();
 
   int InitializeScene();
   int InitializeRenderer();
   int UpdateScene();
+  int UpdateBoids();
+  int InitializeBoidsForScene( bool iResetSimulation );
 
   int InitializeSceneFiles();
   int InitializeBackgroundFiles();
 
   int UpdateCPUTime();
+  void SyncFramebufferResolution( bool iNotifyRenderer = false );
+
+  int DrawMeshInstanceGizmo();
+  int DrawLightGizmo();
+  void NotifyMeshInstanceEdited();
+  void NotifyLightEdited();
+  void NotifyBoidsInstancesEdited();
+  void ComputeBoidsBoundsFromScene();
+
+  bool PickMeshInstance( double iMouseX, double iMouseY, int & oMeshInstanceID ) const;
+  bool BuildPickingRay( double iMouseX, double iMouseY, Vec3 & oRayOrigin, Vec3 & oRayDir ) const;
 
 protected:
 
@@ -101,6 +124,28 @@ protected:
 
   bool                       _RenderToFile = false;
   std::filesystem::path      _CaptureOutputPath;
+
+  // Mesh instance editor
+  int                        _SelectedMeshInstanceID = -1;
+  bool                       _MeshGizmoEnabled       = true;
+  bool                       _ShowSelectedMeshBBox   = true;
+  int                        _MeshGizmoOperation     = 0;
+  int                        _MeshGizmoMode          = 0;
+  bool                       _MeshGizmoSnap          = false;
+  float                      _MeshGizmoTranslateSnap = 0.25f;
+  float                      _MeshGizmoRotateSnap    = 15.f;
+
+  // Light editor
+  int                        _SelectedLightID        = -1;
+  bool                       _LightGizmoEnabled      = true;
+  bool                       _LightGizmoSnap         = false;
+  float                      _LightGizmoTranslateSnap = 0.25f;
+
+  // Boids dynamic instance test
+  bool                       _BoidsEnabled           = false;
+  BoidSettings               _BoidsSettings;
+  BoidSimulation             _BoidsSimulation;
+  BoidSceneBinding           _BoidsBinding;
 };
 
 }

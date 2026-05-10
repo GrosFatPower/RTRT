@@ -12,6 +12,8 @@ flat in int v_MaterialID; // optional: present if vertex shader provides it
 layout(location = 0) out vec4 gAlbedo;   // RGB: albedo, A: unused / opacity
 layout(location = 1) out vec4 gNormal;   // RGB: normal encoded in 0..1, A: unused
 layout(location = 2) out vec4 gPosition; // RGB: world position, A: unused
+layout(location = 3) out vec4 gMaterial; // R: roughness, G: metallic, B: reflectance, A: unused
+layout(location = 4) out vec4 gEmission; // RGB: emission, A: unused
 
 // Optional fallback uniform (simple default albedo if no material sampling)
 uniform vec3 u_DefaultAlbedo = vec3(0.8, 0.8, 0.8);
@@ -22,29 +24,37 @@ void main()
   HitPoint hitPoint;
   InitializeHitPoint(hitPoint);
 
-  hitPoint._Dist       = length(gPosition.xyz - u_CameraPos);
-  hitPoint._Pos        = gPosition.xyz;
+  hitPoint._Pos        = fragWorldPos;
+  hitPoint._Dist       = length(hitPoint._Pos - u_CameraPos);
   hitPoint._Normal     = normalize(fragNormal);
+  if ( !gl_FrontFacing )
+    hitPoint._Normal *= -1.0;
   hitPoint._UV         = fragUV;
   hitPoint._MaterialID = v_MaterialID;
 
-  // Simple albedo output: shader can be extended to sample material/texture arrays.
   vec3 albedo = u_DefaultAlbedo;
+  float roughness = 1.0;
+  float metallic = 0.0;
+  float reflectance = 0.5;
+  vec3 emission = vec3(0.0);
   if ( v_MaterialID >= 0 )
   {
     Material mat;
     LoadMaterial(hitPoint, mat);
-    
+
+    if ( ( mat._AlphaMode == ALPHA_MODE_MASK ) && ( mat._Opacity < mat._AlphaCutoff ) )
+      discard;
+
     albedo = mat._Albedo;
+    roughness = mat._Roughness;
+    metallic = mat._Metallic;
+    reflectance = mat._Reflectance;
+    emission = mat._Emission;
   }
-  //ComputeOnB(hitPoint._Normal, hitPoint._Tangent, hitPoint._Bitangent);
 
-  // Pack outputs
   gAlbedo = vec4(albedo, 1.0);
-
-  // Store normal in [0,1] range so it fits into unsigned textures easily
   gNormal = vec4(hitPoint._Normal * 0.5 + 0.5, 1.0);
-
-  // Store world position directly
   gPosition = vec4(fragWorldPos, 1.0);
+  gMaterial = vec4(roughness, metallic, reflectance, 1.0);
+  gEmission = vec4(emission, 1.0);
 }

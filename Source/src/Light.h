@@ -19,8 +19,10 @@ struct Light
   Vec3       _Emission  = { 1.f, 1.f, 1.f };
   Vec3       _DirU      = { 1.f, 0.f, 0.f };
   Vec3       _DirV      = { 0.f, 0.f, 1.f };
+  bool       _CastShadow = true;
   float      _Intensity = 1.f;
   float      _Radius    = 1.f;
+  float      _ShadowRadius = 0.f;
   float      _Area      = 4.f * static_cast<float>(M_PI);
   float      _Type      = (float)LightType::SphereLight;
 };

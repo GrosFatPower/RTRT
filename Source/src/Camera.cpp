@@ -159,6 +159,22 @@ void Camera::LookAt( Vec3 iPivot )
   Update();
 }
 
+void Camera::SetFreeLookPose( const Vec3 & iPos, float iYaw, float iPitch )
+{
+  _Mode = CameraMode::FreeLook;
+  _Pos = iPos;
+  _Yaw = iYaw;
+  _Pitch = iPitch;
+  _Radius = std::max(_Radius, 1.f);
+
+  if ( fabs(_Yaw) > 360.f )
+    _Yaw -= MathUtil::Sign(_Yaw) * 360.f * floor( fabs( _Yaw / 360.f ) );
+  if ( fabs(_Pitch) >= 90.f )
+    _Pitch = MathUtil::Sign(_Pitch) * 89.999f;
+
+  Update();
+}
+
 void Camera::ComputeLookAtMatrix( Mat4x4 & oM )
 {
 #ifdef USE_GLM_MATRIX_FUNC

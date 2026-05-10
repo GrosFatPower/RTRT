@@ -35,3 +35,31 @@ if (RTRT_BUILD_IMGUI)
     PUBLIC glfw
   )
 endif()
+
+set(imguizmo_dir imguizmo)
+add_library(imguizmo STATIC
+  ${imguizmo_dir}/ImGuizmo.cpp
+  ${imguizmo_dir}/ImGuizmo.h
+)
+
+target_include_directories(imguizmo
+  PUBLIC ${imguizmo_dir}
+)
+
+target_compile_definitions(imguizmo
+  PRIVATE IMGUI_DEFINE_MATH_OPERATORS
+)
+
+if (MSVC)
+  target_compile_options(imguizmo
+    PRIVATE /FI"${CMAKE_CURRENT_SOURCE_DIR}/imguizmo_compat/ImGuizmoImGuiCompat.h"
+  )
+else()
+  target_compile_options(imguizmo
+    PRIVATE -include "${CMAKE_CURRENT_SOURCE_DIR}/imguizmo_compat/ImGuizmoImGuiCompat.h"
+  )
+endif()
+
+target_link_libraries(imguizmo
+  PUBLIC imgui
+)
