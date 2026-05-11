@@ -52,6 +52,7 @@ struct FpsGameSettings
   int             _MaxArmor = 50;
   int             _MaxProjectileAmmo = 32;
   float           _ProjectileAmmoRefillTime = 0.5f;
+  bool            _FreeLook = false;
   bool            _ShowViewWeapon = true;
   Vec3            _ViewWeaponOffset = Vec3(0.44f, -0.33f, 0.83f);
   Vec3            _ViewWeaponRotation = Vec3(-6.5f, -10.5f, 3.f);
@@ -64,6 +65,8 @@ struct FpsGameInput
   bool  _MoveBackward = false;
   bool  _MoveLeft = false;
   bool  _MoveRight = false;
+  bool  _MoveUp = false;
+  bool  _MoveDown = false;
   bool  _Sprint = false;
   bool  _JumpPressed = false;
   bool  _ResetPressed = false;

@@ -166,44 +166,75 @@ int FpsGameWorld::Update( float iDeltaTime, const FpsGameInput & iInput, const F
     _Player._Yaw -= MathUtil::Sign(_Player._Yaw) * 360.f * floor( fabs( _Player._Yaw / 360.f ) );
   _Player._Pitch = MathUtil::Clamp(_Player._Pitch, -89.f, 89.f);
 
-  const float yawRad = MathUtil::ToRadians(_Player._Yaw);
-  Vec3 forward(std::cos(yawRad), 0.f, std::sin(yawRad));
-  Vec3 right = glm::normalize(glm::cross(forward, Vec3(0.f, 1.f, 0.f)));
-
-  Vec3 wishDir(0.f);
-  if ( iInput._MoveForward )
-    wishDir += forward;
-  if ( iInput._MoveBackward )
-    wishDir -= forward;
-  if ( iInput._MoveRight )
-    wishDir += right;
-  if ( iInput._MoveLeft )
-    wishDir -= right;
-
-  const float wishLen = glm::length(wishDir);
-  if ( wishLen > EPSILON )
-    wishDir /= wishLen;
-
   const float speed = iInput._Sprint ? iSettings._SprintSpeed : iSettings._MoveSpeed;
-  _Player._Velocity.x = wishDir.x * speed;
-  _Player._Velocity.z = wishDir.z * speed;
 
-  if ( _Player._Grounded && ( _Player._Velocity.y < 0.f ) )
-    _Player._Velocity.y = 0.f;
-
-  if ( iInput._JumpPressed && _Player._Grounded )
+  if ( iSettings._FreeLook )
   {
-    _Player._Velocity.y = iSettings._JumpSpeed;
+    const Vec3 forward = PlayerForward();
+    const Vec3 right = glm::normalize(glm::cross(forward, Vec3(0.f, 1.f, 0.f)));
+
+    Vec3 wishDir(0.f);
+    if ( iInput._MoveForward )
+      wishDir += forward;
+    if ( iInput._MoveBackward )
+      wishDir -= forward;
+    if ( iInput._MoveRight )
+      wishDir += right;
+    if ( iInput._MoveLeft )
+      wishDir -= right;
+    if ( iInput._MoveUp )
+      wishDir += Vec3(0.f, 1.f, 0.f);
+    if ( iInput._MoveDown )
+      wishDir -= Vec3(0.f, 1.f, 0.f);
+
+    const float wishLen = glm::length(wishDir);
+    if ( wishLen > EPSILON )
+      wishDir /= wishLen;
+
+    _Player._Velocity = wishDir * speed;
+    _Player._Position += _Player._Velocity * dt;
     _Player._Grounded = false;
   }
+  else
+  {
+    const float yawRad = MathUtil::ToRadians(_Player._Yaw);
+    Vec3 forward(std::cos(yawRad), 0.f, std::sin(yawRad));
+    Vec3 right = glm::normalize(glm::cross(forward, Vec3(0.f, 1.f, 0.f)));
 
-  _Player._Velocity.y -= iSettings._Gravity * dt;
+    Vec3 wishDir(0.f);
+    if ( iInput._MoveForward )
+      wishDir += forward;
+    if ( iInput._MoveBackward )
+      wishDir -= forward;
+    if ( iInput._MoveRight )
+      wishDir += right;
+    if ( iInput._MoveLeft )
+      wishDir -= right;
 
-  MoveAxis(0, _Player._Velocity.x * dt, iSettings);
-  MoveAxis(2, _Player._Velocity.z * dt, iSettings);
+    const float wishLen = glm::length(wishDir);
+    if ( wishLen > EPSILON )
+      wishDir /= wishLen;
 
-  _Player._Grounded = false;
-  MoveAxis(1, _Player._Velocity.y * dt, iSettings);
+    _Player._Velocity.x = wishDir.x * speed;
+    _Player._Velocity.z = wishDir.z * speed;
+
+    if ( _Player._Grounded && ( _Player._Velocity.y < 0.f ) )
+      _Player._Velocity.y = 0.f;
+
+    if ( iInput._JumpPressed && _Player._Grounded )
+    {
+      _Player._Velocity.y = iSettings._JumpSpeed;
+      _Player._Grounded = false;
+    }
+
+    _Player._Velocity.y -= iSettings._Gravity * dt;
+
+    MoveAxis(0, _Player._Velocity.x * dt, iSettings);
+    MoveAxis(2, _Player._Velocity.z * dt, iSettings);
+
+    _Player._Grounded = false;
+    MoveAxis(1, _Player._Velocity.y * dt, iSettings);
+  }
 
   while ( _PendingProjectileShots > 0 )
   {

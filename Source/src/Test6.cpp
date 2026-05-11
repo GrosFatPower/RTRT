@@ -326,6 +326,9 @@ int Test6::ProcessInput()
   if ( _KeyInput.IsKeyReleased(GLFW_KEY_F1) )
     _ShowDebugPanel = !_ShowDebugPanel;
 
+  if ( !ImGui::GetIO().WantCaptureKeyboard && _KeyInput.IsKeyReleased(GLFW_KEY_F2) )
+    _GameSettings._FreeLook = !_GameSettings._FreeLook;
+
   if ( !_MouseCaptured && !ImGui::GetIO().WantCaptureMouse && _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1) )
     SetMouseCaptured(true);
 
@@ -337,7 +340,7 @@ int Test6::ProcessInput()
     // LEFT CLICK
     if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1, mouseX, mouseY) )
     {
-      if ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode )
+      if ( ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode ) && !_GameSettings._FreeLook )
         input._FirePressed = true;
     }
   }
@@ -363,7 +366,13 @@ int Test6::ProcessInput()
     input._MoveLeft     = _KeyInput.IsKeyDown(GLFW_KEY_A);
     input._MoveRight    = _KeyInput.IsKeyDown(GLFW_KEY_D);
     input._Sprint       = _KeyInput.IsKeyDown(GLFW_KEY_LEFT_SHIFT) || _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_SHIFT);
-    input._JumpPressed  = _KeyInput.IsKeyDown(GLFW_KEY_SPACE);
+    if ( _GameSettings._FreeLook )
+    {
+      input._MoveUp = _KeyInput.IsKeyDown(GLFW_KEY_SPACE);
+      input._MoveDown = _KeyInput.IsKeyDown(GLFW_KEY_LEFT_CONTROL) || _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_CONTROL);
+    }
+    else
+      input._JumpPressed = _KeyInput.IsKeyDown(GLFW_KEY_SPACE);
     input._ResetPressed = _KeyInput.IsKeyReleased(GLFW_KEY_R);
   }
 
@@ -481,9 +490,12 @@ void Test6::DrawDebugPanel()
   else
     ImGui::Text("Click viewport to capture mouse. Esc releases capture.");
   ImGui::Text("Renderer shortcuts: J Deferred, K Software, L Photo");
-  ImGui::Text("F1 toggles this panel.");
+  ImGui::Text("F1 toggles this panel. F2 toggles free look.");
+
+  ImGui::Checkbox("Free look", &_GameSettings._FreeLook);
 
   const FpsPlayer & player = _GameWorld.GetPlayer();
+  ImGui::Text("Mode: %s", _GameSettings._FreeLook ? "Free look" : "Player physics");
   ImGui::Text("Position: %.2f %.2f %.2f", player._Position.x, player._Position.y, player._Position.z);
   ImGui::Text("Velocity: %.2f %.2f %.2f", player._Velocity.x, player._Velocity.y, player._Velocity.z);
   ImGui::Text("Yaw/Pitch: %.1f %.1f", player._Yaw, player._Pitch);
