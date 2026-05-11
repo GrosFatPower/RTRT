@@ -3,6 +3,7 @@
 #include "Test6.h"
 
 #include "DeferredRenderer.h"
+#include "FpsGameMap.h"
 #include "PathTracer.h"
 #include "PathUtils.h"
 #include "SoftwareRasterizer.h"
@@ -29,6 +30,24 @@ const char * Test6::GetTestHeader() { return "Basic FPS"; }
 // ----------------------------------------------------------------------------
 static int g_Test6DebugMode = 0;
 static unsigned int g_Test6NbThreadsMax = std::thread::hardware_concurrency();
+
+// ----------------------------------------------------------------------------
+// ApplyMapSettings
+// ----------------------------------------------------------------------------
+static void ApplyMapSettings( const FpsGameMap & iMap, FpsGameSettings & ioSettings )
+{
+  if ( iMap._MaxProjectiles > 0 )
+    ioSettings._MaxProjectiles = iMap._MaxProjectiles;
+  if ( iMap._MaxProjectileAmmo >= 0 )
+    ioSettings._MaxProjectileAmmo = iMap._MaxProjectileAmmo;
+  if ( iMap._ProjectileAmmoRefillTime > 0.f )
+    ioSettings._ProjectileAmmoRefillTime = iMap._ProjectileAmmoRefillTime;
+
+  ioSettings._ShowViewWeapon = iMap._Weapon._Visible;
+  ioSettings._ViewWeaponOffset = iMap._Weapon._Offset;
+  ioSettings._ViewWeaponRotation = iMap._Weapon._Rotation;
+  ioSettings._ViewWeaponScale = iMap._Weapon._Scale;
+}
 
 // ----------------------------------------------------------------------------
 // KeyCallback
@@ -224,13 +243,33 @@ int Test6::InitializeScene()
   if ( !newScene )
     return 1;
 
-  if ( 0 != _GameWorld.Initialize(_GameSettings) )
+  FpsGameMap map;
+  const std::string mapPath = PathUtils::GetAssetPath("FPSMaps/default.fpsmap");
+  const bool mapLoaded = FpsGameMapLoader::Load(mapPath, map);
+  if ( mapLoaded )
+  {
+    ApplyMapSettings(map, _GameSettings);
+    if ( 0 != _GameWorld.Initialize(_GameSettings, map) )
+      return 1;
+  }
+  else
+  {
+    std::cout << "Test6 : Failed to load FPS map, using fallback arena" << std::endl;
+    if ( 0 != _GameWorld.Initialize(_GameSettings) )
+      return 1;
+  }
+
+  if ( mapLoaded )
+  {
+    if ( 0 != _SceneBinding.Attach(*newScene, _GameWorld, _GameSettings, map) )
+      return 1;
+  }
+  else if ( 0 != _SceneBinding.Attach(*newScene, _GameWorld, _GameSettings) )
     return 1;
 
-  if ( 0 != _SceneBinding.Attach(*newScene, _GameWorld, _GameSettings) )
-    return 1;
-
-  if ( !newScene -> LoadEnvMap(PathUtils::GetEnvMapPath("syferfontein_18d_clear_1k.hdr")) )
+  const std::string envMap = mapLoaded ? map._Environment : "syferfontein_18d_clear_1k.hdr";
+  const std::string envPath = mapLoaded ? PathUtils::GetAssetPath(envMap) : PathUtils::GetEnvMapPath(envMap);
+  if ( !newScene -> LoadEnvMap(envPath) )
     std::cout << "Test6 : Failed to load default environment map" << std::endl;
 
   _Scene = std::move(newScene);

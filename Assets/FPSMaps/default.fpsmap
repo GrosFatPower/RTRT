@@ -1,0 +1,151 @@
+# Test6 default FPS map.
+# Coordinates are Y-up. Rotations are Euler XYZ degrees.
+
+map "Default FPS Arena" {
+  environment "HDR/syferfontein_18d_clear_1k.hdr"
+}
+
+player {
+  position 0 0.05 -8
+  yaw 90
+  pitch 0
+  health 100
+  armor 50
+}
+
+settings {
+  maxprojectiles 32
+  projectileammo 32
+  projectileammorefill 0.5
+}
+
+box "Floor" {
+  center 0 -0.25 0
+  half 14 0.25 14
+  material floor
+  collidable true
+  visible true
+}
+
+box "North Wall" {
+  center 0 2 14
+  half 14 2 0.35
+  material wall
+  collidable true
+  visible true
+}
+
+box "South Wall" {
+  center 0 2 -14
+  half 14 2 0.35
+  material wall
+  collidable true
+  visible true
+}
+
+box "East Wall" {
+  center 14 2 0
+  half 0.35 2 14
+  material wall
+  collidable true
+  visible true
+}
+
+box "West Wall" {
+  center -14 2 0
+  half 0.35 2 14
+  material wall
+  collidable true
+  visible true
+}
+
+box "Pillar A" {
+  center -5 1.5 -2
+  half 0.8 1.5 0.8
+  material pillar
+  collidable true
+  visible true
+}
+
+box "Pillar B" {
+  center 5 1.5 3
+  half 0.8 1.5 0.8
+  material pillar
+  collidable true
+  visible true
+}
+
+box "Low Block A" {
+  center -2 0.5 4
+  half 2 0.5 1
+  material accent
+  collidable true
+  visible true
+}
+
+box "Low Block B" {
+  center 3 0.75 -5
+  half 1.2 0.75 1.2
+  material accent
+  collidable true
+  visible true
+}
+
+box "Target Crate A" {
+  center -7 0.6 6
+  half 0.6 0.6 0.6
+  material crate
+  collidable true
+  visible true
+}
+
+box "Target Crate B" {
+  center 7 0.6 -7
+  half 0.6 0.6 0.6
+  material crate
+  collidable true
+  visible true
+}
+
+box "Target Crate C" {
+  center 0 0.6 8
+  half 0.6 0.6 0.6
+  material crate
+  collidable true
+  visible true
+}
+
+light "Sun" {
+  type distant
+  direction -0.4 0.8 -0.3
+  emission 1 0.94 0.86
+  intensity 2
+  castshadow true
+}
+
+light "Warm Local" {
+  type sphere
+  position -6 3.5 -6
+  emission 1 0.55 0.25
+  intensity 35
+  radius 0.25
+  castshadow true
+  shadowradius 14
+}
+
+light "Cool Local" {
+  type sphere
+  position 6 3 5
+  emission 0.25 0.55 1
+  intensity 25
+  radius 0.25
+  castshadow false
+}
+
+weapon {
+  path "overwatch_junkrats_grenade_launcher/scene.gltf"
+  offset 0.44 -0.33 0.83
+  rotation -6.5 -10.5 3
+  scale 1.24
+  visible true
+}

@@ -1,6 +1,7 @@
 #include "FpsGame.h"
 
 #include "Camera.h"
+#include "FpsGameMap.h"
 #include "Light.h"
 #include "Loader.h"
 #include "Material.h"
@@ -13,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 
 namespace RTRT
@@ -33,7 +35,22 @@ static FpsSceneObject MakeBox( const std::string & iName,
   object._HalfExtents = iHalfExtents;
   object._Material = iMaterial;
   object._Collidable = iCollidable;
+  object._Visible = true;
   return object;
+}
+
+static Mat4x4 BuildEulerTransform( const Vec3 & iPosition, const Vec3 & iRotation, const Vec3 & iScale )
+{
+  const Vec3 rotRad(MathUtil::ToRadians(iRotation.x),
+                    MathUtil::ToRadians(iRotation.y),
+                    MathUtil::ToRadians(iRotation.z));
+
+  Mat4x4 transform = glm::translate(iPosition);
+  transform = transform * glm::rotate(rotRad.y, Vec3(0.f, 1.f, 0.f));
+  transform = transform * glm::rotate(rotRad.x, Vec3(1.f, 0.f, 0.f));
+  transform = transform * glm::rotate(rotRad.z, Vec3(0.f, 0.f, 1.f));
+  transform = transform * glm::scale(iScale);
+  return transform;
 }
 
 static Material MakeMaterial( const Vec3 & iAlbedo, float iRoughness, float iMetallic = 0.f, float iReflectance = 0.5f )
@@ -65,17 +82,27 @@ int FpsGameWorld::Initialize( const FpsGameSettings & iSettings )
 }
 
 // ----------------------------------------------------------------------------
+// Initialize
+// ----------------------------------------------------------------------------
+int FpsGameWorld::Initialize( const FpsGameSettings & iSettings, const FpsGameMap & iMap )
+{
+  BuildFromMap(iMap);
+  ResizeProjectilePool(iSettings);
+  return Reset(iSettings);
+}
+
+// ----------------------------------------------------------------------------
 // Reset
 // ----------------------------------------------------------------------------
 int FpsGameWorld::Reset( const FpsGameSettings & iSettings )
 {
-  _Player._Position = Vec3(0.f, 0.05f, -8.f);
+  _Player._Position = _SpawnPosition;
   _Player._Velocity = Vec3(0.f);
-  _Player._Yaw = 90.f;
-  _Player._Pitch = 0.f;
+  _Player._Yaw = _SpawnYaw;
+  _Player._Pitch = _SpawnPitch;
   _Player._Grounded = false;
-  _Player._Health = std::max(0, iSettings._MaxHealth);
-  _Player._Armor = std::max(0, iSettings._MaxArmor);
+  _Player._Health = std::max(0, ( _SpawnHealth >= 0 ) ? _SpawnHealth : iSettings._MaxHealth);
+  _Player._Armor = std::max(0, ( _SpawnArmor >= 0 ) ? _SpawnArmor : iSettings._MaxArmor);
   _ProjectileCooldownTimer = 0.f;
   _ProjectileAmmoRefillTimer = 0.f;
   _ProjectileAmmo = std::max(0, iSettings._MaxProjectileAmmo);
@@ -390,6 +417,11 @@ void FpsGameWorld::MoveProjectileAxis( FpsProjectile & ioProjectile, int iAxis, 
 void FpsGameWorld::BuildDefaultArena()
 {
   _Objects.clear();
+  _SpawnPosition = Vec3(0.f, 0.05f, -8.f);
+  _SpawnYaw = 90.f;
+  _SpawnPitch = 0.f;
+  _SpawnHealth = -1;
+  _SpawnArmor = -1;
 
   _Objects.push_back(MakeBox("Floor", Vec3(0.f, -0.25f, 0.f), Vec3(14.f, 0.25f, 14.f), FpsMaterialSlot::Floor));
   _Objects.push_back(MakeBox("North Wall", Vec3(0.f, 2.f, 14.f), Vec3(14.f, 2.f, 0.35f), FpsMaterialSlot::Wall));
@@ -405,6 +437,19 @@ void FpsGameWorld::BuildDefaultArena()
   _Objects.push_back(MakeBox("Target Crate A", Vec3(-7.f, 0.6f, 6.f), Vec3(0.6f), FpsMaterialSlot::Crate));
   _Objects.push_back(MakeBox("Target Crate B", Vec3(7.f, 0.6f, -7.f), Vec3(0.6f), FpsMaterialSlot::Crate));
   _Objects.push_back(MakeBox("Target Crate C", Vec3(0.f, 0.6f, 8.f), Vec3(0.6f), FpsMaterialSlot::Crate));
+}
+
+// ----------------------------------------------------------------------------
+// BuildFromMap
+// ----------------------------------------------------------------------------
+void FpsGameWorld::BuildFromMap( const FpsGameMap & iMap )
+{
+  _Objects = iMap._Objects;
+  _SpawnPosition = iMap._Player._Position;
+  _SpawnYaw = iMap._Player._Yaw;
+  _SpawnPitch = iMap._Player._Pitch;
+  _SpawnHealth = iMap._Player._Health;
+  _SpawnArmor = iMap._Player._Armor;
 }
 
 // ----------------------------------------------------------------------------
@@ -487,15 +532,28 @@ void FpsGameSceneBinding::Reset()
 // ----------------------------------------------------------------------------
 int FpsGameSceneBinding::Attach( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings )
 {
+  FpsGameMap fallbackMap;
+  fallbackMap._Weapon._Path = "overwatch_junkrats_grenade_launcher/scene.gltf";
+  return Attach(iScene, iWorld, iSettings, fallbackMap);
+}
+
+// ----------------------------------------------------------------------------
+// Attach
+// ----------------------------------------------------------------------------
+int FpsGameSceneBinding::Attach( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, const FpsGameMap & iMap )
+{
   Reset();
 
   if ( 0 != EnsureResources(iScene) )
     return 1;
 
-  if ( 0 != AddLights(iScene) )
+  if ( 0 != AddLights(iScene, iMap._Lights.empty() ? nullptr : &iMap) )
     return 1;
 
-  if ( 0 != LoadViewWeapon(iScene) )
+  if ( 0 != LoadProps(iScene, iMap) )
+    std::cout << "FpsGameSceneBinding : failed to load one or more map props" << std::endl;
+
+  if ( 0 != LoadViewWeapon(iScene, iMap._Weapon._Path) )
     std::cout << "FpsGameSceneBinding : failed to load view weapon model" << std::endl;
 
   const std::vector<FpsSceneObject> & objects = iWorld.GetObjects();
@@ -503,6 +561,12 @@ int FpsGameSceneBinding::Attach( Scene & iScene, const FpsGameWorld & iWorld, co
 
   for ( const FpsSceneObject & object : objects )
   {
+    if ( !object._Visible )
+    {
+      _ObjectInstanceIDs.push_back(-1);
+      continue;
+    }
+
     const int materialID = MaterialID(object._Material);
     if ( ( _CubeMeshID < 0 ) || ( materialID < 0 ) )
       return 1;
@@ -555,7 +619,9 @@ int FpsGameSceneBinding::SyncTransforms( Scene & iScene, const FpsGameWorld & iW
   for ( int i = 0; i < static_cast<int>(_ObjectInstanceIDs.size()); ++i )
   {
     const int instanceID = _ObjectInstanceIDs[i];
-    if ( ( instanceID < 0 ) || ( instanceID >= static_cast<int>(instances.size()) ) )
+    if ( instanceID < 0 )
+      continue;
+    if ( instanceID >= static_cast<int>(instances.size()) )
       return 1;
 
     instances[instanceID]._Transform = BuildObjectTransform(objects[i]);
@@ -635,12 +701,15 @@ int FpsGameSceneBinding::EnsureResources( Scene & iScene )
 // ----------------------------------------------------------------------------
 // LoadViewWeapon
 // ----------------------------------------------------------------------------
-int FpsGameSceneBinding::LoadViewWeapon( Scene & iScene )
+int FpsGameSceneBinding::LoadViewWeapon( Scene & iScene, const std::string & iPath )
 {
+  if ( iPath.empty() )
+    return 1;
+
   const int firstInstanceID = iScene.GetNbMeshInstances();
   RenderSettings loaderSettings;
 
-  if ( !Loader::LoadScene(PathUtils::GetAssetPath("overwatch_junkrats_grenade_launcher/scene.gltf"), iScene, loaderSettings) )
+  if ( !Loader::LoadScene(PathUtils::GetAssetPath(iPath), iScene, loaderSettings) )
     return 1;
 
   std::vector<MeshInstance> & instances = iScene.GetMeshInstances();
@@ -654,10 +723,57 @@ int FpsGameSceneBinding::LoadViewWeapon( Scene & iScene )
 }
 
 // ----------------------------------------------------------------------------
+// LoadProps
+// ----------------------------------------------------------------------------
+int FpsGameSceneBinding::LoadProps( Scene & iScene, const FpsGameMap & iMap )
+{
+  int result = 0;
+  for ( const FpsMapProp & prop : iMap._Props )
+  {
+    if ( !prop._Visible )
+      continue;
+
+    const std::filesystem::path filepath(PathUtils::GetAssetPath(prop._Path));
+    const std::string ext = filepath.extension().string();
+    if ( ( ".gltf" != ext ) && ( ".glb" != ext ) )
+    {
+      std::cout << "FpsGameSceneBinding : unsupported prop format " << prop._Path << std::endl;
+      result = 1;
+      continue;
+    }
+
+    const int firstInstanceID = iScene.GetNbMeshInstances();
+    RenderSettings loaderSettings;
+    if ( !Loader::LoadScene(filepath.string(), iScene, loaderSettings) )
+    {
+      std::cout << "FpsGameSceneBinding : failed to load prop " << prop._Path << std::endl;
+      result = 1;
+      continue;
+    }
+
+    const Mat4x4 propTransform = BuildPropTransform(prop);
+    std::vector<MeshInstance> & instances = iScene.GetMeshInstances();
+    for ( int instanceID = firstInstanceID; instanceID < static_cast<int>(instances.size()); ++instanceID )
+    {
+      instances[instanceID]._Transform = propTransform * instances[instanceID]._Transform;
+    }
+  }
+
+  return result;
+}
+
+// ----------------------------------------------------------------------------
 // AddLights
 // ----------------------------------------------------------------------------
-int FpsGameSceneBinding::AddLights( Scene & iScene )
+int FpsGameSceneBinding::AddLights( Scene & iScene, const FpsGameMap * iMap )
 {
+  if ( iMap && !iMap -> _Lights.empty() )
+  {
+    for ( const Light & light : iMap -> _Lights )
+      iScene.AddLight(light);
+    return 0;
+  }
+
   Light sun;
   sun._Type = (float)LightType::DistantLight;
   sun._Pos = Vec3(-0.4f, 0.8f, -0.3f);
@@ -746,6 +862,14 @@ Mat4x4 FpsGameSceneBinding::BuildViewWeaponTransform( const FpsPlayer & iPlayer,
   localTransform = localTransform * glm::scale(Vec3(std::max(0.001f, iSettings._ViewWeaponScale)));
 
   return cameraTransform * localTransform;
+}
+
+// ----------------------------------------------------------------------------
+// BuildPropTransform
+// ----------------------------------------------------------------------------
+Mat4x4 FpsGameSceneBinding::BuildPropTransform( const FpsMapProp & iProp ) const
+{
+  return BuildEulerTransform(iProp._Position, iProp._Rotation, iProp._Scale);
 }
 
 // ----------------------------------------------------------------------------
