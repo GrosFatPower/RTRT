@@ -3,6 +3,7 @@
 
 #include "BaseTest.h"
 #include "FpsGame.h"
+#include "FpsGameMap.h"
 #include "KeyInput.h"
 #include "MouseInput.h"
 #include "Renderer.h"
@@ -59,6 +60,9 @@ protected:
   FpsGameSettings           _GameSettings;
   FpsGameWorld              _GameWorld;
   FpsGameSceneBinding       _SceneBinding;
+  FpsGameMap                _Map;
+  std::string               _MapPath;
+  bool                      _MapLoaded = false;
 
   KeyInput                  _KeyInput;
   MouseInput                _MouseInput;

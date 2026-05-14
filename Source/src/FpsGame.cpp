@@ -16,6 +16,7 @@
 #include <cmath>
 #include <filesystem>
 #include <iostream>
+#include <map>
 
 namespace RTRT
 {
@@ -34,6 +35,15 @@ static FpsSceneObject MakeBox( const std::string & iName,
   object._Center = iCenter;
   object._HalfExtents = iHalfExtents;
   object._Material = iMaterial;
+  switch ( iMaterial )
+  {
+    case FpsMaterialSlot::Floor:  object._MaterialName = "floor";  break;
+    case FpsMaterialSlot::Wall:   object._MaterialName = "wall";   break;
+    case FpsMaterialSlot::Pillar: object._MaterialName = "pillar"; break;
+    case FpsMaterialSlot::Crate:  object._MaterialName = "crate";  break;
+    case FpsMaterialSlot::Accent: object._MaterialName = "accent"; break;
+    default:                      object._MaterialName = "wall";   break;
+  }
   object._Collidable = iCollidable;
   object._Visible = true;
   return object;
@@ -552,6 +562,7 @@ void FpsGameSceneBinding::Reset()
   _ProjectileMaterialID = -1;
   for ( int i = 0; i < (int)FpsMaterialSlot::Count; ++i )
     _MaterialIDs[i] = -1;
+  _MapMaterialIDs.clear();
   _ObjectInstanceIDs.clear();
   _ProjectileInstanceIDs.clear();
   _WeaponInstanceIDs.clear();
@@ -575,7 +586,7 @@ int FpsGameSceneBinding::Attach( Scene & iScene, const FpsGameWorld & iWorld, co
 {
   Reset();
 
-  if ( 0 != EnsureResources(iScene) )
+  if ( 0 != EnsureResources(iScene, &iMap) )
     return 1;
 
   if ( 0 != AddLights(iScene, iMap._Lights.empty() ? nullptr : &iMap) )
@@ -598,7 +609,7 @@ int FpsGameSceneBinding::Attach( Scene & iScene, const FpsGameWorld & iWorld, co
       continue;
     }
 
-    const int materialID = MaterialID(object._Material);
+    const int materialID = MaterialID(object._MaterialName, object._Material);
     if ( ( _CubeMeshID < 0 ) || ( materialID < 0 ) )
       return 1;
 
@@ -686,7 +697,7 @@ int FpsGameSceneBinding::SyncTransforms( Scene & iScene, const FpsGameWorld & iW
 // ----------------------------------------------------------------------------
 // EnsureResources
 // ----------------------------------------------------------------------------
-int FpsGameSceneBinding::EnsureResources( Scene & iScene )
+int FpsGameSceneBinding::EnsureResources( Scene & iScene, const FpsGameMap * iMap )
 {
   Mesh * cubeMesh = ProceduralMesh::CreateCube("__FpsCubeMesh");
   _CubeMeshID = iScene.AddMesh(cubeMesh);
@@ -704,18 +715,29 @@ int FpsGameSceneBinding::EnsureResources( Scene & iScene )
     return 1;
   }
 
-  Material floor = MakeMaterial(Vec3(0.42f, 0.43f, 0.44f), 0.18f, 0.f, 0.9f);
-  Material wall = MakeMaterial(Vec3(0.34f, 0.37f, 0.42f), 0.65f);
-  Material pillar = MakeMaterial(Vec3(0.58f, 0.55f, 0.49f), 0.55f);
-  Material crate = MakeMaterial(Vec3(0.80f, 0.24f, 0.13f), 0.45f);
-  Material accent = MakeMaterial(Vec3(0.12f, 0.42f, 0.68f), 0.16f, 0.f, 0.85f);
   Material projectile = MakeMaterial(Vec3(1.0f, 0.04f, 0.02f), 0.28f, 0.f, 0.75f);
 
-  _MaterialIDs[(int)FpsMaterialSlot::Floor] = iScene.AddMaterial(floor, "__FpsFloor");
-  _MaterialIDs[(int)FpsMaterialSlot::Wall] = iScene.AddMaterial(wall, "__FpsWall");
-  _MaterialIDs[(int)FpsMaterialSlot::Pillar] = iScene.AddMaterial(pillar, "__FpsPillar");
-  _MaterialIDs[(int)FpsMaterialSlot::Crate] = iScene.AddMaterial(crate, "__FpsCrate");
-  _MaterialIDs[(int)FpsMaterialSlot::Accent] = iScene.AddMaterial(accent, "__FpsAccent");
+  FpsGameMap materialMap = iMap ? *iMap : FpsGameMap();
+  FpsGameMapLoader::SeedDefaultMaterials(materialMap);
+
+  for ( const FpsMapMaterial & mapMaterial : materialMap._Materials )
+  {
+    Material material = mapMaterial._Material;
+    const int materialID = iScene.AddMaterial(material, "__FpsMap_" + mapMaterial._Name);
+    _MapMaterialIDs[mapMaterial._Name] = materialID;
+
+    if ( "floor" == mapMaterial._Name )
+      _MaterialIDs[(int)FpsMaterialSlot::Floor] = materialID;
+    else if ( "wall" == mapMaterial._Name )
+      _MaterialIDs[(int)FpsMaterialSlot::Wall] = materialID;
+    else if ( "pillar" == mapMaterial._Name )
+      _MaterialIDs[(int)FpsMaterialSlot::Pillar] = materialID;
+    else if ( "crate" == mapMaterial._Name )
+      _MaterialIDs[(int)FpsMaterialSlot::Crate] = materialID;
+    else if ( "accent" == mapMaterial._Name )
+      _MaterialIDs[(int)FpsMaterialSlot::Accent] = materialID;
+  }
+
   _ProjectileMaterialID = iScene.AddMaterial(projectile, "__FpsProjectile");
 
   for ( int i = 0; i < (int)FpsMaterialSlot::Count; ++i )
@@ -912,6 +934,18 @@ int FpsGameSceneBinding::MaterialID( FpsMaterialSlot iMaterial ) const
   if ( ( materialIndex < 0 ) || ( materialIndex >= (int)FpsMaterialSlot::Count ) )
     return -1;
   return _MaterialIDs[materialIndex];
+}
+
+// ----------------------------------------------------------------------------
+// MaterialID
+// ----------------------------------------------------------------------------
+int FpsGameSceneBinding::MaterialID( const std::string & iMaterialName, FpsMaterialSlot iFallback ) const
+{
+  const auto found = _MapMaterialIDs.find(iMaterialName);
+  if ( found != _MapMaterialIDs.end() )
+    return found -> second;
+
+  return MaterialID(iFallback);
 }
 
 }

@@ -243,13 +243,15 @@ int Test6::InitializeScene()
   if ( !newScene )
     return 1;
 
-  FpsGameMap map;
-  const std::string mapPath = PathUtils::GetAssetPath("FPSMaps/default.fpsmap");
-  const bool mapLoaded = FpsGameMapLoader::Load(mapPath, map);
-  if ( mapLoaded )
+  if ( _MapPath.empty() )
+    _MapPath = PathUtils::GetAssetPath("FPSMaps/default.fpsmap");
+
+  _Map = FpsGameMap();
+  _MapLoaded = FpsGameMapLoader::Load(_MapPath, _Map);
+  if ( _MapLoaded )
   {
-    ApplyMapSettings(map, _GameSettings);
-    if ( 0 != _GameWorld.Initialize(_GameSettings, map) )
+    ApplyMapSettings(_Map, _GameSettings);
+    if ( 0 != _GameWorld.Initialize(_GameSettings, _Map) )
       return 1;
   }
   else
@@ -259,16 +261,16 @@ int Test6::InitializeScene()
       return 1;
   }
 
-  if ( mapLoaded )
+  if ( _MapLoaded )
   {
-    if ( 0 != _SceneBinding.Attach(*newScene, _GameWorld, _GameSettings, map) )
+    if ( 0 != _SceneBinding.Attach(*newScene, _GameWorld, _GameSettings, _Map) )
       return 1;
   }
   else if ( 0 != _SceneBinding.Attach(*newScene, _GameWorld, _GameSettings) )
     return 1;
 
-  const std::string envMap = mapLoaded ? map._Environment : "syferfontein_18d_clear_1k.hdr";
-  const std::string envPath = mapLoaded ? PathUtils::GetAssetPath(envMap) : PathUtils::GetEnvMapPath(envMap);
+  const std::string envMap = _MapLoaded ? _Map._Environment : "syferfontein_18d_clear_1k.hdr";
+  const std::string envPath = _MapLoaded ? PathUtils::GetAssetPath(envMap) : PathUtils::GetEnvMapPath(envMap);
   if ( !newScene -> LoadEnvMap(envPath) )
     std::cout << "Test6 : Failed to load default environment map" << std::endl;
 

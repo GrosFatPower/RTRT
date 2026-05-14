@@ -4,7 +4,9 @@
 #include <cctype>
 #include <cmath>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <set>
 
 namespace RTRT
 {
@@ -162,6 +164,84 @@ static bool ParseMaterialSlot( const std::string & iToken, FpsMaterialSlot & oMa
   return true;
 }
 
+static const char * MaterialSlotName( FpsMaterialSlot iMaterial )
+{
+  switch ( iMaterial )
+  {
+    case FpsMaterialSlot::Floor:  return "floor";
+    case FpsMaterialSlot::Wall:   return "wall";
+    case FpsMaterialSlot::Pillar: return "pillar";
+    case FpsMaterialSlot::Crate:  return "crate";
+    case FpsMaterialSlot::Accent: return "accent";
+    default:                      return "wall";
+  }
+}
+
+static bool ParseAlphaMode( const std::string & iToken, float & oAlphaMode )
+{
+  if ( IsEqual(iToken, "opaque") )
+    oAlphaMode = (float)AlphaMode::Opaque;
+  else if ( IsEqual(iToken, "blend") )
+    oAlphaMode = (float)AlphaMode::Blend;
+  else if ( IsEqual(iToken, "mask") )
+    oAlphaMode = (float)AlphaMode::Mask;
+  else
+    return false;
+
+  return true;
+}
+
+static const char * AlphaModeName( const Material & iMaterial )
+{
+  const AlphaMode alphaMode = MaterialAlphaMode(iMaterial);
+  if ( AlphaMode::Blend == alphaMode )
+    return "blend";
+  if ( AlphaMode::Mask == alphaMode )
+    return "mask";
+  return "opaque";
+}
+
+static Material MakeFpsMaterial( const Vec3 & iAlbedo, float iRoughness, float iMetallic = 0.f, float iReflectance = 0.5f )
+{
+  Material material;
+  material._Albedo = iAlbedo;
+  material._Roughness = iRoughness;
+  material._Metallic = iMetallic;
+  material._Reflectance = iReflectance;
+  return material;
+}
+
+static void AddOrReplaceMaterial( std::vector<FpsMapMaterial> & ioMaterials, const std::string & iName, const Material & iMaterial )
+{
+  for ( FpsMapMaterial & material : ioMaterials )
+  {
+    if ( IsEqual(material._Name, iName) )
+    {
+      material._Material = iMaterial;
+      return;
+    }
+  }
+
+  FpsMapMaterial material;
+  material._Name = iName;
+  material._Material = iMaterial;
+  ioMaterials.push_back(material);
+}
+
+static void AddMaterialIfMissing( std::vector<FpsMapMaterial> & ioMaterials, const std::string & iName, const Material & iMaterial )
+{
+  for ( const FpsMapMaterial & material : ioMaterials )
+  {
+    if ( IsEqual(material._Name, iName) )
+      return;
+  }
+
+  FpsMapMaterial material;
+  material._Name = iName;
+  material._Material = iMaterial;
+  ioMaterials.push_back(material);
+}
+
 class FpsGameMapParser
 {
 public:
@@ -250,6 +330,8 @@ protected:
       return ParsePlayerBlock(ioFile);
     if ( IsEqual(blockType, "settings") )
       return ParseSettingsBlock(ioFile);
+    if ( IsEqual(blockType, "material") )
+      return ParseMaterialBlock(ioFile, blockName);
     if ( IsEqual(blockType, "box") )
       return ParseObjectBlock(ioFile, blockName, true);
     if ( IsEqual(blockType, "collider") )
@@ -355,6 +437,68 @@ protected:
     return false;
   }
 
+  bool ParseMaterialBlock( std::ifstream & ioFile, const std::string & iName )
+  {
+    if ( iName.empty() )
+      return Error("material block is missing a name");
+
+    FpsMapMaterial mapMaterial;
+    mapMaterial._Name = iName;
+    bool hasAlbedo = false;
+
+    std::vector<std::string> tokens;
+    while ( ReadRequiredLine(ioFile, tokens) )
+    {
+      if ( IsClosingBracket(tokens) )
+      {
+        if ( !hasAlbedo )
+          return Error("material is missing albedo");
+        AddOrReplaceMaterial(_Map._Materials, mapMaterial._Name, mapMaterial._Material);
+        return true;
+      }
+
+      if ( IsEqual(tokens[0], "albedo") )
+      {
+        if ( !ParseVec3(tokens, mapMaterial._Material._Albedo) )
+          return Error("invalid material albedo");
+        hasAlbedo = true;
+      }
+      else if ( IsEqual(tokens[0], "roughness") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], mapMaterial._Material._Roughness) )
+          return Error("invalid material roughness");
+      }
+      else if ( IsEqual(tokens[0], "metallic") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], mapMaterial._Material._Metallic) )
+          return Error("invalid material metallic");
+      }
+      else if ( IsEqual(tokens[0], "reflectance") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], mapMaterial._Material._Reflectance) )
+          return Error("invalid material reflectance");
+      }
+      else if ( IsEqual(tokens[0], "emission") )
+      {
+        if ( !ParseVec3(tokens, mapMaterial._Material._Emission) )
+          return Error("invalid material emission");
+      }
+      else if ( IsEqual(tokens[0], "opacity") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], mapMaterial._Material._Opacity) )
+          return Error("invalid material opacity");
+      }
+      else if ( IsEqual(tokens[0], "alphamode") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseAlphaMode(tokens[1], mapMaterial._Material._AlphaMode) )
+          return Error("invalid material alpha mode");
+      }
+      else
+        return Error("invalid material field");
+    }
+    return false;
+  }
+
   bool ParseObjectBlock( std::ifstream & ioFile, const std::string & iName, bool iVisibleByDefault )
   {
     FpsSceneObject object;
@@ -391,8 +535,10 @@ protected:
       }
       else if ( IsEqual(tokens[0], "material") && ( 2 == static_cast<int>(tokens.size()) ) )
       {
-        if ( !ParseMaterialSlot(tokens[1], object._Material) )
-          return Error("invalid material slot '" + tokens[1] + "'");
+        FpsMaterialSlot materialSlot;
+        if ( ParseMaterialSlot(tokens[1], materialSlot) )
+          object._Material = materialSlot;
+        object._MaterialName = tokens[1];
         hasMaterial = true;
       }
       else if ( IsEqual(tokens[0], "collidable") && ( 2 == static_cast<int>(tokens.size()) ) )
@@ -619,7 +765,164 @@ protected:
 bool FpsGameMapLoader::Load( const std::string & iFilename, FpsGameMap & oMap )
 {
   FpsGameMapParser parser(iFilename, oMap);
-  return parser.Parse();
+  if ( !parser.Parse() )
+    return false;
+
+  SeedDefaultMaterials(oMap);
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// SeedDefaultMaterials
+// ----------------------------------------------------------------------------
+void FpsGameMapLoader::SeedDefaultMaterials( FpsGameMap & ioMap )
+{
+  AddMaterialIfMissing(ioMap._Materials, "floor",  MakeFpsMaterial(Vec3(0.42f, 0.43f, 0.44f), 0.18f, 0.f, 0.9f));
+  AddMaterialIfMissing(ioMap._Materials, "wall",   MakeFpsMaterial(Vec3(0.34f, 0.37f, 0.42f), 0.65f));
+  AddMaterialIfMissing(ioMap._Materials, "pillar", MakeFpsMaterial(Vec3(0.58f, 0.55f, 0.49f), 0.55f));
+  AddMaterialIfMissing(ioMap._Materials, "crate",  MakeFpsMaterial(Vec3(0.80f, 0.24f, 0.13f), 0.45f));
+  AddMaterialIfMissing(ioMap._Materials, "accent", MakeFpsMaterial(Vec3(0.12f, 0.42f, 0.68f), 0.16f, 0.f, 0.85f));
+}
+
+static void WriteVec3( std::ofstream & ioFile, const char * iName, const Vec3 & iValue )
+{
+  ioFile << "  " << iName << " " << iValue.x << " " << iValue.y << " " << iValue.z << "\n";
+}
+
+static std::string ObjectMaterialName( const FpsSceneObject & iObject )
+{
+  if ( !iObject._MaterialName.empty() )
+    return iObject._MaterialName;
+  return MaterialSlotName(iObject._Material);
+}
+
+// ----------------------------------------------------------------------------
+// Save
+// ----------------------------------------------------------------------------
+bool FpsGameMapLoader::Save( const std::string & iFilename, const FpsGameMap & iMap )
+{
+  FpsGameMap map = iMap;
+  SeedDefaultMaterials(map);
+
+  std::ofstream file(iFilename);
+  if ( !file.is_open() )
+  {
+    std::cout << "FpsGameMap : couldn't open " << iFilename << " for writing" << std::endl;
+    return false;
+  }
+
+  file << std::fixed << std::setprecision(6);
+  file << "# Test6 FPS map.\n";
+  file << "# Coordinates are Y-up. Rotations are Euler XYZ degrees.\n\n";
+
+  file << "map \"" << map._Name << "\" {\n";
+  file << "  environment \"" << map._Environment << "\"\n";
+  file << "}\n\n";
+
+  file << "player {\n";
+  WriteVec3(file, "position", map._Player._Position);
+  file << "  yaw " << map._Player._Yaw << "\n";
+  file << "  pitch " << map._Player._Pitch << "\n";
+  if ( map._Player._Health >= 0 )
+    file << "  health " << map._Player._Health << "\n";
+  if ( map._Player._Armor >= 0 )
+    file << "  armor " << map._Player._Armor << "\n";
+  file << "}\n\n";
+
+  file << "settings {\n";
+  if ( map._MaxProjectiles > 0 )
+    file << "  maxprojectiles " << map._MaxProjectiles << "\n";
+  if ( map._MaxProjectileAmmo >= 0 )
+    file << "  projectileammo " << map._MaxProjectileAmmo << "\n";
+  if ( map._ProjectileAmmoRefillTime > 0.f )
+    file << "  projectileammorefill " << map._ProjectileAmmoRefillTime << "\n";
+  file << "}\n\n";
+
+  std::set<std::string> usedMaterials;
+  for ( const FpsSceneObject & object : map._Objects )
+  {
+    if ( object._Visible )
+      usedMaterials.insert(ObjectMaterialName(object));
+  }
+
+  for ( const FpsMapMaterial & material : map._Materials )
+  {
+    if ( usedMaterials.find(material._Name) == usedMaterials.end() )
+      continue;
+
+    file << "material \"" << material._Name << "\" {\n";
+    WriteVec3(file, "albedo", material._Material._Albedo);
+    file << "  roughness " << material._Material._Roughness << "\n";
+    file << "  metallic " << material._Material._Metallic << "\n";
+    file << "  reflectance " << material._Material._Reflectance << "\n";
+    WriteVec3(file, "emission", material._Material._Emission);
+    file << "  opacity " << material._Material._Opacity << "\n";
+    file << "  alphamode " << AlphaModeName(material._Material) << "\n";
+    file << "}\n\n";
+  }
+
+  for ( const FpsSceneObject & object : map._Objects )
+  {
+    file << ( object._Visible ? "box" : "collider" ) << " \"" << object._Name << "\" {\n";
+    WriteVec3(file, "center", object._Center);
+    WriteVec3(file, "half", object._HalfExtents);
+    if ( object._Visible )
+      file << "  material \"" << ObjectMaterialName(object) << "\"\n";
+    file << "  collidable " << ( object._Collidable ? "true" : "false" ) << "\n";
+    file << "  visible " << ( object._Visible ? "true" : "false" ) << "\n";
+    file << "}\n\n";
+  }
+
+  for ( const FpsMapProp & prop : map._Props )
+  {
+    file << "prop \"" << prop._Name << "\" {\n";
+    file << "  path \"" << prop._Path << "\"\n";
+    WriteVec3(file, "position", prop._Position);
+    WriteVec3(file, "rotation", prop._Rotation);
+    WriteVec3(file, "scale", prop._Scale);
+    file << "  visible " << ( prop._Visible ? "true" : "false" ) << "\n";
+    file << "}\n\n";
+  }
+
+  for ( const Light & light : map._Lights )
+  {
+    const LightType type = (LightType)(int)light._Type;
+    file << "light {\n";
+    if ( LightType::DistantLight == type )
+    {
+      file << "  type distant\n";
+      WriteVec3(file, "direction", light._Pos);
+    }
+    else if ( LightType::RectLight == type )
+    {
+      file << "  type rect\n";
+      WriteVec3(file, "position", light._Pos);
+      WriteVec3(file, "diru", light._DirU);
+      WriteVec3(file, "dirv", light._DirV);
+      file << "  area " << light._Area << "\n";
+    }
+    else
+    {
+      file << "  type sphere\n";
+      WriteVec3(file, "position", light._Pos);
+      file << "  radius " << light._Radius << "\n";
+    }
+    WriteVec3(file, "emission", light._Emission);
+    file << "  intensity " << light._Intensity << "\n";
+    file << "  castshadow " << ( light._CastShadow ? "true" : "false" ) << "\n";
+    file << "  shadowradius " << light._ShadowRadius << "\n";
+    file << "}\n\n";
+  }
+
+  file << "weapon {\n";
+  file << "  path \"" << map._Weapon._Path << "\"\n";
+  WriteVec3(file, "offset", map._Weapon._Offset);
+  WriteVec3(file, "rotation", map._Weapon._Rotation);
+  file << "  scale " << map._Weapon._Scale << "\n";
+  file << "  visible " << ( map._Weapon._Visible ? "true" : "false" ) << "\n";
+  file << "}\n";
+
+  return true;
 }
 
 }

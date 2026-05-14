@@ -3,6 +3,7 @@
 
 #include "MathUtil.h"
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -94,6 +95,7 @@ struct FpsSceneObject
   Vec3            _Center = Vec3(0.f);
   Vec3            _HalfExtents = Vec3(0.5f);
   FpsMaterialSlot _Material = FpsMaterialSlot::Wall;
+  std::string     _MaterialName = "wall";
   bool            _Collidable = true;
   bool            _Visible = true;
 };
@@ -161,7 +163,7 @@ public:
   void Reset();
 
 protected:
-  int EnsureResources( Scene & iScene );
+  int EnsureResources( Scene & iScene, const FpsGameMap * iMap );
   int LoadViewWeapon( Scene & iScene, const std::string & iPath );
   int LoadProps( Scene & iScene, const FpsGameMap & iMap );
   int AddLights( Scene & iScene, const FpsGameMap * iMap );
@@ -170,12 +172,14 @@ protected:
   Mat4x4 BuildViewWeaponTransform( const FpsPlayer & iPlayer, const FpsGameSettings & iSettings ) const;
   Mat4x4 BuildPropTransform( const FpsMapProp & iProp ) const;
   int MaterialID( FpsMaterialSlot iMaterial ) const;
+  int MaterialID( const std::string & iMaterialName, FpsMaterialSlot iFallback ) const;
 
 protected:
   int              _CubeMeshID = -1;
   int              _SphereMeshID = -1;
   int              _ProjectileMaterialID = -1;
   int              _MaterialIDs[(int)FpsMaterialSlot::Count] = { -1, -1, -1, -1, -1 };
+  std::map<std::string, int> _MapMaterialIDs;
   std::vector<int> _ObjectInstanceIDs;
   std::vector<int> _ProjectileInstanceIDs;
   std::vector<int> _WeaponInstanceIDs;

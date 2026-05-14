@@ -3,6 +3,7 @@
 
 #include "FpsGame.h"
 #include "Light.h"
+#include "Material.h"
 #include "MathUtil.h"
 
 #include <string>
@@ -39,12 +40,19 @@ struct FpsMapWeapon
   bool        _Visible = true;
 };
 
+struct FpsMapMaterial
+{
+  std::string _Name;
+  Material    _Material;
+};
+
 struct FpsGameMap
 {
   std::string                 _Name = "Default FPS Arena";
   std::string                 _Environment = "HDR/syferfontein_18d_clear_1k.hdr";
   FpsMapPlayer                _Player;
   FpsMapWeapon                _Weapon;
+  std::vector<FpsMapMaterial> _Materials;
   std::vector<FpsSceneObject> _Objects;
   std::vector<FpsMapProp>     _Props;
   std::vector<Light>          _Lights;
@@ -57,6 +65,8 @@ class FpsGameMapLoader
 {
 public:
   static bool Load( const std::string & iFilename, FpsGameMap & oMap );
+  static bool Save( const std::string & iFilename, const FpsGameMap & iMap );
+  static void SeedDefaultMaterials( FpsGameMap & ioMap );
 };
 
 }
