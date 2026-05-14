@@ -3,6 +3,83 @@
 ## Summary
 Add a Test6 editor mode toggled with `F3`, backed by `.fpsmap` as the only authoring/save format. The editor uses visible-cursor navigation with right-mouse freelook, left-click selection, ImGuizmo transforms, dedicated editor UI, and live synchronization with the existing `Scene`, `FpsGameWorld`, and renderer dirty-state system.
 
+## Current Status
+This section records the implementation status after the first editor-mode passes.
+
+### Implemented
+- Test6 now stores the active `FpsGameMap`, map path, and load status instead of loading into a short-lived local map.
+- `.fpsmap` material support exists:
+  - `FpsMapMaterial { _Name, _Material }`;
+  - `FpsGameMap::_Materials`;
+  - default material seeding for `floor`, `wall`, `pillar`, `crate`, and `accent`;
+  - material block parsing for albedo, roughness, metallic, reflectance, emission, opacity, and alpha mode;
+  - deterministic `FpsGameMapLoader::Save`.
+- Map objects now carry `_MaterialName` while retaining the old `FpsMaterialSlot` fallback for compatibility.
+- Test6 scene binding resolves map object material names into `Scene` material IDs.
+- `F3` toggles editor mode:
+  - entering editor mode releases cursor capture, hides the view weapon, clears active projectiles, disables firing/gameplay update, and enables editor freelook;
+  - exiting editor mode restores the previous view-weapon and free-look state.
+- Editor-mode navigation works with visible cursor and RMB-held freelook using WASD, Space, Ctrl, and Shift.
+- Test6 has a dedicated editor panel separate from the HUD and debug panel.
+- Editor UI currently supports:
+  - `.fpsmap` Save and Load path fields;
+  - ImGui list boxes for instances, materials, and lights;
+  - add box and add collider;
+  - edit object name, center, half extents, collidable flag, material assignment, and runtime instance visibility;
+  - add material and edit material parameters;
+  - add sphere light and distant light;
+  - edit light type, position/direction, emission, intensity, radius/area, shadow casting, and shadow radius;
+  - edit player spawn and copy current editor camera pose into the spawn.
+- ImGuizmo is integrated into the Test6 UI frame:
+  - selected boxes/colliders can be translated in world space;
+  - selected local lights can be translated in world space;
+  - distant lights remain direction-edited through UI fields.
+- Editor-triggered scene rebuilds preserve the current editor camera/player pose.
+- `FpsGameSceneBinding::Attach` now performs initial camera and transform sync so hidden weapon/projectile instances are valid immediately after rebuild.
+- `MeshInstance` has a `_Visible` flag.
+- Deferred, Software, PathTracer/TLAS, scene compilation, Test5 picking/bounds, and Test6 runtime binding respect mesh-instance visibility.
+- Test6 runtime now hides inactive projectiles and the view weapon through `MeshInstance::_Visible` instead of moving/scaling them offscreen.
+- Test6 editor can temporarily hide visible map instances without changing the `.fpsmap` box/collider meaning.
+
+### Partially Implemented
+- Editor scene binding tracks object-to-scene-instance IDs for boxes through `_ObjectInstanceIDs`, but this is still internal to `FpsGameSceneBinding`.
+- Light map index and `Scene` light index currently match because Test6 adds map lights in order and editor light edits sync by index. This should become an explicit binding if default/fallback lights, helper lights, or imported props add more light sources.
+- Transform-only object and light edits live-sync without rebuilding.
+- Adding boxes, colliders, lights, or materials currently triggers rebuilds where needed, but rebuild policy is still coarse for some cases.
+- Runtime instance visibility is editor-state only; it is not saved to `.fpsmap`.
+
+### Not Yet Implemented
+- Viewport picking:
+  - no `BuildPickingRay` adaptation for Test6 yet;
+  - no click-to-select boxes, colliders, props, or lights yet.
+- Selection feedback overlays:
+  - no selected bounds overlay;
+  - no collider wire helper drawing;
+  - no light helper markers.
+- ImGuizmo scale for boxes/colliders.
+- Prop import and prop editing:
+  - no editor UI for `gltf`, `glb`, or `obj` props yet;
+  - prop-to-scene-instance binding is not exposed for editor sync.
+- OBJ prop single-mesh import with material assignment.
+- Delete, duplicate, undo/redo, object search, and object renaming polish beyond the current name field.
+- Persistent saved per-object editor visibility.
+- In-editor validation/status messages for save/load success or failure.
+
+### Known Design Notes
+- `FpsSceneObject::_Visible` still means map-visible box versus invisible collider. It should not be reused for temporary editor hiding, because that would change saved map semantics.
+- Temporary editor hiding uses `MeshInstance::_Visible` through Test6 editor state.
+- Hidden mesh instances must stay out of scene bounds, shadow fitting, software-rasterizer caches, and TLAS data. This is now handled by the shared `_Visible` flag.
+- Distant-light shadow quality previously degraded in editor mode because hidden weapon geometry was moved far below the arena and inflated scene bounds. The visibility flag removes that class of workaround.
+
+### Recommended Next Slice
+Implement viewport picking and selection feedback before adding more authoring features:
+- adapt Test5 `BuildPickingRay` to Test6;
+- pick visible boxes with ray-AABB tests;
+- pick local lights with small ray-sphere helper tests;
+- pick colliders only when collider helpers are enabled, or through the object list;
+- ignore projectiles and the view weapon;
+- draw selected bounds, collider helper wire boxes, and light helper markers in the ImGui foreground overlay.
+
 ## Key Interfaces And Format Changes
 - Extend the `.fpsmap` model with editable material data:
   - add `FpsMapMaterial { _Name, _Material }`;
