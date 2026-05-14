@@ -545,10 +545,16 @@ int SoftwareRasterizer::ReloadScene()
   const std::vector<Mesh*>        & meshes        = _Scene.GetMeshes();
 
   _CachedMeshInstanceCount = static_cast<int>(meshInstances.size());
+  _CachedVisibleMeshInstanceCount = 0;
 
   for ( int instID = 0; instID < static_cast<int>(meshInstances.size()); ++instID )
   {
     const MeshInstance & meshInst = meshInstances[instID];
+    if ( !meshInst._Visible )
+      continue;
+
+    _CachedVisibleMeshInstanceCount++;
+
     if ( ( meshInst._MeshID < 0 ) || ( meshInst._MeshID >= static_cast<int>(meshes.size()) ) )
       continue;
 
@@ -651,12 +657,24 @@ bool SoftwareRasterizer::CanRefreshSceneInstanceTransforms() const
   const std::vector<MeshInstance> & meshInstances = _Scene.GetMeshInstances();
   const std::vector<Mesh*>        & meshes        = _Scene.GetMeshes();
 
+  int visibleMeshInstanceCount = 0;
+  for ( const MeshInstance & meshInst : meshInstances )
+  {
+    if ( meshInst._Visible )
+      visibleMeshInstanceCount++;
+  }
+  if ( visibleMeshInstanceCount != _CachedVisibleMeshInstanceCount )
+    return false;
+
   for ( const RasterSourceVertex & sourceVertex : _VertexSources )
   {
     if ( ( sourceVertex._MeshInstanceID < 0 ) || ( sourceVertex._MeshInstanceID >= static_cast<int>(meshInstances.size()) ) )
       return false;
 
     const MeshInstance & meshInst = meshInstances[sourceVertex._MeshInstanceID];
+    if ( !meshInst._Visible )
+      return false;
+
     if ( meshInst._MeshID != sourceVertex._MeshID )
       return false;
 

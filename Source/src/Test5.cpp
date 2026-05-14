@@ -390,6 +390,9 @@ void Test5::ComputeBoidsBoundsFromScene()
       continue;
 
     const MeshInstance & inst = meshInstances[i];
+    if ( !inst._Visible )
+      continue;
+
     if ( ( inst._MeshID < 0 ) || ( inst._MeshID >= static_cast<int>(meshes.size()) ) )
       continue;
 
@@ -975,6 +978,8 @@ int Test5::DrawMeshInstanceUI()
 
       ImGui::Text("Mesh ID     : %d", inst._MeshID);
       ImGui::Text("Material ID : %d", inst._MaterialID);
+      if ( ImGui::Checkbox("Visible", &inst._Visible) )
+        NotifyMeshInstanceEdited();
 
       float translation[3] = { 0.f, 0.f, 0.f };
       float rotation[3]    = { 0.f, 0.f, 0.f };
@@ -1547,6 +1552,9 @@ int Test5::DrawSelectedMeshInstanceBBox()
     return 0;
 
   const MeshInstance & inst = meshInstances[_SelectedMeshInstanceID];
+  if ( !inst._Visible )
+    return 0;
+
   if ( ( inst._MeshID < 0 ) || ( inst._MeshID >= static_cast<int>(meshes.size()) ) )
     return 0;
 
@@ -1766,6 +1774,9 @@ bool Test5::PickMeshInstance( double iMouseX, double iMouseY, int & oMeshInstanc
       continue;
 
     const MeshInstance & inst = meshInstances[instID];
+    if ( !inst._Visible )
+      continue;
+
     if ( ( inst._MeshID < 0 ) || ( inst._MeshID >= static_cast<int>(meshes.size()) ) )
       continue;
 

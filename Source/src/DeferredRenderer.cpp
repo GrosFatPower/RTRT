@@ -266,6 +266,9 @@ void DeferredRenderer::ComputeSceneBounds()
   const auto & meshes = _Scene.GetMeshes();
   for ( const MeshInstance & inst : instances )
   {
+    if ( !inst._Visible )
+      continue;
+
     if ( ( inst._MeshID < 0 ) || ( inst._MeshID >= (int)meshes.size() ) )
       continue;
 
@@ -349,6 +352,9 @@ void DeferredRenderer::BuildDeferredDrawLists()
   for ( int i = 0; i < static_cast<int>(instances.size()); ++i )
   {
     const MeshInstance & inst = instances[i];
+    if ( !inst._Visible )
+      continue;
+
     if ( IsTransparentMaterial( inst._MaterialID ) )
       _TransparentMeshInstanceIDs.push_back(i);
     else

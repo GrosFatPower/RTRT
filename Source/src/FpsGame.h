@@ -160,6 +160,7 @@ public:
   int Attach( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, const FpsGameMap & iMap );
   int SyncCamera( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
   int SyncTransforms( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
+  int SetObjectInstanceVisible( Scene & iScene, int iObjectIndex, bool iVisible );
   bool HasViewWeapon() const { return !_WeaponInstanceIDs.empty(); }
   void Reset();
 

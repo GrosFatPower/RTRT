@@ -352,6 +352,36 @@ void Test6::SyncEditorLight( int iLightIndex )
 }
 
 // ----------------------------------------------------------------------------
+// EnsureEditorObjectVisibility
+// ----------------------------------------------------------------------------
+void Test6::EnsureEditorObjectVisibility()
+{
+  const int objectCount = static_cast<int>(_Map._Objects.size());
+  const int oldCount = static_cast<int>(_Editor._ObjectInstanceVisible.size());
+  if ( oldCount < objectCount )
+  {
+    _Editor._ObjectInstanceVisible.resize(objectCount, true);
+    for ( int i = oldCount; i < objectCount; ++i )
+      _Editor._ObjectInstanceVisible[i] = _Map._Objects[i]._Visible;
+  }
+  else if ( oldCount > objectCount )
+    _Editor._ObjectInstanceVisible.resize(objectCount);
+}
+
+// ----------------------------------------------------------------------------
+// ApplyEditorObjectVisibility
+// ----------------------------------------------------------------------------
+void Test6::ApplyEditorObjectVisibility()
+{
+  if ( !_Scene )
+    return;
+
+  EnsureEditorObjectVisibility();
+  for ( int i = 0; i < static_cast<int>(_Editor._ObjectInstanceVisible.size()); ++i )
+    _SceneBinding.SetObjectInstanceVisible(*_Scene, i, _Editor._ObjectInstanceVisible[i]);
+}
+
+// ----------------------------------------------------------------------------
 // InitializeUI
 // ----------------------------------------------------------------------------
 int Test6::InitializeUI()
@@ -438,6 +468,7 @@ int Test6::InitializeScene()
     std::cout << "Test6 : Failed to load default environment map" << std::endl;
 
   _Scene = std::move(newScene);
+  ApplyEditorObjectVisibility();
   SetEditorPathBuffers();
   return 0;
 }
@@ -832,6 +863,7 @@ void Test6::DrawEditorPanel()
       _Map = loadedMap;
       _MapPath = _Editor._LoadPath;
       _MapLoaded = true;
+      _Editor._ObjectInstanceVisible.clear();
       _Editor._Selection = FpsEditorSelection();
       _Editor._Dirty = false;
       SetEditorPathBuffers();
@@ -853,6 +885,7 @@ void Test6::DrawEditorPanel()
       object._Collidable = true;
       object._Visible = true;
       _Map._Objects.push_back(object);
+      EnsureEditorObjectVisibility();
       _MapLoaded = true;
       _Editor._Selection._Kind = FpsEditableKind::Box;
       _Editor._Selection._Index = static_cast<int>(_Map._Objects.size()) - 1;
@@ -871,6 +904,7 @@ void Test6::DrawEditorPanel()
       object._Collidable = true;
       object._Visible = false;
       _Map._Objects.push_back(object);
+      EnsureEditorObjectVisibility();
       _MapLoaded = true;
       _Editor._Selection._Kind = FpsEditableKind::Collider;
       _Editor._Selection._Index = static_cast<int>(_Map._Objects.size()) - 1;
@@ -880,13 +914,17 @@ void Test6::DrawEditorPanel()
 
     if ( ImGui::BeginListBox("Instances", ImVec2(-FLT_MIN, 180.f)) )
     {
+      EnsureEditorObjectVisibility();
       for ( int i = 0; i < static_cast<int>(_Map._Objects.size()); ++i )
       {
         const FpsSceneObject & object = _Map._Objects[i];
         const bool selected = ( ( FpsEditableKind::Box == _Editor._Selection._Kind )
                              || ( FpsEditableKind::Collider == _Editor._Selection._Kind ) )
                            && ( _Editor._Selection._Index == i );
-        const std::string label = std::string(object._Visible ? "Box: " : "Collider: ") + object._Name + "##object" + std::to_string(i);
+        std::string label = std::string(object._Visible ? "Box: " : "Collider: ") + object._Name;
+        if ( object._Visible && !_Editor._ObjectInstanceVisible[i] )
+          label += " (hidden)";
+        label += "##object" + std::to_string(i);
         if ( ImGui::Selectable(label.c_str(), selected) )
         {
           _Editor._Selection._Kind = object._Visible ? FpsEditableKind::Box : FpsEditableKind::Collider;
@@ -905,6 +943,7 @@ void Test6::DrawEditorPanel()
       if ( ( index >= 0 ) && ( index < static_cast<int>(_Map._Objects.size()) ) )
       {
         FpsSceneObject & object = _Map._Objects[index];
+        EnsureEditorObjectVisibility();
         bool objectDirty = false;
         char nameBuffer[128];
         std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", object._Name.c_str());
@@ -920,6 +959,16 @@ void Test6::DrawEditorPanel()
 
         if ( object._Visible )
         {
+          bool instanceVisible = _Editor._ObjectInstanceVisible[index];
+          if ( ImGui::Checkbox("Show instance", &instanceVisible) )
+          {
+            _Editor._ObjectInstanceVisible[index] = instanceVisible;
+            if ( _Scene )
+              _SceneBinding.SetObjectInstanceVisible(*_Scene, index, instanceVisible);
+            if ( _Renderer )
+              _Renderer -> Notify(DirtyState::SceneInstances);
+          }
+
           FpsGameMapLoader::SeedDefaultMaterials(_Map);
           int currentMaterial = 0;
           for ( int i = 0; i < static_cast<int>(_Map._Materials.size()); ++i )

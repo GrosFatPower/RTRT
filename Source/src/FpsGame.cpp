@@ -669,6 +669,7 @@ int FpsGameSceneBinding::SyncTransforms( Scene & iScene, const FpsGameWorld & iW
     if ( instanceID >= static_cast<int>(instances.size()) )
       return 1;
 
+    instances[instanceID]._Visible = objects[i]._Visible;
     instances[instanceID]._Transform = BuildObjectTransform(objects[i]);
   }
 
@@ -678,6 +679,7 @@ int FpsGameSceneBinding::SyncTransforms( Scene & iScene, const FpsGameWorld & iW
     if ( ( instanceID < 0 ) || ( instanceID >= static_cast<int>(instances.size()) ) )
       return 1;
 
+    instances[instanceID]._Visible = projectiles[i]._Active;
     instances[instanceID]._Transform = BuildProjectileTransform(projectiles[i], iSettings);
   }
 
@@ -691,9 +693,30 @@ int FpsGameSceneBinding::SyncTransforms( Scene & iScene, const FpsGameWorld & iW
     if ( ( instanceID < 0 ) || ( instanceID >= static_cast<int>(instances.size()) ) )
       return 1;
 
+    instances[instanceID]._Visible = iSettings._ShowViewWeapon;
     instances[instanceID]._Transform = weaponTransform * _WeaponBaseTransforms[i];
   }
 
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// SetObjectInstanceVisible
+// ----------------------------------------------------------------------------
+int FpsGameSceneBinding::SetObjectInstanceVisible( Scene & iScene, int iObjectIndex, bool iVisible )
+{
+  if ( ( iObjectIndex < 0 ) || ( iObjectIndex >= static_cast<int>(_ObjectInstanceIDs.size()) ) )
+    return 1;
+
+  const int instanceID = _ObjectInstanceIDs[iObjectIndex];
+  if ( instanceID < 0 )
+    return 0;
+
+  std::vector<MeshInstance> & instances = iScene.GetMeshInstances();
+  if ( instanceID >= static_cast<int>(instances.size()) )
+    return 1;
+
+  instances[instanceID]._Visible = iVisible;
   return 0;
 }
 
@@ -876,7 +899,7 @@ Mat4x4 FpsGameSceneBinding::BuildObjectTransform( const FpsSceneObject & iObject
 Mat4x4 FpsGameSceneBinding::BuildProjectileTransform( const FpsProjectile & iProjectile, const FpsGameSettings & iSettings ) const
 {
   if ( !iProjectile._Active )
-    return glm::translate(Vec3(0.f, -4.f, 0.f)) * glm::scale(Vec3(0.001f));
+    return glm::translate(iProjectile._Position) * glm::scale(Vec3(0.001f));
 
   const float radius = std::max(0.02f, iSettings._ProjectileRadius);
   return glm::translate(iProjectile._Position) * glm::scale(Vec3(radius * 2.f));
@@ -888,7 +911,7 @@ Mat4x4 FpsGameSceneBinding::BuildProjectileTransform( const FpsProjectile & iPro
 Mat4x4 FpsGameSceneBinding::BuildViewWeaponTransform( const FpsPlayer & iPlayer, const FpsGameSettings & iSettings ) const
 {
   if ( !iSettings._ShowViewWeapon )
-    return glm::translate(iPlayer.EyePosition(iSettings)) * glm::scale(Vec3(0.001f));
+    return glm::translate(iPlayer.EyePosition(iSettings)) * glm::scale(Vec3(std::max(0.001f, iSettings._ViewWeaponScale)));
 
   const float yawRad = MathUtil::ToRadians(iPlayer._Yaw);
   const float pitchRad = MathUtil::ToRadians(iPlayer._Pitch);

@@ -83,24 +83,42 @@ int GpuTLAS::Build( std::vector<Mesh*> & iMeshes, std::vector<MeshInstance> & iM
 {
   auto startTime = std::chrono::system_clock::now();
 
+  std::vector<MeshInstance> visibleInstances;
+  visibleInstances.reserve(iMeshInstances.size());
+  for ( const MeshInstance & meshInstance : iMeshInstances )
+  {
+    if ( !meshInstance._Visible )
+      continue;
+    if ( ( meshInstance._MeshID < 0 ) || ( meshInstance._MeshID >= static_cast<int>(iMeshes.size()) ) )
+      continue;
+    if ( !iMeshes[meshInstance._MeshID] )
+      continue;
+
+      visibleInstances.push_back(meshInstance);
+  }
+
   // 1. Compute BVH
-  const int nbInstances = static_cast<int>(iMeshInstances.size());
+  const int nbInstances = static_cast<int>(visibleInstances.size());
   if ( 0 == nbInstances )
+  {
+    _Nodes.clear();
+    _PackedMeshInstances.clear();
     return 0;
+  }
 
   std::vector<RadeonRays::bbox> bounds(nbInstances);
 
 //#pragma omp parallel for
   for ( int i = 0; i < nbInstances; ++i )
   {
-    Mesh * curMesh = iMeshes[iMeshInstances[i]._MeshID];
+    Mesh * curMesh = iMeshes[visibleInstances[i]._MeshID];
     if ( !curMesh )
       return 1;
 
     AABB<Vec3> boundingBox = curMesh -> GetBoundingBox();
 
     Vec3 right, up, forward, pos;
-    MathUtil::Decompose(iMeshInstances[i]._Transform, right, up, forward, pos);
+    MathUtil::Decompose(visibleInstances[i]._Transform, right, up, forward, pos);
 
     // Transformation de la bbox
     Vec3 lowRight = right * boundingBox._Low.x;
@@ -137,7 +155,7 @@ int GpuTLAS::Build( std::vector<Mesh*> & iMeshes, std::vector<MeshInstance> & iM
     for ( int i = 0; i < nbPackedInstance; ++i )
     {
       int instanceId = PackedInstances[i];
-      _PackedMeshInstances.push_back(iMeshInstances[instanceId]);
+      _PackedMeshInstances.push_back(visibleInstances[instanceId]);
     }
   }
 

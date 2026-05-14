@@ -185,6 +185,7 @@ protected:
 
   // Scene data
   int                                                  _CachedMeshInstanceCount = 0;
+  int                                                  _CachedVisibleMeshInstanceCount = 0;
   std::vector<RasterData::Vertex>                      _VertexBuffer;
   std::vector<RasterSourceVertex>                      _VertexSources;
   std::vector<RasterData::Triangle>                    _Triangles;

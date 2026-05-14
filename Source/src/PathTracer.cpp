@@ -975,7 +975,7 @@ int PathTracer::ReloadScene()
     return 1;
 
   _NbTriangles = _Scene.GetNbFaces();
-  _NbMeshInstances = _Scene.GetNbMeshInstances();
+  _NbMeshInstances = static_cast<int>(_Scene.GetTLASPackedMeshMatID().size());
 
   if ( _NbTriangles )
   {
@@ -1051,7 +1051,7 @@ int PathTracer::ReloadSceneInstances()
   if ( 0 != _Scene.RebuildTLASData() )
     return 1;
 
-  _NbMeshInstances = _Scene.GetNbMeshInstances();
+  _NbMeshInstances = static_cast<int>(_Scene.GetTLASPackedMeshMatID().size());
 
   if ( _NbTriangles )
   {
