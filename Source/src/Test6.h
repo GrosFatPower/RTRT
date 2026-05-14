@@ -18,6 +18,39 @@ struct GLFWwindow;
 namespace RTRT
 {
 
+enum class FpsEditableKind
+{
+  None = 0,
+  Box,
+  Collider,
+  Prop,
+  Light,
+  PlayerSpawn,
+  Weapon
+};
+
+struct FpsEditorSelection
+{
+  FpsEditableKind _Kind = FpsEditableKind::None;
+  int             _Index = -1;
+  int             _SceneInstanceID = -1;
+};
+
+struct FpsGameEditor
+{
+  bool               _Enabled = false;
+  bool               _Dirty = false;
+  bool               _PreviousShowViewWeapon = true;
+  bool               _PreviousFreeLook = false;
+  bool               _ShowColliderHelpers = true;
+  bool               _ShowLightHelpers = true;
+  FpsEditorSelection _Selection;
+  int                _SelectedMaterial = 0;
+  char               _SavePath[512] = {};
+  char               _LoadPath[512] = {};
+  char               _NewMaterialName[128] = "new_material";
+};
+
 class Test6 : public BaseTest
 {
 public:
@@ -42,6 +75,8 @@ protected:
   int UpdateGame();
   int DrawUI();
   void DrawDebugPanel();
+  void DrawEditorPanel();
+  int DrawEditorGizmo();
   void DrawHUD();
   int DrawSettingsUI();
   void DrawCrosshair();
@@ -49,6 +84,12 @@ protected:
   void SyncFramebufferResolution( bool iNotifyRenderer = false );
   void SetMouseCaptured( bool iCaptured );
   void ApplyRendererDefaults();
+  void SetEditorMode( bool iEnabled );
+  void SetEditorPathBuffers();
+  void SyncMapFromRuntimeSettings();
+  void SyncEditorObject( int iObjectIndex );
+  void SyncEditorLight( int iLightIndex );
+  void MarkEditorDirty() { _Editor._Dirty = true; }
 
 protected:
   std::unique_ptr<Scene>    _Scene;
@@ -63,6 +104,7 @@ protected:
   FpsGameMap                _Map;
   std::string               _MapPath;
   bool                      _MapLoaded = false;
+  FpsGameEditor             _Editor;
 
   KeyInput                  _KeyInput;
   MouseInput                _MouseInput;

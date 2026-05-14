@@ -9,13 +9,17 @@
 #include "SoftwareRasterizer.h"
 
 #include "imgui.h"
+#include "ImGuizmo.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include "glm/gtc/type_ptr.hpp"
 
 #include <algorithm>
+#include <cfloat>
+#include <cstring>
 #include <cstdio>
 #include <iostream>
 #include <thread>
@@ -47,6 +51,38 @@ static void ApplyMapSettings( const FpsGameMap & iMap, FpsGameSettings & ioSetti
   ioSettings._ViewWeaponOffset = iMap._Weapon._Offset;
   ioSettings._ViewWeaponRotation = iMap._Weapon._Rotation;
   ioSettings._ViewWeaponScale = iMap._Weapon._Scale;
+}
+
+// ----------------------------------------------------------------------------
+// CopyPathToBuffer
+// ----------------------------------------------------------------------------
+static void CopyPathToBuffer( char * oBuffer, size_t iBufferSize, const std::string & iPath )
+{
+  if ( !oBuffer || !iBufferSize )
+    return;
+
+  std::snprintf(oBuffer, iBufferSize, "%s", iPath.c_str());
+}
+
+// ----------------------------------------------------------------------------
+// EditorMaterialSlotFromName
+// ----------------------------------------------------------------------------
+static bool EditorMaterialSlotFromName( const std::string & iName, FpsMaterialSlot & oMaterial )
+{
+  if ( "floor" == iName )
+    oMaterial = FpsMaterialSlot::Floor;
+  else if ( "wall" == iName )
+    oMaterial = FpsMaterialSlot::Wall;
+  else if ( "pillar" == iName )
+    oMaterial = FpsMaterialSlot::Pillar;
+  else if ( "crate" == iName )
+    oMaterial = FpsMaterialSlot::Crate;
+  else if ( "accent" == iName )
+    oMaterial = FpsMaterialSlot::Accent;
+  else
+    return false;
+
+  return true;
 }
 
 // ----------------------------------------------------------------------------
@@ -214,6 +250,108 @@ void Test6::ApplyRendererDefaults()
 }
 
 // ----------------------------------------------------------------------------
+// SetEditorPathBuffers
+// ----------------------------------------------------------------------------
+void Test6::SetEditorPathBuffers()
+{
+  CopyPathToBuffer(_Editor._SavePath, sizeof(_Editor._SavePath), _MapPath);
+  CopyPathToBuffer(_Editor._LoadPath, sizeof(_Editor._LoadPath), _MapPath);
+}
+
+// ----------------------------------------------------------------------------
+// SyncMapFromRuntimeSettings
+// ----------------------------------------------------------------------------
+void Test6::SyncMapFromRuntimeSettings()
+{
+  _Map._MaxProjectiles = _GameSettings._MaxProjectiles;
+  _Map._MaxProjectileAmmo = _GameSettings._MaxProjectileAmmo;
+  _Map._ProjectileAmmoRefillTime = _GameSettings._ProjectileAmmoRefillTime;
+
+  _Map._Weapon._Visible = _Editor._Enabled ? _Editor._PreviousShowViewWeapon : _GameSettings._ShowViewWeapon;
+  _Map._Weapon._Offset = _GameSettings._ViewWeaponOffset;
+  _Map._Weapon._Rotation = _GameSettings._ViewWeaponRotation;
+  _Map._Weapon._Scale = _GameSettings._ViewWeaponScale;
+}
+
+// ----------------------------------------------------------------------------
+// SetEditorMode
+// ----------------------------------------------------------------------------
+void Test6::SetEditorMode( bool iEnabled )
+{
+  if ( _Editor._Enabled == iEnabled )
+    return;
+
+  _Editor._Enabled = iEnabled;
+  _HasLastMousePos = false;
+
+  if ( _Editor._Enabled )
+  {
+    _Editor._PreviousShowViewWeapon = _GameSettings._ShowViewWeapon;
+    _Editor._PreviousFreeLook = _GameSettings._FreeLook;
+    _GameSettings._ShowViewWeapon = false;
+    _GameSettings._FreeLook = true;
+    _GameWorld.ClearProjectiles();
+    SetMouseCaptured(false);
+  }
+  else
+  {
+    _GameSettings._ShowViewWeapon = _Editor._PreviousShowViewWeapon;
+    _GameSettings._FreeLook = _Editor._PreviousFreeLook;
+  }
+
+  if ( _Scene )
+  {
+    _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings);
+    _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings);
+  }
+
+  if ( _Renderer )
+  {
+    _Renderer -> Notify(DirtyState::SceneCamera);
+    _Renderer -> Notify(DirtyState::SceneInstances);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// SyncEditorObject
+// ----------------------------------------------------------------------------
+void Test6::SyncEditorObject( int iObjectIndex )
+{
+  if ( ( iObjectIndex < 0 ) || ( iObjectIndex >= static_cast<int>(_Map._Objects.size()) ) )
+    return;
+
+  std::vector<FpsSceneObject> & objects = _GameWorld.GetObjects();
+  if ( iObjectIndex >= static_cast<int>(objects.size()) )
+    return;
+
+  objects[iObjectIndex] = _Map._Objects[iObjectIndex];
+
+  if ( _Scene )
+    _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings);
+  if ( _Renderer )
+    _Renderer -> Notify(DirtyState::SceneInstances);
+}
+
+// ----------------------------------------------------------------------------
+// SyncEditorLight
+// ----------------------------------------------------------------------------
+void Test6::SyncEditorLight( int iLightIndex )
+{
+  if ( !_Scene )
+    return;
+  if ( ( iLightIndex < 0 ) || ( iLightIndex >= static_cast<int>(_Map._Lights.size()) ) )
+    return;
+
+  Light * light = _Scene -> GetLight(iLightIndex);
+  if ( !light )
+    return;
+
+  *light = _Map._Lights[iLightIndex];
+  if ( _Renderer )
+    _Renderer -> Notify(DirtyState::SceneLights);
+}
+
+// ----------------------------------------------------------------------------
 // InitializeUI
 // ----------------------------------------------------------------------------
 int Test6::InitializeUI()
@@ -243,14 +381,29 @@ int Test6::InitializeScene()
   if ( !newScene )
     return 1;
 
+  const bool preserveEditorPose = _Editor._Enabled;
+  FpsPlayer editorPlayer;
+  if ( preserveEditorPose )
+    editorPlayer = _GameWorld.GetPlayer();
+
   if ( _MapPath.empty() )
     _MapPath = PathUtils::GetAssetPath("FPSMaps/default.fpsmap");
 
-  _Map = FpsGameMap();
-  _MapLoaded = FpsGameMapLoader::Load(_MapPath, _Map);
+  if ( !_MapLoaded )
+  {
+    _Map = FpsGameMap();
+    _MapLoaded = FpsGameMapLoader::Load(_MapPath, _Map);
+  }
+
   if ( _MapLoaded )
   {
+    FpsGameMapLoader::SeedDefaultMaterials(_Map);
     ApplyMapSettings(_Map, _GameSettings);
+    if ( _Editor._Enabled )
+    {
+      _GameSettings._ShowViewWeapon = false;
+      _GameSettings._FreeLook = true;
+    }
     if ( 0 != _GameWorld.Initialize(_GameSettings, _Map) )
       return 1;
   }
@@ -259,6 +412,16 @@ int Test6::InitializeScene()
     std::cout << "Test6 : Failed to load FPS map, using fallback arena" << std::endl;
     if ( 0 != _GameWorld.Initialize(_GameSettings) )
       return 1;
+  }
+
+  if ( preserveEditorPose )
+  {
+    FpsPlayer & player = _GameWorld.GetPlayer();
+    player._Position = editorPlayer._Position;
+    player._Velocity = Vec3(0.f);
+    player._Yaw = editorPlayer._Yaw;
+    player._Pitch = editorPlayer._Pitch;
+    player._Grounded = false;
   }
 
   if ( _MapLoaded )
@@ -275,6 +438,7 @@ int Test6::InitializeScene()
     std::cout << "Test6 : Failed to load default environment map" << std::endl;
 
   _Scene = std::move(newScene);
+  SetEditorPathBuffers();
   return 0;
 }
 
@@ -330,6 +494,100 @@ int Test6::ProcessInput()
 
   if ( !ImGui::GetIO().WantCaptureKeyboard && _KeyInput.IsKeyReleased(GLFW_KEY_F2) )
     _GameSettings._FreeLook = !_GameSettings._FreeLook;
+
+  if ( !ImGui::GetIO().WantCaptureKeyboard && _KeyInput.IsKeyReleased(GLFW_KEY_F3) )
+    SetEditorMode(!_Editor._Enabled);
+
+  if ( _Editor._Enabled )
+  {
+    if ( !ImGui::GetIO().WantCaptureKeyboard )
+    {
+      FpsRendererMode requestedRendererMode = _GameSettings._RendererMode;
+      if ( _KeyInput.IsKeyDown(GLFW_KEY_J) )
+        requestedRendererMode = FpsRendererMode::Deferred;
+      else if ( _KeyInput.IsKeyDown(GLFW_KEY_K) )
+        requestedRendererMode = FpsRendererMode::Software;
+      else if ( _KeyInput.IsKeyDown(GLFW_KEY_L) )
+        requestedRendererMode = FpsRendererMode::PhotoPathTracer;
+
+      if ( requestedRendererMode != _GameSettings._RendererMode )
+      {
+        _GameSettings._RendererMode = requestedRendererMode;
+        _ReloadRenderer = true;
+      }
+    }
+
+    const bool rightMouseHeld = !ImGui::GetIO().WantCaptureMouse
+                             && ( GLFW_PRESS == glfwGetMouseButton(_MainWindow.get(), GLFW_MOUSE_BUTTON_RIGHT) )
+                             && ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode );
+    if ( rightMouseHeld )
+    {
+      FpsPlayer & player = _GameWorld.GetPlayer();
+      if ( _HasLastMousePos )
+      {
+        player._Yaw += static_cast<float>(curMouseX - _LastMouseX) * _GameSettings._MouseSensitivity;
+        player._Pitch -= static_cast<float>(curMouseY - _LastMouseY) * _GameSettings._MouseSensitivity;
+        player._Pitch = MathUtil::Clamp(player._Pitch, -89.f, 89.f);
+      }
+      _HasLastMousePos = true;
+
+      if ( !ImGui::GetIO().WantTextInput )
+      {
+        const float yawRad = MathUtil::ToRadians(player._Yaw);
+        const float pitchRad = MathUtil::ToRadians(player._Pitch);
+        Vec3 forward(std::cos(yawRad) * std::cos(pitchRad),
+                     std::sin(pitchRad),
+                     std::sin(yawRad) * std::cos(pitchRad));
+        forward = glm::normalize(forward);
+        const Vec3 right = glm::normalize(glm::cross(forward, Vec3(0.f, 1.f, 0.f)));
+        const Vec3 up(0.f, 1.f, 0.f);
+
+        Vec3 move(0.f);
+        if ( _KeyInput.IsKeyDown(GLFW_KEY_W) )
+          move += forward;
+        if ( _KeyInput.IsKeyDown(GLFW_KEY_S) )
+          move -= forward;
+        if ( _KeyInput.IsKeyDown(GLFW_KEY_D) )
+          move += right;
+        if ( _KeyInput.IsKeyDown(GLFW_KEY_A) )
+          move -= right;
+        if ( _KeyInput.IsKeyDown(GLFW_KEY_SPACE) )
+          move += up;
+        if ( _KeyInput.IsKeyDown(GLFW_KEY_LEFT_CONTROL) || _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_CONTROL) )
+          move -= up;
+
+        if ( glm::length(move) > EPSILON )
+        {
+          const float speed = ( _KeyInput.IsKeyDown(GLFW_KEY_LEFT_SHIFT) || _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_SHIFT) )
+                            ? _GameSettings._SprintSpeed
+                            : _GameSettings._MoveSpeed;
+          const float deltaTime = std::min(static_cast<float>(_DeltaTime), 0.05f);
+          player._Position += glm::normalize(move) * speed * deltaTime;
+        }
+      }
+
+      if ( _Scene )
+        _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings);
+      if ( _Renderer )
+        _Renderer -> Notify(DirtyState::SceneCamera);
+    }
+    else
+      _HasLastMousePos = false;
+
+    if ( _KeyInput.IsKeyReleased(GLFW_KEY_C) )
+    {
+      _CaptureOutputPath = "./Test6_" + std::to_string(_NbRenderedFrames) + "frames.png";
+      _RenderToFile = true;
+    }
+
+    _LastMouseX = curMouseX;
+    _LastMouseY = curMouseY;
+    _KeyInput.ClearLastEvents();
+    _MouseInput.ClearLastEvents(curMouseX, curMouseY);
+
+    glfwPollEvents();
+    return 0;
+  }
 
   if ( !_MouseCaptured && !ImGui::GetIO().WantCaptureMouse && _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1) )
     SetMouseCaptured(true);
@@ -458,11 +716,19 @@ int Test6::DrawUI()
   ImGui_ImplOpenGL3_NewFrame();
   ImGui_ImplGlfw_NewFrame();
   ImGui::NewFrame();
+  ImGuizmo::BeginFrame();
 
   if ( _ShowDebugPanel )
     DrawDebugPanel();
 
-  DrawHUD();
+  if ( _Editor._Enabled )
+  {
+    DrawEditorPanel();
+    DrawEditorGizmo();
+    DrawCrosshair();
+  }
+  else
+    DrawHUD();
 
   ImGui::Render();
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -492,7 +758,8 @@ void Test6::DrawDebugPanel()
   else
     ImGui::Text("Click viewport to capture mouse. Esc releases capture.");
   ImGui::Text("Renderer shortcuts: J Deferred, K Software, L Photo");
-  ImGui::Text("F1 toggles this panel. F2 toggles free look.");
+  ImGui::Text("F1 toggles this panel. F2 toggles free look. F3 toggles editor.");
+  ImGui::Text("Editor: %s", _Editor._Enabled ? "on" : "off");
 
   ImGui::Checkbox("Free look", &_GameSettings._FreeLook);
 
@@ -528,6 +795,448 @@ void Test6::DrawDebugPanel()
   DrawSettingsUI();
 
   ImGui::End();
+}
+
+// ----------------------------------------------------------------------------
+// DrawEditorPanel
+// ----------------------------------------------------------------------------
+void Test6::DrawEditorPanel()
+{
+  ImGui::Begin("Test6 Map Editor");
+
+  ImGui::Text("Mode: editor");
+  ImGui::Text("Map: %s%s", _MapPath.c_str(), _Editor._Dirty ? " *" : "");
+  ImGui::Checkbox("Collider helpers", &_Editor._ShowColliderHelpers);
+  ImGui::SameLine();
+  ImGui::Checkbox("Light helpers", &_Editor._ShowLightHelpers);
+
+  ImGui::PushItemWidth(360.f);
+  ImGui::InputText("Save path", _Editor._SavePath, sizeof(_Editor._SavePath));
+  if ( ImGui::Button("Save") )
+  {
+    SyncMapFromRuntimeSettings();
+    if ( FpsGameMapLoader::Save(_Editor._SavePath, _Map) )
+    {
+      _MapPath = _Editor._SavePath;
+      SetEditorPathBuffers();
+      _Editor._Dirty = false;
+    }
+  }
+
+  ImGui::InputText("Load path", _Editor._LoadPath, sizeof(_Editor._LoadPath));
+  if ( ImGui::Button("Load") )
+  {
+    FpsGameMap loadedMap;
+    if ( FpsGameMapLoader::Load(_Editor._LoadPath, loadedMap) )
+    {
+      _Map = loadedMap;
+      _MapPath = _Editor._LoadPath;
+      _MapLoaded = true;
+      _Editor._Selection = FpsEditorSelection();
+      _Editor._Dirty = false;
+      SetEditorPathBuffers();
+      _ReloadScene = true;
+    }
+  }
+  ImGui::PopItemWidth();
+
+  if ( ImGui::CollapsingHeader("Objects", ImGuiTreeNodeFlags_DefaultOpen) )
+  {
+    if ( ImGui::Button("Add box") )
+    {
+      FpsSceneObject object;
+      object._Name = "Box " + std::to_string(static_cast<int>(_Map._Objects.size()));
+      object._Center = _GameWorld.GetPlayer().EyePosition(_GameSettings) + Vec3(0.f, 0.f, 3.f);
+      object._HalfExtents = Vec3(0.5f);
+      object._MaterialName = "wall";
+      object._Material = FpsMaterialSlot::Wall;
+      object._Collidable = true;
+      object._Visible = true;
+      _Map._Objects.push_back(object);
+      _MapLoaded = true;
+      _Editor._Selection._Kind = FpsEditableKind::Box;
+      _Editor._Selection._Index = static_cast<int>(_Map._Objects.size()) - 1;
+      MarkEditorDirty();
+      _ReloadScene = true;
+    }
+    ImGui::SameLine();
+    if ( ImGui::Button("Add collider") )
+    {
+      FpsSceneObject object;
+      object._Name = "Collider " + std::to_string(static_cast<int>(_Map._Objects.size()));
+      object._Center = _GameWorld.GetPlayer().EyePosition(_GameSettings) + Vec3(0.f, 0.f, 3.f);
+      object._HalfExtents = Vec3(0.5f);
+      object._MaterialName = "wall";
+      object._Material = FpsMaterialSlot::Wall;
+      object._Collidable = true;
+      object._Visible = false;
+      _Map._Objects.push_back(object);
+      _MapLoaded = true;
+      _Editor._Selection._Kind = FpsEditableKind::Collider;
+      _Editor._Selection._Index = static_cast<int>(_Map._Objects.size()) - 1;
+      MarkEditorDirty();
+      _ReloadScene = true;
+    }
+
+    if ( ImGui::BeginListBox("Instances", ImVec2(-FLT_MIN, 180.f)) )
+    {
+      for ( int i = 0; i < static_cast<int>(_Map._Objects.size()); ++i )
+      {
+        const FpsSceneObject & object = _Map._Objects[i];
+        const bool selected = ( ( FpsEditableKind::Box == _Editor._Selection._Kind )
+                             || ( FpsEditableKind::Collider == _Editor._Selection._Kind ) )
+                           && ( _Editor._Selection._Index == i );
+        const std::string label = std::string(object._Visible ? "Box: " : "Collider: ") + object._Name + "##object" + std::to_string(i);
+        if ( ImGui::Selectable(label.c_str(), selected) )
+        {
+          _Editor._Selection._Kind = object._Visible ? FpsEditableKind::Box : FpsEditableKind::Collider;
+          _Editor._Selection._Index = i;
+        }
+        if ( selected )
+          ImGui::SetItemDefaultFocus();
+      }
+      ImGui::EndListBox();
+    }
+
+    if ( ( FpsEditableKind::Box == _Editor._Selection._Kind )
+      || ( FpsEditableKind::Collider == _Editor._Selection._Kind ) )
+    {
+      const int index = _Editor._Selection._Index;
+      if ( ( index >= 0 ) && ( index < static_cast<int>(_Map._Objects.size()) ) )
+      {
+        FpsSceneObject & object = _Map._Objects[index];
+        bool objectDirty = false;
+        char nameBuffer[128];
+        std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", object._Name.c_str());
+        if ( ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer)) )
+        {
+          object._Name = nameBuffer;
+          objectDirty = true;
+        }
+
+        objectDirty |= ImGui::DragFloat3("Center", &object._Center.x, 0.05f, -100.f, 100.f, "%.3f");
+        objectDirty |= ImGui::DragFloat3("Half extents", &object._HalfExtents.x, 0.05f, 0.01f, 100.f, "%.3f");
+        objectDirty |= ImGui::Checkbox("Collidable", &object._Collidable);
+
+        if ( object._Visible )
+        {
+          FpsGameMapLoader::SeedDefaultMaterials(_Map);
+          int currentMaterial = 0;
+          for ( int i = 0; i < static_cast<int>(_Map._Materials.size()); ++i )
+          {
+            if ( _Map._Materials[i]._Name == object._MaterialName )
+              currentMaterial = i;
+          }
+
+          const char * currentName = _Map._Materials.empty() ? "" : _Map._Materials[currentMaterial]._Name.c_str();
+          if ( ImGui::BeginCombo("Material", currentName) )
+          {
+            for ( int i = 0; i < static_cast<int>(_Map._Materials.size()); ++i )
+            {
+              const bool selected = ( i == currentMaterial );
+              if ( ImGui::Selectable(_Map._Materials[i]._Name.c_str(), selected) )
+              {
+                object._MaterialName = _Map._Materials[i]._Name;
+                FpsMaterialSlot materialSlot;
+                if ( EditorMaterialSlotFromName(object._MaterialName, materialSlot) )
+                  object._Material = materialSlot;
+                MarkEditorDirty();
+                _ReloadScene = true;
+              }
+              if ( selected )
+                ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+          }
+        }
+
+        if ( objectDirty )
+        {
+          object._HalfExtents = MathUtil::Max(object._HalfExtents, Vec3(0.01f));
+          SyncEditorObject(index);
+          MarkEditorDirty();
+        }
+      }
+    }
+  }
+
+  if ( ImGui::CollapsingHeader("Materials") )
+  {
+    FpsGameMapLoader::SeedDefaultMaterials(_Map);
+    if ( !_Map._Materials.empty() )
+      _Editor._SelectedMaterial = MathUtil::Clamp(_Editor._SelectedMaterial, 0, static_cast<int>(_Map._Materials.size()) - 1);
+
+    ImGui::InputText("New material", _Editor._NewMaterialName, sizeof(_Editor._NewMaterialName));
+    ImGui::SameLine();
+    if ( ImGui::Button("Add material") && std::strlen(_Editor._NewMaterialName) > 0 )
+    {
+      bool exists = false;
+      for ( int i = 0; i < static_cast<int>(_Map._Materials.size()); ++i )
+      {
+        if ( _Map._Materials[i]._Name == _Editor._NewMaterialName )
+        {
+          _Editor._SelectedMaterial = i;
+          exists = true;
+          break;
+        }
+      }
+
+      if ( !exists )
+      {
+        FpsMapMaterial material;
+        material._Name = _Editor._NewMaterialName;
+        material._Material._Albedo = Vec3(0.8f);
+        material._Material._Roughness = 0.5f;
+        _Map._Materials.push_back(material);
+        _Editor._SelectedMaterial = static_cast<int>(_Map._Materials.size()) - 1;
+        MarkEditorDirty();
+        _ReloadScene = true;
+      }
+    }
+
+    if ( !_Map._Materials.empty() )
+    {
+      if ( ImGui::BeginListBox("Materials", ImVec2(-FLT_MIN, 130.f)) )
+      {
+        for ( int i = 0; i < static_cast<int>(_Map._Materials.size()); ++i )
+        {
+          const bool selected = ( i == _Editor._SelectedMaterial );
+          if ( ImGui::Selectable(_Map._Materials[i]._Name.c_str(), selected) )
+            _Editor._SelectedMaterial = i;
+          if ( selected )
+            ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndListBox();
+      }
+
+      FpsMapMaterial & mapMaterial = _Map._Materials[_Editor._SelectedMaterial];
+      Material & material = mapMaterial._Material;
+      bool materialDirty = false;
+      materialDirty |= ImGui::ColorEdit3("Albedo", &material._Albedo.x);
+      materialDirty |= ImGui::DragFloat("Roughness", &material._Roughness, 0.01f, 0.f, 1.f, "%.3f");
+      materialDirty |= ImGui::DragFloat("Metallic", &material._Metallic, 0.01f, 0.f, 1.f, "%.3f");
+      materialDirty |= ImGui::DragFloat("Reflectance", &material._Reflectance, 0.01f, 0.f, 1.f, "%.3f");
+      materialDirty |= ImGui::ColorEdit3("Emission", &material._Emission.x);
+      materialDirty |= ImGui::DragFloat("Opacity", &material._Opacity, 0.01f, 0.f, 1.f, "%.3f");
+      int alphaMode = static_cast<int>(material._AlphaMode);
+      static const char * alphaModes[] = { "Opaque", "Blend", "Mask" };
+      if ( ImGui::Combo("Alpha mode", &alphaMode, alphaModes, 3) )
+      {
+        material._AlphaMode = static_cast<float>(alphaMode);
+        materialDirty = true;
+      }
+
+      if ( materialDirty )
+      {
+        material._Roughness = MathUtil::Clamp(material._Roughness, 0.f, 1.f);
+        material._Metallic = MathUtil::Clamp(material._Metallic, 0.f, 1.f);
+        material._Reflectance = MathUtil::Clamp(material._Reflectance, 0.f, 1.f);
+        material._Opacity = MathUtil::Clamp(material._Opacity, 0.f, 1.f);
+        if ( _Scene )
+        {
+          const int materialID = _Scene -> FindMaterialID("__FpsMap_" + mapMaterial._Name);
+          if ( ( materialID >= 0 ) && ( materialID < static_cast<int>(_Scene -> GetMaterials().size()) ) )
+          {
+            const float id = _Scene -> GetMaterials()[materialID]._ID;
+            _Scene -> GetMaterials()[materialID] = material;
+            _Scene -> GetMaterials()[materialID]._ID = id;
+          }
+        }
+        if ( _Renderer )
+          _Renderer -> Notify(DirtyState::SceneMaterials);
+        MarkEditorDirty();
+      }
+    }
+  }
+
+  if ( ImGui::CollapsingHeader("Lights") )
+  {
+    if ( ImGui::Button("Add sphere light") )
+    {
+      Light light;
+      light._Type = (float)LightType::SphereLight;
+      light._Pos = _GameWorld.GetPlayer().EyePosition(_GameSettings) + Vec3(0.f, 0.f, 2.f);
+      light._Emission = Vec3(1.f, 0.85f, 0.65f);
+      light._Intensity = 20.f;
+      light._Radius = 0.25f;
+      light._Area = 4.0f * static_cast<float>(M_PI) * light._Radius * light._Radius;
+      _Map._Lights.push_back(light);
+      _Editor._Selection._Kind = FpsEditableKind::Light;
+      _Editor._Selection._Index = static_cast<int>(_Map._Lights.size()) - 1;
+      MarkEditorDirty();
+      _ReloadScene = true;
+    }
+    ImGui::SameLine();
+    if ( ImGui::Button("Add distant light") )
+    {
+      Light light;
+      light._Type = (float)LightType::DistantLight;
+      light._Pos = Vec3(-0.4f, 0.8f, -0.3f);
+      light._Emission = Vec3(1.f);
+      light._Intensity = 2.f;
+      light._CastShadow = true;
+      _Map._Lights.push_back(light);
+      _Editor._Selection._Kind = FpsEditableKind::Light;
+      _Editor._Selection._Index = static_cast<int>(_Map._Lights.size()) - 1;
+      MarkEditorDirty();
+      _ReloadScene = true;
+    }
+
+    if ( ImGui::BeginListBox("Lights", ImVec2(-FLT_MIN, 150.f)) )
+    {
+      for ( int i = 0; i < static_cast<int>(_Map._Lights.size()); ++i )
+      {
+        const LightType type = (LightType)(int)_Map._Lights[i]._Type;
+        const char * typeName = ( LightType::DistantLight == type ) ? "Distant" : ( LightType::RectLight == type ? "Rect" : "Sphere" );
+        const bool selected = ( FpsEditableKind::Light == _Editor._Selection._Kind ) && ( _Editor._Selection._Index == i );
+        const std::string label = std::string(typeName) + " light##light" + std::to_string(i);
+        if ( ImGui::Selectable(label.c_str(), selected) )
+        {
+          _Editor._Selection._Kind = FpsEditableKind::Light;
+          _Editor._Selection._Index = i;
+        }
+        if ( selected )
+          ImGui::SetItemDefaultFocus();
+      }
+      ImGui::EndListBox();
+    }
+
+    if ( FpsEditableKind::Light == _Editor._Selection._Kind )
+    {
+      const int index = _Editor._Selection._Index;
+      if ( ( index >= 0 ) && ( index < static_cast<int>(_Map._Lights.size()) ) )
+      {
+        Light & light = _Map._Lights[index];
+        bool lightDirty = false;
+        LightType type = (LightType)(int)light._Type;
+        int lightType = ( LightType::DistantLight == type ) ? 2 : ( LightType::RectLight == type ? 1 : 0 );
+        static const char * lightTypes[] = { "Sphere", "Rect", "Distant" };
+        if ( ImGui::Combo("Type", &lightType, lightTypes, 3) )
+        {
+          if ( 0 == lightType )
+            light._Type = (float)LightType::SphereLight;
+          else if ( 1 == lightType )
+            light._Type = (float)LightType::RectLight;
+          else
+            light._Type = (float)LightType::DistantLight;
+          lightDirty = true;
+        }
+
+        type = (LightType)(int)light._Type;
+        if ( LightType::DistantLight == type )
+          lightDirty |= ImGui::DragFloat3("Direction", &light._Pos.x, 0.01f, -1.f, 1.f, "%.3f");
+        else
+          lightDirty |= ImGui::DragFloat3("Position", &light._Pos.x, 0.05f, -100.f, 100.f, "%.3f");
+
+        lightDirty |= ImGui::ColorEdit3("Emission", &light._Emission.x);
+        lightDirty |= ImGui::DragFloat("Intensity", &light._Intensity, 0.1f, 0.f, 500.f, "%.2f");
+        if ( LightType::SphereLight == type )
+          lightDirty |= ImGui::DragFloat("Radius", &light._Radius, 0.01f, 0.01f, 20.f, "%.3f");
+        if ( LightType::RectLight == type )
+        {
+          lightDirty |= ImGui::DragFloat3("Dir U", &light._DirU.x, 0.05f, -20.f, 20.f, "%.3f");
+          lightDirty |= ImGui::DragFloat3("Dir V", &light._DirV.x, 0.05f, -20.f, 20.f, "%.3f");
+          lightDirty |= ImGui::DragFloat("Area", &light._Area, 0.01f, 0.01f, 400.f, "%.3f");
+        }
+        lightDirty |= ImGui::Checkbox("Cast shadow", &light._CastShadow);
+        lightDirty |= ImGui::DragFloat("Shadow radius", &light._ShadowRadius, 0.05f, 0.f, 200.f, "%.2f");
+
+        if ( lightDirty )
+        {
+          if ( LightType::SphereLight == (LightType)(int)light._Type )
+            light._Area = 4.0f * static_cast<float>(M_PI) * light._Radius * light._Radius;
+          SyncEditorLight(index);
+          MarkEditorDirty();
+        }
+      }
+    }
+  }
+
+  if ( ImGui::CollapsingHeader("Player spawn") )
+  {
+    bool spawnDirty = false;
+    spawnDirty |= ImGui::DragFloat3("Spawn position", &_Map._Player._Position.x, 0.05f, -100.f, 100.f, "%.3f");
+    spawnDirty |= ImGui::DragFloat("Spawn yaw", &_Map._Player._Yaw, 0.5f, -360.f, 360.f, "%.2f");
+    spawnDirty |= ImGui::DragFloat("Spawn pitch", &_Map._Player._Pitch, 0.5f, -89.f, 89.f, "%.2f");
+    if ( ImGui::Button("Use current camera") )
+    {
+      const FpsPlayer & player = _GameWorld.GetPlayer();
+      _Map._Player._Position = player._Position;
+      _Map._Player._Yaw = player._Yaw;
+      _Map._Player._Pitch = player._Pitch;
+      spawnDirty = true;
+    }
+    if ( spawnDirty )
+      MarkEditorDirty();
+  }
+
+  ImGui::End();
+}
+
+// ----------------------------------------------------------------------------
+// DrawEditorGizmo
+// ----------------------------------------------------------------------------
+int Test6::DrawEditorGizmo()
+{
+  if ( !_Editor._Enabled || !_Scene || !_Renderer )
+    return 0;
+
+  Mat4x4 view(1.f);
+  Mat4x4 proj(1.f);
+
+  Camera & camera = _Scene -> GetCamera();
+  camera.ComputeLookAtMatrix(view);
+
+  const float width  = static_cast<float>(std::max(1, _Settings._WindowResolution.x));
+  const float height = static_cast<float>(std::max(1, _Settings._WindowResolution.y));
+  camera.ComputePerspectiveProjMatrix(width / height, proj);
+
+  ImGuiIO & io = ImGui::GetIO();
+  ImGuizmo::SetDrawlist(ImGui::GetForegroundDrawList());
+  ImGuizmo::SetRect(0.f, 0.f, io.DisplaySize.x, io.DisplaySize.y);
+  ImGuizmo::SetOrthographic(false);
+
+  if ( ( FpsEditableKind::Box == _Editor._Selection._Kind )
+    || ( FpsEditableKind::Collider == _Editor._Selection._Kind ) )
+  {
+    const int index = _Editor._Selection._Index;
+    if ( ( index < 0 ) || ( index >= static_cast<int>(_Map._Objects.size()) ) )
+      return 0;
+
+    FpsSceneObject & object = _Map._Objects[index];
+    Mat4x4 transform = glm::translate(object._Center);
+    if ( ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
+                              ImGuizmo::TRANSLATE, ImGuizmo::WORLD,
+                              glm::value_ptr(transform)) )
+    {
+      object._Center = Vec3(transform[3]);
+      SyncEditorObject(index);
+      MarkEditorDirty();
+    }
+  }
+  else if ( FpsEditableKind::Light == _Editor._Selection._Kind )
+  {
+    const int index = _Editor._Selection._Index;
+    if ( ( index < 0 ) || ( index >= static_cast<int>(_Map._Lights.size()) ) )
+      return 0;
+
+    Light & light = _Map._Lights[index];
+    if ( LightType::DistantLight == (LightType)(int)light._Type )
+      return 0;
+
+    Mat4x4 transform(1.f);
+    transform[3] = Vec4(light._Pos, 1.f);
+    if ( ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
+                              ImGuizmo::TRANSLATE, ImGuizmo::WORLD,
+                              glm::value_ptr(transform)) )
+    {
+      light._Pos = Vec3(transform[3]);
+      SyncEditorLight(index);
+      MarkEditorDirty();
+    }
+  }
+
+  return 0;
 }
 
 // ----------------------------------------------------------------------------

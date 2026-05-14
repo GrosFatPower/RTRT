@@ -628,7 +628,10 @@ int FpsGameSceneBinding::Attach( Scene & iScene, const FpsGameWorld & iWorld, co
     _ProjectileInstanceIDs.push_back(iScene.AddMeshInstance(instance));
   }
 
-  return SyncCamera(iScene, iWorld, iSettings);
+  if ( 0 != SyncCamera(iScene, iWorld, iSettings) )
+    return 1;
+
+  return SyncTransforms(iScene, iWorld, iSettings);
 }
 
 // ----------------------------------------------------------------------------
@@ -885,7 +888,7 @@ Mat4x4 FpsGameSceneBinding::BuildProjectileTransform( const FpsProjectile & iPro
 Mat4x4 FpsGameSceneBinding::BuildViewWeaponTransform( const FpsPlayer & iPlayer, const FpsGameSettings & iSettings ) const
 {
   if ( !iSettings._ShowViewWeapon )
-    return glm::translate(Vec3(0.f, -1000.f, 0.f)) * glm::scale(Vec3(0.001f));
+    return glm::translate(iPlayer.EyePosition(iSettings)) * glm::scale(Vec3(0.001f));
 
   const float yawRad = MathUtil::ToRadians(iPlayer._Yaw);
   const float pitchRad = MathUtil::ToRadians(iPlayer._Pitch);

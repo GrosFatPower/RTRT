@@ -121,6 +121,7 @@ public:
   const FpsPlayer & GetPlayer() const { return _Player; }
   FpsPlayer & GetPlayer() { return _Player; }
   const std::vector<FpsSceneObject> & GetObjects() const { return _Objects; }
+  std::vector<FpsSceneObject> & GetObjects() { return _Objects; }
   const std::vector<FpsProjectile> & GetProjectiles() const { return _Projectiles; }
   int GetActiveProjectileCount() const;
   int GetProjectileAmmo() const { return _ProjectileAmmo; }
