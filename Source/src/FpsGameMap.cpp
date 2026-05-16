@@ -146,6 +146,32 @@ static bool ParseVec3( const std::vector<std::string> & iTokens, Vec3 & oValue )
       && ParseFloat(iTokens[3], oValue.z);
 }
 
+static bool ParseVec4( const std::vector<std::string> & iTokens, Vec4 & oValue )
+{
+  if ( 5 != static_cast<int>(iTokens.size()) )
+    return false;
+
+  return ParseFloat(iTokens[1], oValue.x)
+      && ParseFloat(iTokens[2], oValue.y)
+      && ParseFloat(iTokens[3], oValue.z)
+      && ParseFloat(iTokens[4], oValue.w);
+}
+
+static Vec4 OrientationFromEuler( const Vec3 & iRotation )
+{
+  const Vec3 rotRad(MathUtil::ToRadians(iRotation.x),
+                    MathUtil::ToRadians(iRotation.y),
+                    MathUtil::ToRadians(iRotation.z));
+
+  Mat4x4 transform(1.f);
+  transform = transform * glm::rotate(rotRad.x, Vec3(1.f, 0.f, 0.f));
+  transform = transform * glm::rotate(rotRad.y, Vec3(0.f, 1.f, 0.f));
+  transform = transform * glm::rotate(rotRad.z, Vec3(0.f, 0.f, 1.f));
+
+  const glm::quat quat = glm::normalize(glm::quat_cast(glm::mat3(transform)));
+  return Vec4(quat.x, quat.y, quat.z, quat.w);
+}
+
 static bool ParseMaterialSlot( const std::string & iToken, FpsMaterialSlot & oMaterial )
 {
   if ( IsEqual(iToken, "floor") )
@@ -527,6 +553,17 @@ protected:
           return Error("invalid object center");
         hasCenter = true;
       }
+      else if ( IsEqual(tokens[0], "rotation") )
+      {
+        if ( !ParseVec3(tokens, object._Rotation) )
+          return Error("invalid object rotation");
+        object._Orientation = OrientationFromEuler(object._Rotation);
+      }
+      else if ( IsEqual(tokens[0], "orientation") )
+      {
+        if ( !ParseVec4(tokens, object._Orientation) )
+          return Error("invalid object orientation");
+      }
       else if ( IsEqual(tokens[0], "half") )
       {
         if ( !ParseVec3(tokens, object._HalfExtents) )
@@ -789,6 +826,11 @@ static void WriteVec3( std::ofstream & ioFile, const char * iName, const Vec3 & 
   ioFile << "  " << iName << " " << iValue.x << " " << iValue.y << " " << iValue.z << "\n";
 }
 
+static void WriteVec4( std::ofstream & ioFile, const char * iName, const Vec4 & iValue )
+{
+  ioFile << "  " << iName << " " << iValue.x << " " << iValue.y << " " << iValue.z << " " << iValue.w << "\n";
+}
+
 static std::string ObjectMaterialName( const FpsSceneObject & iObject )
 {
   if ( !iObject._MaterialName.empty() )
@@ -865,6 +907,8 @@ bool FpsGameMapLoader::Save( const std::string & iFilename, const FpsGameMap & i
   {
     file << ( object._Visible ? "box" : "collider" ) << " \"" << object._Name << "\" {\n";
     WriteVec3(file, "center", object._Center);
+    WriteVec3(file, "rotation", object._Rotation);
+    WriteVec4(file, "orientation", object._Orientation);
     WriteVec3(file, "half", object._HalfExtents);
     if ( object._Visible )
       file << "  material \"" << ObjectMaterialName(object) << "\"\n";

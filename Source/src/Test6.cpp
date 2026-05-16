@@ -86,6 +86,179 @@ static bool EditorMaterialSlotFromName( const std::string & iName, FpsMaterialSl
 }
 
 // ----------------------------------------------------------------------------
+// EditorObjectTransform
+// ----------------------------------------------------------------------------
+static glm::quat EditorQuatFromVec4( const Vec4 & iQuat )
+{
+  glm::quat quat(iQuat.w, iQuat.x, iQuat.y, iQuat.z);
+  const float len = glm::length(quat);
+  if ( len <= EPSILON )
+    return glm::quat(1.f, 0.f, 0.f, 0.f);
+  return glm::normalize(quat);
+}
+
+static Vec4 EditorVec4FromQuat( const glm::quat & iQuat )
+{
+  glm::quat quat = glm::normalize(iQuat);
+  return Vec4(quat.x, quat.y, quat.z, quat.w);
+}
+
+static Mat4x4 EditorEulerTransform( const Vec3 & iRotation )
+{
+  const Vec3 rotRad(MathUtil::ToRadians(iRotation.x),
+                    MathUtil::ToRadians(iRotation.y),
+                    MathUtil::ToRadians(iRotation.z));
+
+  Mat4x4 transform(1.f);
+  transform = transform * glm::rotate(rotRad.x, Vec3(1.f, 0.f, 0.f));
+  transform = transform * glm::rotate(rotRad.y, Vec3(0.f, 1.f, 0.f));
+  transform = transform * glm::rotate(rotRad.z, Vec3(0.f, 0.f, 1.f));
+  return transform;
+}
+
+static Vec4 EditorVec4FromEuler( const Vec3 & iRotation )
+{
+  const glm::quat quat = glm::quat_cast(glm::mat3(EditorEulerTransform(iRotation)));
+  return EditorVec4FromQuat(quat);
+}
+
+static Vec3 EditorEulerFromMatrix( const Mat4x4 & iTransform )
+{
+  float translation[3] = { 0.f, 0.f, 0.f };
+  float rotation[3] = { 0.f, 0.f, 0.f };
+  float scale[3] = { 1.f, 1.f, 1.f };
+  ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(iTransform), translation, rotation, scale);
+  return Vec3(rotation[0], rotation[1], rotation[2]);
+}
+
+static Mat4x4 EditorObjectRotationTransform( const FpsSceneObject & iObject )
+{
+  Vec4 orientation = iObject._Orientation;
+  if ( glm::length(orientation) <= EPSILON )
+    orientation = EditorVec4FromEuler(iObject._Rotation);
+  return glm::toMat4(EditorQuatFromVec4(orientation));
+}
+
+static Mat4x4 EditorObjectTransform( const FpsSceneObject & iObject )
+{
+  Mat4x4 transform = glm::translate(iObject._Center);
+  transform = transform * EditorObjectRotationTransform(iObject);
+  transform = transform * glm::scale(iObject._HalfExtents * 2.f);
+  return transform;
+}
+
+// ----------------------------------------------------------------------------
+// EditorObjectGizmoTransform
+// ----------------------------------------------------------------------------
+static Mat4x4 EditorObjectGizmoTransform( const FpsSceneObject & iObject )
+{
+  Mat4x4 transform = glm::translate(iObject._Center);
+  transform = transform * EditorObjectRotationTransform(iObject);
+  return transform;
+}
+
+// ----------------------------------------------------------------------------
+// EditorUnitBox
+// ----------------------------------------------------------------------------
+static AABB<Vec3> EditorUnitBox()
+{
+  AABB<Vec3> box;
+  box.Insert(Vec3(-0.5f));
+  box.Insert(Vec3( 0.5f));
+  return box;
+}
+
+// ----------------------------------------------------------------------------
+// EditorIntersectRayObject
+// ----------------------------------------------------------------------------
+static bool EditorIntersectRayObject( const Vec3 & iRayOrigin, const Vec3 & iRayDir, const FpsSceneObject & iObject, float & oHitT )
+{
+  Mat4x4 invTransform = glm::inverse(EditorObjectTransform(iObject));
+  Vec3 localOrigin = Vec3(invTransform * Vec4(iRayOrigin, 1.f));
+  Vec3 localDir = glm::normalize(Vec3(invTransform * Vec4(iRayDir, 0.f)));
+
+  float localHitT = 0.f;
+  if ( !MathUtil::IntersectRayAABB(localOrigin, localDir, EditorUnitBox(), localHitT) )
+    return false;
+
+  const Vec3 localHit = localOrigin + localDir * localHitT;
+  const Vec3 worldHit = MathUtil::TransformPoint(localHit, EditorObjectTransform(iObject));
+  oHitT = glm::length(worldHit - iRayOrigin);
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// EditorIntersectRaySphere
+// ----------------------------------------------------------------------------
+static bool EditorIntersectRaySphere( const Vec3 & iRayOrigin, const Vec3 & iRayDir, const Vec3 & iCenter, float iRadius, float & oHitT )
+{
+  const Vec3 oc = iRayOrigin - iCenter;
+  const float b = glm::dot(oc, iRayDir);
+  const float c = glm::dot(oc, oc) - iRadius * iRadius;
+  const float discriminant = b * b - c;
+  if ( discriminant < 0.f )
+    return false;
+
+  const float sqrtDiscriminant = std::sqrt(discriminant);
+  float hitT = -b - sqrtDiscriminant;
+  if ( hitT < 0.f )
+    hitT = -b + sqrtDiscriminant;
+  if ( hitT < 0.f )
+    return false;
+
+  oHitT = hitT;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// EditorProjectPoint
+// ----------------------------------------------------------------------------
+static bool EditorProjectPoint( const Vec3 & iPoint, const Mat4x4 & iView, const Mat4x4 & iProj, const ImVec2 & iDisplaySize, ImVec2 & oPoint )
+{
+  Vec4 clip = iProj * iView * Vec4(iPoint, 1.f);
+  if ( clip.w <= 0.00001f )
+    return false;
+
+  Vec3 ndc = Vec3(clip) / clip.w;
+  oPoint.x = ( ndc.x * 0.5f + 0.5f ) * iDisplaySize.x;
+  oPoint.y = ( 0.5f - ndc.y * 0.5f ) * iDisplaySize.y;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// EditorDrawTransformedBox
+// ----------------------------------------------------------------------------
+static void EditorDrawTransformedBox( const Mat4x4 & iTransform, const Mat4x4 & iView, const Mat4x4 & iProj, ImDrawList * ioDrawList, ImU32 iColor, float iLineWidth )
+{
+  if ( !ioDrawList )
+    return;
+
+  Vec3 corners[8];
+  EditorUnitBox().Corners(corners);
+
+  ImGuiIO & io = ImGui::GetIO();
+  ImVec2 screenCorners[8];
+  bool visibleCorners[8] = { false, false, false, false, false, false, false, false };
+  for ( int i = 0; i < 8; ++i )
+    visibleCorners[i] = EditorProjectPoint(MathUtil::TransformPoint(corners[i], iTransform), iView, iProj, io.DisplaySize, screenCorners[i]);
+
+  static const int Edges[12][2] =
+  {
+    { 0, 1 }, { 1, 3 }, { 3, 2 }, { 2, 0 },
+    { 4, 5 }, { 5, 7 }, { 7, 6 }, { 6, 4 },
+    { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }
+  };
+
+  for ( int i = 0; i < 12; ++i )
+  {
+    const int c0 = Edges[i][0];
+    const int c1 = Edges[i][1];
+    if ( visibleCorners[c0] && visibleCorners[c1] )
+      ioDrawList -> AddLine(screenCorners[c0], screenCorners[c1], iColor, iLineWidth);
+  }
+}
+
+// ----------------------------------------------------------------------------
 // KeyCallback
 // ----------------------------------------------------------------------------
 void Test6::KeyCallback( GLFWwindow * iWindow, const int iKey, const int iScancode, const int iAction, const int iMods )
@@ -382,6 +555,107 @@ void Test6::ApplyEditorObjectVisibility()
 }
 
 // ----------------------------------------------------------------------------
+// BuildPickingRay
+// ----------------------------------------------------------------------------
+bool Test6::BuildPickingRay( double iMouseX, double iMouseY, Vec3 & oRayOrigin, Vec3 & oRayDir ) const
+{
+  if ( !_MainWindow || !_Scene )
+    return false;
+
+  int windowWidth = 0;
+  int windowHeight = 0;
+  glfwGetWindowSize(_MainWindow.get(), &windowWidth, &windowHeight);
+  if ( !windowWidth || !windowHeight || !_Settings._WindowResolution.x || !_Settings._WindowResolution.y )
+    return false;
+
+  const float mouseX = static_cast<float>(iMouseX) * static_cast<float>(_Settings._WindowResolution.x) / static_cast<float>(windowWidth);
+  const float mouseY = static_cast<float>(iMouseY) * static_cast<float>(_Settings._WindowResolution.y) / static_cast<float>(windowHeight);
+
+  const float ndcX = 2.f * mouseX / static_cast<float>(_Settings._WindowResolution.x) - 1.f;
+  const float ndcY = 1.f - 2.f * mouseY / static_cast<float>(_Settings._WindowResolution.y);
+
+  Mat4x4 view(1.f);
+  Mat4x4 proj(1.f);
+  Camera & camera = const_cast<Scene*>(_Scene.get()) -> GetCamera();
+  camera.ComputeLookAtMatrix(view);
+  camera.ComputePerspectiveProjMatrix(static_cast<float>(_Settings._WindowResolution.x) / static_cast<float>(_Settings._WindowResolution.y), proj);
+
+  Mat4x4 invViewProj = glm::inverse(proj * view);
+  Vec4 nearPoint = invViewProj * Vec4(ndcX, ndcY, -1.f, 1.f);
+  Vec4 farPoint  = invViewProj * Vec4(ndcX, ndcY,  1.f, 1.f);
+  if ( nearPoint.w != 0.f )
+    nearPoint /= nearPoint.w;
+  if ( farPoint.w != 0.f )
+    farPoint /= farPoint.w;
+
+  oRayOrigin = camera.GetPos();
+  oRayDir = glm::normalize(Vec3(farPoint) - oRayOrigin);
+
+  return glm::length(oRayDir) > 0.f;
+}
+
+// ----------------------------------------------------------------------------
+// PickEditorSelection
+// ----------------------------------------------------------------------------
+bool Test6::PickEditorSelection( double iMouseX, double iMouseY, FpsEditorSelection & oSelection ) const
+{
+  oSelection = FpsEditorSelection();
+  if ( !_Scene )
+    return false;
+
+  Vec3 rayOrigin(0.f);
+  Vec3 rayDir(0.f);
+  if ( !BuildPickingRay(iMouseX, iMouseY, rayOrigin, rayDir) )
+    return false;
+
+  float nearestDist = MAX_FLOAT;
+
+  for ( int i = 0; i < static_cast<int>(_Map._Objects.size()); ++i )
+  {
+    const FpsSceneObject & object = _Map._Objects[i];
+    if ( object._Visible )
+    {
+      if ( i < static_cast<int>(_Editor._ObjectInstanceVisible.size()) && !_Editor._ObjectInstanceVisible[i] )
+        continue;
+    }
+    else if ( !_Editor._ShowColliderHelpers )
+      continue;
+
+    float hitT = 0.f;
+    if ( EditorIntersectRayObject(rayOrigin, rayDir, object, hitT) && hitT < nearestDist )
+    {
+      nearestDist = hitT;
+      oSelection._Kind = object._Visible ? FpsEditableKind::Box : FpsEditableKind::Collider;
+      oSelection._Index = i;
+      oSelection._SceneInstanceID = -1;
+    }
+  }
+
+  if ( _Editor._ShowLightHelpers )
+  {
+    for ( int i = 0; i < static_cast<int>(_Map._Lights.size()); ++i )
+    {
+      const Light & light = _Map._Lights[i];
+      const LightType type = (LightType)(int)light._Type;
+      if ( LightType::DistantLight == type )
+        continue;
+
+      const float radius = std::max(0.25f, light._Radius);
+      float hitT = 0.f;
+      if ( EditorIntersectRaySphere(rayOrigin, rayDir, light._Pos, radius, hitT) && hitT < nearestDist )
+      {
+        nearestDist = hitT;
+        oSelection._Kind = FpsEditableKind::Light;
+        oSelection._Index = i;
+        oSelection._SceneInstanceID = -1;
+      }
+    }
+  }
+
+  return FpsEditableKind::None != oSelection._Kind;
+}
+
+// ----------------------------------------------------------------------------
 // InitializeUI
 // ----------------------------------------------------------------------------
 int Test6::InitializeUI()
@@ -551,6 +825,20 @@ int Test6::ProcessInput()
     const bool rightMouseHeld = !ImGui::GetIO().WantCaptureMouse
                              && ( GLFW_PRESS == glfwGetMouseButton(_MainWindow.get(), GLFW_MOUSE_BUTTON_RIGHT) )
                              && ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode );
+    double mouseX = 0., mouseY = 0.;
+    if ( !ImGui::GetIO().WantCaptureMouse
+      && !rightMouseHeld
+      && _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1, mouseX, mouseY)
+      && !ImGuizmo::IsOver()
+      && !ImGuizmo::IsUsing() )
+    {
+      FpsEditorSelection selection;
+      if ( PickEditorSelection(mouseX, mouseY, selection) )
+        _Editor._Selection = selection;
+      else
+        _Editor._Selection = FpsEditorSelection();
+    }
+
     if ( rightMouseHeld )
     {
       FpsPlayer & player = _GameWorld.GetPlayer();
@@ -755,6 +1043,7 @@ int Test6::DrawUI()
   if ( _Editor._Enabled )
   {
     DrawEditorPanel();
+    DrawEditorOverlays();
     DrawEditorGizmo();
     DrawCrosshair();
   }
@@ -954,6 +1243,11 @@ void Test6::DrawEditorPanel()
         }
 
         objectDirty |= ImGui::DragFloat3("Center", &object._Center.x, 0.05f, -100.f, 100.f, "%.3f");
+        if ( ImGui::DragFloat3("Rotation", &object._Rotation.x, 0.5f, -360.f, 360.f, "%.2f") )
+        {
+          object._Orientation = EditorVec4FromEuler(object._Rotation);
+          objectDirty = true;
+        }
         objectDirty |= ImGui::DragFloat3("Half extents", &object._HalfExtents.x, 0.05f, 0.01f, 100.f, "%.3f");
         objectDirty |= ImGui::Checkbox("Collidable", &object._Collidable);
 
@@ -1223,6 +1517,81 @@ void Test6::DrawEditorPanel()
 }
 
 // ----------------------------------------------------------------------------
+// DrawEditorOverlays
+// ----------------------------------------------------------------------------
+int Test6::DrawEditorOverlays()
+{
+  if ( !_Editor._Enabled || !_Scene )
+    return 0;
+
+  Mat4x4 view(1.f);
+  Mat4x4 proj(1.f);
+
+  Camera & camera = _Scene -> GetCamera();
+  camera.ComputeLookAtMatrix(view);
+
+  const float width  = static_cast<float>(std::max(1, _Settings._WindowResolution.x));
+  const float height = static_cast<float>(std::max(1, _Settings._WindowResolution.y));
+  camera.ComputePerspectiveProjMatrix(width / height, proj);
+
+  ImGuiIO & io = ImGui::GetIO();
+  ImDrawList * drawList = ImGui::GetForegroundDrawList();
+
+  const ImU32 selectedColor = IM_COL32(255, 184, 48, 245);
+  const ImU32 colliderColor = IM_COL32(74, 202, 255, 190);
+  const ImU32 hiddenColor = IM_COL32(180, 180, 180, 170);
+  const ImU32 lightColor = IM_COL32(255, 232, 96, 230);
+
+  for ( int i = 0; i < static_cast<int>(_Map._Objects.size()); ++i )
+  {
+    const FpsSceneObject & object = _Map._Objects[i];
+    const bool selected = ( ( FpsEditableKind::Box == _Editor._Selection._Kind )
+                         || ( FpsEditableKind::Collider == _Editor._Selection._Kind ) )
+                       && ( _Editor._Selection._Index == i );
+    const bool collider = !object._Visible;
+    const bool runtimeHidden = object._Visible
+                            && ( i < static_cast<int>(_Editor._ObjectInstanceVisible.size()) )
+                            && !_Editor._ObjectInstanceVisible[i];
+
+    if ( !selected && !collider )
+      continue;
+    if ( collider && !_Editor._ShowColliderHelpers && !selected )
+      continue;
+
+    ImU32 color = selected ? selectedColor : colliderColor;
+    if ( runtimeHidden && !selected )
+      color = hiddenColor;
+
+    EditorDrawTransformedBox(EditorObjectTransform(object), view, proj, drawList, color, selected ? 2.5f : 1.5f);
+  }
+
+  for ( int i = 0; i < static_cast<int>(_Map._Lights.size()); ++i )
+  {
+    const Light & light = _Map._Lights[i];
+    const bool selected = ( FpsEditableKind::Light == _Editor._Selection._Kind ) && ( _Editor._Selection._Index == i );
+    const LightType type = (LightType)(int)light._Type;
+    if ( LightType::DistantLight == type )
+      continue;
+    if ( !_Editor._ShowLightHelpers && !selected )
+      continue;
+
+    ImVec2 screenPos;
+    if ( !EditorProjectPoint(light._Pos, view, proj, io.DisplaySize, screenPos) )
+      continue;
+
+    const float radius = selected ? 8.f : 6.f;
+    const ImU32 color = selected ? selectedColor : lightColor;
+    drawList -> AddCircle(screenPos, radius, color, 20, selected ? 2.5f : 1.8f);
+    drawList -> AddLine(ImVec2(screenPos.x - radius - 3.f, screenPos.y), ImVec2(screenPos.x - 2.f, screenPos.y), color, 1.5f);
+    drawList -> AddLine(ImVec2(screenPos.x + 2.f, screenPos.y), ImVec2(screenPos.x + radius + 3.f, screenPos.y), color, 1.5f);
+    drawList -> AddLine(ImVec2(screenPos.x, screenPos.y - radius - 3.f), ImVec2(screenPos.x, screenPos.y - 2.f), color, 1.5f);
+    drawList -> AddLine(ImVec2(screenPos.x, screenPos.y + 2.f), ImVec2(screenPos.x, screenPos.y + radius + 3.f), color, 1.5f);
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // DrawEditorGizmo
 // ----------------------------------------------------------------------------
 int Test6::DrawEditorGizmo()
@@ -1244,6 +1613,8 @@ int Test6::DrawEditorGizmo()
   ImGuizmo::SetDrawlist(ImGui::GetForegroundDrawList());
   ImGuizmo::SetRect(0.f, 0.f, io.DisplaySize.x, io.DisplaySize.y);
   ImGuizmo::SetOrthographic(false);
+  const bool rotateMode = _KeyInput.IsKeyDown(GLFW_KEY_LEFT_SHIFT) || _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_SHIFT);
+  const ImGuizmo::OPERATION operation = rotateMode ? ImGuizmo::ROTATE : ImGuizmo::TRANSLATE;
 
   if ( ( FpsEditableKind::Box == _Editor._Selection._Kind )
     || ( FpsEditableKind::Collider == _Editor._Selection._Kind ) )
@@ -1253,12 +1624,19 @@ int Test6::DrawEditorGizmo()
       return 0;
 
     FpsSceneObject & object = _Map._Objects[index];
-    Mat4x4 transform = glm::translate(object._Center);
+    Mat4x4 transform = ( ImGuizmo::ROTATE == operation ) ? EditorObjectGizmoTransform(object) : EditorObjectTransform(object);
     if ( ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
-                              ImGuizmo::TRANSLATE, ImGuizmo::WORLD,
+                              operation, ImGuizmo::WORLD,
                               glm::value_ptr(transform)) )
     {
-      object._Center = Vec3(transform[3]);
+      if ( ImGuizmo::ROTATE == operation )
+      {
+        object._Center = Vec3(transform[3]);
+        object._Orientation = EditorVec4FromQuat(glm::quat_cast(glm::mat3(transform)));
+        object._Rotation = EditorEulerFromMatrix(transform);
+      }
+      else
+        object._Center = Vec3(transform[3]);
       SyncEditorObject(index);
       MarkEditorDirty();
     }
@@ -1271,6 +1649,8 @@ int Test6::DrawEditorGizmo()
 
     Light & light = _Map._Lights[index];
     if ( LightType::DistantLight == (LightType)(int)light._Type )
+      return 0;
+    if ( rotateMode )
       return 0;
 
     Mat4x4 transform(1.f);

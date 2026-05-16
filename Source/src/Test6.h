@@ -78,6 +78,7 @@ protected:
   void DrawDebugPanel();
   void DrawEditorPanel();
   int DrawEditorGizmo();
+  int DrawEditorOverlays();
   void DrawHUD();
   int DrawSettingsUI();
   void DrawCrosshair();
@@ -92,6 +93,8 @@ protected:
   void SyncEditorLight( int iLightIndex );
   void EnsureEditorObjectVisibility();
   void ApplyEditorObjectVisibility();
+  bool BuildPickingRay( double iMouseX, double iMouseY, Vec3 & oRayOrigin, Vec3 & oRayDir ) const;
+  bool PickEditorSelection( double iMouseX, double iMouseY, FpsEditorSelection & oSelection ) const;
   void MarkEditorDirty() { _Editor._Dirty = true; }
 
 protected:

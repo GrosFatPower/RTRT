@@ -56,11 +56,71 @@ static Mat4x4 BuildEulerTransform( const Vec3 & iPosition, const Vec3 & iRotatio
                     MathUtil::ToRadians(iRotation.z));
 
   Mat4x4 transform = glm::translate(iPosition);
-  transform = transform * glm::rotate(rotRad.y, Vec3(0.f, 1.f, 0.f));
   transform = transform * glm::rotate(rotRad.x, Vec3(1.f, 0.f, 0.f));
+  transform = transform * glm::rotate(rotRad.y, Vec3(0.f, 1.f, 0.f));
   transform = transform * glm::rotate(rotRad.z, Vec3(0.f, 0.f, 1.f));
   transform = transform * glm::scale(iScale);
   return transform;
+}
+
+static glm::quat QuatFromVec4( const Vec4 & iQuat )
+{
+  glm::quat quat(iQuat.w, iQuat.x, iQuat.y, iQuat.z);
+  const float len = glm::length(quat);
+  if ( len <= EPSILON )
+    return glm::quat(1.f, 0.f, 0.f, 0.f);
+  return glm::normalize(quat);
+}
+
+static Vec4 Vec4FromEuler( const Vec3 & iRotation )
+{
+  glm::quat quat = glm::quat_cast(glm::mat3(BuildEulerTransform(Vec3(0.f), iRotation, Vec3(1.f))));
+  return Vec4(quat.x, quat.y, quat.z, quat.w);
+}
+
+static Mat4x4 BuildObjectRotationTransform( const FpsSceneObject & iObject )
+{
+  Vec4 orientation = iObject._Orientation;
+  if ( glm::length(orientation) <= EPSILON )
+    orientation = Vec4FromEuler(iObject._Rotation);
+
+  return glm::toMat4(QuatFromVec4(orientation));
+}
+
+static Mat4x4 BuildSceneObjectTransform( const FpsSceneObject & iObject, const Vec3 & iScale )
+{
+  Mat4x4 transform = glm::translate(iObject._Center);
+  transform = transform * BuildObjectRotationTransform(iObject);
+  transform = transform * glm::scale(iScale);
+  return transform;
+}
+
+static Vec3 ObjectCollisionHalfExtents( const FpsSceneObject & iObject )
+{
+  if ( ( glm::length(iObject._Rotation) <= EPSILON ) && ( glm::length(iObject._Orientation - Vec4(0.f, 0.f, 0.f, 1.f)) <= EPSILON ) )
+    return iObject._HalfExtents;
+
+  const Mat4x4 rotation = BuildObjectRotationTransform(iObject);
+  Vec3 corners[8] =
+  {
+    Vec3(-iObject._HalfExtents.x, -iObject._HalfExtents.y, -iObject._HalfExtents.z),
+    Vec3( iObject._HalfExtents.x, -iObject._HalfExtents.y, -iObject._HalfExtents.z),
+    Vec3(-iObject._HalfExtents.x,  iObject._HalfExtents.y, -iObject._HalfExtents.z),
+    Vec3( iObject._HalfExtents.x,  iObject._HalfExtents.y, -iObject._HalfExtents.z),
+    Vec3(-iObject._HalfExtents.x, -iObject._HalfExtents.y,  iObject._HalfExtents.z),
+    Vec3( iObject._HalfExtents.x, -iObject._HalfExtents.y,  iObject._HalfExtents.z),
+    Vec3(-iObject._HalfExtents.x,  iObject._HalfExtents.y,  iObject._HalfExtents.z),
+    Vec3( iObject._HalfExtents.x,  iObject._HalfExtents.y,  iObject._HalfExtents.z)
+  };
+
+  Vec3 halfExtents(0.f);
+  for ( int i = 0; i < 8; ++i )
+  {
+    const Vec3 corner = Vec3(rotation * Vec4(corners[i], 1.f));
+    halfExtents = MathUtil::Max(halfExtents, Vec3(std::abs(corner.x), std::abs(corner.y), std::abs(corner.z)));
+  }
+
+  return halfExtents;
 }
 
 static Material MakeMaterial( const Vec3 & iAlbedo, float iRoughness, float iMetallic = 0.f, float iReflectance = 0.5f )
@@ -418,7 +478,7 @@ void FpsGameWorld::MoveProjectileAxis( FpsProjectile & ioProjectile, int iAxis, 
       continue;
 
     const Vec3 delta = ioProjectile._Position - object._Center;
-    const Vec3 sumHalf = object._HalfExtents + Vec3(radius);
+    const Vec3 sumHalf = ObjectCollisionHalfExtents(object) + Vec3(radius);
     if ( ( std::abs(delta.x) >= sumHalf.x )
       || ( std::abs(delta.y) >= sumHalf.y )
       || ( std::abs(delta.z) >= sumHalf.z ) )
@@ -541,7 +601,7 @@ bool FpsGameWorld::OverlapPlayerObject( const FpsSceneObject & iObject, const Fp
                         std::max(iSettings._PlayerRadius, 0.05f));
   const Vec3 playerCenter = _Player._Position + Vec3(0.f, playerHalf.y, 0.f);
   const Vec3 delta = playerCenter - iObject._Center;
-  const Vec3 sumHalf = playerHalf + iObject._HalfExtents;
+  const Vec3 sumHalf = playerHalf + ObjectCollisionHalfExtents(iObject);
 
   if ( ( std::abs(delta.x) >= sumHalf.x )
     || ( std::abs(delta.y) >= sumHalf.y )
@@ -890,7 +950,7 @@ int FpsGameSceneBinding::AddLights( Scene & iScene, const FpsGameMap * iMap )
 // ----------------------------------------------------------------------------
 Mat4x4 FpsGameSceneBinding::BuildObjectTransform( const FpsSceneObject & iObject ) const
 {
-  return glm::translate(iObject._Center) * glm::scale(iObject._HalfExtents * 2.f);
+  return BuildSceneObjectTransform(iObject, iObject._HalfExtents * 2.f);
 }
 
 // ----------------------------------------------------------------------------

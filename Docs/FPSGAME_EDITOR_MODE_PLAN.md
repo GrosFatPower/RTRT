@@ -25,15 +25,28 @@ This section records the implementation status after the first editor-mode passe
   - `.fpsmap` Save and Load path fields;
   - ImGui list boxes for instances, materials, and lights;
   - add box and add collider;
-  - edit object name, center, half extents, collidable flag, material assignment, and runtime instance visibility;
+  - edit object name, center, rotation, half extents, collidable flag, material assignment, and runtime instance visibility;
   - add material and edit material parameters;
   - add sphere light and distant light;
   - edit light type, position/direction, emission, intensity, radius/area, shadow casting, and shadow radius;
   - edit player spawn and copy current editor camera pose into the spawn.
 - ImGuizmo is integrated into the Test6 UI frame:
   - selected boxes/colliders can be translated in world space;
+  - holding `Shift` switches selected box/collider gizmos from translate to rotate mode, releasing `Shift` returns to translate mode;
   - selected local lights can be translated in world space;
   - distant lights remain direction-edited through UI fields.
+- Map objects now carry `_Rotation` for UI/legacy editing and `_Orientation` for stable authored orientation. `.fpsmap` box/collider blocks support `rotation x y z` and `orientation x y z w`, and save writes both fields.
+- Rotated box/collider rendering, picking, and selection overlays use the same transform; runtime collision remains AABB-based by using the rotated object's world-space bounds.
+- Viewport picking is implemented for editor mode:
+  - visible boxes can be selected with left click;
+  - colliders can be selected with left click while collider helpers are enabled;
+  - local lights can be selected with left click while light helpers are enabled;
+  - projectiles and the view weapon are ignored because picking is performed against editor map objects/lights.
+- Selection feedback overlays are implemented:
+  - selected box/collider bounds are drawn in the foreground overlay;
+  - collider helper wire boxes can be toggled;
+  - local light helper markers can be toggled;
+  - selected local lights remain visible even when light helpers are hidden.
 - Editor-triggered scene rebuilds preserve the current editor camera/player pose.
 - `FpsGameSceneBinding::Attach` now performs initial camera and transform sync so hidden weapon/projectile instances are valid immediately after rebuild.
 - `MeshInstance` has a `_Visible` flag.
@@ -49,13 +62,7 @@ This section records the implementation status after the first editor-mode passe
 - Runtime instance visibility is editor-state only; it is not saved to `.fpsmap`.
 
 ### Not Yet Implemented
-- Viewport picking:
-  - no `BuildPickingRay` adaptation for Test6 yet;
-  - no click-to-select boxes, colliders, props, or lights yet.
-- Selection feedback overlays:
-  - no selected bounds overlay;
-  - no collider wire helper drawing;
-  - no light helper markers.
+- Viewport picking for props, once prop import/editing exists.
 - ImGuizmo scale for boxes/colliders.
 - Prop import and prop editing:
   - no editor UI for `gltf`, `glb`, or `obj` props yet;
@@ -70,21 +77,24 @@ This section records the implementation status after the first editor-mode passe
 - Temporary editor hiding uses `MeshInstance::_Visible` through Test6 editor state.
 - Hidden mesh instances must stay out of scene bounds, shadow fitting, software-rasterizer caches, and TLAS data. This is now handled by the shared `_Visible` flag.
 - Distant-light shadow quality previously degraded in editor mode because hidden weapon geometry was moved far below the arena and inflated scene bounds. The visibility flag removes that class of workaround.
+- Rotated primitive collision uses the rotated object's world-space AABB for now. This keeps gameplay conservative without adding full OBB collision resolution yet.
 
 ### Recommended Next Slice
-Implement viewport picking and selection feedback before adding more authoring features:
-- adapt Test5 `BuildPickingRay` to Test6;
-- pick visible boxes with ray-AABB tests;
-- pick local lights with small ray-sphere helper tests;
-- pick colliders only when collider helpers are enabled, or through the object list;
-- ignore projectiles and the view weapon;
-- draw selected bounds, collider helper wire boxes, and light helper markers in the ImGui foreground overlay.
+Implement the remaining primitive gizmo polish before adding prop authoring:
+- add scale mode for boxes/colliders;
+- after that, move to prop import/editing and explicit prop-to-scene-instance binding.
 
 ## Key Interfaces And Format Changes
 - Extend the `.fpsmap` model with editable material data:
   - add `FpsMapMaterial { _Name, _Material }`;
   - add `std::vector<FpsMapMaterial> _Materials` to `FpsGameMap`;
   - replace hardcoded object material storage with a material name string while preserving existing names: `floor`, `wall`, `pillar`, `crate`, `accent`.
+- Extend map objects with rotation:
+  - add `Vec3 _Rotation` to `FpsSceneObject`;
+  - add `Vec4 _Orientation` to store the stable quaternion used by runtime/editor transforms;
+  - support optional `rotation x y z` in `.fpsmap` box/collider blocks;
+  - support optional `orientation x y z w` in `.fpsmap` box/collider blocks;
+  - save `rotation` deterministically for authored objects.
 - Add `.fpsmap` serialization:
   - keep `FpsGameMapLoader::Load`;
   - add a matching deterministic `Save` API, or introduce `FpsGameMapIO::Load/Save` if renaming is cleaner;

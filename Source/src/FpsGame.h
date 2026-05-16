@@ -93,6 +93,8 @@ struct FpsSceneObject
 {
   std::string     _Name;
   Vec3            _Center = Vec3(0.f);
+  Vec3            _Rotation = Vec3(0.f);
+  Vec4            _Orientation = Vec4(0.f, 0.f, 0.f, 1.f);
   Vec3            _HalfExtents = Vec3(0.5f);
   FpsMaterialSlot _Material = FpsMaterialSlot::Wall;
   std::string     _MaterialName = "wall";

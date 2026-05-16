@@ -1,4 +1,4 @@
-# Test6 default FPS map.
+# Test6 FPS map.
 # Coordinates are Y-up. Rotations are Euler XYZ degrees.
 
 map "Default FPS Arena" {
@@ -6,9 +6,9 @@ map "Default FPS Arena" {
 }
 
 player {
-  position 0 0.05 -8
-  yaw 90
-  pitch 0
+  position 0.000000 0.050000 -8.000000
+  yaw 90.000000
+  pitch 0.000000
   health 100
   armor 50
 }
@@ -16,136 +16,212 @@ player {
 settings {
   maxprojectiles 32
   projectileammo 32
-  projectileammorefill 0.5
+  projectileammorefill 0.500000
+}
+
+material "floor" {
+  albedo 0.420000 0.430000 0.440000
+  roughness 0.180000
+  metallic 0.000000
+  reflectance 0.900000
+  emission 0.000000 0.000000 0.000000
+  opacity 1.000000
+  alphamode opaque
+}
+
+material "wall" {
+  albedo 0.340000 0.370000 0.420000
+  roughness 0.650000
+  metallic 0.000000
+  reflectance 0.500000
+  emission 0.000000 0.000000 0.000000
+  opacity 1.000000
+  alphamode opaque
+}
+
+material "pillar" {
+  albedo 0.580000 0.550000 0.490000
+  roughness 0.550000
+  metallic 0.000000
+  reflectance 0.500000
+  emission 0.000000 0.000000 0.000000
+  opacity 1.000000
+  alphamode opaque
+}
+
+material "crate" {
+  albedo 0.800000 0.240000 0.130000
+  roughness 0.450000
+  metallic 0.000000
+  reflectance 0.500000
+  emission 0.000000 0.000000 0.000000
+  opacity 1.000000
+  alphamode opaque
+}
+
+material "accent" {
+  albedo 0.120000 0.420000 0.680000
+  roughness 0.160000
+  metallic 0.000000
+  reflectance 0.850000
+  emission 0.000000 0.000000 0.000000
+  opacity 1.000000
+  alphamode opaque
 }
 
 box "Floor" {
-  center 0 -0.25 0
-  half 14 0.25 14
-  material floor
+  center 0.000000 -0.250000 0.000000
+  rotation 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  half 14.000000 0.250000 14.000000
+  material "floor"
   collidable true
   visible true
 }
 
 box "North Wall" {
-  center 0 2 14
-  half 14 2 0.35
-  material wall
+  center 0.000000 2.000000 14.000000
+  rotation 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  half 14.000000 2.000000 0.350000
+  material "wall"
   collidable true
   visible true
 }
 
 box "South Wall" {
-  center 0 2 -14
-  half 14 2 0.35
-  material wall
+  center 0.000000 2.000000 -14.000000
+  rotation 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  half 14.000000 2.000000 0.350000
+  material "wall"
   collidable true
   visible true
 }
 
 box "East Wall" {
-  center 14 2 0
-  half 0.35 2 14
-  material wall
+  center 14.000000 2.000000 0.000000
+  rotation 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  half 0.350000 2.000000 14.000000
+  material "wall"
   collidable true
   visible true
 }
 
 box "West Wall" {
-  center -14 2 0
-  half 0.35 2 14
-  material wall
+  center -14.000000 2.000000 0.000000
+  rotation 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  half 0.350000 2.000000 14.000000
+  material "wall"
   collidable true
   visible true
 }
 
 box "Pillar A" {
-  center -5 1.5 -2
-  half 0.8 1.5 0.8
-  material pillar
+  center -5.000000 1.500000 -2.000000
+  rotation 0.000000 19.021601 0.000000
+  orientation 0.000000 0.165234 0.000000 0.986255
+  half 0.800000 1.500000 0.800000
+  material "pillar"
   collidable true
   visible true
 }
 
 box "Pillar B" {
-  center 5 1.5 3
-  half 0.8 1.5 0.8
-  material pillar
+  center 5.000000 1.500000 3.000000
+  rotation 0.000000 19.913614 0.000000
+  orientation 0.000000 0.172906 0.000000 0.984938
+  half 0.800000 1.500000 0.800000
+  material "pillar"
   collidable true
   visible true
 }
 
 box "Low Block A" {
-  center -2 0.5 4
-  half 2 0.5 1
-  material accent
+  center -2.275755 0.095718 4.000000
+  rotation 67.605682 56.591194 14.520925
+  orientation 0.436155 0.452641 -0.169132 0.759131
+  half 2.000000 0.500000 1.000000
+  material "accent"
   collidable true
   visible true
 }
 
 box "Low Block B" {
-  center 3 0.75 -5
-  half 1.2 0.75 1.2
-  material accent
+  center 3.000000 0.604753 -5.000000
+  rotation -65.488480 22.118347 -87.737373
+  orientation -0.270892 0.484196 -0.497260 0.667012
+  half 1.200000 0.750000 1.200000
+  material "accent"
   collidable true
   visible true
 }
 
 box "Target Crate A" {
-  center -7 0.6 6
-  half 0.6 0.6 0.6
-  material crate
+  center -0.324173 1.374951 8.509948
+  rotation 11.550445 -24.147816 -26.545244
+  orientation 0.047992 -0.225144 -0.202880 0.951760
+  half 0.600000 0.600000 0.600000
+  material "crate"
   collidable true
   visible true
 }
 
 box "Target Crate B" {
-  center 7 0.6 -7
-  half 0.6 0.6 0.6
-  material crate
+  center 7.000000 0.600000 -7.000000
+  rotation 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  half 0.600000 0.600000 0.600000
+  material "crate"
   collidable true
   visible true
 }
 
 box "Target Crate C" {
-  center 0 0.6 8
-  half 0.6 0.6 0.6
-  material crate
+  center 0.000000 0.600000 8.000000
+  rotation 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  half 0.600000 0.600000 0.600000
+  material "crate"
   collidable true
   visible true
 }
 
-light "Sun" {
+light {
   type distant
-  direction -0.4 0.8 -0.3
-  emission 1 0.94 0.86
-  intensity 2
+  direction -0.400000 0.800000 -0.300000
+  emission 1.000000 0.940000 0.860000
+  intensity 2.000000
   castshadow true
+  shadowradius 0.000000
 }
 
-light "Warm Local" {
+light {
   type sphere
-  position -6 3.5 -6
-  emission 1 0.55 0.25
-  intensity 35
-  radius 0.25
+  position -6.000000 3.500000 -6.000000
+  radius 2.000000
+  emission 1.000000 0.550000 0.250000
+  intensity 35.000000
   castshadow true
-  shadowradius 14
+  shadowradius 14.000000
 }
 
-light "Cool Local" {
+light {
   type sphere
-  position 6 3 5
-  emission 0.25 0.55 1
-  intensity 25
-  radius 0.25
-  castshadow false
+  position 6.000000 3.000000 5.000000
+  radius 2.050000
+  emission 0.250000 0.550000 1.000000
+  intensity 25.000000
+  castshadow true
+  shadowradius 0.000000
 }
 
 weapon {
   path "overwatch_junkrats_grenade_launcher/scene.gltf"
-  offset 0.44 -0.33 0.83
-  rotation -6.5 -10.5 3
-  scale 1.24
+  offset 0.440000 -0.330000 0.830000
+  rotation -6.500000 -10.500000 3.000000
+  scale 1.240000
   visible true
 }
