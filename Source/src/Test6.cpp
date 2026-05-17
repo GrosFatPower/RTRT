@@ -20,6 +20,7 @@
 #include "glm/gtc/type_ptr.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cfloat>
 #include <cstring>
 #include <cstdio>
@@ -64,6 +65,40 @@ static void CopyPathToBuffer( char * oBuffer, size_t iBufferSize, const std::str
     return;
 
   std::snprintf(oBuffer, iBufferSize, "%s", iPath.c_str());
+}
+
+// ----------------------------------------------------------------------------
+// EditorPropAssetPath
+// ----------------------------------------------------------------------------
+static bool EditorIsPropAssetPath( const std::filesystem::path & iPath )
+{
+  std::string ext = iPath.extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(), []( unsigned char c ) { return static_cast<char>(std::tolower(c)); });
+  return ( ".obj" == ext ) || ( ".gltf" == ext ) || ( ".glb" == ext );
+}
+
+static bool EditorPropAssetCombo( const char * iLabel, const std::vector<std::string> & iAssets, std::string & ioPath )
+{
+  const char * preview = ioPath.empty() ? "<select prop>" : ioPath.c_str();
+  bool changed = false;
+
+  if ( ImGui::BeginCombo(iLabel, preview) )
+  {
+    for ( int i = 0; i < static_cast<int>(iAssets.size()); ++i )
+    {
+      const bool selected = ( ioPath == iAssets[i] );
+      if ( ImGui::Selectable(iAssets[i].c_str(), selected) )
+      {
+        ioPath = iAssets[i];
+        changed = true;
+      }
+      if ( selected )
+        ImGui::SetItemDefaultFocus();
+    }
+    ImGui::EndCombo();
+  }
+
+  return changed;
 }
 
 // ----------------------------------------------------------------------------
@@ -523,6 +558,42 @@ void Test6::SetEditorPathBuffers()
 }
 
 // ----------------------------------------------------------------------------
+// RefreshEditorPropAssets
+// ----------------------------------------------------------------------------
+void Test6::RefreshEditorPropAssets()
+{
+  _Editor._PropAssetPaths.clear();
+
+  const std::filesystem::path assetsDir(PathUtils::GetAssetPath(""));
+  std::error_code ec;
+  if ( !std::filesystem::exists(assetsDir, ec) )
+  {
+    _Editor._NewPropAssetIndex = -1;
+    return;
+  }
+
+  std::filesystem::directory_iterator it(assetsDir, std::filesystem::directory_options::skip_permission_denied, ec);
+  std::filesystem::directory_iterator end;
+  while ( !ec && it != end )
+  {
+    const std::filesystem::directory_entry entry = *it;
+    if ( entry.is_regular_file(ec) && EditorIsPropAssetPath(entry.path()) )
+    {
+      const std::filesystem::path relativePath = std::filesystem::relative(entry.path(), assetsDir, ec);
+      if ( !ec )
+        _Editor._PropAssetPaths.push_back(relativePath.generic_string());
+    }
+    it.increment(ec);
+  }
+
+  std::sort(_Editor._PropAssetPaths.begin(), _Editor._PropAssetPaths.end());
+  if ( _Editor._PropAssetPaths.empty() )
+    _Editor._NewPropAssetIndex = -1;
+  else if ( ( _Editor._NewPropAssetIndex < 0 ) || ( _Editor._NewPropAssetIndex >= static_cast<int>(_Editor._PropAssetPaths.size()) ) )
+    _Editor._NewPropAssetIndex = 0;
+}
+
+// ----------------------------------------------------------------------------
 // SyncMapFromRuntimeSettings
 // ----------------------------------------------------------------------------
 void Test6::SyncMapFromRuntimeSettings()
@@ -890,6 +961,7 @@ int Test6::InitializeScene()
   _Scene = std::move(newScene);
   ApplyEditorObjectVisibility();
   SetEditorPathBuffers();
+  RefreshEditorPropAssets();
   return 0;
 }
 
@@ -1541,14 +1613,41 @@ void Test6::DrawEditorPanel()
   if ( ImGui::CollapsingHeader("Props") )
   {
     ImGui::InputText("New prop name", _Editor._NewPropName, sizeof(_Editor._NewPropName));
-    ImGui::InputText("New prop path", _Editor._NewPropPath, sizeof(_Editor._NewPropPath));
-    if ( ImGui::Button("Add prop") && std::strlen(_Editor._NewPropPath) > 0 )
+    if ( ImGui::Button("Refresh prop list") )
+      RefreshEditorPropAssets();
+
+    const bool hasPropAssets = !_Editor._PropAssetPaths.empty();
+    const bool hasSelectedPropAsset = hasPropAssets
+                                   && ( _Editor._NewPropAssetIndex >= 0 )
+                                   && ( _Editor._NewPropAssetIndex < static_cast<int>(_Editor._PropAssetPaths.size()) );
+    if ( hasPropAssets )
+    {
+      const char * preview = hasSelectedPropAsset ? _Editor._PropAssetPaths[_Editor._NewPropAssetIndex].c_str()
+                                                  : "<select prop>";
+      if ( ImGui::BeginCombo("New prop asset", preview) )
+      {
+        for ( int i = 0; i < static_cast<int>(_Editor._PropAssetPaths.size()); ++i )
+        {
+          const bool selected = ( _Editor._NewPropAssetIndex == i );
+          if ( ImGui::Selectable(_Editor._PropAssetPaths[i].c_str(), selected) )
+            _Editor._NewPropAssetIndex = i;
+          if ( selected )
+            ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+      }
+    }
+    else
+      ImGui::TextUnformatted("No loadable props found in Assets");
+
+    ImGui::BeginDisabled(!hasSelectedPropAsset);
+    if ( ImGui::Button("Add prop") )
     {
       FpsMapProp prop;
       prop._Name = std::strlen(_Editor._NewPropName) > 0
                  ? _Editor._NewPropName
                  : ( "Prop " + std::to_string(static_cast<int>(_Map._Props.size())) );
-      prop._Path = _Editor._NewPropPath;
+      prop._Path = _Editor._PropAssetPaths[_Editor._NewPropAssetIndex];
       prop._Position = _GameWorld.GetPlayer().EyePosition(_GameSettings) + Vec3(0.f, 0.f, 3.f);
       prop._Rotation = Vec3(0.f);
       prop._Scale = Vec3(1.f);
@@ -1560,6 +1659,7 @@ void Test6::DrawEditorPanel()
       MarkEditorDirty();
       _ReloadScene = true;
     }
+    ImGui::EndDisabled();
 
     if ( ImGui::BeginListBox("Props", ImVec2(-FLT_MIN, 150.f)) )
     {
@@ -1599,21 +1699,16 @@ void Test6::DrawEditorPanel()
           propDirty = true;
         }
 
-        if ( _Editor._PropPathEditIndex != index )
+        if ( !_Editor._PropAssetPaths.empty() )
         {
-          _Editor._PropPathEditIndex = index;
-          CopyPathToBuffer(_Editor._PropPathEdit, sizeof(_Editor._PropPathEdit), prop._Path);
+          if ( EditorPropAssetCombo("Prop asset", _Editor._PropAssetPaths, prop._Path) )
+          {
+            propDirty = true;
+            reloadProp = true;
+          }
         }
-        ImGui::InputText("Prop path", _Editor._PropPathEdit, sizeof(_Editor._PropPathEdit));
-        const bool pathChanged = prop._Path != _Editor._PropPathEdit;
-        ImGui::BeginDisabled(!pathChanged);
-        if ( ImGui::Button("Apply prop path") )
-        {
-          prop._Path = _Editor._PropPathEdit;
-          propDirty = true;
-          reloadProp = true;
-        }
-        ImGui::EndDisabled();
+        else
+          ImGui::TextUnformatted("No loadable props found in Assets");
 
         propDirty |= ImGui::DragFloat3("Prop position", &prop._Position.x, 0.05f, -100.f, 100.f, "%.3f");
         propDirty |= ImGui::DragFloat3("Prop rotation", &prop._Rotation.x, 0.5f, -360.f, 360.f, "%.2f");

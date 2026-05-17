@@ -50,9 +50,8 @@ struct FpsGameEditor
   char               _LoadPath[512] = {};
   char               _NewMaterialName[128] = "new_material";
   char               _NewPropName[128] = "New Prop";
-  char               _NewPropPath[512] = {};
-  int                _PropPathEditIndex = -1;
-  char               _PropPathEdit[512] = {};
+  int                _NewPropAssetIndex = -1;
+  std::vector<std::string> _PropAssetPaths;
   std::vector<bool>  _ObjectInstanceVisible;
 };
 
@@ -92,6 +91,7 @@ protected:
   void ApplyRendererDefaults();
   void SetEditorMode( bool iEnabled );
   void SetEditorPathBuffers();
+  void RefreshEditorPropAssets();
   void SyncMapFromRuntimeSettings();
   void SyncEditorObject( int iObjectIndex );
   void SyncEditorProp( int iPropIndex );
