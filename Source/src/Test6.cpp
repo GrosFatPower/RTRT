@@ -11,6 +11,7 @@
 #include "SoftwareRasterizer.h"
 
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "ImGuizmo.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
@@ -1106,6 +1107,7 @@ int Test6::InitializeUI()
   ImGuiIO & io = ImGui::GetIO(); (void)io;
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+  io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
   ImGui::StyleColorsDark();
   io.Fonts -> AddFontDefault();
@@ -1484,7 +1486,11 @@ int Test6::DrawUI()
 
   if ( _Editor._Enabled )
   {
-    DrawEditorPanel();
+    DrawEditorDockspace();
+    DrawEditorScenePanel();
+    DrawEditorInspectorPanel();
+    DrawEditorMaterialsPanel();
+    DrawEditorSettingsPanel();
     DrawEditorOverlays();
     DrawEditorGizmo();
     DrawCrosshair();
@@ -1502,7 +1508,7 @@ int Test6::DrawUI()
 // ----------------------------------------------------------------------------
 void Test6::DrawDebugPanel()
 {
-  ImGui::Begin("Test6 FPS");
+  ImGui::Begin("Test6 FPS", nullptr, ImGuiWindowFlags_NoDocking);
 
   static const char * Renderers[] = { "Deferred", "Software", "Photo Path Tracer" };
   int rendererMode = (int)_GameSettings._RendererMode;
@@ -1560,40 +1566,91 @@ void Test6::DrawDebugPanel()
 }
 
 // ----------------------------------------------------------------------------
-// DrawEditorPanel
+// DrawEditorDockspace
 // ----------------------------------------------------------------------------
-void Test6::DrawEditorPanel()
+void Test6::DrawEditorDockspace()
 {
-  ImGui::Begin("Test6 Map Editor");
+  const ImGuiViewport * viewport = ImGui::GetMainViewport();
 
-  ImGui::Text("Mode: editor");
+  ImGuiWindowFlags windowFlags = ImGuiWindowFlags_MenuBar
+                               | ImGuiWindowFlags_NoDocking
+                               | ImGuiWindowFlags_NoTitleBar
+                               | ImGuiWindowFlags_NoCollapse
+                               | ImGuiWindowFlags_NoResize
+                               | ImGuiWindowFlags_NoMove
+                               | ImGuiWindowFlags_NoBringToFrontOnFocus
+                               | ImGuiWindowFlags_NoNavFocus
+                               | ImGuiWindowFlags_NoBackground;
+
+  ImGui::SetNextWindowPos(viewport -> WorkPos);
+  ImGui::SetNextWindowSize(viewport -> WorkSize);
+  ImGui::SetNextWindowViewport(viewport -> ID);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.f);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
+  ImGui::Begin("Test6 Editor Dockspace", nullptr, windowFlags);
+  ImGui::PopStyleVar(3);
+
+  const ImGuiID dockspaceID = ImGui::GetID("Test6EditorDockspace");
+  const ImGuiDockNodeFlags dockspaceFlags = ImGuiDockNodeFlags_PassthruCentralNode;
+
+  if ( _Editor._ResetDockLayout || !ImGui::DockBuilderGetNode(dockspaceID) )
+  {
+    _Editor._ResetDockLayout = false;
+    ImGui::DockBuilderRemoveNode(dockspaceID);
+    ImGui::DockBuilderAddNode(dockspaceID, ImGuiDockNodeFlags_DockSpace | dockspaceFlags);
+    ImGui::DockBuilderSetNodeSize(dockspaceID, viewport -> WorkSize);
+
+    ImGuiID leftID = 0;
+    ImGuiID rightID = 0;
+    ImGuiID rightBottomID = 0;
+    ImGuiID centerID = dockspaceID;
+    ImGui::DockBuilderSplitNode(centerID, ImGuiDir_Left, 0.24f, &leftID, &centerID);
+    ImGui::DockBuilderSplitNode(centerID, ImGuiDir_Right, 0.30f, &rightID, &centerID);
+    ImGui::DockBuilderSplitNode(rightID, ImGuiDir_Down, 0.45f, &rightBottomID, &rightID);
+
+    ImGui::DockBuilderDockWindow("Editor Scene", leftID);
+    ImGui::DockBuilderDockWindow("Editor Inspector", rightID);
+    ImGui::DockBuilderDockWindow("Editor Materials", rightBottomID);
+    ImGui::DockBuilderDockWindow("Editor Settings", rightBottomID);
+    ImGui::DockBuilderFinish(dockspaceID);
+  }
+
+  if ( ImGui::BeginMenuBar() )
+  {
+    if ( ImGui::BeginMenu("Panels") )
+    {
+      ImGui::MenuItem("Scene", nullptr, &_Editor._ShowScenePanel);
+      ImGui::MenuItem("Inspector", nullptr, &_Editor._ShowInspectorPanel);
+      ImGui::MenuItem("Materials", nullptr, &_Editor._ShowMaterialsPanel);
+      ImGui::MenuItem("Settings", nullptr, &_Editor._ShowSettingsPanel);
+      ImGui::EndMenu();
+    }
+    if ( ImGui::MenuItem("Reset editor layout") )
+      _Editor._ResetDockLayout = true;
+    ImGui::EndMenuBar();
+  }
+
+  ImGui::DockSpace(dockspaceID, ImVec2(0.f, 0.f), dockspaceFlags);
+  ImGui::End();
+}
+
+// ----------------------------------------------------------------------------
+// DrawEditorScenePanel
+// ----------------------------------------------------------------------------
+void Test6::DrawEditorScenePanel()
+{
+  if ( !_Editor._ShowScenePanel )
+    return;
+
+  if ( !ImGui::Begin("Editor Scene", &_Editor._ShowScenePanel) )
+  {
+    ImGui::End();
+    return;
+  }
+
   ImGui::Text("Map: %s%s", _MapPath.c_str(), _Editor._Dirty ? " *" : "");
-  ImGui::Checkbox("Collider helpers", &_Editor._ShowColliderHelpers);
-  ImGui::SameLine();
-  ImGui::Checkbox("Light helpers", &_Editor._ShowLightHelpers);
-
-  if ( !_Editor._StatusMessage.empty() )
-    ImGui::Text("Status: %s", _Editor._StatusMessage.c_str());
-
-  const bool hasEditableSelection = ( FpsEditableKind::Box == _Editor._Selection._Kind )
-                                 || ( FpsEditableKind::Collider == _Editor._Selection._Kind )
-                                 || ( FpsEditableKind::Prop == _Editor._Selection._Kind )
-                                 || ( FpsEditableKind::Light == _Editor._Selection._Kind );
-  ImGui::BeginDisabled(!hasEditableSelection);
-  if ( ImGui::Button("Duplicate selected") )
-  {
-    if ( !DuplicateSelectedEditorItem() )
-      SetEditorStatus("Nothing selected to duplicate");
-  }
-  ImGui::SameLine();
-  if ( ImGui::Button("Delete selected") )
-  {
-    if ( !DeleteSelectedEditorItem() )
-      SetEditorStatus("Nothing selected to delete");
-  }
-  ImGui::EndDisabled();
-
-  ImGui::PushItemWidth(360.f);
+  ImGui::PushItemWidth(-FLT_MIN);
   ImGui::InputText("Save path", _Editor._SavePath, sizeof(_Editor._SavePath));
   if ( ImGui::Button("Save") )
   {
@@ -1694,178 +1751,6 @@ void Test6::DrawEditorPanel()
       ImGui::EndListBox();
     }
 
-    if ( ( FpsEditableKind::Box == _Editor._Selection._Kind )
-      || ( FpsEditableKind::Collider == _Editor._Selection._Kind ) )
-    {
-      const int index = _Editor._Selection._Index;
-      if ( ( index >= 0 ) && ( index < static_cast<int>(_Map._Objects.size()) ) )
-      {
-        FpsSceneObject & object = _Map._Objects[index];
-        EnsureEditorObjectVisibility();
-        bool objectDirty = false;
-        char nameBuffer[128];
-        std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", object._Name.c_str());
-        if ( ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer)) )
-        {
-          object._Name = nameBuffer;
-          objectDirty = true;
-        }
-
-        objectDirty |= ImGui::DragFloat3("Center", &object._Center.x, 0.05f, -100.f, 100.f, "%.3f");
-        if ( ImGui::DragFloat3("Rotation", &object._Rotation.x, 0.5f, -360.f, 360.f, "%.2f") )
-        {
-          object._Orientation = EditorVec4FromEuler(object._Rotation);
-          objectDirty = true;
-        }
-        objectDirty |= ImGui::DragFloat3("Half extents", &object._HalfExtents.x, 0.05f, 0.01f, 100.f, "%.3f");
-        objectDirty |= ImGui::Checkbox("Collidable", &object._Collidable);
-
-        if ( object._Visible )
-        {
-          bool instanceVisible = _Editor._ObjectInstanceVisible[index];
-          if ( ImGui::Checkbox("Show instance", &instanceVisible) )
-          {
-            _Editor._ObjectInstanceVisible[index] = instanceVisible;
-            if ( _Scene )
-              _SceneBinding.SetObjectInstanceVisible(*_Scene, index, instanceVisible);
-            if ( _Renderer )
-              _Renderer -> Notify(DirtyState::SceneInstances);
-          }
-
-          FpsGameMapLoader::SeedDefaultMaterials(_Map);
-          int currentMaterial = 0;
-          for ( int i = 0; i < static_cast<int>(_Map._Materials.size()); ++i )
-          {
-            if ( _Map._Materials[i]._Name == object._MaterialName )
-              currentMaterial = i;
-          }
-
-          const char * currentName = _Map._Materials.empty() ? "" : _Map._Materials[currentMaterial]._Name.c_str();
-          if ( ImGui::BeginCombo("Material", currentName) )
-          {
-            for ( int i = 0; i < static_cast<int>(_Map._Materials.size()); ++i )
-            {
-              const bool selected = ( i == currentMaterial );
-              if ( ImGui::Selectable(_Map._Materials[i]._Name.c_str(), selected) )
-              {
-                object._MaterialName = _Map._Materials[i]._Name;
-                FpsMaterialSlot materialSlot;
-                if ( EditorMaterialSlotFromName(object._MaterialName, materialSlot) )
-                  object._Material = materialSlot;
-                MarkEditorDirty();
-                _ReloadScene = true;
-              }
-              if ( selected )
-                ImGui::SetItemDefaultFocus();
-            }
-            ImGui::EndCombo();
-          }
-        }
-
-        if ( objectDirty )
-        {
-          object._HalfExtents = MathUtil::Max(object._HalfExtents, Vec3(0.01f));
-          SyncEditorObject(index);
-          MarkEditorDirty();
-        }
-      }
-    }
-  }
-
-  if ( ImGui::CollapsingHeader("Materials") )
-  {
-    FpsGameMapLoader::SeedDefaultMaterials(_Map);
-    if ( !_Map._Materials.empty() )
-      _Editor._SelectedMaterial = MathUtil::Clamp(_Editor._SelectedMaterial, 0, static_cast<int>(_Map._Materials.size()) - 1);
-
-    ImGui::InputText("New material", _Editor._NewMaterialName, sizeof(_Editor._NewMaterialName));
-    ImGui::SameLine();
-    if ( ImGui::Button("Add material") && std::strlen(_Editor._NewMaterialName) > 0 )
-    {
-      bool exists = false;
-      for ( int i = 0; i < static_cast<int>(_Map._Materials.size()); ++i )
-      {
-        if ( _Map._Materials[i]._Name == _Editor._NewMaterialName )
-        {
-          _Editor._SelectedMaterial = i;
-          exists = true;
-          break;
-        }
-      }
-
-      if ( !exists )
-      {
-        FpsMapMaterial material;
-        material._Name = _Editor._NewMaterialName;
-        material._Material._Albedo = Vec3(0.8f);
-        material._Material._Roughness = 0.5f;
-        _Map._Materials.push_back(material);
-        _Editor._SelectedMaterial = static_cast<int>(_Map._Materials.size()) - 1;
-        MarkEditorDirty();
-        _ReloadScene = true;
-        SetEditorStatus("Added material " + material._Name);
-      }
-    }
-
-    if ( !_Map._Materials.empty() )
-    {
-      if ( ImGui::BeginListBox("Materials", ImVec2(-FLT_MIN, 130.f)) )
-      {
-        for ( int i = 0; i < static_cast<int>(_Map._Materials.size()); ++i )
-        {
-          const bool selected = ( i == _Editor._SelectedMaterial );
-          if ( ImGui::Selectable(_Map._Materials[i]._Name.c_str(), selected) )
-            _Editor._SelectedMaterial = i;
-          if ( selected )
-            ImGui::SetItemDefaultFocus();
-        }
-        ImGui::EndListBox();
-      }
-
-      if ( ImGui::Button("Duplicate material") )
-        DuplicateSelectedMaterial();
-      ImGui::SameLine();
-      if ( ImGui::Button("Delete material") )
-        DeleteSelectedMaterial();
-
-      FpsMapMaterial & mapMaterial = _Map._Materials[_Editor._SelectedMaterial];
-      Material & material = mapMaterial._Material;
-      bool materialDirty = false;
-      materialDirty |= ImGui::ColorEdit3("Albedo", &material._Albedo.x);
-      materialDirty |= ImGui::DragFloat("Roughness", &material._Roughness, 0.01f, 0.f, 1.f, "%.3f");
-      materialDirty |= ImGui::DragFloat("Metallic", &material._Metallic, 0.01f, 0.f, 1.f, "%.3f");
-      materialDirty |= ImGui::DragFloat("Reflectance", &material._Reflectance, 0.01f, 0.f, 1.f, "%.3f");
-      materialDirty |= ImGui::ColorEdit3("Emission", &material._Emission.x);
-      materialDirty |= ImGui::DragFloat("Opacity", &material._Opacity, 0.01f, 0.f, 1.f, "%.3f");
-      int alphaMode = static_cast<int>(material._AlphaMode);
-      static const char * alphaModes[] = { "Opaque", "Blend", "Mask" };
-      if ( ImGui::Combo("Alpha mode", &alphaMode, alphaModes, 3) )
-      {
-        material._AlphaMode = static_cast<float>(alphaMode);
-        materialDirty = true;
-      }
-
-      if ( materialDirty )
-      {
-        material._Roughness = MathUtil::Clamp(material._Roughness, 0.f, 1.f);
-        material._Metallic = MathUtil::Clamp(material._Metallic, 0.f, 1.f);
-        material._Reflectance = MathUtil::Clamp(material._Reflectance, 0.f, 1.f);
-        material._Opacity = MathUtil::Clamp(material._Opacity, 0.f, 1.f);
-        if ( _Scene )
-        {
-          const int materialID = _Scene -> FindMaterialID("__FpsMap_" + mapMaterial._Name);
-          if ( ( materialID >= 0 ) && ( materialID < static_cast<int>(_Scene -> GetMaterials().size()) ) )
-          {
-            const float id = _Scene -> GetMaterials()[materialID]._ID;
-            _Scene -> GetMaterials()[materialID] = material;
-            _Scene -> GetMaterials()[materialID]._ID = id;
-          }
-        }
-        if ( _Renderer )
-          _Renderer -> Notify(DirtyState::SceneMaterials);
-        MarkEditorDirty();
-      }
-    }
   }
 
   if ( ImGui::CollapsingHeader("Props") )
@@ -1943,50 +1828,6 @@ void Test6::DrawEditorPanel()
       ImGui::EndListBox();
     }
 
-    if ( FpsEditableKind::Prop == _Editor._Selection._Kind )
-    {
-      const int index = _Editor._Selection._Index;
-      if ( ( index >= 0 ) && ( index < static_cast<int>(_Map._Props.size()) ) )
-      {
-        FpsMapProp & prop = _Map._Props[index];
-        bool propDirty = false;
-        bool reloadProp = false;
-
-        char nameBuffer[128];
-        std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", prop._Name.c_str());
-        if ( ImGui::InputText("Prop name", nameBuffer, sizeof(nameBuffer)) )
-        {
-          prop._Name = nameBuffer;
-          propDirty = true;
-        }
-
-        if ( !_Editor._PropAssetPaths.empty() )
-        {
-          if ( EditorPropAssetCombo("Prop asset", _Editor._PropAssetPaths, prop._Path) )
-          {
-            propDirty = true;
-            reloadProp = true;
-          }
-        }
-        else
-          ImGui::TextUnformatted("No loadable props found in Assets");
-
-        propDirty |= ImGui::DragFloat3("Prop position", &prop._Position.x, 0.05f, -100.f, 100.f, "%.3f");
-        propDirty |= ImGui::DragFloat3("Prop rotation", &prop._Rotation.x, 0.5f, -360.f, 360.f, "%.2f");
-        propDirty |= ImGui::DragFloat3("Prop scale", &prop._Scale.x, 0.05f, 0.01f, 100.f, "%.3f");
-        propDirty |= ImGui::Checkbox("Prop visible", &prop._Visible);
-
-        if ( propDirty )
-        {
-          prop._Scale = MathUtil::Max(prop._Scale, Vec3(0.01f));
-          MarkEditorDirty();
-          if ( reloadProp )
-            _ReloadScene = true;
-          else
-            SyncEditorProp(index);
-        }
-      }
-    }
   }
 
   if ( ImGui::CollapsingHeader("Lights") )
@@ -2041,56 +1882,196 @@ void Test6::DrawEditorPanel()
       ImGui::EndListBox();
     }
 
-    if ( FpsEditableKind::Light == _Editor._Selection._Kind )
+  }
+
+  ImGui::End();
+}
+
+// ----------------------------------------------------------------------------
+// DrawEditorInspectorPanel
+// ----------------------------------------------------------------------------
+void Test6::DrawEditorInspectorPanel()
+{
+  if ( !_Editor._ShowInspectorPanel )
+    return;
+
+  if ( !ImGui::Begin("Editor Inspector", &_Editor._ShowInspectorPanel) )
+  {
+    ImGui::End();
+    return;
+  }
+
+  if ( ( FpsEditableKind::Box == _Editor._Selection._Kind )
+    || ( FpsEditableKind::Collider == _Editor._Selection._Kind ) )
+  {
+    const int index = _Editor._Selection._Index;
+    if ( ( index >= 0 ) && ( index < static_cast<int>(_Map._Objects.size()) ) )
     {
-      const int index = _Editor._Selection._Index;
-      if ( ( index >= 0 ) && ( index < static_cast<int>(_Map._Lights.size()) ) )
+      FpsSceneObject & object = _Map._Objects[index];
+      EnsureEditorObjectVisibility();
+      bool objectDirty = false;
+      char nameBuffer[128];
+      std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", object._Name.c_str());
+      if ( ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer)) )
       {
-        Light & light = _Map._Lights[index];
-        bool lightDirty = false;
-        LightType type = (LightType)(int)light._Type;
-        int lightType = ( LightType::DistantLight == type ) ? 2 : ( LightType::RectLight == type ? 1 : 0 );
-        static const char * lightTypes[] = { "Sphere", "Rect", "Distant" };
-        if ( ImGui::Combo("Type", &lightType, lightTypes, 3) )
+        object._Name = nameBuffer;
+        objectDirty = true;
+      }
+
+      objectDirty |= ImGui::DragFloat3("Center", &object._Center.x, 0.05f, -100.f, 100.f, "%.3f");
+      if ( ImGui::DragFloat3("Rotation", &object._Rotation.x, 0.5f, -360.f, 360.f, "%.2f") )
+      {
+        object._Orientation = EditorVec4FromEuler(object._Rotation);
+        objectDirty = true;
+      }
+      objectDirty |= ImGui::DragFloat3("Half extents", &object._HalfExtents.x, 0.05f, 0.01f, 100.f, "%.3f");
+      objectDirty |= ImGui::Checkbox("Collidable", &object._Collidable);
+
+      if ( object._Visible )
+      {
+        bool instanceVisible = _Editor._ObjectInstanceVisible[index];
+        if ( ImGui::Checkbox("Show instance", &instanceVisible) )
         {
-          if ( 0 == lightType )
-            light._Type = (float)LightType::SphereLight;
-          else if ( 1 == lightType )
-            light._Type = (float)LightType::RectLight;
-          else
-            light._Type = (float)LightType::DistantLight;
-          lightDirty = true;
+          _Editor._ObjectInstanceVisible[index] = instanceVisible;
+          if ( _Scene )
+            _SceneBinding.SetObjectInstanceVisible(*_Scene, index, instanceVisible);
+          if ( _Renderer )
+            _Renderer -> Notify(DirtyState::SceneInstances);
         }
 
-        type = (LightType)(int)light._Type;
-        if ( LightType::DistantLight == type )
-          lightDirty |= ImGui::DragFloat3("Direction", &light._Pos.x, 0.01f, -1.f, 1.f, "%.3f");
-        else
-          lightDirty |= ImGui::DragFloat3("Position", &light._Pos.x, 0.05f, -100.f, 100.f, "%.3f");
-
-        lightDirty |= ImGui::ColorEdit3("Emission", &light._Emission.x);
-        lightDirty |= ImGui::DragFloat("Intensity", &light._Intensity, 0.1f, 0.f, 500.f, "%.2f");
-        if ( LightType::SphereLight == type )
-          lightDirty |= ImGui::DragFloat("Radius", &light._Radius, 0.01f, 0.01f, 20.f, "%.3f");
-        if ( LightType::RectLight == type )
+        FpsGameMapLoader::SeedDefaultMaterials(_Map);
+        int currentMaterial = 0;
+        for ( int i = 0; i < static_cast<int>(_Map._Materials.size()); ++i )
         {
-          lightDirty |= ImGui::DragFloat3("Dir U", &light._DirU.x, 0.05f, -20.f, 20.f, "%.3f");
-          lightDirty |= ImGui::DragFloat3("Dir V", &light._DirV.x, 0.05f, -20.f, 20.f, "%.3f");
-          lightDirty |= ImGui::DragFloat("Area", &light._Area, 0.01f, 0.01f, 400.f, "%.3f");
+          if ( _Map._Materials[i]._Name == object._MaterialName )
+            currentMaterial = i;
         }
-        lightDirty |= ImGui::Checkbox("Cast shadow", &light._CastShadow);
-        lightDirty |= ImGui::DragFloat("Shadow radius", &light._ShadowRadius, 0.05f, 0.f, 200.f, "%.2f");
 
-        if ( lightDirty )
+        const char * currentName = _Map._Materials.empty() ? "" : _Map._Materials[currentMaterial]._Name.c_str();
+        if ( ImGui::BeginCombo("Material", currentName) )
         {
-          if ( LightType::SphereLight == (LightType)(int)light._Type )
-            light._Area = 4.0f * static_cast<float>(M_PI) * light._Radius * light._Radius;
-          SyncEditorLight(index);
-          MarkEditorDirty();
+          for ( int i = 0; i < static_cast<int>(_Map._Materials.size()); ++i )
+          {
+            const bool selected = ( i == currentMaterial );
+            if ( ImGui::Selectable(_Map._Materials[i]._Name.c_str(), selected) )
+            {
+              object._MaterialName = _Map._Materials[i]._Name;
+              FpsMaterialSlot materialSlot;
+              if ( EditorMaterialSlotFromName(object._MaterialName, materialSlot) )
+                object._Material = materialSlot;
+              MarkEditorDirty();
+              _ReloadScene = true;
+            }
+            if ( selected )
+              ImGui::SetItemDefaultFocus();
+          }
+          ImGui::EndCombo();
         }
+      }
+
+      if ( objectDirty )
+      {
+        object._HalfExtents = MathUtil::Max(object._HalfExtents, Vec3(0.01f));
+        SyncEditorObject(index);
+        MarkEditorDirty();
       }
     }
   }
+  else if ( FpsEditableKind::Prop == _Editor._Selection._Kind )
+  {
+    const int index = _Editor._Selection._Index;
+    if ( ( index >= 0 ) && ( index < static_cast<int>(_Map._Props.size()) ) )
+    {
+      FpsMapProp & prop = _Map._Props[index];
+      bool propDirty = false;
+      bool reloadProp = false;
+
+      char nameBuffer[128];
+      std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", prop._Name.c_str());
+      if ( ImGui::InputText("Prop name", nameBuffer, sizeof(nameBuffer)) )
+      {
+        prop._Name = nameBuffer;
+        propDirty = true;
+      }
+
+      if ( !_Editor._PropAssetPaths.empty() )
+      {
+        if ( EditorPropAssetCombo("Prop asset", _Editor._PropAssetPaths, prop._Path) )
+        {
+          propDirty = true;
+          reloadProp = true;
+        }
+      }
+      else
+        ImGui::TextUnformatted("No loadable props found in Assets");
+
+      propDirty |= ImGui::DragFloat3("Prop position", &prop._Position.x, 0.05f, -100.f, 100.f, "%.3f");
+      propDirty |= ImGui::DragFloat3("Prop rotation", &prop._Rotation.x, 0.5f, -360.f, 360.f, "%.2f");
+      propDirty |= ImGui::DragFloat3("Prop scale", &prop._Scale.x, 0.05f, 0.01f, 100.f, "%.3f");
+      propDirty |= ImGui::Checkbox("Prop visible", &prop._Visible);
+
+      if ( propDirty )
+      {
+        prop._Scale = MathUtil::Max(prop._Scale, Vec3(0.01f));
+        MarkEditorDirty();
+        if ( reloadProp )
+          _ReloadScene = true;
+        else
+          SyncEditorProp(index);
+      }
+    }
+  }
+  else if ( FpsEditableKind::Light == _Editor._Selection._Kind )
+  {
+    const int index = _Editor._Selection._Index;
+    if ( ( index >= 0 ) && ( index < static_cast<int>(_Map._Lights.size()) ) )
+    {
+      Light & light = _Map._Lights[index];
+      bool lightDirty = false;
+      LightType type = (LightType)(int)light._Type;
+      int lightType = ( LightType::DistantLight == type ) ? 2 : ( LightType::RectLight == type ? 1 : 0 );
+      static const char * lightTypes[] = { "Sphere", "Rect", "Distant" };
+      if ( ImGui::Combo("Type", &lightType, lightTypes, 3) )
+      {
+        if ( 0 == lightType )
+          light._Type = (float)LightType::SphereLight;
+        else if ( 1 == lightType )
+          light._Type = (float)LightType::RectLight;
+        else
+          light._Type = (float)LightType::DistantLight;
+        lightDirty = true;
+      }
+
+      type = (LightType)(int)light._Type;
+      if ( LightType::DistantLight == type )
+        lightDirty |= ImGui::DragFloat3("Direction", &light._Pos.x, 0.01f, -1.f, 1.f, "%.3f");
+      else
+        lightDirty |= ImGui::DragFloat3("Position", &light._Pos.x, 0.05f, -100.f, 100.f, "%.3f");
+
+      lightDirty |= ImGui::ColorEdit3("Emission", &light._Emission.x);
+      lightDirty |= ImGui::DragFloat("Intensity", &light._Intensity, 0.1f, 0.f, 500.f, "%.2f");
+      if ( LightType::SphereLight == type )
+        lightDirty |= ImGui::DragFloat("Radius", &light._Radius, 0.01f, 0.01f, 20.f, "%.3f");
+      if ( LightType::RectLight == type )
+      {
+        lightDirty |= ImGui::DragFloat3("Dir U", &light._DirU.x, 0.05f, -20.f, 20.f, "%.3f");
+        lightDirty |= ImGui::DragFloat3("Dir V", &light._DirV.x, 0.05f, -20.f, 20.f, "%.3f");
+        lightDirty |= ImGui::DragFloat("Area", &light._Area, 0.01f, 0.01f, 400.f, "%.3f");
+      }
+      lightDirty |= ImGui::Checkbox("Cast shadow", &light._CastShadow);
+      lightDirty |= ImGui::DragFloat("Shadow radius", &light._ShadowRadius, 0.05f, 0.f, 200.f, "%.2f");
+
+      if ( lightDirty )
+      {
+        if ( LightType::SphereLight == (LightType)(int)light._Type )
+          light._Area = 4.0f * static_cast<float>(M_PI) * light._Radius * light._Radius;
+        SyncEditorLight(index);
+        MarkEditorDirty();
+      }
+    }
+  }
+  else
+    ImGui::TextUnformatted("No editable item selected.");
 
   if ( ImGui::CollapsingHeader("Player spawn") )
   {
@@ -2109,6 +2090,173 @@ void Test6::DrawEditorPanel()
     if ( spawnDirty )
       MarkEditorDirty();
   }
+
+  ImGui::End();
+}
+
+// ----------------------------------------------------------------------------
+// DrawEditorMaterialsPanel
+// ----------------------------------------------------------------------------
+void Test6::DrawEditorMaterialsPanel()
+{
+  if ( !_Editor._ShowMaterialsPanel )
+    return;
+
+  if ( !ImGui::Begin("Editor Materials", &_Editor._ShowMaterialsPanel) )
+  {
+    ImGui::End();
+    return;
+  }
+
+  FpsGameMapLoader::SeedDefaultMaterials(_Map);
+  if ( !_Map._Materials.empty() )
+    _Editor._SelectedMaterial = MathUtil::Clamp(_Editor._SelectedMaterial, 0, static_cast<int>(_Map._Materials.size()) - 1);
+
+  ImGui::InputText("New material", _Editor._NewMaterialName, sizeof(_Editor._NewMaterialName));
+  ImGui::SameLine();
+  if ( ImGui::Button("Add material") && std::strlen(_Editor._NewMaterialName) > 0 )
+  {
+    bool exists = false;
+    for ( int i = 0; i < static_cast<int>(_Map._Materials.size()); ++i )
+    {
+      if ( _Map._Materials[i]._Name == _Editor._NewMaterialName )
+      {
+        _Editor._SelectedMaterial = i;
+        exists = true;
+        break;
+      }
+    }
+
+    if ( !exists )
+    {
+      FpsMapMaterial material;
+      material._Name = _Editor._NewMaterialName;
+      material._Material._Albedo = Vec3(0.8f);
+      material._Material._Roughness = 0.5f;
+      _Map._Materials.push_back(material);
+      _Editor._SelectedMaterial = static_cast<int>(_Map._Materials.size()) - 1;
+      MarkEditorDirty();
+      _ReloadScene = true;
+      SetEditorStatus("Added material " + material._Name);
+    }
+  }
+
+  if ( !_Map._Materials.empty() )
+  {
+    if ( ImGui::BeginListBox("Materials", ImVec2(-FLT_MIN, 150.f)) )
+    {
+      for ( int i = 0; i < static_cast<int>(_Map._Materials.size()); ++i )
+      {
+        const bool selected = ( i == _Editor._SelectedMaterial );
+        if ( ImGui::Selectable(_Map._Materials[i]._Name.c_str(), selected) )
+          _Editor._SelectedMaterial = i;
+        if ( selected )
+          ImGui::SetItemDefaultFocus();
+      }
+      ImGui::EndListBox();
+    }
+
+    if ( ImGui::Button("Duplicate material") )
+      DuplicateSelectedMaterial();
+    ImGui::SameLine();
+    if ( ImGui::Button("Delete material") )
+      DeleteSelectedMaterial();
+
+    if ( ( _Editor._SelectedMaterial >= 0 ) && ( _Editor._SelectedMaterial < static_cast<int>(_Map._Materials.size()) ) )
+    {
+      FpsMapMaterial & mapMaterial = _Map._Materials[_Editor._SelectedMaterial];
+      Material & material = mapMaterial._Material;
+      bool materialDirty = false;
+      materialDirty |= ImGui::ColorEdit3("Albedo", &material._Albedo.x);
+      materialDirty |= ImGui::DragFloat("Roughness", &material._Roughness, 0.01f, 0.f, 1.f, "%.3f");
+      materialDirty |= ImGui::DragFloat("Metallic", &material._Metallic, 0.01f, 0.f, 1.f, "%.3f");
+      materialDirty |= ImGui::DragFloat("Reflectance", &material._Reflectance, 0.01f, 0.f, 1.f, "%.3f");
+      materialDirty |= ImGui::ColorEdit3("Emission", &material._Emission.x);
+      materialDirty |= ImGui::DragFloat("Opacity", &material._Opacity, 0.01f, 0.f, 1.f, "%.3f");
+      int alphaMode = static_cast<int>(material._AlphaMode);
+      static const char * alphaModes[] = { "Opaque", "Blend", "Mask" };
+      if ( ImGui::Combo("Alpha mode", &alphaMode, alphaModes, 3) )
+      {
+        material._AlphaMode = static_cast<float>(alphaMode);
+        materialDirty = true;
+      }
+
+      if ( materialDirty )
+      {
+        material._Roughness = MathUtil::Clamp(material._Roughness, 0.f, 1.f);
+        material._Metallic = MathUtil::Clamp(material._Metallic, 0.f, 1.f);
+        material._Reflectance = MathUtil::Clamp(material._Reflectance, 0.f, 1.f);
+        material._Opacity = MathUtil::Clamp(material._Opacity, 0.f, 1.f);
+        if ( _Scene )
+        {
+          const int materialID = _Scene -> FindMaterialID("__FpsMap_" + mapMaterial._Name);
+          if ( ( materialID >= 0 ) && ( materialID < static_cast<int>(_Scene -> GetMaterials().size()) ) )
+          {
+            const float id = _Scene -> GetMaterials()[materialID]._ID;
+            _Scene -> GetMaterials()[materialID] = material;
+            _Scene -> GetMaterials()[materialID]._ID = id;
+          }
+        }
+        if ( _Renderer )
+          _Renderer -> Notify(DirtyState::SceneMaterials);
+        MarkEditorDirty();
+      }
+    }
+  }
+
+  ImGui::End();
+}
+
+// ----------------------------------------------------------------------------
+// DrawEditorSettingsPanel
+// ----------------------------------------------------------------------------
+void Test6::DrawEditorSettingsPanel()
+{
+  if ( !_Editor._ShowSettingsPanel )
+    return;
+
+  if ( !ImGui::Begin("Editor Settings", &_Editor._ShowSettingsPanel) )
+  {
+    ImGui::End();
+    return;
+  }
+
+  ImGui::Text("Mode: editor");
+  ImGui::Text("Renderer: %s", FpsRendererMode::Deferred == _GameSettings._RendererMode ? "Deferred" :
+                              FpsRendererMode::Software == _GameSettings._RendererMode ? "Software" : "Photo Path Tracer");
+  if ( !_Editor._StatusMessage.empty() )
+    ImGui::TextWrapped("Status: %s", _Editor._StatusMessage.c_str());
+
+  ImGui::Separator();
+  ImGui::Checkbox("Collider helpers", &_Editor._ShowColliderHelpers);
+  ImGui::Checkbox("Light helpers", &_Editor._ShowLightHelpers);
+
+  const bool hasEditableSelection = ( FpsEditableKind::Box == _Editor._Selection._Kind )
+                                 || ( FpsEditableKind::Collider == _Editor._Selection._Kind )
+                                 || ( FpsEditableKind::Prop == _Editor._Selection._Kind )
+                                 || ( FpsEditableKind::Light == _Editor._Selection._Kind );
+  ImGui::BeginDisabled(!hasEditableSelection);
+  if ( ImGui::Button("Duplicate selected") )
+  {
+    if ( !DuplicateSelectedEditorItem() )
+      SetEditorStatus("Nothing selected to duplicate");
+  }
+  ImGui::SameLine();
+  if ( ImGui::Button("Delete selected") )
+  {
+    if ( !DeleteSelectedEditorItem() )
+      SetEditorStatus("Nothing selected to delete");
+  }
+  ImGui::EndDisabled();
+
+  if ( ImGui::Button("Refresh prop list") )
+  {
+    RefreshEditorPropAssets();
+    SetEditorStatus("Found " + std::to_string(_Editor._PropAssetPaths.size()) + " root asset props");
+  }
+  ImGui::SameLine();
+  if ( ImGui::Button("Reset editor layout") )
+    _Editor._ResetDockLayout = true;
 
   ImGui::End();
 }

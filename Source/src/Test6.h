@@ -45,6 +45,11 @@ struct FpsGameEditor
   bool               _PreviousFreeLook = false;
   bool               _ShowColliderHelpers = true;
   bool               _ShowLightHelpers = true;
+  bool               _ShowScenePanel = true;
+  bool               _ShowInspectorPanel = true;
+  bool               _ShowMaterialsPanel = true;
+  bool               _ShowSettingsPanel = true;
+  bool               _ResetDockLayout = false;
   FpsEditorSelection _Selection;
   int                _SelectedMaterial = 0;
   char               _SavePath[512] = {};
@@ -81,7 +86,11 @@ protected:
   int UpdateGame();
   int DrawUI();
   void DrawDebugPanel();
-  void DrawEditorPanel();
+  void DrawEditorDockspace();
+  void DrawEditorScenePanel();
+  void DrawEditorInspectorPanel();
+  void DrawEditorMaterialsPanel();
+  void DrawEditorSettingsPanel();
   int DrawEditorGizmo();
   int DrawEditorOverlays();
   void DrawHUD();
