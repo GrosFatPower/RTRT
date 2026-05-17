@@ -624,6 +624,8 @@ void FpsGameSceneBinding::Reset()
     _MaterialIDs[i] = -1;
   _MapMaterialIDs.clear();
   _ObjectInstanceIDs.clear();
+  _PropInstanceIDs.clear();
+  _PropBaseTransforms.clear();
   _ProjectileInstanceIDs.clear();
   _WeaponInstanceIDs.clear();
   _WeaponBaseTransforms.clear();
@@ -781,6 +783,48 @@ int FpsGameSceneBinding::SetObjectInstanceVisible( Scene & iScene, int iObjectIn
 }
 
 // ----------------------------------------------------------------------------
+// SyncProp
+// ----------------------------------------------------------------------------
+int FpsGameSceneBinding::SyncProp( Scene & iScene, const FpsGameMap & iMap, int iPropIndex )
+{
+  if ( ( iPropIndex < 0 ) || ( iPropIndex >= static_cast<int>(iMap._Props.size()) ) )
+    return 1;
+  if ( ( iPropIndex >= static_cast<int>(_PropInstanceIDs.size()) )
+    || ( iPropIndex >= static_cast<int>(_PropBaseTransforms.size()) ) )
+    return 1;
+
+  const FpsMapProp & prop = iMap._Props[iPropIndex];
+  const Mat4x4 propTransform = BuildPropTransform(prop);
+  const std::vector<int> & instanceIDs = _PropInstanceIDs[iPropIndex];
+  const std::vector<Mat4x4> & baseTransforms = _PropBaseTransforms[iPropIndex];
+  if ( instanceIDs.size() != baseTransforms.size() )
+    return 1;
+
+  std::vector<MeshInstance> & instances = iScene.GetMeshInstances();
+  for ( int i = 0; i < static_cast<int>(instanceIDs.size()); ++i )
+  {
+    const int instanceID = instanceIDs[i];
+    if ( ( instanceID < 0 ) || ( instanceID >= static_cast<int>(instances.size()) ) )
+      return 1;
+
+    instances[instanceID]._Visible = prop._Visible;
+    instances[instanceID]._Transform = propTransform * baseTransforms[i];
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// GetPropInstanceIDs
+// ----------------------------------------------------------------------------
+const std::vector<int> * FpsGameSceneBinding::GetPropInstanceIDs( int iPropIndex ) const
+{
+  if ( ( iPropIndex < 0 ) || ( iPropIndex >= static_cast<int>(_PropInstanceIDs.size()) ) )
+    return nullptr;
+  return &_PropInstanceIDs[iPropIndex];
+}
+
+// ----------------------------------------------------------------------------
 // EnsureResources
 // ----------------------------------------------------------------------------
 int FpsGameSceneBinding::EnsureResources( Scene & iScene, const FpsGameMap * iMap )
@@ -869,11 +913,31 @@ int FpsGameSceneBinding::LoadProps( Scene & iScene, const FpsGameMap & iMap )
   int result = 0;
   for ( const FpsMapProp & prop : iMap._Props )
   {
-    if ( !prop._Visible )
-      continue;
+    _PropInstanceIDs.push_back(std::vector<int>());
+    _PropBaseTransforms.push_back(std::vector<Mat4x4>());
 
     const std::filesystem::path filepath(PathUtils::GetAssetPath(prop._Path));
     const std::string ext = filepath.extension().string();
+
+    if ( ".obj" == ext )
+    {
+      const int meshID = iScene.AddMesh(filepath.string());
+      const int materialID = MaterialID(FpsMaterialSlot::Wall);
+      if ( ( meshID < 0 ) || ( materialID < 0 ) )
+      {
+        std::cout << "FpsGameSceneBinding : failed to load obj prop " << prop._Path << std::endl;
+        result = 1;
+        continue;
+      }
+
+      MeshInstance instance(prop._Name, meshID, materialID, BuildPropTransform(prop));
+      instance._Visible = prop._Visible;
+      const int instanceID = iScene.AddMeshInstance(instance);
+      _PropInstanceIDs.back().push_back(instanceID);
+      _PropBaseTransforms.back().push_back(Mat4x4(1.f));
+      continue;
+    }
+
     if ( ( ".gltf" != ext ) && ( ".glb" != ext ) )
     {
       std::cout << "FpsGameSceneBinding : unsupported prop format " << prop._Path << std::endl;
@@ -894,7 +958,10 @@ int FpsGameSceneBinding::LoadProps( Scene & iScene, const FpsGameMap & iMap )
     std::vector<MeshInstance> & instances = iScene.GetMeshInstances();
     for ( int instanceID = firstInstanceID; instanceID < static_cast<int>(instances.size()); ++instanceID )
     {
-      instances[instanceID]._Transform = propTransform * instances[instanceID]._Transform;
+      _PropInstanceIDs.back().push_back(instanceID);
+      _PropBaseTransforms.back().push_back(instances[instanceID]._Transform);
+      instances[instanceID]._Transform = propTransform * _PropBaseTransforms.back().back();
+      instances[instanceID]._Visible = prop._Visible;
     }
   }
 

@@ -162,7 +162,9 @@ public:
   int Attach( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, const FpsGameMap & iMap );
   int SyncCamera( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
   int SyncTransforms( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
+  int SyncProp( Scene & iScene, const FpsGameMap & iMap, int iPropIndex );
   int SetObjectInstanceVisible( Scene & iScene, int iObjectIndex, bool iVisible );
+  const std::vector<int> * GetPropInstanceIDs( int iPropIndex ) const;
   bool HasViewWeapon() const { return !_WeaponInstanceIDs.empty(); }
   void Reset();
 
@@ -185,6 +187,8 @@ protected:
   int              _MaterialIDs[(int)FpsMaterialSlot::Count] = { -1, -1, -1, -1, -1 };
   std::map<std::string, int> _MapMaterialIDs;
   std::vector<int> _ObjectInstanceIDs;
+  std::vector<std::vector<int>> _PropInstanceIDs;
+  std::vector<std::vector<Mat4x4>> _PropBaseTransforms;
   std::vector<int> _ProjectileInstanceIDs;
   std::vector<int> _WeaponInstanceIDs;
   std::vector<Mat4x4> _WeaponBaseTransforms;

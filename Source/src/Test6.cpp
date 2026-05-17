@@ -4,6 +4,8 @@
 
 #include "DeferredRenderer.h"
 #include "FpsGameMap.h"
+#include "Mesh.h"
+#include "MeshInstance.h"
 #include "PathTracer.h"
 #include "PathUtils.h"
 #include "SoftwareRasterizer.h"
@@ -157,6 +159,21 @@ static Mat4x4 EditorObjectGizmoTransform( const FpsSceneObject & iObject )
   return transform;
 }
 
+static Mat4x4 EditorPropTransform( const FpsMapProp & iProp )
+{
+  Mat4x4 transform = glm::translate(iProp._Position);
+  transform = transform * EditorEulerTransform(iProp._Rotation);
+  transform = transform * glm::scale(iProp._Scale);
+  return transform;
+}
+
+static Mat4x4 EditorPropGizmoTransform( const FpsMapProp & iProp )
+{
+  Mat4x4 transform = glm::translate(iProp._Position);
+  transform = transform * EditorEulerTransform(iProp._Rotation);
+  return transform;
+}
+
 // ----------------------------------------------------------------------------
 // EditorUnitBox
 // ----------------------------------------------------------------------------
@@ -184,6 +201,50 @@ static bool EditorIntersectRayObject( const Vec3 & iRayOrigin, const Vec3 & iRay
   const Vec3 localHit = localOrigin + localDir * localHitT;
   const Vec3 worldHit = MathUtil::TransformPoint(localHit, EditorObjectTransform(iObject));
   oHitT = glm::length(worldHit - iRayOrigin);
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// EditorIntersectRayMeshInstance
+// ----------------------------------------------------------------------------
+static bool EditorIntersectRayMeshInstance( const Vec3 & iRayOrigin, const Vec3 & iRayDir, const MeshInstance & iInstance, const Mesh & iMesh, float & oHitT )
+{
+  Mat4x4 invTransform = glm::inverse(iInstance._Transform);
+  Vec3 localOrigin = Vec3(invTransform * Vec4(iRayOrigin, 1.f));
+  Vec3 localDir = glm::normalize(Vec3(invTransform * Vec4(iRayDir, 0.f)));
+
+  float boxHitT = 0.f;
+  if ( !MathUtil::IntersectRayAABB(localOrigin, localDir, iMesh.GetBoundingBox(), boxHitT) )
+    return false;
+
+  bool hit = false;
+  float nearestDist = MAX_FLOAT;
+  const std::vector<Vec3> & vertices = iMesh.GetVertices();
+  const std::vector<Vec3i> & indices = iMesh.GetIndices();
+  for ( int i = 0; i + 2 < static_cast<int>(indices.size()); i += 3 )
+  {
+    const Vec3i & i0 = indices[i + 0];
+    const Vec3i & i1 = indices[i + 1];
+    const Vec3i & i2 = indices[i + 2];
+
+    float triHitT = 0.f;
+    if ( MathUtil::IntersectRayTriangle(localOrigin, localDir, vertices[i0.x], vertices[i1.x], vertices[i2.x], triHitT) )
+    {
+      const Vec3 localHit = localOrigin + localDir * triHitT;
+      const Vec3 worldHit = MathUtil::TransformPoint(localHit, iInstance._Transform);
+      const float worldDist = glm::length(worldHit - iRayOrigin);
+      if ( worldDist < nearestDist )
+      {
+        nearestDist = worldDist;
+        hit = true;
+      }
+    }
+  }
+
+  if ( !hit )
+    return false;
+
+  oHitT = nearestDist;
   return true;
 }
 
@@ -235,6 +296,36 @@ static void EditorDrawTransformedBox( const Mat4x4 & iTransform, const Mat4x4 & 
 
   Vec3 corners[8];
   EditorUnitBox().Corners(corners);
+
+  ImGuiIO & io = ImGui::GetIO();
+  ImVec2 screenCorners[8];
+  bool visibleCorners[8] = { false, false, false, false, false, false, false, false };
+  for ( int i = 0; i < 8; ++i )
+    visibleCorners[i] = EditorProjectPoint(MathUtil::TransformPoint(corners[i], iTransform), iView, iProj, io.DisplaySize, screenCorners[i]);
+
+  static const int Edges[12][2] =
+  {
+    { 0, 1 }, { 1, 3 }, { 3, 2 }, { 2, 0 },
+    { 4, 5 }, { 5, 7 }, { 7, 6 }, { 6, 4 },
+    { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }
+  };
+
+  for ( int i = 0; i < 12; ++i )
+  {
+    const int c0 = Edges[i][0];
+    const int c1 = Edges[i][1];
+    if ( visibleCorners[c0] && visibleCorners[c1] )
+      ioDrawList -> AddLine(screenCorners[c0], screenCorners[c1], iColor, iLineWidth);
+  }
+}
+
+static void EditorDrawTransformedAABB( const AABB<Vec3> & iBox, const Mat4x4 & iTransform, const Mat4x4 & iView, const Mat4x4 & iProj, ImDrawList * ioDrawList, ImU32 iColor, float iLineWidth )
+{
+  if ( !ioDrawList )
+    return;
+
+  Vec3 corners[8];
+  iBox.Corners(corners);
 
   ImGuiIO & io = ImGui::GetIO();
   ImVec2 screenCorners[8];
@@ -506,6 +597,23 @@ void Test6::SyncEditorObject( int iObjectIndex )
 }
 
 // ----------------------------------------------------------------------------
+// SyncEditorProp
+// ----------------------------------------------------------------------------
+void Test6::SyncEditorProp( int iPropIndex )
+{
+  if ( !_Scene )
+    return;
+  if ( ( iPropIndex < 0 ) || ( iPropIndex >= static_cast<int>(_Map._Props.size()) ) )
+    return;
+
+  if ( 0 != _SceneBinding.SyncProp(*_Scene, _Map, iPropIndex) )
+    return;
+
+  if ( _Renderer )
+    _Renderer -> Notify(DirtyState::SceneInstances);
+}
+
+// ----------------------------------------------------------------------------
 // SyncEditorLight
 // ----------------------------------------------------------------------------
 void Test6::SyncEditorLight( int iLightIndex )
@@ -628,6 +736,44 @@ bool Test6::PickEditorSelection( double iMouseX, double iMouseY, FpsEditorSelect
       oSelection._Kind = object._Visible ? FpsEditableKind::Box : FpsEditableKind::Collider;
       oSelection._Index = i;
       oSelection._SceneInstanceID = -1;
+    }
+  }
+
+  const std::vector<MeshInstance> & meshInstances = const_cast<Scene*>(_Scene.get()) -> GetMeshInstances();
+  const std::vector<Mesh*> & meshes = const_cast<Scene*>(_Scene.get()) -> GetMeshes();
+  for ( int propIndex = 0; propIndex < static_cast<int>(_Map._Props.size()); ++propIndex )
+  {
+    const FpsMapProp & prop = _Map._Props[propIndex];
+    if ( !prop._Visible )
+      continue;
+
+    const std::vector<int> * instanceIDs = _SceneBinding.GetPropInstanceIDs(propIndex);
+    if ( !instanceIDs )
+      continue;
+
+    for ( int instanceID : *instanceIDs )
+    {
+      if ( ( instanceID < 0 ) || ( instanceID >= static_cast<int>(meshInstances.size()) ) )
+        continue;
+
+      const MeshInstance & instance = meshInstances[instanceID];
+      if ( !instance._Visible )
+        continue;
+      if ( ( instance._MeshID < 0 ) || ( instance._MeshID >= static_cast<int>(meshes.size()) ) )
+        continue;
+
+      Mesh * mesh = meshes[instance._MeshID];
+      if ( !mesh )
+        continue;
+
+      float hitT = 0.f;
+      if ( EditorIntersectRayMeshInstance(rayOrigin, rayDir, instance, *mesh, hitT) && hitT < nearestDist )
+      {
+        nearestDist = hitT;
+        oSelection._Kind = FpsEditableKind::Prop;
+        oSelection._Index = propIndex;
+        oSelection._SceneInstanceID = instanceID;
+      }
     }
   }
 
@@ -1392,6 +1538,101 @@ void Test6::DrawEditorPanel()
     }
   }
 
+  if ( ImGui::CollapsingHeader("Props") )
+  {
+    ImGui::InputText("New prop name", _Editor._NewPropName, sizeof(_Editor._NewPropName));
+    ImGui::InputText("New prop path", _Editor._NewPropPath, sizeof(_Editor._NewPropPath));
+    if ( ImGui::Button("Add prop") && std::strlen(_Editor._NewPropPath) > 0 )
+    {
+      FpsMapProp prop;
+      prop._Name = std::strlen(_Editor._NewPropName) > 0
+                 ? _Editor._NewPropName
+                 : ( "Prop " + std::to_string(static_cast<int>(_Map._Props.size())) );
+      prop._Path = _Editor._NewPropPath;
+      prop._Position = _GameWorld.GetPlayer().EyePosition(_GameSettings) + Vec3(0.f, 0.f, 3.f);
+      prop._Rotation = Vec3(0.f);
+      prop._Scale = Vec3(1.f);
+      prop._Visible = true;
+      _Map._Props.push_back(prop);
+      _MapLoaded = true;
+      _Editor._Selection._Kind = FpsEditableKind::Prop;
+      _Editor._Selection._Index = static_cast<int>(_Map._Props.size()) - 1;
+      MarkEditorDirty();
+      _ReloadScene = true;
+    }
+
+    if ( ImGui::BeginListBox("Props", ImVec2(-FLT_MIN, 150.f)) )
+    {
+      for ( int i = 0; i < static_cast<int>(_Map._Props.size()); ++i )
+      {
+        const FpsMapProp & prop = _Map._Props[i];
+        const bool selected = ( FpsEditableKind::Prop == _Editor._Selection._Kind ) && ( _Editor._Selection._Index == i );
+        std::string label = "Prop: " + prop._Name;
+        if ( !prop._Visible )
+          label += " (hidden)";
+        label += "##prop" + std::to_string(i);
+        if ( ImGui::Selectable(label.c_str(), selected) )
+        {
+          _Editor._Selection._Kind = FpsEditableKind::Prop;
+          _Editor._Selection._Index = i;
+        }
+        if ( selected )
+          ImGui::SetItemDefaultFocus();
+      }
+      ImGui::EndListBox();
+    }
+
+    if ( FpsEditableKind::Prop == _Editor._Selection._Kind )
+    {
+      const int index = _Editor._Selection._Index;
+      if ( ( index >= 0 ) && ( index < static_cast<int>(_Map._Props.size()) ) )
+      {
+        FpsMapProp & prop = _Map._Props[index];
+        bool propDirty = false;
+        bool reloadProp = false;
+
+        char nameBuffer[128];
+        std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", prop._Name.c_str());
+        if ( ImGui::InputText("Prop name", nameBuffer, sizeof(nameBuffer)) )
+        {
+          prop._Name = nameBuffer;
+          propDirty = true;
+        }
+
+        if ( _Editor._PropPathEditIndex != index )
+        {
+          _Editor._PropPathEditIndex = index;
+          CopyPathToBuffer(_Editor._PropPathEdit, sizeof(_Editor._PropPathEdit), prop._Path);
+        }
+        ImGui::InputText("Prop path", _Editor._PropPathEdit, sizeof(_Editor._PropPathEdit));
+        const bool pathChanged = prop._Path != _Editor._PropPathEdit;
+        ImGui::BeginDisabled(!pathChanged);
+        if ( ImGui::Button("Apply prop path") )
+        {
+          prop._Path = _Editor._PropPathEdit;
+          propDirty = true;
+          reloadProp = true;
+        }
+        ImGui::EndDisabled();
+
+        propDirty |= ImGui::DragFloat3("Prop position", &prop._Position.x, 0.05f, -100.f, 100.f, "%.3f");
+        propDirty |= ImGui::DragFloat3("Prop rotation", &prop._Rotation.x, 0.5f, -360.f, 360.f, "%.2f");
+        propDirty |= ImGui::DragFloat3("Prop scale", &prop._Scale.x, 0.05f, 0.01f, 100.f, "%.3f");
+        propDirty |= ImGui::Checkbox("Prop visible", &prop._Visible);
+
+        if ( propDirty )
+        {
+          prop._Scale = MathUtil::Max(prop._Scale, Vec3(0.01f));
+          MarkEditorDirty();
+          if ( reloadProp )
+            _ReloadScene = true;
+          else
+            SyncEditorProp(index);
+        }
+      }
+    }
+  }
+
   if ( ImGui::CollapsingHeader("Lights") )
   {
     if ( ImGui::Button("Add sphere light") )
@@ -1565,6 +1806,32 @@ int Test6::DrawEditorOverlays()
     EditorDrawTransformedBox(EditorObjectTransform(object), view, proj, drawList, color, selected ? 2.5f : 1.5f);
   }
 
+  if ( FpsEditableKind::Prop == _Editor._Selection._Kind )
+  {
+    const int propIndex = _Editor._Selection._Index;
+    const std::vector<int> * instanceIDs = _SceneBinding.GetPropInstanceIDs(propIndex);
+    if ( instanceIDs )
+    {
+      const std::vector<MeshInstance> & meshInstances = _Scene -> GetMeshInstances();
+      const std::vector<Mesh*> & meshes = _Scene -> GetMeshes();
+      for ( int instanceID : *instanceIDs )
+      {
+        if ( ( instanceID < 0 ) || ( instanceID >= static_cast<int>(meshInstances.size()) ) )
+          continue;
+
+        const MeshInstance & instance = meshInstances[instanceID];
+        if ( !instance._Visible )
+          continue;
+        if ( ( instance._MeshID < 0 ) || ( instance._MeshID >= static_cast<int>(meshes.size()) ) )
+          continue;
+
+        Mesh * mesh = meshes[instance._MeshID];
+        if ( mesh )
+          EditorDrawTransformedAABB(mesh -> GetBoundingBox(), instance._Transform, view, proj, drawList, selectedColor, 2.5f);
+      }
+    }
+  }
+
   for ( int i = 0; i < static_cast<int>(_Map._Lights.size()); ++i )
   {
     const Light & light = _Map._Lights[i];
@@ -1646,6 +1913,37 @@ int Test6::DrawEditorGizmo()
       else
         object._Center = Vec3(transform[3]);
       SyncEditorObject(index);
+      MarkEditorDirty();
+    }
+  }
+  else if ( FpsEditableKind::Prop == _Editor._Selection._Kind )
+  {
+    const int index = _Editor._Selection._Index;
+    if ( ( index < 0 ) || ( index >= static_cast<int>(_Map._Props.size()) ) )
+      return 0;
+
+    FpsMapProp & prop = _Map._Props[index];
+    Mat4x4 transform = ( ImGuizmo::ROTATE == operation ) ? EditorPropGizmoTransform(prop) : EditorPropTransform(prop);
+    if ( ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
+                              operation, ImGuizmo::WORLD,
+                              glm::value_ptr(transform)) )
+    {
+      if ( ImGuizmo::ROTATE == operation )
+      {
+        prop._Position = Vec3(transform[3]);
+        prop._Rotation = EditorEulerFromMatrix(transform);
+      }
+      else if ( ImGuizmo::SCALE == operation )
+      {
+        prop._Position = Vec3(transform[3]);
+        prop._Scale.x = std::max(0.01f, glm::length(Vec3(transform[0])));
+        prop._Scale.y = std::max(0.01f, glm::length(Vec3(transform[1])));
+        prop._Scale.z = std::max(0.01f, glm::length(Vec3(transform[2])));
+      }
+      else
+        prop._Position = Vec3(transform[3]);
+
+      SyncEditorProp(index);
       MarkEditorDirty();
     }
   }

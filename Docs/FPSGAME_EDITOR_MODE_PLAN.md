@@ -26,6 +26,8 @@ This section records the implementation status after the first editor-mode passe
   - ImGui list boxes for instances, materials, and lights;
   - add box and add collider;
   - edit object name, center, rotation, half extents, collidable flag, material assignment, and runtime instance visibility;
+  - add `gltf`, `glb`, and `obj` props;
+  - list props and edit prop name, path, position, rotation, scale, and visibility;
   - add material and edit material parameters;
   - add sphere light and distant light;
   - edit light type, position/direction, emission, intensity, radius/area, shadow casting, and shadow radius;
@@ -34,6 +36,7 @@ This section records the implementation status after the first editor-mode passe
   - selected boxes/colliders can be translated in world space;
   - holding `Shift` switches selected box/collider gizmos from translate to rotate mode, releasing `Shift` returns to translate mode;
   - holding `Alt`/Option switches selected box/collider gizmos from translate to scale mode, releasing `Alt` returns to translate mode;
+  - selected props can be translated, Shift-rotated, and Alt-scaled in world space;
   - selected local lights can be translated in world space;
   - distant lights remain direction-edited through UI fields.
 - Map objects now carry `_Rotation` for UI/legacy editing and `_Orientation` for stable authored orientation. `.fpsmap` box/collider blocks support `rotation x y z` and `orientation x y z w`, and save writes both fields.
@@ -41,13 +44,16 @@ This section records the implementation status after the first editor-mode passe
 - Viewport picking is implemented for editor mode:
   - visible boxes can be selected with left click;
   - colliders can be selected with left click while collider helpers are enabled;
+  - props can be selected with left click using mesh triangle tests;
   - local lights can be selected with left click while light helpers are enabled;
   - projectiles and the view weapon are ignored because picking is performed against editor map objects/lights.
 - Selection feedback overlays are implemented:
   - selected box/collider bounds are drawn in the foreground overlay;
+  - selected prop mesh bounds are drawn in the foreground overlay;
   - collider helper wire boxes can be toggled;
   - local light helper markers can be toggled;
   - selected local lights remain visible even when light helpers are hidden.
+- Editor scene binding tracks prop index to generated scene mesh instance IDs and base transforms. Transform-only prop edits live-sync without rebuilding.
 - Editor-triggered scene rebuilds preserve the current editor camera/player pose.
 - `FpsGameSceneBinding::Attach` now performs initial camera and transform sync so hidden weapon/projectile instances are valid immediately after rebuild.
 - `MeshInstance` has a `_Visible` flag.
@@ -59,15 +65,11 @@ This section records the implementation status after the first editor-mode passe
 - Editor scene binding tracks object-to-scene-instance IDs for boxes through `_ObjectInstanceIDs`, but this is still internal to `FpsGameSceneBinding`.
 - Light map index and `Scene` light index currently match because Test6 adds map lights in order and editor light edits sync by index. This should become an explicit binding if default/fallback lights, helper lights, or imported props add more light sources.
 - Transform-only object and light edits live-sync without rebuilding.
-- Adding boxes, colliders, lights, or materials currently triggers rebuilds where needed, but rebuild policy is still coarse for some cases.
+- Adding boxes, colliders, props, lights, or materials currently triggers rebuilds where needed, but rebuild policy is still coarse for some cases.
 - Runtime instance visibility is editor-state only; it is not saved to `.fpsmap`.
 
 ### Not Yet Implemented
-- Viewport picking for props, once prop import/editing exists.
-- Prop import and prop editing:
-  - no editor UI for `gltf`, `glb`, or `obj` props yet;
-  - prop-to-scene-instance binding is not exposed for editor sync.
-- OBJ prop single-mesh import with material assignment.
+- OBJ prop material assignment; OBJ props currently use the default wall material.
 - Delete, duplicate, undo/redo, object search, and object renaming polish beyond the current name field.
 - Persistent saved per-object editor visibility.
 - In-editor validation/status messages for save/load success or failure.
@@ -80,7 +82,7 @@ This section records the implementation status after the first editor-mode passe
 - Rotated primitive collision uses the rotated object's world-space AABB for now. This keeps gameplay conservative without adding full OBB collision resolution yet.
 
 ### Recommended Next Slice
-Move to prop import/editing and explicit prop-to-scene-instance binding.
+Add delete/duplicate actions and save/load status messages, then add OBJ prop material assignment.
 
 ## Key Interfaces And Format Changes
 - Extend the `.fpsmap` model with editable material data:
@@ -206,7 +208,8 @@ Move to prop import/editing and explicit prop-to-scene-instance binding.
   - confirm live render updates and gameplay collision uses the rotated primitive's conservative world-space AABB.
 - Verify authoring:
   - add a box, collider, material, sphere light, distant light, GLTF/GLB prop, and OBJ prop;
-  - assign materials to boxes and OBJ props;
+  - assign materials to boxes;
+  - verify OBJ prop material assignment once that follow-up is implemented;
   - edit material and light parameters.
 - Verify save/load:
   - save to `.fpsmap`;
