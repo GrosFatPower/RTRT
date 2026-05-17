@@ -33,6 +33,7 @@ This section records the implementation status after the first editor-mode passe
 - ImGuizmo is integrated into the Test6 UI frame:
   - selected boxes/colliders can be translated in world space;
   - holding `Shift` switches selected box/collider gizmos from translate to rotate mode, releasing `Shift` returns to translate mode;
+  - holding `Alt`/Option switches selected box/collider gizmos from translate to scale mode, releasing `Alt` returns to translate mode;
   - selected local lights can be translated in world space;
   - distant lights remain direction-edited through UI fields.
 - Map objects now carry `_Rotation` for UI/legacy editing and `_Orientation` for stable authored orientation. `.fpsmap` box/collider blocks support `rotation x y z` and `orientation x y z w`, and save writes both fields.
@@ -63,7 +64,6 @@ This section records the implementation status after the first editor-mode passe
 
 ### Not Yet Implemented
 - Viewport picking for props, once prop import/editing exists.
-- ImGuizmo scale for boxes/colliders.
 - Prop import and prop editing:
   - no editor UI for `gltf`, `glb`, or `obj` props yet;
   - prop-to-scene-instance binding is not exposed for editor sync.
@@ -80,9 +80,7 @@ This section records the implementation status after the first editor-mode passe
 - Rotated primitive collision uses the rotated object's world-space AABB for now. This keeps gameplay conservative without adding full OBB collision resolution yet.
 
 ### Recommended Next Slice
-Implement the remaining primitive gizmo polish before adding prop authoring:
-- add scale mode for boxes/colliders;
-- after that, move to prop import/editing and explicit prop-to-scene-instance binding.
+Move to prop import/editing and explicit prop-to-scene-instance binding.
 
 ## Key Interfaces And Format Changes
 - Extend the `.fpsmap` model with editable material data:
@@ -94,7 +92,7 @@ Implement the remaining primitive gizmo polish before adding prop authoring:
   - add `Vec4 _Orientation` to store the stable quaternion used by runtime/editor transforms;
   - support optional `rotation x y z` in `.fpsmap` box/collider blocks;
   - support optional `orientation x y z w` in `.fpsmap` box/collider blocks;
-  - save `rotation` deterministically for authored objects.
+  - save `rotation` and `orientation` deterministically for authored objects.
 - Add `.fpsmap` serialization:
   - keep `FpsGameMapLoader::Load`;
   - add a matching deterministic `Save` API, or introduce `FpsGameMapIO::Load/Save` if renaming is cleaner;
@@ -162,7 +160,7 @@ Implement the remaining primitive gizmo polish before adding prop authoring:
   - call `ImGuizmo::BeginFrame()` from Test6 UI rendering;
   - use ImGuizmo for mandatory viewport manipulation;
   - operation availability is type-specific in v1:
-    - boxes/colliders: translate and scale only, preserving axis-aligned collision correctness;
+    - boxes/colliders: translate, Shift-held rotate, and Alt-held scale;
     - props: translate, rotate, and scale;
     - local lights: translate;
     - distant lights: direction edited through UI fields;
@@ -202,10 +200,10 @@ Implement the remaining primitive gizmo polish before adding prop authoring:
   - select invisible colliders through helper visualization or object list;
   - confirm projectiles and weapon cannot be selected.
 - Verify ImGuizmo:
-  - translate and scale boxes/colliders;
+  - translate, Shift-rotate, and Alt-scale boxes/colliders;
   - translate/rotate/scale props;
   - translate local lights;
-  - confirm live render updates and collisions match edited axis-aligned boxes.
+  - confirm live render updates and gameplay collision uses the rotated primitive's conservative world-space AABB.
 - Verify authoring:
   - add a box, collider, material, sphere light, distant light, GLTF/GLB prop, and OBJ prop;
   - assign materials to boxes and OBJ props;
@@ -223,7 +221,7 @@ Implement the remaining primitive gizmo polish before adding prop authoring:
 ## Assumptions And Defaults
 - `.fpsmap` is the only editor save/load target; `.scene` export is out of scope.
 - Native file dialogs are out of scope for v1; paths are edited through ImGui text fields.
-- Primitive boxes and colliders remain axis-aligned in v1; rotated colliders are follow-up work.
+- Primitive boxes and colliders can be visually rotated in v1; their gameplay collision currently uses the rotated primitive's conservative world-space AABB, not full OBB collision.
 - Imported props are visual-only unless paired with explicit colliders.
 - Runtime projectiles, player transient state, and HUD counters are not map content.
 - ImGuizmo is mandatory for viewport transforms, with type-specific operation support to keep collision behavior correct.

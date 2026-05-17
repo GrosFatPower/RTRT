@@ -1613,8 +1613,9 @@ int Test6::DrawEditorGizmo()
   ImGuizmo::SetDrawlist(ImGui::GetForegroundDrawList());
   ImGuizmo::SetRect(0.f, 0.f, io.DisplaySize.x, io.DisplaySize.y);
   ImGuizmo::SetOrthographic(false);
+  const bool scaleMode = _KeyInput.IsKeyDown(GLFW_KEY_LEFT_ALT) || _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_ALT);
   const bool rotateMode = _KeyInput.IsKeyDown(GLFW_KEY_LEFT_SHIFT) || _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_SHIFT);
-  const ImGuizmo::OPERATION operation = rotateMode ? ImGuizmo::ROTATE : ImGuizmo::TRANSLATE;
+  const ImGuizmo::OPERATION operation = scaleMode ? ImGuizmo::SCALE : ( rotateMode ? ImGuizmo::ROTATE : ImGuizmo::TRANSLATE );
 
   if ( ( FpsEditableKind::Box == _Editor._Selection._Kind )
     || ( FpsEditableKind::Collider == _Editor._Selection._Kind ) )
@@ -1635,6 +1636,13 @@ int Test6::DrawEditorGizmo()
         object._Orientation = EditorVec4FromQuat(glm::quat_cast(glm::mat3(transform)));
         object._Rotation = EditorEulerFromMatrix(transform);
       }
+      else if ( ImGuizmo::SCALE == operation )
+      {
+        object._Center = Vec3(transform[3]);
+        object._HalfExtents.x = std::max(0.01f, glm::length(Vec3(transform[0])) * 0.5f);
+        object._HalfExtents.y = std::max(0.01f, glm::length(Vec3(transform[1])) * 0.5f);
+        object._HalfExtents.z = std::max(0.01f, glm::length(Vec3(transform[2])) * 0.5f);
+      }
       else
         object._Center = Vec3(transform[3]);
       SyncEditorObject(index);
@@ -1649,6 +1657,8 @@ int Test6::DrawEditorGizmo()
 
     Light & light = _Map._Lights[index];
     if ( LightType::DistantLight == (LightType)(int)light._Type )
+      return 0;
+    if ( scaleMode )
       return 0;
     if ( rotateMode )
       return 0;
