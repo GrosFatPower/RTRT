@@ -12,6 +12,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <string>
 
 struct GLFWwindow;
 
@@ -53,6 +54,7 @@ struct FpsGameEditor
   int                _NewPropAssetIndex = -1;
   std::vector<std::string> _PropAssetPaths;
   std::vector<bool>  _ObjectInstanceVisible;
+  std::string        _StatusMessage;
 };
 
 class Test6 : public BaseTest
@@ -91,11 +93,16 @@ protected:
   void ApplyRendererDefaults();
   void SetEditorMode( bool iEnabled );
   void SetEditorPathBuffers();
+  void SetEditorStatus( const std::string & iMessage );
   void RefreshEditorPropAssets();
   void SyncMapFromRuntimeSettings();
   void SyncEditorObject( int iObjectIndex );
   void SyncEditorProp( int iPropIndex );
   void SyncEditorLight( int iLightIndex );
+  bool DeleteSelectedEditorItem();
+  bool DuplicateSelectedEditorItem();
+  bool DeleteSelectedMaterial();
+  bool DuplicateSelectedMaterial();
   void EnsureEditorObjectVisibility();
   void ApplyEditorObjectVisibility();
   bool BuildPickingRay( double iMouseX, double iMouseY, Vec3 & oRayOrigin, Vec3 & oRayDir ) const;

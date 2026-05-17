@@ -29,9 +29,12 @@ This section records the implementation status after the first editor-mode passe
   - add `gltf`, `glb`, and `obj` props;
   - list props and edit prop name, path, position, rotation, scale, and visibility;
   - add material and edit material parameters;
+  - duplicate and delete selected boxes, colliders, props, and lights;
+  - duplicate material entries and safely delete unused non-built-in materials;
   - add sphere light and distant light;
   - edit light type, position/direction, emission, intensity, radius/area, shadow casting, and shadow radius;
   - edit player spawn and copy current editor camera pose into the spawn.
+- Editor UI shows status feedback for Save, Load, failed Save/Load, prop list refresh, duplicate, and delete actions.
 - ImGuizmo is integrated into the Test6 UI frame:
   - selected boxes/colliders can be translated in world space;
   - holding `Shift` switches selected box/collider gizmos from translate to rotate mode, releasing `Shift` returns to translate mode;
@@ -70,9 +73,9 @@ This section records the implementation status after the first editor-mode passe
 
 ### Not Yet Implemented
 - OBJ prop material assignment; OBJ props currently use the default wall material.
-- Delete, duplicate, undo/redo, object search, and object renaming polish beyond the current name field.
+- Undo/redo, object search, and object renaming polish beyond the current name field.
 - Persistent saved per-object editor visibility.
-- In-editor validation/status messages for save/load success or failure.
+- Broader in-editor validation beyond the current status messages for save/load and common authoring actions.
 
 ### Known Design Notes
 - `FpsSceneObject::_Visible` still means map-visible box versus invisible collider. It should not be reused for temporary editor hiding, because that would change saved map semantics.
@@ -82,7 +85,7 @@ This section records the implementation status after the first editor-mode passe
 - Rotated primitive collision uses the rotated object's world-space AABB for now. This keeps gameplay conservative without adding full OBB collision resolution yet.
 
 ### Recommended Next Slice
-Add delete/duplicate actions and save/load status messages, then add OBJ prop material assignment.
+Add OBJ prop material assignment.
 
 ## Key Interfaces And Format Changes
 - Extend the `.fpsmap` model with editable material data:

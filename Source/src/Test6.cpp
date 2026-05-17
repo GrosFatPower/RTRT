@@ -101,6 +101,37 @@ static bool EditorPropAssetCombo( const char * iLabel, const std::vector<std::st
   return changed;
 }
 
+static std::string EditorUniqueName( const std::string & iBaseName, const std::vector<std::string> & iUsedNames )
+{
+  std::string baseName = iBaseName.empty() ? "Item" : iBaseName;
+  std::string name = baseName + " Copy";
+  int suffix = 2;
+  bool found = true;
+  while ( found )
+  {
+    found = false;
+    for ( const std::string & usedName : iUsedNames )
+    {
+      if ( usedName == name )
+      {
+        found = true;
+        name = baseName + " Copy " + std::to_string(suffix++);
+        break;
+      }
+    }
+  }
+  return name;
+}
+
+static bool EditorIsBuiltinMaterialName( const std::string & iName )
+{
+  return ( "floor" == iName )
+      || ( "wall" == iName )
+      || ( "pillar" == iName )
+      || ( "crate" == iName )
+      || ( "accent" == iName );
+}
+
 // ----------------------------------------------------------------------------
 // EditorMaterialSlotFromName
 // ----------------------------------------------------------------------------
@@ -558,6 +589,14 @@ void Test6::SetEditorPathBuffers()
 }
 
 // ----------------------------------------------------------------------------
+// SetEditorStatus
+// ----------------------------------------------------------------------------
+void Test6::SetEditorStatus( const std::string & iMessage )
+{
+  _Editor._StatusMessage = iMessage;
+}
+
+// ----------------------------------------------------------------------------
 // RefreshEditorPropAssets
 // ----------------------------------------------------------------------------
 void Test6::RefreshEditorPropAssets()
@@ -701,6 +740,191 @@ void Test6::SyncEditorLight( int iLightIndex )
   *light = _Map._Lights[iLightIndex];
   if ( _Renderer )
     _Renderer -> Notify(DirtyState::SceneLights);
+}
+
+// ----------------------------------------------------------------------------
+// DeleteSelectedEditorItem
+// ----------------------------------------------------------------------------
+bool Test6::DeleteSelectedEditorItem()
+{
+  const FpsEditableKind kind = _Editor._Selection._Kind;
+  const int index = _Editor._Selection._Index;
+
+  if ( ( FpsEditableKind::Box == kind ) || ( FpsEditableKind::Collider == kind ) )
+  {
+    if ( ( index < 0 ) || ( index >= static_cast<int>(_Map._Objects.size()) ) )
+      return false;
+
+    const std::string name = _Map._Objects[index]._Name;
+    _Map._Objects.erase(_Map._Objects.begin() + index);
+    if ( index < static_cast<int>(_Editor._ObjectInstanceVisible.size()) )
+      _Editor._ObjectInstanceVisible.erase(_Editor._ObjectInstanceVisible.begin() + index);
+    _Editor._Selection = FpsEditorSelection();
+    MarkEditorDirty();
+    _ReloadScene = true;
+    SetEditorStatus("Deleted " + name);
+    return true;
+  }
+
+  if ( FpsEditableKind::Prop == kind )
+  {
+    if ( ( index < 0 ) || ( index >= static_cast<int>(_Map._Props.size()) ) )
+      return false;
+
+    const std::string name = _Map._Props[index]._Name;
+    _Map._Props.erase(_Map._Props.begin() + index);
+    _Editor._Selection = FpsEditorSelection();
+    MarkEditorDirty();
+    _ReloadScene = true;
+    SetEditorStatus("Deleted " + name);
+    return true;
+  }
+
+  if ( FpsEditableKind::Light == kind )
+  {
+    if ( ( index < 0 ) || ( index >= static_cast<int>(_Map._Lights.size()) ) )
+      return false;
+
+    _Map._Lights.erase(_Map._Lights.begin() + index);
+    _Editor._Selection = FpsEditorSelection();
+    MarkEditorDirty();
+    _ReloadScene = true;
+    SetEditorStatus("Deleted light");
+    return true;
+  }
+
+  return false;
+}
+
+// ----------------------------------------------------------------------------
+// DuplicateSelectedEditorItem
+// ----------------------------------------------------------------------------
+bool Test6::DuplicateSelectedEditorItem()
+{
+  const FpsEditableKind kind = _Editor._Selection._Kind;
+  const int index = _Editor._Selection._Index;
+
+  if ( ( FpsEditableKind::Box == kind ) || ( FpsEditableKind::Collider == kind ) )
+  {
+    if ( ( index < 0 ) || ( index >= static_cast<int>(_Map._Objects.size()) ) )
+      return false;
+
+    std::vector<std::string> usedNames;
+    for ( const FpsSceneObject & object : _Map._Objects )
+      usedNames.push_back(object._Name);
+
+    FpsSceneObject object = _Map._Objects[index];
+    object._Name = EditorUniqueName(object._Name, usedNames);
+    object._Center += Vec3(1.f, 0.f, 1.f);
+    _Map._Objects.push_back(object);
+    EnsureEditorObjectVisibility();
+    if ( index < static_cast<int>(_Editor._ObjectInstanceVisible.size()) )
+      _Editor._ObjectInstanceVisible.back() = _Editor._ObjectInstanceVisible[index];
+    _Editor._Selection._Kind = object._Visible ? FpsEditableKind::Box : FpsEditableKind::Collider;
+    _Editor._Selection._Index = static_cast<int>(_Map._Objects.size()) - 1;
+    MarkEditorDirty();
+    _ReloadScene = true;
+    SetEditorStatus("Duplicated " + object._Name);
+    return true;
+  }
+
+  if ( FpsEditableKind::Prop == kind )
+  {
+    if ( ( index < 0 ) || ( index >= static_cast<int>(_Map._Props.size()) ) )
+      return false;
+
+    std::vector<std::string> usedNames;
+    for ( const FpsMapProp & prop : _Map._Props )
+      usedNames.push_back(prop._Name);
+
+    FpsMapProp prop = _Map._Props[index];
+    prop._Name = EditorUniqueName(prop._Name, usedNames);
+    prop._Position += Vec3(1.f, 0.f, 1.f);
+    _Map._Props.push_back(prop);
+    _Editor._Selection._Kind = FpsEditableKind::Prop;
+    _Editor._Selection._Index = static_cast<int>(_Map._Props.size()) - 1;
+    MarkEditorDirty();
+    _ReloadScene = true;
+    SetEditorStatus("Duplicated " + prop._Name);
+    return true;
+  }
+
+  if ( FpsEditableKind::Light == kind )
+  {
+    if ( ( index < 0 ) || ( index >= static_cast<int>(_Map._Lights.size()) ) )
+      return false;
+
+    Light light = _Map._Lights[index];
+    if ( LightType::DistantLight != (LightType)(int)light._Type )
+      light._Pos += Vec3(1.f, 0.f, 1.f);
+    _Map._Lights.push_back(light);
+    _Editor._Selection._Kind = FpsEditableKind::Light;
+    _Editor._Selection._Index = static_cast<int>(_Map._Lights.size()) - 1;
+    MarkEditorDirty();
+    _ReloadScene = true;
+    SetEditorStatus("Duplicated light");
+    return true;
+  }
+
+  return false;
+}
+
+// ----------------------------------------------------------------------------
+// DeleteSelectedMaterial
+// ----------------------------------------------------------------------------
+bool Test6::DeleteSelectedMaterial()
+{
+  if ( ( _Editor._SelectedMaterial < 0 ) || ( _Editor._SelectedMaterial >= static_cast<int>(_Map._Materials.size()) ) )
+    return false;
+
+  const std::string name = _Map._Materials[_Editor._SelectedMaterial]._Name;
+  if ( EditorIsBuiltinMaterialName(name) )
+  {
+    SetEditorStatus("Built-in material cannot be deleted");
+    return false;
+  }
+
+  for ( const FpsSceneObject & object : _Map._Objects )
+  {
+    if ( object._Visible && ( object._MaterialName == name ) )
+    {
+      SetEditorStatus("Material is still used by an object");
+      return false;
+    }
+  }
+
+  _Map._Materials.erase(_Map._Materials.begin() + _Editor._SelectedMaterial);
+  if ( _Editor._SelectedMaterial >= static_cast<int>(_Map._Materials.size()) )
+    _Editor._SelectedMaterial = static_cast<int>(_Map._Materials.size()) - 1;
+  if ( _Editor._SelectedMaterial < 0 )
+    _Editor._SelectedMaterial = 0;
+
+  MarkEditorDirty();
+  _ReloadScene = true;
+  SetEditorStatus("Deleted material " + name);
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// DuplicateSelectedMaterial
+// ----------------------------------------------------------------------------
+bool Test6::DuplicateSelectedMaterial()
+{
+  if ( ( _Editor._SelectedMaterial < 0 ) || ( _Editor._SelectedMaterial >= static_cast<int>(_Map._Materials.size()) ) )
+    return false;
+
+  std::vector<std::string> usedNames;
+  for ( const FpsMapMaterial & material : _Map._Materials )
+    usedNames.push_back(material._Name);
+
+  FpsMapMaterial material = _Map._Materials[_Editor._SelectedMaterial];
+  material._Name = EditorUniqueName(material._Name, usedNames);
+  _Map._Materials.push_back(material);
+  _Editor._SelectedMaterial = static_cast<int>(_Map._Materials.size()) - 1;
+  MarkEditorDirty();
+  _ReloadScene = true;
+  SetEditorStatus("Duplicated material " + material._Name);
+  return true;
 }
 
 // ----------------------------------------------------------------------------
@@ -1348,6 +1572,27 @@ void Test6::DrawEditorPanel()
   ImGui::SameLine();
   ImGui::Checkbox("Light helpers", &_Editor._ShowLightHelpers);
 
+  if ( !_Editor._StatusMessage.empty() )
+    ImGui::Text("Status: %s", _Editor._StatusMessage.c_str());
+
+  const bool hasEditableSelection = ( FpsEditableKind::Box == _Editor._Selection._Kind )
+                                 || ( FpsEditableKind::Collider == _Editor._Selection._Kind )
+                                 || ( FpsEditableKind::Prop == _Editor._Selection._Kind )
+                                 || ( FpsEditableKind::Light == _Editor._Selection._Kind );
+  ImGui::BeginDisabled(!hasEditableSelection);
+  if ( ImGui::Button("Duplicate selected") )
+  {
+    if ( !DuplicateSelectedEditorItem() )
+      SetEditorStatus("Nothing selected to duplicate");
+  }
+  ImGui::SameLine();
+  if ( ImGui::Button("Delete selected") )
+  {
+    if ( !DeleteSelectedEditorItem() )
+      SetEditorStatus("Nothing selected to delete");
+  }
+  ImGui::EndDisabled();
+
   ImGui::PushItemWidth(360.f);
   ImGui::InputText("Save path", _Editor._SavePath, sizeof(_Editor._SavePath));
   if ( ImGui::Button("Save") )
@@ -1358,7 +1603,10 @@ void Test6::DrawEditorPanel()
       _MapPath = _Editor._SavePath;
       SetEditorPathBuffers();
       _Editor._Dirty = false;
+      SetEditorStatus("Saved " + _MapPath);
     }
+    else
+      SetEditorStatus("Save failed");
   }
 
   ImGui::InputText("Load path", _Editor._LoadPath, sizeof(_Editor._LoadPath));
@@ -1375,7 +1623,10 @@ void Test6::DrawEditorPanel()
       _Editor._Dirty = false;
       SetEditorPathBuffers();
       _ReloadScene = true;
+      SetEditorStatus("Loaded " + _MapPath);
     }
+    else
+      SetEditorStatus("Load failed");
   }
   ImGui::PopItemWidth();
 
@@ -1552,6 +1803,7 @@ void Test6::DrawEditorPanel()
         _Editor._SelectedMaterial = static_cast<int>(_Map._Materials.size()) - 1;
         MarkEditorDirty();
         _ReloadScene = true;
+        SetEditorStatus("Added material " + material._Name);
       }
     }
 
@@ -1569,6 +1821,12 @@ void Test6::DrawEditorPanel()
         }
         ImGui::EndListBox();
       }
+
+      if ( ImGui::Button("Duplicate material") )
+        DuplicateSelectedMaterial();
+      ImGui::SameLine();
+      if ( ImGui::Button("Delete material") )
+        DeleteSelectedMaterial();
 
       FpsMapMaterial & mapMaterial = _Map._Materials[_Editor._SelectedMaterial];
       Material & material = mapMaterial._Material;
@@ -1614,7 +1872,10 @@ void Test6::DrawEditorPanel()
   {
     ImGui::InputText("New prop name", _Editor._NewPropName, sizeof(_Editor._NewPropName));
     if ( ImGui::Button("Refresh prop list") )
+    {
       RefreshEditorPropAssets();
+      SetEditorStatus("Found " + std::to_string(_Editor._PropAssetPaths.size()) + " root asset props");
+    }
 
     const bool hasPropAssets = !_Editor._PropAssetPaths.empty();
     const bool hasSelectedPropAsset = hasPropAssets
