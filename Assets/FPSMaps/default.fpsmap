@@ -189,6 +189,26 @@ box "Target Crate C" {
   visible true
 }
 
+boids "Boids 0" {
+  visible true
+  count 128
+  seed 1337
+  center 0.000000 7.000000 0.000000
+  radius 14.560866
+  height 3.000000
+  minspeed 0.500000
+  maxspeed 2.500000
+  maxforce 4.000000
+  neighborradius 1.200000
+  separationradius 0.350000
+  separation 1.600000
+  alignment 1.000000
+  cohesion 1.000000
+  boundsweight 2.000000
+  scale 0.120000
+  color 0.950000 0.350000 0.120000
+}
+
 light {
   type distant
   direction -0.400000 0.800000 -0.300000
