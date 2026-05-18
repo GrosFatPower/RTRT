@@ -4,6 +4,7 @@
 #include "BaseTest.h"
 #include "FpsGame.h"
 #include "FpsGameEditor.h"
+#include "FpsGameHud.h"
 #include "FpsGameMap.h"
 #include "KeyInput.h"
 #include "MouseInput.h"
@@ -48,10 +49,7 @@ protected:
 
   int DrawUI();
   void DrawDebugPanel();
-  void DrawHUD();
   int DrawSettingsUI();
-
-  void DrawCrosshair();
 
   void SyncFramebufferResolution( bool iNotifyRenderer = false );
 
@@ -60,6 +58,7 @@ protected:
   void ApplyRendererDefaults();
 
   FpsGameEditorContext MakeEditorContext();
+  FpsGameHudContext MakeHudContext() const;
 
 protected:
   std::unique_ptr<Scene>    _Scene;
@@ -75,6 +74,7 @@ protected:
   std::string               _MapPath;
   bool                      _MapLoaded = false;
   FpsGameEditor             _Editor;
+  FpsGameHud                _Hud;
 
   KeyInput                  _KeyInput;
   MouseInput                _MouseInput;
