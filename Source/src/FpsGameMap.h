@@ -1,6 +1,7 @@
 #ifndef _FpsGameMap_
 #define _FpsGameMap_
 
+#include "Boids.h"
 #include "FpsGame.h"
 #include "Light.h"
 #include "Material.h"
@@ -46,6 +47,13 @@ struct FpsMapMaterial
   Material    _Material;
 };
 
+struct FpsMapBoids
+{
+  std::string  _Name = "Boids";
+  BoidSettings _Settings;
+  bool         _Visible = true;
+};
+
 struct FpsGameMap
 {
   std::string                 _Name = "Default FPS Arena";
@@ -55,6 +63,7 @@ struct FpsGameMap
   std::vector<FpsMapMaterial> _Materials;
   std::vector<FpsSceneObject> _Objects;
   std::vector<FpsMapProp>     _Props;
+  std::vector<FpsMapBoids>    _Boids;
   std::vector<Light>          _Lights;
   int                         _MaxProjectiles = -1;
   int                         _MaxProjectileAmmo = -1;

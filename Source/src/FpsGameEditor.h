@@ -53,6 +53,7 @@ enum class FpsEditableKind
   Collider,
   Prop,
   Light,
+  Boids,
   PlayerSpawn,
   Weapon
 };
@@ -110,6 +111,7 @@ protected:
   bool               _PreviousFreeLook = false;
   bool               _ShowColliderHelpers = true;
   bool               _ShowLightHelpers = true;
+  bool               _ShowBoidsHelpers = true;
   bool               _ShowScenePanel = true;
   bool               _ShowInspectorPanel = true;
   bool               _ShowMaterialsPanel = true;

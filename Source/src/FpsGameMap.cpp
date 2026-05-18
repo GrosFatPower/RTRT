@@ -366,6 +366,8 @@ protected:
       return ParseLightBlock(ioFile);
     if ( IsEqual(blockType, "prop") )
       return ParsePropBlock(ioFile, blockName);
+    if ( IsEqual(blockType, "boids") )
+      return ParseBoidsBlock(ioFile, blockName);
     if ( IsEqual(blockType, "weapon") )
       return ParseWeaponBlock(ioFile);
 
@@ -748,6 +750,123 @@ protected:
     return false;
   }
 
+  bool ParseBoidsBlock( std::ifstream & ioFile, const std::string & iName )
+  {
+    FpsMapBoids boids;
+    boids._Name = iName.empty() ? "Boids" : iName;
+
+    std::vector<std::string> tokens;
+    while ( ReadRequiredLine(ioFile, tokens) )
+    {
+      if ( IsClosingBracket(tokens) )
+      {
+        boids._Settings._Count = std::max(0, boids._Settings._Count);
+        boids._Settings._Seed = std::max(1u, boids._Settings._Seed);
+        boids._Settings._BoundsRadius = std::max(0.001f, boids._Settings._BoundsRadius);
+        boids._Settings._BoundsHeight = std::max(0.001f, boids._Settings._BoundsHeight);
+        boids._Settings._MinSpeed = std::max(0.001f, boids._Settings._MinSpeed);
+        boids._Settings._MaxSpeed = std::max(boids._Settings._MinSpeed, boids._Settings._MaxSpeed);
+        boids._Settings._MaxForce = std::max(0.001f, boids._Settings._MaxForce);
+        boids._Settings._NeighborRadius = std::max(0.001f, boids._Settings._NeighborRadius);
+        boids._Settings._SeparationRadius = MathUtil::Clamp(boids._Settings._SeparationRadius, 0.001f, boids._Settings._NeighborRadius);
+        boids._Settings._Scale = std::max(0.001f, boids._Settings._Scale);
+        _Map._Boids.push_back(boids);
+        return true;
+      }
+
+      if ( ( IsEqual(tokens[0], "visible") || IsEqual(tokens[0], "enabled") ) && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseBool(tokens[1], boids._Visible) )
+          return Error("invalid boids visible flag");
+      }
+      else if ( IsEqual(tokens[0], "count") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseInt(tokens[1], boids._Settings._Count) )
+          return Error("invalid boids count");
+      }
+      else if ( IsEqual(tokens[0], "seed") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        int seed = 1;
+        if ( !ParseInt(tokens[1], seed) )
+          return Error("invalid boids seed");
+        boids._Settings._Seed = static_cast<unsigned int>(std::max(seed, 1));
+      }
+      else if ( IsEqual(tokens[0], "center") || IsEqual(tokens[0], "boundscenter") )
+      {
+        if ( !ParseVec3(tokens, boids._Settings._BoundsCenter) )
+          return Error("invalid boids bounds center");
+      }
+      else if ( ( IsEqual(tokens[0], "radius") || IsEqual(tokens[0], "boundsradius") ) && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], boids._Settings._BoundsRadius) )
+          return Error("invalid boids bounds radius");
+      }
+      else if ( ( IsEqual(tokens[0], "height") || IsEqual(tokens[0], "boundsheight") ) && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], boids._Settings._BoundsHeight) )
+          return Error("invalid boids bounds height");
+      }
+      else if ( IsEqual(tokens[0], "minspeed") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], boids._Settings._MinSpeed) )
+          return Error("invalid boids min speed");
+      }
+      else if ( IsEqual(tokens[0], "maxspeed") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], boids._Settings._MaxSpeed) )
+          return Error("invalid boids max speed");
+      }
+      else if ( IsEqual(tokens[0], "maxforce") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], boids._Settings._MaxForce) )
+          return Error("invalid boids max force");
+      }
+      else if ( IsEqual(tokens[0], "neighborradius") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], boids._Settings._NeighborRadius) )
+          return Error("invalid boids neighbor radius");
+      }
+      else if ( IsEqual(tokens[0], "separationradius") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], boids._Settings._SeparationRadius) )
+          return Error("invalid boids separation radius");
+      }
+      else if ( IsEqual(tokens[0], "separation") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], boids._Settings._SeparationWeight) )
+          return Error("invalid boids separation weight");
+      }
+      else if ( IsEqual(tokens[0], "alignment") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], boids._Settings._AlignmentWeight) )
+          return Error("invalid boids alignment weight");
+      }
+      else if ( IsEqual(tokens[0], "cohesion") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], boids._Settings._CohesionWeight) )
+          return Error("invalid boids cohesion weight");
+      }
+      else if ( IsEqual(tokens[0], "boundsweight") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], boids._Settings._BoundsWeight) )
+          return Error("invalid boids bounds weight");
+      }
+      else if ( IsEqual(tokens[0], "scale") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], boids._Settings._Scale) )
+          return Error("invalid boids scale");
+      }
+      else if ( IsEqual(tokens[0], "color") )
+      {
+        if ( !ParseVec3(tokens, boids._Settings._Color) )
+          return Error("invalid boids color");
+      }
+      else
+        return Error("invalid boids field");
+    }
+    return false;
+  }
+
   bool ParseWeaponBlock( std::ifstream & ioFile )
   {
     std::vector<std::string> tokens;
@@ -925,6 +1044,30 @@ bool FpsGameMapLoader::Save( const std::string & iFilename, const FpsGameMap & i
     WriteVec3(file, "rotation", prop._Rotation);
     WriteVec3(file, "scale", prop._Scale);
     file << "  visible " << ( prop._Visible ? "true" : "false" ) << "\n";
+    file << "}\n\n";
+  }
+
+  for ( const FpsMapBoids & boids : map._Boids )
+  {
+    const BoidSettings & settings = boids._Settings;
+    file << "boids \"" << boids._Name << "\" {\n";
+    file << "  visible " << ( boids._Visible ? "true" : "false" ) << "\n";
+    file << "  count " << settings._Count << "\n";
+    file << "  seed " << settings._Seed << "\n";
+    WriteVec3(file, "center", settings._BoundsCenter);
+    file << "  radius " << settings._BoundsRadius << "\n";
+    file << "  height " << settings._BoundsHeight << "\n";
+    file << "  minspeed " << settings._MinSpeed << "\n";
+    file << "  maxspeed " << settings._MaxSpeed << "\n";
+    file << "  maxforce " << settings._MaxForce << "\n";
+    file << "  neighborradius " << settings._NeighborRadius << "\n";
+    file << "  separationradius " << settings._SeparationRadius << "\n";
+    file << "  separation " << settings._SeparationWeight << "\n";
+    file << "  alignment " << settings._AlignmentWeight << "\n";
+    file << "  cohesion " << settings._CohesionWeight << "\n";
+    file << "  boundsweight " << settings._BoundsWeight << "\n";
+    file << "  scale " << settings._Scale << "\n";
+    WriteVec3(file, "color", settings._Color);
     file << "}\n\n";
   }
 

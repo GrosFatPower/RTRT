@@ -318,9 +318,54 @@ int Test6::InitializeScene()
     std::cout << "Test6 : Failed to load default environment map" << std::endl;
 
   _Scene = std::move(newScene);
+  if ( 0 != InitializeMapBoids(true) )
+    return 1;
+
   _Editor.ApplyObjectVisibility(MakeEditorContext());
   _Editor.SetPathBuffers(_MapPath);
   _Editor.RefreshPropAssets();
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeMapBoids
+// ----------------------------------------------------------------------------
+int Test6::InitializeMapBoids( bool iResetSimulation )
+{
+  _BoidSettings.clear();
+  _BoidSimulations.clear();
+  _BoidBindings.clear();
+
+  if ( !_Scene || !_MapLoaded )
+    return 0;
+
+  for ( const FpsMapBoids & mapBoids : _Map._Boids )
+  {
+    if ( !mapBoids._Visible )
+      continue;
+
+    _BoidSettings.push_back(mapBoids._Settings);
+    _BoidSimulations.push_back(BoidSimulation());
+    _BoidBindings.push_back(BoidSceneBinding());
+
+    BoidSettings & settings = _BoidSettings.back();
+    settings._Paused = false;
+
+    BoidSimulation & simulation = _BoidSimulations.back();
+    BoidSceneBinding & binding = _BoidBindings.back();
+
+    if ( iResetSimulation )
+      simulation.Reset(settings);
+    else
+      simulation.Resize(settings);
+
+    if ( 0 != binding.Attach(*_Scene, settings) )
+      return 1;
+
+    if ( 0 != binding.SyncTransforms(*_Scene, simulation, settings) )
+      return 1;
+  }
+
   return 0;
 }
 
@@ -601,6 +646,44 @@ int Test6::UpdateGame()
     if ( 0 != InitializeRenderer() )
       return 1;
   }
+
+  if ( 0 != UpdateBoids() )
+    return 1;
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateBoids
+// ----------------------------------------------------------------------------
+int Test6::UpdateBoids()
+{
+  if ( !_Scene || ( FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode ) )
+    return 0;
+
+  if ( _BoidSimulations.size() != _BoidBindings.size() )
+    return 1;
+
+  bool boidsDirty = false;
+  for ( int i = 0; i < static_cast<int>(_BoidSimulations.size()); ++i )
+  {
+    if ( i >= static_cast<int>(_BoidSettings.size()) )
+      return 1;
+
+    if ( _BoidSettings[i]._Paused )
+      continue;
+
+    if ( 0 != _BoidSimulations[i].Update(static_cast<float>(_DeltaTime), _BoidSettings[i]) )
+      return 1;
+
+    if ( 0 != _BoidBindings[i].SyncTransforms(*_Scene, _BoidSimulations[i], _BoidSettings[i]) )
+      return 1;
+
+    boidsDirty = true;
+  }
+
+  if ( boidsDirty && _Renderer )
+    _Renderer -> Notify(DirtyState::SceneInstances);
 
   return 0;
 }

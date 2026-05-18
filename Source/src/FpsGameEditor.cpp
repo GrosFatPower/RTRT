@@ -265,6 +265,23 @@ static Mat4x4 EditorPropGizmoTransform( const FpsMapProp & iProp )
   return transform;
 }
 
+static Mat4x4 EditorBoidsTransform( const FpsMapBoids & iBoids )
+{
+  const BoidSettings & settings = iBoids._Settings;
+  Mat4x4 transform = glm::translate(settings._BoundsCenter);
+  transform = transform * glm::scale(Vec3(settings._BoundsRadius * 2.f,
+                                          settings._BoundsHeight,
+                                          settings._BoundsRadius * 2.f));
+  return transform;
+}
+
+static Mat4x4 EditorBoidsGizmoTransform( const FpsMapBoids & iBoids )
+{
+  Mat4x4 transform(1.f);
+  transform[3] = Vec4(iBoids._Settings._BoundsCenter, 1.f);
+  return transform;
+}
+
 // ----------------------------------------------------------------------------
 // EditorUnitBox
 // ----------------------------------------------------------------------------
@@ -359,6 +376,23 @@ static bool EditorIntersectRaySphere( const Vec3 & iRayOrigin, const Vec3 & iRay
     return false;
 
   oHitT = hitT;
+  return true;
+}
+
+static bool EditorIntersectRayBoids( const Vec3 & iRayOrigin, const Vec3 & iRayDir, const FpsMapBoids & iBoids, float & oHitT )
+{
+  Mat4x4 transform = EditorBoidsTransform(iBoids);
+  Mat4x4 invTransform = glm::inverse(transform);
+  Vec3 localOrigin = Vec3(invTransform * Vec4(iRayOrigin, 1.f));
+  Vec3 localDir = glm::normalize(Vec3(invTransform * Vec4(iRayDir, 0.f)));
+
+  float localHitT = 0.f;
+  if ( !MathUtil::IntersectRayAABB(localOrigin, localDir, EditorUnitBox(), localHitT) )
+    return false;
+
+  const Vec3 localHit = localOrigin + localDir * localHitT;
+  const Vec3 worldHit = MathUtil::TransformPoint(localHit, transform);
+  oHitT = glm::length(worldHit - iRayOrigin);
   return true;
 }
 
@@ -654,6 +688,20 @@ bool FpsGameEditor::DeleteSelectedItem( FpsGameEditorContext & ioContext )
     return true;
   }
 
+  if ( FpsEditableKind::Boids == kind )
+  {
+    if ( ( index < 0 ) || ( index >= static_cast<int>(ioContext._Map._Boids.size()) ) )
+      return false;
+
+    const std::string name = ioContext._Map._Boids[index]._Name;
+    ioContext._Map._Boids.erase(ioContext._Map._Boids.begin() + index);
+    _Selection = FpsEditorSelection();
+    MarkDirty();
+    ioContext._ReloadScene = true;
+    SetStatus("Deleted " + name);
+    return true;
+  }
+
   return false;
 }
 
@@ -724,6 +772,27 @@ bool FpsGameEditor::DuplicateSelectedItem( FpsGameEditorContext & ioContext )
     MarkDirty();
     ioContext._ReloadScene = true;
     SetStatus("Duplicated light");
+    return true;
+  }
+
+  if ( FpsEditableKind::Boids == kind )
+  {
+    if ( ( index < 0 ) || ( index >= static_cast<int>(ioContext._Map._Boids.size()) ) )
+      return false;
+
+    std::vector<std::string> usedNames;
+    for ( const FpsMapBoids & boids : ioContext._Map._Boids )
+      usedNames.push_back(boids._Name);
+
+    FpsMapBoids boids = ioContext._Map._Boids[index];
+    boids._Name = EditorUniqueName(boids._Name, usedNames);
+    boids._Settings._BoundsCenter += Vec3(1.f, 0.f, 1.f);
+    ioContext._Map._Boids.push_back(boids);
+    _Selection._Kind = FpsEditableKind::Boids;
+    _Selection._Index = static_cast<int>(ioContext._Map._Boids.size()) - 1;
+    MarkDirty();
+    ioContext._ReloadScene = true;
+    SetStatus("Duplicated " + boids._Name);
     return true;
   }
 
@@ -948,6 +1017,25 @@ bool FpsGameEditor::PickSelection( const FpsGameEditorContext & iContext, double
       {
         nearestDist = hitT;
         oSelection._Kind = FpsEditableKind::Light;
+        oSelection._Index = i;
+        oSelection._SceneInstanceID = -1;
+      }
+    }
+  }
+
+  if ( _ShowBoidsHelpers )
+  {
+    for ( int i = 0; i < static_cast<int>(iContext._Map._Boids.size()); ++i )
+    {
+      const FpsMapBoids & boids = iContext._Map._Boids[i];
+      if ( !boids._Visible )
+        continue;
+
+      float hitT = 0.f;
+      if ( EditorIntersectRayBoids(rayOrigin, rayDir, boids, hitT) && hitT < nearestDist )
+      {
+        nearestDist = hitT;
+        oSelection._Kind = FpsEditableKind::Boids;
         oSelection._Index = i;
         oSelection._SceneInstanceID = -1;
       }
@@ -1222,6 +1310,46 @@ void FpsGameEditor::DrawScenePanel( FpsGameEditorContext & ioContext )
 
   }
 
+  if ( ImGui::CollapsingHeader("Boids") )
+  {
+    if ( ImGui::Button("Add boids") )
+    {
+      FpsMapBoids boids;
+      boids._Name = "Boids " + std::to_string(static_cast<int>(ioContext._Map._Boids.size()));
+      boids._Settings._BoundsCenter = ioContext._GameWorld.GetPlayer().EyePosition(ioContext._GameSettings) + Vec3(0.f, 1.f, 3.f);
+      boids._Settings._BoundsRadius = 4.f;
+      boids._Settings._BoundsHeight = 3.f;
+      boids._Visible = true;
+      ioContext._Map._Boids.push_back(boids);
+      ioContext._MapLoaded = true;
+      _Selection._Kind = FpsEditableKind::Boids;
+      _Selection._Index = static_cast<int>(ioContext._Map._Boids.size()) - 1;
+      MarkDirty();
+      ioContext._ReloadScene = true;
+    }
+
+    if ( ImGui::BeginListBox("Boids", ImVec2(-FLT_MIN, 120.f)) )
+    {
+      for ( int i = 0; i < static_cast<int>(ioContext._Map._Boids.size()); ++i )
+      {
+        const FpsMapBoids & boids = ioContext._Map._Boids[i];
+        const bool selected = ( FpsEditableKind::Boids == _Selection._Kind ) && ( _Selection._Index == i );
+        std::string label = "Boids: " + boids._Name;
+        if ( !boids._Visible )
+          label += " (hidden)";
+        label += "##boids" + std::to_string(i);
+        if ( ImGui::Selectable(label.c_str(), selected) )
+        {
+          _Selection._Kind = FpsEditableKind::Boids;
+          _Selection._Index = i;
+        }
+        if ( selected )
+          ImGui::SetItemDefaultFocus();
+      }
+      ImGui::EndListBox();
+    }
+  }
+
   if ( ImGui::CollapsingHeader("Lights") )
   {
     if ( ImGui::Button("Add sphere light") )
@@ -1462,6 +1590,86 @@ void FpsGameEditor::DrawInspectorPanel( FpsGameEditorContext & ioContext )
       }
     }
   }
+  else if ( FpsEditableKind::Boids == _Selection._Kind )
+  {
+    const int index = _Selection._Index;
+    if ( ( index >= 0 ) && ( index < static_cast<int>(ioContext._Map._Boids.size()) ) )
+    {
+      FpsMapBoids & boids = ioContext._Map._Boids[index];
+      BoidSettings & settings = boids._Settings;
+      bool boidsDirty = false;
+
+      char nameBuffer[128];
+      std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", boids._Name.c_str());
+      if ( ImGui::InputText("Boids name", nameBuffer, sizeof(nameBuffer)) )
+      {
+        boids._Name = nameBuffer;
+        boidsDirty = true;
+      }
+
+      boidsDirty |= ImGui::Checkbox("Visible", &boids._Visible);
+      boidsDirty |= ImGui::DragFloat3("Bounds center", &settings._BoundsCenter.x, 0.05f, -100.f, 100.f, "%.3f");
+      boidsDirty |= ImGui::DragFloat("Bounds radius", &settings._BoundsRadius, 0.05f, 0.1f, 50.f, "%.3f");
+      boidsDirty |= ImGui::DragFloat("Bounds height", &settings._BoundsHeight, 0.05f, 0.1f, 50.f, "%.3f");
+      boidsDirty |= ImGui::ColorEdit3("Color", &settings._Color.x);
+
+      int count = settings._Count;
+      if ( ImGui::SliderInt("Count", &count, 0, 512) )
+      {
+        settings._Count = count;
+        boidsDirty = true;
+      }
+
+      int seed = static_cast<int>(settings._Seed);
+      if ( ImGui::InputInt("Seed", &seed) )
+      {
+        settings._Seed = static_cast<unsigned int>(std::max(seed, 1));
+        boidsDirty = true;
+      }
+
+      boidsDirty |= ImGui::DragFloat("Scale", &settings._Scale, 0.01f, 0.01f, 1.f, "%.3f");
+      if ( ImGui::DragFloat("Min speed", &settings._MinSpeed, 0.01f, 0.01f, 10.f, "%.3f") )
+      {
+        settings._MinSpeed = std::min(settings._MinSpeed, settings._MaxSpeed);
+        boidsDirty = true;
+      }
+      if ( ImGui::DragFloat("Max speed", &settings._MaxSpeed, 0.01f, 0.01f, 12.f, "%.3f") )
+      {
+        settings._MaxSpeed = std::max(settings._MaxSpeed, settings._MinSpeed);
+        boidsDirty = true;
+      }
+      boidsDirty |= ImGui::DragFloat("Max force", &settings._MaxForce, 0.01f, 0.01f, 20.f, "%.3f");
+      if ( ImGui::DragFloat("Neighbor radius", &settings._NeighborRadius, 0.01f, 0.01f, 10.f, "%.3f") )
+      {
+        settings._NeighborRadius = std::max(settings._NeighborRadius, settings._SeparationRadius);
+        boidsDirty = true;
+      }
+      if ( ImGui::DragFloat("Separation radius", &settings._SeparationRadius, 0.01f, 0.01f, 10.f, "%.3f") )
+      {
+        settings._SeparationRadius = std::min(settings._SeparationRadius, settings._NeighborRadius);
+        boidsDirty = true;
+      }
+      boidsDirty |= ImGui::DragFloat("Separation", &settings._SeparationWeight, 0.01f, 0.f, 10.f, "%.3f");
+      boidsDirty |= ImGui::DragFloat("Alignment", &settings._AlignmentWeight, 0.01f, 0.f, 10.f, "%.3f");
+      boidsDirty |= ImGui::DragFloat("Cohesion", &settings._CohesionWeight, 0.01f, 0.f, 10.f, "%.3f");
+      boidsDirty |= ImGui::DragFloat("Bounds weight", &settings._BoundsWeight, 0.01f, 0.f, 10.f, "%.3f");
+
+      if ( boidsDirty )
+      {
+        settings._Count = std::max(0, settings._Count);
+        settings._BoundsRadius = std::max(0.1f, settings._BoundsRadius);
+        settings._BoundsHeight = std::max(0.1f, settings._BoundsHeight);
+        settings._Scale = std::max(0.01f, settings._Scale);
+        settings._MinSpeed = std::max(0.01f, settings._MinSpeed);
+        settings._MaxSpeed = std::max(settings._MaxSpeed, settings._MinSpeed);
+        settings._MaxForce = std::max(0.01f, settings._MaxForce);
+        settings._NeighborRadius = std::max(0.01f, settings._NeighborRadius);
+        settings._SeparationRadius = MathUtil::Clamp(settings._SeparationRadius, 0.01f, settings._NeighborRadius);
+        MarkDirty();
+        ioContext._ReloadScene = true;
+      }
+    }
+  }
   else
     ImGui::TextUnformatted("No editable item selected.");
 
@@ -1622,11 +1830,13 @@ void FpsGameEditor::DrawSettingsPanel( FpsGameEditorContext & ioContext )
   ImGui::Separator();
   ImGui::Checkbox("Collider helpers", &_ShowColliderHelpers);
   ImGui::Checkbox("Light helpers", &_ShowLightHelpers);
+  ImGui::Checkbox("Boids helpers", &_ShowBoidsHelpers);
 
   const bool hasEditableSelection = ( FpsEditableKind::Box == _Selection._Kind )
                                  || ( FpsEditableKind::Collider == _Selection._Kind )
                                  || ( FpsEditableKind::Prop == _Selection._Kind )
-                                 || ( FpsEditableKind::Light == _Selection._Kind );
+                                 || ( FpsEditableKind::Light == _Selection._Kind )
+                                 || ( FpsEditableKind::Boids == _Selection._Kind );
   ImGui::BeginDisabled(!hasEditableSelection);
   if ( ImGui::Button("Duplicate selected") )
   {
@@ -1678,6 +1888,7 @@ int FpsGameEditor::DrawOverlays( FpsGameEditorContext & ioContext )
   const ImU32 colliderColor = IM_COL32(74, 202, 255, 190);
   const ImU32 hiddenColor = IM_COL32(180, 180, 180, 170);
   const ImU32 lightColor = IM_COL32(255, 232, 96, 230);
+  const ImU32 boidsColor = IM_COL32(98, 224, 140, 220);
 
   for ( int i = 0; i < static_cast<int>(ioContext._Map._Objects.size()); ++i )
   {
@@ -1749,6 +1960,19 @@ int FpsGameEditor::DrawOverlays( FpsGameEditorContext & ioContext )
     drawList -> AddLine(ImVec2(screenPos.x + 2.f, screenPos.y), ImVec2(screenPos.x + radius + 3.f, screenPos.y), color, 1.5f);
     drawList -> AddLine(ImVec2(screenPos.x, screenPos.y - radius - 3.f), ImVec2(screenPos.x, screenPos.y - 2.f), color, 1.5f);
     drawList -> AddLine(ImVec2(screenPos.x, screenPos.y + 2.f), ImVec2(screenPos.x, screenPos.y + radius + 3.f), color, 1.5f);
+  }
+
+  for ( int i = 0; i < static_cast<int>(ioContext._Map._Boids.size()); ++i )
+  {
+    const FpsMapBoids & boids = ioContext._Map._Boids[i];
+    const bool selected = ( FpsEditableKind::Boids == _Selection._Kind ) && ( _Selection._Index == i );
+    if ( !_ShowBoidsHelpers && !selected )
+      continue;
+    if ( !boids._Visible && !selected )
+      continue;
+
+    const ImU32 color = selected ? selectedColor : boidsColor;
+    EditorDrawTransformedBox(EditorBoidsTransform(boids), view, proj, drawList, color, selected ? 2.5f : 1.5f);
   }
 
   return 0;
@@ -1866,6 +2090,33 @@ int FpsGameEditor::DrawGizmo( FpsGameEditorContext & ioContext )
       light._Pos = Vec3(transform[3]);
       SyncLight(ioContext, index);
       MarkDirty();
+    }
+  }
+  else if ( FpsEditableKind::Boids == _Selection._Kind )
+  {
+    const int index = _Selection._Index;
+    if ( ( index < 0 ) || ( index >= static_cast<int>(ioContext._Map._Boids.size()) ) )
+      return 0;
+    if ( rotateMode )
+      return 0;
+
+    FpsMapBoids & boids = ioContext._Map._Boids[index];
+    BoidSettings & settings = boids._Settings;
+    Mat4x4 transform = scaleMode ? EditorBoidsTransform(boids) : EditorBoidsGizmoTransform(boids);
+    if ( ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
+                              scaleMode ? ImGuizmo::SCALE : ImGuizmo::TRANSLATE, ImGuizmo::WORLD,
+                              glm::value_ptr(transform)) )
+    {
+      settings._BoundsCenter = Vec3(transform[3]);
+      if ( scaleMode )
+      {
+        const float radiusX = glm::length(Vec3(transform[0])) * 0.5f;
+        const float radiusZ = glm::length(Vec3(transform[2])) * 0.5f;
+        settings._BoundsRadius = std::max(0.1f, ( radiusX + radiusZ ) * 0.5f);
+        settings._BoundsHeight = std::max(0.1f, glm::length(Vec3(transform[1])));
+      }
+      MarkDirty();
+      ioContext._ReloadScene = true;
     }
   }
 

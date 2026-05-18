@@ -2,6 +2,7 @@
 #define _Test6_
 
 #include "BaseTest.h"
+#include "Boids.h"
 #include "FpsGame.h"
 #include "FpsGameEditor.h"
 #include "FpsGameHud.h"
@@ -15,6 +16,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <vector>
 
 struct GLFWwindow;
 
@@ -42,9 +44,11 @@ protected:
   int InitializeUI();
   int InitializeScene();
   int InitializeRenderer();
+  int InitializeMapBoids( bool iResetSimulation );
 
   int ProcessInput();
   int UpdateGame();
+  int UpdateBoids();
   int UpdateCPUTime();
 
   int DrawUI();
@@ -75,6 +79,9 @@ protected:
   bool                      _MapLoaded = false;
   FpsGameEditor             _Editor;
   FpsGameHud                _Hud;
+  std::vector<BoidSettings>      _BoidSettings;
+  std::vector<BoidSimulation>    _BoidSimulations;
+  std::vector<BoidSceneBinding>  _BoidBindings;
 
   KeyInput                  _KeyInput;
   MouseInput                _MouseInput;
