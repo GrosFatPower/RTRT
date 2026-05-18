@@ -3,6 +3,7 @@
 
 #include "BaseTest.h"
 #include "FpsGame.h"
+#include "FpsGameEditor.h"
 #include "FpsGameMap.h"
 #include "KeyInput.h"
 #include "MouseInput.h"
@@ -19,48 +20,6 @@ struct GLFWwindow;
 namespace RTRT
 {
 
-enum class FpsEditableKind
-{
-  None = 0,
-  Box,
-  Collider,
-  Prop,
-  Light,
-  PlayerSpawn,
-  Weapon
-};
-
-struct FpsEditorSelection
-{
-  FpsEditableKind _Kind = FpsEditableKind::None;
-  int             _Index = -1;
-  int             _SceneInstanceID = -1;
-};
-
-struct FpsGameEditor
-{
-  bool               _Enabled = false;
-  bool               _Dirty = false;
-  bool               _PreviousShowViewWeapon = true;
-  bool               _PreviousFreeLook = false;
-  bool               _ShowColliderHelpers = true;
-  bool               _ShowLightHelpers = true;
-  bool               _ShowScenePanel = true;
-  bool               _ShowInspectorPanel = true;
-  bool               _ShowMaterialsPanel = true;
-  bool               _ShowSettingsPanel = true;
-  bool               _ResetDockLayout = false;
-  FpsEditorSelection _Selection;
-  int                _SelectedMaterial = 0;
-  char               _SavePath[512] = {};
-  char               _LoadPath[512] = {};
-  char               _NewMaterialName[128] = "new_material";
-  char               _NewPropName[128] = "New Prop";
-  int                _NewPropAssetIndex = -1;
-  std::vector<std::string> _PropAssetPaths;
-  std::vector<bool>  _ObjectInstanceVisible;
-  std::string        _StatusMessage;
-};
 
 class Test6 : public BaseTest
 {
@@ -82,41 +41,25 @@ protected:
   int InitializeUI();
   int InitializeScene();
   int InitializeRenderer();
+
   int ProcessInput();
   int UpdateGame();
+  int UpdateCPUTime();
+
   int DrawUI();
   void DrawDebugPanel();
-  void DrawEditorDockspace();
-  void DrawEditorScenePanel();
-  void DrawEditorInspectorPanel();
-  void DrawEditorMaterialsPanel();
-  void DrawEditorSettingsPanel();
-  int DrawEditorGizmo();
-  int DrawEditorOverlays();
   void DrawHUD();
   int DrawSettingsUI();
+
   void DrawCrosshair();
-  int UpdateCPUTime();
+
   void SyncFramebufferResolution( bool iNotifyRenderer = false );
+
   void SetMouseCaptured( bool iCaptured );
+
   void ApplyRendererDefaults();
-  void SetEditorMode( bool iEnabled );
-  void SetEditorPathBuffers();
-  void SetEditorStatus( const std::string & iMessage );
-  void RefreshEditorPropAssets();
-  void SyncMapFromRuntimeSettings();
-  void SyncEditorObject( int iObjectIndex );
-  void SyncEditorProp( int iPropIndex );
-  void SyncEditorLight( int iLightIndex );
-  bool DeleteSelectedEditorItem();
-  bool DuplicateSelectedEditorItem();
-  bool DeleteSelectedMaterial();
-  bool DuplicateSelectedMaterial();
-  void EnsureEditorObjectVisibility();
-  void ApplyEditorObjectVisibility();
-  bool BuildPickingRay( double iMouseX, double iMouseY, Vec3 & oRayOrigin, Vec3 & oRayDir ) const;
-  bool PickEditorSelection( double iMouseX, double iMouseY, FpsEditorSelection & oSelection ) const;
-  void MarkEditorDirty() { _Editor._Dirty = true; }
+
+  FpsGameEditorContext MakeEditorContext();
 
 protected:
   std::unique_ptr<Scene>    _Scene;
