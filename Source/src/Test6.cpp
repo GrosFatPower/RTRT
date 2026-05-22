@@ -321,7 +321,8 @@ int Test6::InitializeScene()
   if ( 0 != InitializeMapBoids(true) )
     return 1;
 
-  _Editor.ApplyObjectVisibility(MakeEditorContext());
+  FpsGameEditorContext editorContext = MakeEditorContext();
+  _Editor.ApplyObjectVisibility(editorContext);
   _Editor.SetPathBuffers(_MapPath);
   _Editor.RefreshPropAssets();
   return 0;
@@ -423,12 +424,15 @@ int Test6::ProcessInput()
     _GameSettings._FreeLook = !_GameSettings._FreeLook;
 
   if ( !ImGui::GetIO().WantCaptureKeyboard && _KeyInput.IsKeyReleased(GLFW_KEY_F3) )
-    if ( _Editor.SetMode(MakeEditorContext(), !_Editor.IsEnabled()) )
+  {
+    FpsGameEditorContext editorContext = MakeEditorContext();
+    if ( _Editor.SetMode(editorContext, !_Editor.IsEnabled()) )
     {
       _HasLastMousePos = false;
       if ( _Editor.IsEnabled() )
         SetMouseCaptured(false);
     }
+  }
 
   if ( _Editor.IsEnabled() )
   {
@@ -703,10 +707,11 @@ int Test6::DrawUI()
 
   if ( _Editor.IsEnabled() )
   {
+    FpsGameEditorContext editorContext = MakeEditorContext();
     _Editor.DrawDockspace();
-    _Editor.DrawPanels(MakeEditorContext());
-    _Editor.DrawOverlays(MakeEditorContext());
-    _Editor.DrawGizmo(MakeEditorContext());
+    _Editor.DrawPanels(editorContext);
+    _Editor.DrawOverlays(editorContext);
+    _Editor.DrawGizmo(editorContext);
     _Hud.DrawCrosshair();
   }
   else
