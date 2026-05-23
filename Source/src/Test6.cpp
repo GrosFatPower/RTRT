@@ -26,12 +26,6 @@ namespace RTRT
 const char * Test6::GetTestHeader() { return "Basic FPS"; }
 
 // ----------------------------------------------------------------------------
-// Global variables
-// ----------------------------------------------------------------------------
-static int g_Test6DebugMode = 0;
-static unsigned int g_Test6NbThreadsMax = std::thread::hardware_concurrency();
-
-// ----------------------------------------------------------------------------
 // ApplyMapSettings
 // ----------------------------------------------------------------------------
 static void ApplyMapSettings( const FpsGameMap & iMap, FpsGameSettings & ioSettings )
@@ -196,7 +190,7 @@ void Test6::ApplyRendererDefaults()
   }
   else if ( FpsRendererMode::Software == _GameSettings._RendererMode )
   {
-    _Settings._NbThreads = std::max(1u, g_Test6NbThreadsMax);
+    _Settings._NbThreads = std::max(1u, std::thread::hardware_concurrency());
     _Settings._ShadingType = ShadingType::PBR;
     _Settings._Sampling = SamplingMode::Bilinear;
     _Settings._TiledRendering = true;
@@ -241,7 +235,9 @@ int Test6::InitializeUI()
 // ----------------------------------------------------------------------------
 FpsGameEditorContext Test6::MakeEditorContext()
 {
-  return FpsGameEditorContext(_MainWindow.get(), _Scene.get(), _Renderer.get(), _Settings, _KeyInput, _GameSettings, _GameWorld, _SceneBinding, _Map, _MapPath, _MapLoaded, _ReloadScene);
+  return FpsGameEditorContext(_MainWindow.get(), _Scene.get(), _Renderer.get(), _Settings, _KeyInput, _GameSettings, _GameWorld, _SceneBinding, _Map, _MapPath, _MapLoaded, _ReloadScene,
+                              _FrameRate, _FrameTime, _DeltaTime, _NbRenderedFrames,
+                              _DebugMode, _DeferredDebugView, _DeferredShowWires, _SoftwareDebugView, _SoftwareShowWires);
 }
 
 // ----------------------------------------------------------------------------
@@ -394,8 +390,8 @@ int Test6::InitializeRenderer()
   _Renderer.reset(newRenderer);
   _Renderer -> Initialize();
 
-  g_Test6DebugMode = 0;
-  _Renderer -> SetDebugMode(g_Test6DebugMode);
+  _DebugMode = 0;
+  _Renderer -> SetDebugMode(_DebugMode);
   SyncFramebufferResolution(true);
 
   return 0;
@@ -703,7 +699,11 @@ int Test6::DrawUI()
   ImGuizmo::BeginFrame();
 
   if ( _ShowDebugPanel )
+  {
     DrawDebugPanel();
+    DrawRenderStatsUI();
+    DrawRenderSettingsUI();
+  }
 
   if ( _Editor.IsEnabled() )
   {
@@ -779,15 +779,15 @@ void Test6::DrawDebugPanel()
     _RenderToFile = true;
   }
 
-  DrawSettingsUI();
+  DrawGameSettingsUI();
 
   ImGui::End();
 }
 
 // ----------------------------------------------------------------------------
-// DrawSettingsUI
+// DrawGameSettingsUI
 // ----------------------------------------------------------------------------
-int Test6::DrawSettingsUI()
+int Test6::DrawGameSettingsUI()
 {
   if ( ImGui::CollapsingHeader("Game tuning") )
   {
@@ -881,167 +881,34 @@ int Test6::DrawSettingsUI()
     }
   }
 
-  if ( ImGui::CollapsingHeader("Render settings") && _Renderer )
-  {
-    int renderScale = _Settings._RenderScale;
-    if ( ImGui::SliderInt("Render scale", &renderScale, 25, 150) )
-    {
-      _Settings._RenderScale = renderScale;
-      SyncFramebufferResolution(true);
-    }
+  return 0;
+}
 
-    if ( ImGui::Checkbox("Show lights", &_Settings._ShowLights) )
-      _Renderer -> Notify(DirtyState::SceneLights);
+// ----------------------------------------------------------------------------
+// DrawRenderSettingsUI
+// ----------------------------------------------------------------------------
+int Test6::DrawRenderSettingsUI()
+{
+  ImGui::Begin("Test6 Render Settings", nullptr, ImGuiWindowFlags_NoDocking);
 
-    if ( ImGui::Checkbox("Tone mapping", &_Settings._ToneMapping) )
-      _Renderer -> Notify(DirtyState::RenderSettings);
+  FpsGameEditorContext editorContext = MakeEditorContext();
+  _Editor.DrawRenderSettingsUI(editorContext);
 
-    if ( _Settings._ToneMapping )
-    {
-      if ( ImGui::SliderFloat("Gamma", &_Settings._Gamma, 0.5f, 3.f) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      if ( ImGui::SliderFloat("Exposure", &_Settings._Exposure, 0.1f, 5.f) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-    }
+  ImGui::End();
+  return 0;
+}
 
-    if ( FpsRendererMode::Deferred == _GameSettings._RendererMode )
-    {
-      if ( ImGui::Checkbox("Shadow mapping", &_Settings._ShadowMapping) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      int shadowMapResolution = _Settings._ShadowMapResolution;
-      if ( ImGui::SliderInt( "Shadow map resolution", &shadowMapResolution, 256, 4096 ) )
-      {
-        shadowMapResolution = std::max(256, ( shadowMapResolution / 64 ) * 64);
-        _Settings._ShadowMapResolution = shadowMapResolution;
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      }
-      if ( ImGui::SliderFloat( "Shadow bias", &_Settings._ShadowBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic ) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
+// ----------------------------------------------------------------------------
+// DrawRenderStatsUI
+// ----------------------------------------------------------------------------
+int Test6::DrawRenderStatsUI()
+{
+  ImGui::Begin("Test6 Rendering Stats", nullptr, ImGuiWindowFlags_NoDocking);
 
-      if ( ImGui::Checkbox("SSAO", &_Settings._SSAO) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      if ( ImGui::Checkbox("SSAO blur", &_Settings._SSAOBlur) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      if ( ImGui::SliderFloat("SSAO radius", &_Settings._SSAORadius, 0.05f, 5.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      if ( ImGui::SliderFloat("SSAO bias", &_Settings._SSAOBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      if ( ImGui::SliderFloat("SSAO intensity", &_Settings._SSAOIntensity, 0.f, 3.f) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      int ssaoKernelSize = _Settings._SSAOKernelSize;
-      if ( ImGui::SliderInt("SSAO kernel size", &ssaoKernelSize, 4, 32) )
-      {
-        _Settings._SSAOKernelSize = std::max(4, std::min(32, ssaoKernelSize));
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      }
-      if ( ImGui::SliderInt("Max shadow casting lights", &_Settings._MaxShadowCastingLights, 1, 8) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
+  FpsGameEditorContext editorContext = MakeEditorContext();
+  _Editor.DrawPerformanceUI(editorContext);
 
-      if ( ImGui::Checkbox("SSR", &_Settings._SSR) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      if ( ImGui::SliderFloat("SSR intensity", &_Settings._SSRIntensity, 0.f, 2.f) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      if ( ImGui::SliderFloat("SSR max roughness", &_Settings._SSRMaxRoughness, 0.05f, 1.f) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      int ssrMaxSteps = _Settings._SSRMaxSteps;
-      if ( ImGui::SliderInt("SSR max steps", &ssrMaxSteps, 4, 128) )
-      {
-        _Settings._SSRMaxSteps = std::max(4, std::min(128, ssrMaxSteps));
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      }
-      if ( ImGui::SliderFloat("SSR step size", &_Settings._SSRStepSize, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      if ( ImGui::SliderFloat("SSR max distance", &_Settings._SSRMaxDistance, 1.f, 100.f) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      if ( ImGui::SliderFloat("SSR thickness", &_Settings._SSRThickness, 0.01f, 2.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      if ( ImGui::SliderFloat("SSR edge fade", &_Settings._SSRFade, 0.01f, 0.5f) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-
-      if ( ImGui::Checkbox("PBR direct lighting", &_Settings._PBRDirectLighting) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      if ( ImGui::SliderFloat("Direct light intensity", &_Settings._DirectLightIntensity, 0.f, 8.f) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      if ( ImGui::SliderFloat("IBL max roughness", &_Settings._SpecularIBLMaxRoughness, 0.05f, 1.f) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-
-      static const char * DEBUG_VIEWS[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params", "SSR", "Direct diffuse", "Direct specular" };
-      static int bufferChoice = 0;
-      static bool showWires = false;
-      if ( ImGui::Combo("Debug view", &bufferChoice, DEBUG_VIEWS, 10) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      if ( ImGui::Checkbox("Show wires", &showWires) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-
-      g_Test6DebugMode = 0;
-      _Settings._ShowShadowMap = ( 3 == bufferChoice );
-      if ( 1 == bufferChoice )
-        g_Test6DebugMode |= (int)DeferredDebugModes::DepthBuffer;
-      else if ( 2 == bufferChoice )
-        g_Test6DebugMode |= (int)DeferredDebugModes::Normals;
-      else if ( 3 == bufferChoice )
-        g_Test6DebugMode |= (int)DeferredDebugModes::Shadows;
-      else if ( 4 == bufferChoice )
-        g_Test6DebugMode |= (int)DeferredDebugModes::SSAO;
-      else if ( 5 == bufferChoice )
-        g_Test6DebugMode |= (int)DeferredDebugModes::SpecularIBL;
-      else if ( 6 == bufferChoice )
-        g_Test6DebugMode |= (int)DeferredDebugModes::MaterialParams;
-      else if ( 7 == bufferChoice )
-        g_Test6DebugMode |= (int)DeferredDebugModes::SSR;
-      else if ( 8 == bufferChoice )
-        g_Test6DebugMode |= (int)DeferredDebugModes::DirectDiffuse;
-      else if ( 9 == bufferChoice )
-        g_Test6DebugMode |= (int)DeferredDebugModes::DirectSpecular;
-
-      if ( showWires )
-        g_Test6DebugMode |= (int)DeferredDebugModes::Wires;
-      _Renderer -> SetDebugMode(g_Test6DebugMode);
-    }
-    else if ( FpsRendererMode::Software == _GameSettings._RendererMode )
-    {
-      int numThreads = (int)_Settings._NbThreads;
-      if ( ImGui::SliderInt("Nb threads", &numThreads, 1, (int)std::max(1u, g_Test6NbThreadsMax)) )
-      {
-        _Settings._NbThreads = std::max(1, numThreads);
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      }
-
-      static const char * DEBUG_VIEWS[] = { "Color", "Depth", "Normals" };
-      static int bufferChoice = 0;
-      static bool showWires = false;
-      if ( ImGui::Combo("Debug view", &bufferChoice, DEBUG_VIEWS, 3) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      if ( ImGui::Checkbox("Show wires", &showWires) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-
-      g_Test6DebugMode = 0;
-      if ( 1 == bufferChoice )
-        g_Test6DebugMode |= (int)RasterDebugModes::DepthBuffer;
-      else if ( 2 == bufferChoice )
-        g_Test6DebugMode |= (int)RasterDebugModes::Normals;
-      if ( showWires )
-        g_Test6DebugMode |= (int)RasterDebugModes::Wires;
-      _Renderer -> SetDebugMode(g_Test6DebugMode);
-    }
-    else if ( FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode )
-    {
-      if ( ImGui::SliderInt("Bounces", &_Settings._Bounces, 1, 8) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      if ( ImGui::SliderInt("SPP", &_Settings._NbSamplesPerPixel, 1, 8) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      if ( ImGui::Checkbox("Denoise", &_Settings._Denoise) )
-        _Renderer -> Notify(DirtyState::RenderSettings);
-
-      static const char * DEBUG_VIEWS[] = { "Off", "Tiles", "Albedo", "Metalness", "Roughness", "Normals", "UV", "BLAS" };
-      if ( ImGui::Combo("Debug view", &g_Test6DebugMode, DEBUG_VIEWS, 8) )
-      {
-        _Renderer -> SetDebugMode(g_Test6DebugMode);
-        _Renderer -> Notify(DirtyState::RenderSettings);
-      }
-    }
-  }
-
+  ImGui::End();
   return 0;
 }
 

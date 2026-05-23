@@ -30,7 +30,16 @@ struct FpsGameEditorContext
                         FpsGameMap & iMap,
                         std::string & iMapPath,
                         bool & iMapLoaded,
-                        bool & iReloadScene );
+                        bool & iReloadScene,
+                        double iFrameRate,
+                        double iFrameTime,
+                        double iDeltaTime,
+                        unsigned int iNbRenderedFrames,
+                        int & iDebugMode,
+                        int & iDeferredDebugView,
+                        bool & iDeferredShowWires,
+                        int & iSoftwareDebugView,
+                        bool & iSoftwareShowWires );
 
   GLFWwindow           * _Window = nullptr;
   Scene                 * _Scene = nullptr;
@@ -44,6 +53,15 @@ struct FpsGameEditorContext
   std::string           & _MapPath;
   bool                  & _MapLoaded;
   bool                  & _ReloadScene;
+  double                  _FrameRate = 0.;
+  double                  _FrameTime = 0.;
+  double                  _DeltaTime = 0.;
+  unsigned int            _NbRenderedFrames = 0;
+  int                   & _DebugMode;
+  int                   & _DeferredDebugView;
+  bool                  & _DeferredShowWires;
+  int                   & _SoftwareDebugView;
+  bool                  & _SoftwareShowWires;
 };
 
 enum class FpsEditableKind
@@ -101,6 +119,10 @@ public:
   void DrawInspectorPanel( FpsGameEditorContext & ioContext );
   void DrawMaterialsPanel( FpsGameEditorContext & ioContext );
   void DrawSettingsPanel( FpsGameEditorContext & ioContext );
+  void DrawRenderSettingsPanel( FpsGameEditorContext & ioContext );
+  void DrawPerformancePanel( FpsGameEditorContext & ioContext );
+  int DrawRenderSettingsUI( FpsGameEditorContext & ioContext );
+  int DrawPerformanceUI( FpsGameEditorContext & ioContext );
   int DrawOverlays( FpsGameEditorContext & ioContext );
   int DrawGizmo( FpsGameEditorContext & ioContext );
 
@@ -116,7 +138,14 @@ protected:
   bool               _ShowInspectorPanel = true;
   bool               _ShowMaterialsPanel = true;
   bool               _ShowSettingsPanel = true;
+  bool               _ShowRenderSettingsPanel = true;
+  bool               _ShowPerformancePanel = true;
   bool               _ResetDockLayout = false;
+  std::vector<float> _FrameRateHistory;
+  int                _LastFrameRateIndex = -1;
+  unsigned int       _LastFrameRateFrame = 0;
+  double             _FrameRateAccumTime = 0.;
+  float              _MaxFrameRate = 300.f;
   FpsEditorSelection _Selection;
   int                _SelectedMaterial = 0;
   char               _SavePath[512] = {};

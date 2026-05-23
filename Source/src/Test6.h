@@ -53,7 +53,9 @@ protected:
 
   int DrawUI();
   void DrawDebugPanel();
-  int DrawSettingsUI();
+  int DrawGameSettingsUI();
+  int DrawRenderSettingsUI();
+  int DrawRenderStatsUI();
 
   void SyncFramebufferResolution( bool iNotifyRenderer = false );
 
@@ -97,6 +99,11 @@ protected:
   double                    _FrameRate = 0.;
   double                    _FrameTime = 0.;
   unsigned int              _NbRenderedFrames = 0;
+  int                       _DebugMode = 0;
+  int                       _DeferredDebugView = 0;
+  bool                      _DeferredShowWires = false;
+  int                       _SoftwareDebugView = 0;
+  bool                      _SoftwareShowWires = false;
 
   bool                      _RenderToFile = false;
   std::filesystem::path     _CaptureOutputPath;

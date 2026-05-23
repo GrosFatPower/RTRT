@@ -2,12 +2,15 @@
 
 #include "FpsGameEditor.h"
 
+#include "DeferredRenderer.h"
 #include "FpsGameMap.h"
 #include "Mesh.h"
 #include "MeshInstance.h"
 #include "PathUtils.h"
+#include "PathTracer.h"
 #include "Renderer.h"
 #include "Scene.h"
+#include "SoftwareRasterizer.h"
 
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -21,6 +24,7 @@
 #include <cstring>
 #include <cstdio>
 #include <filesystem>
+#include <thread>
 
 #include <GLFW/glfw3.h>
 
@@ -42,7 +46,16 @@ FpsGameEditorContext::FpsGameEditorContext( GLFWwindow * iWindow,
                                             FpsGameMap & iMap,
                                             std::string & iMapPath,
                                             bool & iMapLoaded,
-                                            bool & iReloadScene )
+                                            bool & iReloadScene,
+                                            double iFrameRate,
+                                            double iFrameTime,
+                                            double iDeltaTime,
+                                            unsigned int iNbRenderedFrames,
+                                            int & iDebugMode,
+                                            int & iDeferredDebugView,
+                                            bool & iDeferredShowWires,
+                                            int & iSoftwareDebugView,
+                                            bool & iSoftwareShowWires )
 : _Window(iWindow)
 , _Scene(iScene)
 , _Renderer(iRenderer)
@@ -55,6 +68,15 @@ FpsGameEditorContext::FpsGameEditorContext( GLFWwindow * iWindow,
 , _MapPath(iMapPath)
 , _MapLoaded(iMapLoaded)
 , _ReloadScene(iReloadScene)
+, _FrameRate(iFrameRate)
+, _FrameTime(iFrameTime)
+, _DeltaTime(iDeltaTime)
+, _NbRenderedFrames(iNbRenderedFrames)
+, _DebugMode(iDebugMode)
+, _DeferredDebugView(iDeferredDebugView)
+, _DeferredShowWires(iDeferredShowWires)
+, _SoftwareDebugView(iSoftwareDebugView)
+, _SoftwareShowWires(iSoftwareShowWires)
 {
 }
 
@@ -79,6 +101,8 @@ void FpsGameEditor::DrawPanels( FpsGameEditorContext & ioContext )
   DrawInspectorPanel(ioContext);
   DrawMaterialsPanel(ioContext);
   DrawSettingsPanel(ioContext);
+  DrawRenderSettingsPanel(ioContext);
+  DrawPerformancePanel(ioContext);
 }
 
 // ----------------------------------------------------------------------------
@@ -155,6 +179,37 @@ static bool EditorIsBuiltinMaterialName( const std::string & iName )
       || ( "pillar" == iName )
       || ( "crate" == iName )
       || ( "accent" == iName );
+}
+
+// ----------------------------------------------------------------------------
+// EditorSyncFramebufferResolution
+// ----------------------------------------------------------------------------
+static void EditorSyncFramebufferResolution( FpsGameEditorContext & ioContext, bool iNotifyRenderer )
+{
+  if ( !ioContext._Window )
+    return;
+
+  int frameBufferWidth = 0;
+  int frameBufferHeight = 0;
+  glfwGetFramebufferSize(ioContext._Window, &frameBufferWidth, &frameBufferHeight);
+  if ( !frameBufferWidth || !frameBufferHeight )
+    return;
+
+  const int renderWidth = std::max(1, frameBufferWidth * ioContext._Settings._RenderScale / 100);
+  const int renderHeight = std::max(1, frameBufferHeight * ioContext._Settings._RenderScale / 100);
+  if ( ( ioContext._Settings._WindowResolution.x == frameBufferWidth )
+    && ( ioContext._Settings._WindowResolution.y == frameBufferHeight )
+    && ( ioContext._Settings._RenderResolution.x == renderWidth )
+    && ( ioContext._Settings._RenderResolution.y == renderHeight ) )
+    return;
+
+  ioContext._Settings._WindowResolution.x = frameBufferWidth;
+  ioContext._Settings._WindowResolution.y = frameBufferHeight;
+  ioContext._Settings._RenderResolution.x = renderWidth;
+  ioContext._Settings._RenderResolution.y = renderHeight;
+
+  if ( iNotifyRenderer && ioContext._Renderer )
+    ioContext._Renderer -> Notify(DirtyState::RenderSettings);
 }
 
 // ----------------------------------------------------------------------------
@@ -1093,6 +1148,8 @@ void FpsGameEditor::DrawDockspace()
     ImGui::DockBuilderDockWindow("Editor Inspector", rightID);
     ImGui::DockBuilderDockWindow("Editor Materials", rightBottomID);
     ImGui::DockBuilderDockWindow("Editor Settings", rightBottomID);
+    ImGui::DockBuilderDockWindow("Editor Render Settings", rightBottomID);
+    ImGui::DockBuilderDockWindow("Editor Performance", rightBottomID);
     ImGui::DockBuilderFinish(dockspaceID);
   }
 
@@ -1104,6 +1161,8 @@ void FpsGameEditor::DrawDockspace()
       ImGui::MenuItem("Inspector", nullptr, &_ShowInspectorPanel);
       ImGui::MenuItem("Materials", nullptr, &_ShowMaterialsPanel);
       ImGui::MenuItem("Settings", nullptr, &_ShowSettingsPanel);
+      ImGui::MenuItem("Render Settings", nullptr, &_ShowRenderSettingsPanel);
+      ImGui::MenuItem("Performance", nullptr, &_ShowPerformancePanel);
       ImGui::EndMenu();
     }
     if ( ImGui::MenuItem("Reset editor layout") )
@@ -1861,6 +1920,279 @@ void FpsGameEditor::DrawSettingsPanel( FpsGameEditorContext & ioContext )
     _ResetDockLayout = true;
 
   ImGui::End();
+}
+
+// ----------------------------------------------------------------------------
+// DrawEditorRenderSettingsPanel
+// ----------------------------------------------------------------------------
+void FpsGameEditor::DrawRenderSettingsPanel( FpsGameEditorContext & ioContext )
+{
+  if ( !_ShowRenderSettingsPanel )
+    return;
+
+  if ( !ImGui::Begin("Editor Render Settings", &_ShowRenderSettingsPanel) )
+  {
+    ImGui::End();
+    return;
+  }
+
+  DrawRenderSettingsUI(ioContext);
+
+  ImGui::End();
+}
+
+// ----------------------------------------------------------------------------
+// DrawEditorPerformancePanel
+// ----------------------------------------------------------------------------
+void FpsGameEditor::DrawPerformancePanel( FpsGameEditorContext & ioContext )
+{
+  if ( !_ShowPerformancePanel )
+    return;
+
+  if ( !ImGui::Begin("Editor Performance", &_ShowPerformancePanel) )
+  {
+    ImGui::End();
+    return;
+  }
+
+  DrawPerformanceUI(ioContext);
+
+  ImGui::End();
+}
+
+// ----------------------------------------------------------------------------
+// DrawRenderSettingsUI
+// ----------------------------------------------------------------------------
+int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
+{
+  if ( !ioContext._Renderer )
+  {
+    ImGui::Text("No renderer");
+    return 0;
+  }
+
+  int renderScale = ioContext._Settings._RenderScale;
+  if ( ImGui::SliderInt("Render scale", &renderScale, 25, 150) )
+  {
+    ioContext._Settings._RenderScale = renderScale;
+    EditorSyncFramebufferResolution(ioContext, true);
+  }
+
+  if ( ImGui::Checkbox("Show lights", &ioContext._Settings._ShowLights) )
+    ioContext._Renderer -> Notify(DirtyState::SceneLights);
+
+  if ( ImGui::Checkbox("Tone mapping", &ioContext._Settings._ToneMapping) )
+    ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+
+  if ( ioContext._Settings._ToneMapping )
+  {
+    if ( ImGui::SliderFloat("Gamma", &ioContext._Settings._Gamma, 0.5f, 3.f) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    if ( ImGui::SliderFloat("Exposure", &ioContext._Settings._Exposure, 0.1f, 5.f) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+  }
+
+  ImGui::Separator();
+
+  if ( FpsRendererMode::Deferred == ioContext._GameSettings._RendererMode )
+  {
+    if ( ImGui::Checkbox("Shadow mapping", &ioContext._Settings._ShadowMapping) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    int shadowMapResolution = ioContext._Settings._ShadowMapResolution;
+    if ( ImGui::SliderInt( "Shadow map resolution", &shadowMapResolution, 256, 4096 ) )
+    {
+      shadowMapResolution = std::max(256, ( shadowMapResolution / 64 ) * 64);
+      ioContext._Settings._ShadowMapResolution = shadowMapResolution;
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    }
+    if ( ImGui::SliderFloat( "Shadow bias", &ioContext._Settings._ShadowBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic ) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+
+    if ( ImGui::Checkbox("SSAO", &ioContext._Settings._SSAO) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    if ( ImGui::Checkbox("SSAO blur", &ioContext._Settings._SSAOBlur) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    if ( ImGui::SliderFloat("SSAO radius", &ioContext._Settings._SSAORadius, 0.05f, 5.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    if ( ImGui::SliderFloat("SSAO bias", &ioContext._Settings._SSAOBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    if ( ImGui::SliderFloat("SSAO intensity", &ioContext._Settings._SSAOIntensity, 0.f, 3.f) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    int ssaoKernelSize = ioContext._Settings._SSAOKernelSize;
+    if ( ImGui::SliderInt("SSAO kernel size", &ssaoKernelSize, 4, 32) )
+    {
+      ioContext._Settings._SSAOKernelSize = std::max(4, std::min(32, ssaoKernelSize));
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    }
+    if ( ImGui::SliderInt("Max shadow casting lights", &ioContext._Settings._MaxShadowCastingLights, 1, 8) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+
+    if ( ImGui::Checkbox("SSR", &ioContext._Settings._SSR) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    if ( ImGui::SliderFloat("SSR intensity", &ioContext._Settings._SSRIntensity, 0.f, 2.f) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    if ( ImGui::SliderFloat("SSR max roughness", &ioContext._Settings._SSRMaxRoughness, 0.05f, 1.f) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    int ssrMaxSteps = ioContext._Settings._SSRMaxSteps;
+    if ( ImGui::SliderInt("SSR max steps", &ssrMaxSteps, 4, 128) )
+    {
+      ioContext._Settings._SSRMaxSteps = std::max(4, std::min(128, ssrMaxSteps));
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    }
+    if ( ImGui::SliderFloat("SSR step size", &ioContext._Settings._SSRStepSize, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    if ( ImGui::SliderFloat("SSR max distance", &ioContext._Settings._SSRMaxDistance, 1.f, 100.f) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    if ( ImGui::SliderFloat("SSR thickness", &ioContext._Settings._SSRThickness, 0.01f, 2.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    if ( ImGui::SliderFloat("SSR edge fade", &ioContext._Settings._SSRFade, 0.01f, 0.5f) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+
+    if ( ImGui::Checkbox("PBR direct lighting", &ioContext._Settings._PBRDirectLighting) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    if ( ImGui::SliderFloat("Direct light intensity", &ioContext._Settings._DirectLightIntensity, 0.f, 8.f) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    if ( ImGui::SliderFloat("IBL max roughness", &ioContext._Settings._SpecularIBLMaxRoughness, 0.05f, 1.f) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+
+    static const char * DEBUG_VIEWS[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params", "SSR", "Direct diffuse", "Direct specular" };
+    if ( ImGui::Combo("Debug view", &ioContext._DeferredDebugView, DEBUG_VIEWS, 10) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    if ( ImGui::Checkbox("Show wires", &ioContext._DeferredShowWires) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+
+    ioContext._DebugMode = 0;
+    ioContext._Settings._ShowShadowMap = ( 3 == ioContext._DeferredDebugView );
+    if ( 1 == ioContext._DeferredDebugView )
+      ioContext._DebugMode |= (int)DeferredDebugModes::DepthBuffer;
+    else if ( 2 == ioContext._DeferredDebugView )
+      ioContext._DebugMode |= (int)DeferredDebugModes::Normals;
+    else if ( 3 == ioContext._DeferredDebugView )
+      ioContext._DebugMode |= (int)DeferredDebugModes::Shadows;
+    else if ( 4 == ioContext._DeferredDebugView )
+      ioContext._DebugMode |= (int)DeferredDebugModes::SSAO;
+    else if ( 5 == ioContext._DeferredDebugView )
+      ioContext._DebugMode |= (int)DeferredDebugModes::SpecularIBL;
+    else if ( 6 == ioContext._DeferredDebugView )
+      ioContext._DebugMode |= (int)DeferredDebugModes::MaterialParams;
+    else if ( 7 == ioContext._DeferredDebugView )
+      ioContext._DebugMode |= (int)DeferredDebugModes::SSR;
+    else if ( 8 == ioContext._DeferredDebugView )
+      ioContext._DebugMode |= (int)DeferredDebugModes::DirectDiffuse;
+    else if ( 9 == ioContext._DeferredDebugView )
+      ioContext._DebugMode |= (int)DeferredDebugModes::DirectSpecular;
+
+    if ( ioContext._DeferredShowWires )
+      ioContext._DebugMode |= (int)DeferredDebugModes::Wires;
+    ioContext._Renderer -> SetDebugMode(ioContext._DebugMode);
+  }
+  else if ( FpsRendererMode::Software == ioContext._GameSettings._RendererMode )
+  {
+    const unsigned int nbThreadsMax = std::max(1u, std::thread::hardware_concurrency());
+    int numThreads = (int)ioContext._Settings._NbThreads;
+    if ( ImGui::SliderInt("Nb threads", &numThreads, 1, (int)nbThreadsMax) )
+    {
+      ioContext._Settings._NbThreads = std::max(1, numThreads);
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    }
+
+    static const char * DEBUG_VIEWS[] = { "Color", "Depth", "Normals" };
+    if ( ImGui::Combo("Debug view", &ioContext._SoftwareDebugView, DEBUG_VIEWS, 3) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    if ( ImGui::Checkbox("Show wires", &ioContext._SoftwareShowWires) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+
+    ioContext._DebugMode = 0;
+    if ( 1 == ioContext._SoftwareDebugView )
+      ioContext._DebugMode |= (int)RasterDebugModes::DepthBuffer;
+    else if ( 2 == ioContext._SoftwareDebugView )
+      ioContext._DebugMode |= (int)RasterDebugModes::Normals;
+    if ( ioContext._SoftwareShowWires )
+      ioContext._DebugMode |= (int)RasterDebugModes::Wires;
+    ioContext._Renderer -> SetDebugMode(ioContext._DebugMode);
+  }
+  else if ( FpsRendererMode::PhotoPathTracer == ioContext._GameSettings._RendererMode )
+  {
+    if ( ImGui::SliderInt("Bounces", &ioContext._Settings._Bounces, 1, 8) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    if ( ImGui::SliderInt("SPP", &ioContext._Settings._NbSamplesPerPixel, 1, 8) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    if ( ImGui::Checkbox("Denoise", &ioContext._Settings._Denoise) )
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+
+    static const char * DEBUG_VIEWS[] = { "Off", "Tiles", "Albedo", "Metalness", "Roughness", "Normals", "UV", "BLAS" };
+    if ( ImGui::Combo("Debug view", &ioContext._DebugMode, DEBUG_VIEWS, 8) )
+    {
+      ioContext._Renderer -> SetDebugMode(ioContext._DebugMode);
+      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    }
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawPerformanceUI
+// ----------------------------------------------------------------------------
+int FpsGameEditor::DrawPerformanceUI( FpsGameEditorContext & ioContext )
+{
+  if ( _FrameRateHistory.empty() )
+  {
+    _FrameRateHistory.assign(120, 0.f);
+    _LastFrameRateIndex = 0;
+    _LastFrameRateFrame = ioContext._NbRenderedFrames;
+    _FrameRateHistory[_LastFrameRateIndex] = (float)ioContext._FrameRate;
+  }
+
+  if ( _LastFrameRateFrame != ioContext._NbRenderedFrames )
+  {
+    _LastFrameRateFrame = ioContext._NbRenderedFrames;
+    _FrameRateAccumTime += ioContext._DeltaTime;
+    while ( _FrameRateAccumTime > ( 1. / 60. ) )
+    {
+      _FrameRateAccumTime -= 0.1;
+      _MaxFrameRate = std::max(1.f, *std::max_element(_FrameRateHistory.begin(), _FrameRateHistory.end()));
+      _LastFrameRateIndex++;
+      if ( _LastFrameRateIndex >= 120 )
+        _LastFrameRateIndex = 0;
+      _FrameRateHistory[_LastFrameRateIndex] = (float)ioContext._FrameRate;
+    }
+  }
+
+  const int offset = ( _LastFrameRateIndex >= 119 ) ? 0 : _LastFrameRateIndex + 1;
+  char overlay[32];
+  std::snprintf(overlay, 32, "%.1f FPS", ioContext._FrameRate);
+  ImGui::PlotLines("Frame rate", &_FrameRateHistory[0], static_cast<int>(_FrameRateHistory.size()), offset, overlay, -0.1f, _MaxFrameRate, ImVec2(0.f, 80.f));
+
+  ImGui::Text("Window width : %d height : %d", ioContext._Settings._WindowResolution.x, ioContext._Settings._WindowResolution.y);
+  ImGui::Text("Render width : %d height : %d", ioContext._Settings._RenderResolution.x, ioContext._Settings._RenderResolution.y);
+  ImGui::Text("Render time           : %.3f ms/frame", ioContext._FrameTime * 1000.);
+  ImGui::Text("Rendered frames       : %u", ioContext._NbRenderedFrames);
+
+  if ( ( FpsRendererMode::PhotoPathTracer == ioContext._GameSettings._RendererMode ) && ioContext._Renderer )
+  {
+    PathTracer * pathTracer = ioContext._Renderer -> AsPathTracer();
+    if ( pathTracer )
+    {
+      ImGui::Separator();
+      ImGui::Text("Path trace time       : %.3f ms", pathTracer -> GetPathTraceTime() * 1000.);
+      ImGui::Text("Accumulate time       : %.3f ms", pathTracer -> GetAccumulateTime() * 1000.);
+      ImGui::Text("Denoise time          : %.3f ms", pathTracer -> GetDenoiseTime() * 1000.);
+      ImGui::Text("Render to screen time : %.3f ms", pathTracer -> GetRenderToScreenTime() * 1000.);
+      ImGui::Text("Frame number          : %d", pathTracer -> GetFrameNum());
+      ImGui::Text("Nb complete frames    : %d", pathTracer -> GetNbCompleteFrames());
+    }
+  }
+
+  if ( ioContext._Scene )
+  {
+    ImGui::Separator();
+    ImGui::Text("Nb vertices           : %d", (int)ioContext._Scene -> GetVertices().size());
+    ImGui::Text("Nb triangles          : %d", (int)ioContext._Scene -> GetIndices().size() / 3);
+    ImGui::Text("Nb meshes instances   : %d", ioContext._Scene -> GetNbMeshInstances());
+  }
+
+  return 0;
 }
 
 // ----------------------------------------------------------------------------
