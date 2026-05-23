@@ -39,6 +39,7 @@ protected:
   static void MouseButtonCallback( GLFWwindow * iWindow, const int iButton, const int iAction, const int iMods );
   static void MouseScrollCallback( GLFWwindow * iWindow, const double iOffsetX, const double iOffsetY );
   static void FramebufferSizeCallback( GLFWwindow * iWindow, const int iWidth, const int iHeight );
+  static void DropCallback( GLFWwindow * iWindow, int iCount, const char ** iPaths );
 
 protected:
   int InitializeUI();
@@ -60,6 +61,7 @@ protected:
   void SyncFramebufferResolution( bool iNotifyRenderer = false );
 
   void SetMouseCaptured( bool iCaptured );
+  void HandleDroppedFiles( int iCount, const char ** iPaths );
 
   void ApplyRendererDefaults();
   void InitializeCpuTimings();

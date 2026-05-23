@@ -11,8 +11,10 @@
 #include "ProceduralMesh.h"
 #include "RenderSettings.h"
 #include "Scene.h"
+#include "Texture.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
@@ -47,6 +49,40 @@ static FpsSceneObject MakeBox( const std::string & iName,
   object._Collidable = iCollidable;
   object._Visible = true;
   return object;
+}
+
+static std::filesystem::path GetPropFilePath( const std::string & iPath )
+{
+  const std::filesystem::path filepath(iPath);
+  if ( filepath.is_absolute() )
+    return filepath.lexically_normal();
+  return std::filesystem::path(PathUtils::GetAssetPath(iPath)).lexically_normal();
+}
+
+static std::string MakePropResourceName( const FpsMapProp & iProp, int iPropIndex, const std::string & iName )
+{
+  std::string name = "__FpsProp_" + std::to_string(iPropIndex) + "_" + iProp._Name;
+  for ( char & c : name )
+  {
+    if ( std::isspace(static_cast<unsigned char>(c)) )
+      c = '_';
+  }
+
+  if ( !iName.empty() )
+    name += "_" + iName;
+  return name;
+}
+
+static int RemapMaterialTextureID( float & ioTextureID, const std::vector<int> & iTextureIDs )
+{
+  const int srcID = static_cast<int>(ioTextureID + 0.5f);
+  if ( srcID < 0 )
+    return 0;
+  if ( srcID >= static_cast<int>(iTextureIDs.size()) )
+    return 1;
+
+  ioTextureID = static_cast<float>(iTextureIDs[srcID]);
+  return 0;
 }
 
 static Mat4x4 BuildEulerTransform( const Vec3 & iPosition, const Vec3 & iRotation, const Vec3 & iScale )
@@ -911,61 +947,164 @@ int FpsGameSceneBinding::LoadViewWeapon( Scene & iScene, const std::string & iPa
 int FpsGameSceneBinding::LoadProps( Scene & iScene, const FpsGameMap & iMap )
 {
   int result = 0;
-  for ( const FpsMapProp & prop : iMap._Props )
+  for ( int propIndex = 0; propIndex < static_cast<int>(iMap._Props.size()); ++propIndex )
   {
-    _PropInstanceIDs.push_back(std::vector<int>());
-    _PropBaseTransforms.push_back(std::vector<Mat4x4>());
-
-    const std::filesystem::path filepath(PathUtils::GetAssetPath(prop._Path));
-    const std::string ext = filepath.extension().string();
-
-    if ( ".obj" == ext )
-    {
-      const int meshID = iScene.AddMesh(filepath.string());
-      const int materialID = MaterialID(FpsMaterialSlot::Wall);
-      if ( ( meshID < 0 ) || ( materialID < 0 ) )
-      {
-        std::cout << "FpsGameSceneBinding : failed to load obj prop " << prop._Path << std::endl;
-        result = 1;
-        continue;
-      }
-
-      MeshInstance instance(prop._Name, meshID, materialID, BuildPropTransform(prop));
-      instance._Visible = prop._Visible;
-      const int instanceID = iScene.AddMeshInstance(instance);
-      _PropInstanceIDs.back().push_back(instanceID);
-      _PropBaseTransforms.back().push_back(Mat4x4(1.f));
-      continue;
-    }
-
-    if ( ( ".gltf" != ext ) && ( ".glb" != ext ) )
-    {
-      std::cout << "FpsGameSceneBinding : unsupported prop format " << prop._Path << std::endl;
+    if ( 0 != LoadProp(iScene, iMap, propIndex) )
       result = 1;
-      continue;
-    }
-
-    const int firstInstanceID = iScene.GetNbMeshInstances();
-    RenderSettings loaderSettings;
-    if ( !Loader::LoadScene(filepath.string(), iScene, loaderSettings) )
-    {
-      std::cout << "FpsGameSceneBinding : failed to load prop " << prop._Path << std::endl;
-      result = 1;
-      continue;
-    }
-
-    const Mat4x4 propTransform = BuildPropTransform(prop);
-    std::vector<MeshInstance> & instances = iScene.GetMeshInstances();
-    for ( int instanceID = firstInstanceID; instanceID < static_cast<int>(instances.size()); ++instanceID )
-    {
-      _PropInstanceIDs.back().push_back(instanceID);
-      _PropBaseTransforms.back().push_back(instances[instanceID]._Transform);
-      instances[instanceID]._Transform = propTransform * _PropBaseTransforms.back().back();
-      instances[instanceID]._Visible = prop._Visible;
-    }
   }
 
   return result;
+}
+
+// ----------------------------------------------------------------------------
+// LoadProp
+// ----------------------------------------------------------------------------
+int FpsGameSceneBinding::LoadProp( Scene & iScene, const FpsGameMap & iMap, int iPropIndex )
+{
+  if ( ( iPropIndex < 0 ) || ( iPropIndex >= static_cast<int>(iMap._Props.size()) ) )
+    return 1;
+
+  if ( iPropIndex >= static_cast<int>(_PropInstanceIDs.size()) )
+    _PropInstanceIDs.resize(iPropIndex + 1);
+  if ( iPropIndex >= static_cast<int>(_PropBaseTransforms.size()) )
+    _PropBaseTransforms.resize(iPropIndex + 1);
+
+  _PropInstanceIDs[iPropIndex].clear();
+  _PropBaseTransforms[iPropIndex].clear();
+
+  const FpsMapProp & prop = iMap._Props[iPropIndex];
+  const std::filesystem::path filepath(GetPropFilePath(prop._Path));
+  std::string ext = filepath.extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(), []( unsigned char c ) { return static_cast<char>(std::tolower(c)); });
+
+  if ( ".obj" == ext )
+  {
+    const int meshID = iScene.AddMesh(filepath.string());
+    const int materialID = MaterialID(FpsMaterialSlot::Wall);
+    if ( ( meshID < 0 ) || ( materialID < 0 ) )
+    {
+      std::cout << "FpsGameSceneBinding : failed to load obj prop " << prop._Path << std::endl;
+      return 1;
+    }
+
+    MeshInstance instance(prop._Name, meshID, materialID, BuildPropTransform(prop));
+    instance._Visible = prop._Visible;
+    const int instanceID = iScene.AddMeshInstance(instance);
+    _PropInstanceIDs[iPropIndex].push_back(instanceID);
+    _PropBaseTransforms[iPropIndex].push_back(Mat4x4(1.f));
+    return 0;
+  }
+
+  if ( ( ".gltf" != ext ) && ( ".glb" != ext ) )
+  {
+    std::cout << "FpsGameSceneBinding : unsupported prop format " << prop._Path << std::endl;
+    return 1;
+  }
+
+  Scene propScene;
+  RenderSettings loaderSettings;
+  if ( !Loader::LoadScene(filepath.string(), propScene, loaderSettings) )
+  {
+    std::cout << "FpsGameSceneBinding : failed to load prop " << prop._Path << std::endl;
+    return 1;
+  }
+
+  std::vector<int> textureIDs(propScene.GetNbTextures(), -1);
+  for ( int textureID = 0; textureID < propScene.GetNbTextures(); ++textureID )
+  {
+    Texture * texture = propScene.GetTextures()[textureID];
+    if ( !texture )
+      continue;
+
+    const std::string textureName = MakePropResourceName(prop, iPropIndex, texture -> Filename());
+    const int dstTextureID = iScene.AddTexture(textureName, texture -> GetUCData(), texture -> GetWidth(), texture -> GetHeight(), texture -> GetNbComponents());
+    if ( dstTextureID < 0 )
+    {
+      std::cout << "FpsGameSceneBinding : failed to merge prop texture " << textureName << std::endl;
+      return 1;
+    }
+    textureIDs[textureID] = dstTextureID;
+  }
+
+  std::vector<int> materialIDs(propScene.GetNbMaterials(), -1);
+  for ( int materialID = 0; materialID < propScene.GetNbMaterials(); ++materialID )
+  {
+    Material material = propScene.GetMaterials()[materialID];
+    if ( 0 != RemapMaterialTextureID(material._BaseColorTexId, textureIDs)
+      || 0 != RemapMaterialTextureID(material._MetallicRoughnessTexID, textureIDs)
+      || 0 != RemapMaterialTextureID(material._NormalMapTexID, textureIDs)
+      || 0 != RemapMaterialTextureID(material._EmissionMapTexID, textureIDs) )
+    {
+      std::cout << "FpsGameSceneBinding : failed to remap prop material textures " << prop._Path << std::endl;
+      return 1;
+    }
+
+    std::string materialName = propScene.FindMaterialName(materialID);
+    if ( materialName.empty() )
+      materialName = "Material_" + std::to_string(materialID);
+
+    const int dstMaterialID = iScene.AddMaterial(material, MakePropResourceName(prop, iPropIndex, materialName));
+    if ( dstMaterialID < 0 )
+    {
+      std::cout << "FpsGameSceneBinding : failed to merge prop material " << materialName << std::endl;
+      return 1;
+    }
+    materialIDs[materialID] = dstMaterialID;
+  }
+
+  std::vector<int> meshIDs(propScene.GetNbMeshes(), -1);
+  for ( int meshID = 0; meshID < propScene.GetNbMeshes(); ++meshID )
+  {
+    Mesh * mesh = propScene.GetMeshes()[meshID];
+    if ( !mesh )
+      continue;
+
+    Mesh * newMesh = new Mesh(MakePropResourceName(prop, iPropIndex, mesh -> Filename()),
+                              mesh -> GetVertices(),
+                              mesh -> GetNormals(),
+                              mesh -> GetUVs(),
+                              mesh -> GetIndices());
+    const int dstMeshID = iScene.AddMesh(newMesh);
+    if ( dstMeshID < 0 )
+    {
+      delete newMesh;
+      std::cout << "FpsGameSceneBinding : failed to merge prop mesh " << mesh -> Filename() << std::endl;
+      return 1;
+    }
+    meshIDs[meshID] = dstMeshID;
+  }
+
+  const Mat4x4 propTransform = BuildPropTransform(prop);
+  std::vector<MeshInstance> & propInstances = propScene.GetMeshInstances();
+  for ( int instanceID = 0; instanceID < static_cast<int>(propInstances.size()); ++instanceID )
+  {
+    MeshInstance instance = propInstances[instanceID];
+    if ( ( instance._MeshID < 0 ) || ( instance._MeshID >= static_cast<int>(meshIDs.size()) )
+      || ( instance._MaterialID < 0 ) || ( instance._MaterialID >= static_cast<int>(materialIDs.size()) ) )
+    {
+      std::cout << "FpsGameSceneBinding : failed to remap prop instance " << prop._Path << std::endl;
+      return 1;
+    }
+
+    instance._Filename = MakePropResourceName(prop, iPropIndex, instance._Filename);
+    instance._MeshID = meshIDs[instance._MeshID];
+    instance._MaterialID = materialIDs[instance._MaterialID];
+    instance._Visible = prop._Visible;
+
+    _PropBaseTransforms[iPropIndex].push_back(instance._Transform);
+    instance._Transform = propTransform * _PropBaseTransforms[iPropIndex].back();
+
+    const int dstInstanceID = iScene.AddMeshInstance(instance);
+    _PropInstanceIDs[iPropIndex].push_back(dstInstanceID);
+  }
+
+  if ( _PropInstanceIDs[iPropIndex].empty() )
+  {
+    std::cout << "FpsGameSceneBinding : prop loaded no instances " << prop._Path << std::endl;
+    return 1;
+  }
+
+  return 0;
 }
 
 // ----------------------------------------------------------------------------

@@ -111,6 +111,8 @@ void GetMeshName( const tinygltf::Mesh & iGltfMesh, int iIndMesh, int iIndPrim, 
 
   if ( oMeshName.empty() )
     oMeshName = "Mesh_" + std::to_string( iIndMesh );
+  else
+    oMeshName += "_Mesh" + std::to_string(iIndMesh);
 
   if ( iGltfMesh.primitives.size() > 1 )
   {

@@ -16,6 +16,7 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <iostream>
 #include <thread>
@@ -41,6 +42,13 @@ static void ApplyMapSettings( const FpsGameMap & iMap, FpsGameSettings & ioSetti
   ioSettings._ViewWeaponOffset = iMap._Weapon._Offset;
   ioSettings._ViewWeaponRotation = iMap._Weapon._Rotation;
   ioSettings._ViewWeaponScale = iMap._Weapon._Scale;
+}
+
+static bool Test6IsDroppedPropPath( const std::filesystem::path & iPath )
+{
+  std::string ext = iPath.extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(), []( unsigned char c ) { return static_cast<char>(std::tolower(c)); });
+  return ( ".gltf" == ext ) || ( ".glb" == ext );
 }
 
 // ----------------------------------------------------------------------------
@@ -103,6 +111,18 @@ void Test6::FramebufferSizeCallback( GLFWwindow * iWindow, const int iWidth, con
     return;
 
   this_ -> SyncFramebufferResolution(true);
+}
+
+// ----------------------------------------------------------------------------
+// DropCallback
+// ----------------------------------------------------------------------------
+void Test6::DropCallback( GLFWwindow * iWindow, int iCount, const char ** iPaths )
+{
+  auto * const this_ = static_cast<Test6*>(glfwGetWindowUserPointer(iWindow));
+  if ( !this_ )
+    return;
+
+  this_ -> HandleDroppedFiles(iCount, iPaths);
 }
 
 // ----------------------------------------------------------------------------
@@ -173,6 +193,49 @@ void Test6::SetMouseCaptured( bool iCaptured )
   _MouseCaptured = iCaptured;
   _HasLastMousePos = false;
   glfwSetInputMode(_MainWindow.get(), GLFW_CURSOR, _MouseCaptured ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+}
+
+// ----------------------------------------------------------------------------
+// HandleDroppedFiles
+// ----------------------------------------------------------------------------
+void Test6::HandleDroppedFiles( int iCount, const char ** iPaths )
+{
+  if ( !_Editor.IsEnabled() || !iPaths || ( iCount <= 0 ) )
+    return;
+
+  const FpsPlayer & player = _GameWorld.GetPlayer();
+  const float yawRad = MathUtil::ToRadians(player._Yaw);
+  const float pitchRad = MathUtil::ToRadians(player._Pitch);
+  Vec3 forward(std::cos(yawRad) * std::cos(pitchRad),
+               std::sin(pitchRad),
+               std::sin(yawRad) * std::cos(pitchRad));
+  if ( glm::length(forward) <= EPSILON )
+    forward = Vec3(0.f, 0.f, 1.f);
+  else
+    forward = glm::normalize(forward);
+
+  const Vec3 dropPosition = player.EyePosition(_GameSettings) + forward * 4.f;
+  FpsGameEditorContext editorContext = MakeEditorContext();
+
+  int droppedProps = 0;
+  for ( int i = 0; i < iCount; ++i )
+  {
+    if ( !iPaths[i] || !iPaths[i][0] )
+      continue;
+
+    const std::filesystem::path filepath(iPaths[i]);
+    if ( !Test6IsDroppedPropPath(filepath) )
+    {
+      _Editor.SetStatus("Unsupported dropped file: " + filepath.filename().string());
+      continue;
+    }
+
+    if ( _Editor.AddDroppedProp(editorContext, filepath, dropPosition) )
+      ++droppedProps;
+  }
+
+  if ( droppedProps > 1 )
+    _Editor.SetStatus("Dropped " + std::to_string(droppedProps) + " props");
 }
 
 // ----------------------------------------------------------------------------
@@ -1101,6 +1164,7 @@ int Test6::Run()
     glfwSetMouseButtonCallback(_MainWindow.get(), Test6::MouseButtonCallback);
     glfwSetScrollCallback(_MainWindow.get(), Test6::MouseScrollCallback);
     glfwSetKeyCallback(_MainWindow.get(), Test6::KeyCallback);
+    glfwSetDropCallback(_MainWindow.get(), Test6::DropCallback);
 
     glfwMakeContextCurrent(_MainWindow.get());
     glfwSwapInterval(0);
@@ -1199,6 +1263,7 @@ int Test6::Run()
   glfwSetMouseButtonCallback(_MainWindow.get(), nullptr);
   glfwSetScrollCallback(_MainWindow.get(), nullptr);
   glfwSetKeyCallback(_MainWindow.get(), nullptr);
+  glfwSetDropCallback(_MainWindow.get(), nullptr);
 
   return ret;
 }

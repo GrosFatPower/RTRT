@@ -189,13 +189,8 @@ int DeferredRenderer::Update()
 
   if ( _DirtyStates & (unsigned long)DirtyState::Textures )
   {
-    if ( _GenerateMipMaps )
-      GLUtil::SetMinFilter(_TexArrayTEX, GL_LINEAR_MIPMAP_LINEAR);
-    else
-      GLUtil::SetMinFilter(_TexArrayTEX, GL_LINEAR);
-
-    if ( _GenerateMipMaps && _AnisotropicLevel )
-      GLUtil::EnableAnisotropyIfAvailable(_TexArrayTEX, (float)_AnisotropicLevel);
+    if ( 0 != ReloadScene() )
+      return 1;
   }
 
   if ( _DirtyStates & (unsigned long)DirtyState::SceneEnvMap )

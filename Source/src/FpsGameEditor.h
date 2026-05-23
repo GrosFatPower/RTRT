@@ -6,6 +6,7 @@
 #include "KeyInput.h"
 #include "RenderSettings.h"
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -106,6 +107,7 @@ public:
   void SetStatus( const std::string & iMessage );
   void RefreshPropAssets();
   void SyncMapFromRuntimeSettings( FpsGameEditorContext & ioContext );
+  bool AddDroppedProp( FpsGameEditorContext & ioContext, const std::filesystem::path & iPath, const Vec3 & iPosition );
 
   void SyncObject( FpsGameEditorContext & ioContext, int iObjectIndex );
   void SyncProp( FpsGameEditorContext & ioContext, int iPropIndex );

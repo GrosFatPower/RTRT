@@ -128,6 +128,13 @@ static bool EditorIsPropAssetPath( const std::filesystem::path & iPath )
   return ( ".obj" == ext ) || ( ".gltf" == ext ) || ( ".glb" == ext );
 }
 
+static bool EditorIsDroppedPropAssetPath( const std::filesystem::path & iPath )
+{
+  std::string ext = iPath.extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(), []( unsigned char c ) { return static_cast<char>(std::tolower(c)); });
+  return ( ".gltf" == ext ) || ( ".glb" == ext );
+}
+
 static bool EditorPropAssetCombo( const char * iLabel, const std::vector<std::string> & iAssets, std::string & ioPath )
 {
   const char * preview = ioPath.empty() ? "<select prop>" : ioPath.c_str();
@@ -172,6 +179,31 @@ static std::string EditorUniqueName( const std::string & iBaseName, const std::v
     }
   }
   return name;
+}
+
+static bool EditorPathIsUnderAssets( const std::filesystem::path & iPath )
+{
+  std::error_code ec;
+  const std::filesystem::path assetsDir = std::filesystem::weakly_canonical(PathUtils::GetAssetPath(""), ec);
+  if ( ec || assetsDir.empty() )
+    return false;
+
+  ec.clear();
+  const std::filesystem::path filePath = std::filesystem::weakly_canonical(iPath, ec);
+  if ( ec || filePath.empty() )
+    return false;
+
+  const std::filesystem::path relativePath = std::filesystem::relative(filePath, assetsDir, ec);
+  if ( ec || relativePath.empty() )
+    return false;
+
+  for ( const std::filesystem::path & part : relativePath )
+  {
+    if ( ".." == part )
+      return false;
+  }
+
+  return true;
 }
 
 static bool EditorIsBuiltinMaterialName( const std::string & iName )
@@ -582,6 +614,73 @@ void FpsGameEditor::RefreshPropAssets()
     _NewPropAssetIndex = -1;
   else if ( ( _NewPropAssetIndex < 0 ) || ( _NewPropAssetIndex >= static_cast<int>(_PropAssetPaths.size()) ) )
     _NewPropAssetIndex = 0;
+}
+
+// ----------------------------------------------------------------------------
+// AddDroppedEditorProp
+// ----------------------------------------------------------------------------
+bool FpsGameEditor::AddDroppedProp( FpsGameEditorContext & ioContext, const std::filesystem::path & iPath, const Vec3 & iPosition )
+{
+  if ( !ioContext._Scene || !EditorIsDroppedPropAssetPath(iPath) )
+    return false;
+
+  std::error_code ec;
+  std::filesystem::path filepath = std::filesystem::absolute(iPath, ec);
+  if ( ec )
+    filepath = iPath;
+  filepath = filepath.lexically_normal();
+
+  if ( !std::filesystem::exists(filepath, ec) || ec )
+  {
+    SetStatus("Dropped prop file does not exist: " + filepath.generic_string());
+    return false;
+  }
+
+  std::vector<std::string> usedNames;
+  for ( const FpsMapProp & prop : ioContext._Map._Props )
+    usedNames.push_back(prop._Name);
+
+  std::string propName = filepath.stem().string();
+  if ( propName.empty() )
+    propName = "Dropped Prop";
+  if ( std::find(usedNames.begin(), usedNames.end(), propName) != usedNames.end() )
+    propName = EditorUniqueName(propName, usedNames);
+
+  FpsMapProp prop;
+  prop._Name = propName;
+  prop._Path = filepath.generic_string();
+  prop._Position = iPosition;
+  prop._Rotation = Vec3(0.f);
+  prop._Scale = Vec3(1.f);
+  prop._Visible = true;
+
+  ioContext._Map._Props.push_back(prop);
+  const int propIndex = static_cast<int>(ioContext._Map._Props.size()) - 1;
+
+  if ( 0 != ioContext._SceneBinding.LoadProp(*ioContext._Scene, ioContext._Map, propIndex) )
+  {
+    ioContext._Map._Props.pop_back();
+    SetStatus("Failed to load dropped prop: " + filepath.generic_string());
+    return false;
+  }
+
+  _Selection._Kind = FpsEditableKind::Prop;
+  _Selection._Index = propIndex;
+  _Selection._SceneInstanceID = -1;
+  MarkDirty();
+
+  if ( ioContext._Renderer )
+  {
+    ioContext._Renderer -> Notify(DirtyState::SceneInstances);
+    ioContext._Renderer -> Notify(DirtyState::SceneMaterials);
+    ioContext._Renderer -> Notify(DirtyState::Textures);
+  }
+
+  if ( EditorPathIsUnderAssets(filepath) )
+    RefreshPropAssets();
+
+  SetStatus("Dropped prop loaded: " + prop._Name);
+  return true;
 }
 
 // ----------------------------------------------------------------------------

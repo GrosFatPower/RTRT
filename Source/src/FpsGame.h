@@ -163,6 +163,7 @@ public:
   int SyncCamera( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
   int SyncTransforms( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
   int SyncProp( Scene & iScene, const FpsGameMap & iMap, int iPropIndex );
+  int LoadProp( Scene & iScene, const FpsGameMap & iMap, int iPropIndex );
   int SetObjectInstanceVisible( Scene & iScene, int iObjectIndex, bool iVisible );
   const std::vector<int> * GetPropInstanceIDs( int iPropIndex ) const;
   bool HasViewWeapon() const { return !_WeaponInstanceIDs.empty(); }
