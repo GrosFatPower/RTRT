@@ -71,6 +71,7 @@ public:
   double GetAccumulateTime()          const { return _AccumulateTime; }
   double GetDenoiseTime()             const { return _DenoiseTime; }
   double GetRenderToScreenTime()      const { return _RenderToScreenTime; }
+  virtual int GetRenderPassTimings( std::vector<RenderPassTiming> & oTimings ) const override;
 
   virtual PathTracer * AsPathTracer() override { return this; }
 

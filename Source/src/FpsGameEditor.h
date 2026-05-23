@@ -17,6 +17,13 @@ namespace RTRT
 class Renderer;
 class Scene;
 
+struct FpsCpuTiming
+{
+  const char * _Name = "";
+  double       _Seconds = 0.;
+  bool         _Enabled = false;
+};
+
 struct FpsGameEditorContext
 {
   FpsGameEditorContext( GLFWwindow * iWindow,
@@ -39,7 +46,8 @@ struct FpsGameEditorContext
                         int & iDeferredDebugView,
                         bool & iDeferredShowWires,
                         int & iSoftwareDebugView,
-                        bool & iSoftwareShowWires );
+                        bool & iSoftwareShowWires,
+                        const std::vector<FpsCpuTiming> & iCpuTimings );
 
   GLFWwindow           * _Window = nullptr;
   Scene                 * _Scene = nullptr;
@@ -62,6 +70,7 @@ struct FpsGameEditorContext
   bool                  & _DeferredShowWires;
   int                   & _SoftwareDebugView;
   bool                  & _SoftwareShowWires;
+  const std::vector<FpsCpuTiming> & _CpuTimings;
 };
 
 enum class FpsEditableKind

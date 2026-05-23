@@ -171,6 +171,19 @@ int PathTracer::UpdateStats()
 }
 
 // ----------------------------------------------------------------------------
+// GetRenderPassTimings
+// ----------------------------------------------------------------------------
+int PathTracer::GetRenderPassTimings( std::vector<RenderPassTiming> & oTimings ) const
+{
+  oTimings.clear();
+  oTimings.push_back({ "Path trace", _PathTraceTime, true, true });
+  oTimings.push_back({ "Accumulate", _AccumulateTime, true, true });
+  oTimings.push_back({ "Denoise", _DenoiseTime, true, _DenoisedThisFrame });
+  oTimings.push_back({ "Composite / screen", _RenderToScreenTime, true, true });
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // BeginTimer
 // ----------------------------------------------------------------------------
 void PathTracer::BeginTimer( GLuint iTimerId[2] )

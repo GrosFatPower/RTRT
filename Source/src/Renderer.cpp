@@ -30,4 +30,13 @@ void Renderer::SetDebugMode( const int iDebugMode )
   _DebugMode = iDebugMode;
 }
 
+// ----------------------------------------------------------------------------
+// GetRenderPassTimings
+// ----------------------------------------------------------------------------
+int Renderer::GetRenderPassTimings( std::vector<RenderPassTiming> & oTimings ) const
+{
+  oTimings.clear();
+  return 0;
+}
+
 }

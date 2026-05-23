@@ -76,6 +76,7 @@ public:
   void SetAnisotropicLevel(int iLevel);
   int GetAnisotropicLevel() const { return _AnisotropicLevel; }
   float GetEffectiveShadowFar() const { return _ShadowFar; }
+  virtual int GetRenderPassTimings( std::vector<RenderPassTiming> & oTimings ) const override;
 
   virtual DeferredRenderer * AsDeferredRenderer() override { return this; }
 
@@ -91,6 +92,8 @@ protected:
   int InitializeSSAO();
   int InitializeSSR();
   int InitializeBRDFLUT();
+  int InitializeStats();
+  int UpdateStats();
 
   int RecompileShaders();
 
@@ -113,6 +116,11 @@ protected:
   bool IsTransparentMaterial(int iMaterialID);
   void BuildTransparentMeshTriangleData( size_t iMeshID, const std::vector<Vec3> & iPositions, const std::vector<uint32_t> & iIndices );
   bool UpdateSortedTransparentMeshIndices( int iMeshID, const Mat4x4 & iModel, const Mat4x4 & iView );
+
+  void BeginTimer( int iTimerID );
+  void EndTimer( int iTimerID );
+  double ReadTimer( int iTimerID );
+  void SetTimingEnabled( int iTimerID, bool iEnabled );
 
   void ComputeSceneBounds();
   float ComputeAutoShadowFar(const Vec3 & iLightPos) const;
@@ -222,6 +230,25 @@ protected:
   // Textures filtering
   bool _GenerateMipMaps = true;
   int  _AnisotropicLevel = 16;
+
+  enum TimingID
+  {
+    TimingShadowMap = 0,
+    TimingGBuffer,
+    TimingSSAO,
+    TimingSSR,
+    TimingLighting,
+    TimingTransparency,
+    TimingWireframe,
+    TimingSSRSourceCopy,
+    TimingCompositeScreen,
+    TimingCount
+  };
+
+  std::array<double, TimingCount> _PassTimes = {};
+  std::array<bool, TimingCount>   _PassEnabled = {};
+  std::array<bool, TimingCount>   _TimerWritten = {};
+  std::array<std::array<GLuint, 2>, TimingCount> _TimerIDs = {};
 };
 
 } // namespace RTRT

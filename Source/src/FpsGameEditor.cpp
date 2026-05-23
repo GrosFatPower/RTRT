@@ -55,7 +55,8 @@ FpsGameEditorContext::FpsGameEditorContext( GLFWwindow * iWindow,
                                             int & iDeferredDebugView,
                                             bool & iDeferredShowWires,
                                             int & iSoftwareDebugView,
-                                            bool & iSoftwareShowWires )
+                                            bool & iSoftwareShowWires,
+                                            const std::vector<FpsCpuTiming> & iCpuTimings )
 : _Window(iWindow)
 , _Scene(iScene)
 , _Renderer(iRenderer)
@@ -77,6 +78,7 @@ FpsGameEditorContext::FpsGameEditorContext( GLFWwindow * iWindow,
 , _DeferredShowWires(iDeferredShowWires)
 , _SoftwareDebugView(iSoftwareDebugView)
 , _SoftwareShowWires(iSoftwareShowWires)
+, _CpuTimings(iCpuTimings)
 {
 }
 
@@ -2169,16 +2171,60 @@ int FpsGameEditor::DrawPerformanceUI( FpsGameEditorContext & ioContext )
   ImGui::Text("Render time           : %.3f ms/frame", ioContext._FrameTime * 1000.);
   ImGui::Text("Rendered frames       : %u", ioContext._NbRenderedFrames);
 
+  if ( !ioContext._CpuTimings.empty() )
+  {
+    double cpuFrameTotal = 0.;
+    ImGui::Separator();
+    ImGui::Text("CPU frame");
+    for ( const FpsCpuTiming & timing : ioContext._CpuTimings )
+    {
+      if ( timing._Enabled )
+      {
+        ImGui::Text("%-24s : %.3f ms [CPU]", timing._Name, timing._Seconds * 1000.);
+        cpuFrameTotal += timing._Seconds;
+      }
+      else
+        ImGui::Text("%-24s : -- [CPU]", timing._Name);
+    }
+    ImGui::Text("CPU frame total       : %.3f ms", cpuFrameTotal * 1000.);
+  }
+
+  if ( ioContext._Renderer )
+  {
+    std::vector<RenderPassTiming> timings;
+    ioContext._Renderer -> GetRenderPassTimings(timings);
+    if ( !timings.empty() )
+    {
+      double cpuTotal = 0.;
+      double gpuTotal = 0.;
+      ImGui::Separator();
+      ImGui::Text("Render passes");
+
+      for ( const RenderPassTiming & timing : timings )
+      {
+        if ( timing._Enabled )
+        {
+          ImGui::Text("%-24s : %.3f ms [%s]", timing._Name, timing._Seconds * 1000., timing._GPU ? "GPU" : "CPU");
+          if ( timing._GPU )
+            gpuTotal += timing._Seconds;
+          else
+            cpuTotal += timing._Seconds;
+        }
+        else
+          ImGui::Text("%-24s : -- [%s]", timing._Name, timing._GPU ? "GPU" : "CPU");
+      }
+
+      ImGui::Text("CPU pass total        : %.3f ms", cpuTotal * 1000.);
+      ImGui::Text("GPU pass total        : %.3f ms", gpuTotal * 1000.);
+    }
+  }
+
   if ( ( FpsRendererMode::PhotoPathTracer == ioContext._GameSettings._RendererMode ) && ioContext._Renderer )
   {
     PathTracer * pathTracer = ioContext._Renderer -> AsPathTracer();
     if ( pathTracer )
     {
       ImGui::Separator();
-      ImGui::Text("Path trace time       : %.3f ms", pathTracer -> GetPathTraceTime() * 1000.);
-      ImGui::Text("Accumulate time       : %.3f ms", pathTracer -> GetAccumulateTime() * 1000.);
-      ImGui::Text("Denoise time          : %.3f ms", pathTracer -> GetDenoiseTime() * 1000.);
-      ImGui::Text("Render to screen time : %.3f ms", pathTracer -> GetRenderToScreenTime() * 1000.);
       ImGui::Text("Frame number          : %d", pathTracer -> GetFrameNum());
       ImGui::Text("Nb complete frames    : %d", pathTracer -> GetNbCompleteFrames());
     }

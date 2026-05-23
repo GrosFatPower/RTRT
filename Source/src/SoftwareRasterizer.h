@@ -11,6 +11,7 @@
 
 #include "GL/glew.h"
 
+#include <array>
 #include <memory>
 #include <mutex>
 
@@ -53,6 +54,7 @@ public:
   virtual int RenderToTexture() override;
   virtual int RenderToScreen() override;
   virtual int RenderToFile(const std::filesystem::path& iFilePath) override;
+  virtual int GetRenderPassTimings( std::vector<RenderPassTiming> & oTimings ) const override;
 
   virtual SoftwareRasterizer* AsSoftwareRasterizer() override { return this; }
 
@@ -71,6 +73,8 @@ protected:
   int ResizeRenderTarget();
 
   int InitializeFrameBuffers();
+  int InitializeStats();
+  int UpdateStats();
   int RecompileShaders();
 
   int UpdateNumberOfWorkers(bool iForce = false);
@@ -139,6 +143,9 @@ protected:
 #endif
 
   void ComputeLOD( RasterData::RasterTriangle & ioRasterTri );
+  void BeginTimer( int iTimerID );
+  void EndTimer( int iTimerID );
+  double ReadTimer( int iTimerID );
 
 protected:
 
@@ -182,6 +189,23 @@ protected:
   unsigned int _FrameNum = 1;
   unsigned int _NbCompleteFrames = 0;
   RasterData::FrameBuffer _ImageBuffer;
+
+  enum TimingID
+  {
+    TimingProcessVertices = 0,
+    TimingClipTriangles,
+    TimingRasterize,
+    TimingProcessFragments,
+    TimingRenderScene,
+    TimingCopyToRenderTarget,
+    TimingCompositeScreen,
+    TimingCount
+  };
+
+  std::array<double, TimingCount> _PassTimes = {};
+  std::array<bool, TimingCount>   _PassEnabled = {};
+  std::array<bool, TimingCount>   _TimerWritten = {};
+  std::array<std::array<GLuint, 2>, TimingCount> _TimerIDs = {};
 
   // Scene data
   int                                                  _CachedMeshInstanceCount = 0;

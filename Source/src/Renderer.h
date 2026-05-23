@@ -3,6 +3,7 @@
 
 #include "RenderSettings.h"
 #include <filesystem> // C++17
+#include <vector>
 
 namespace RTRT
 {
@@ -24,6 +25,14 @@ enum class DirtyState
   Textures       = 0x40
 };
 
+struct RenderPassTiming
+{
+  const char * _Name = "";
+  double       _Seconds = 0.;
+  bool         _GPU = false;
+  bool         _Enabled = false;
+};
+
 class Renderer
 {
 public:
@@ -37,6 +46,7 @@ public:
   virtual int RenderToTexture() = 0;
   virtual int RenderToScreen() = 0;
   virtual int RenderToFile( const std::filesystem::path & iFilePath ) = 0;
+  virtual int GetRenderPassTimings( std::vector<RenderPassTiming> & oTimings ) const;
 
   void Notify( DirtyState iState ) { _DirtyStates |= (unsigned long)iState; };
 

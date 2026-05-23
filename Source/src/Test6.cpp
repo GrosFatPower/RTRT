@@ -111,6 +111,8 @@ void Test6::FramebufferSizeCallback( GLFWwindow * iWindow, const int iWidth, con
 Test6::Test6( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iScreenHeight )
 : BaseTest(iMainWindow, iScreenWidth, iScreenHeight)
 {
+  InitializeCpuTimings();
+
   _Settings._WindowResolution.x = iScreenWidth;
   _Settings._WindowResolution.y = iScreenHeight;
   _Settings._RenderResolution.x = iScreenWidth;
@@ -207,6 +209,87 @@ void Test6::ApplyRendererDefaults()
   }
 }
 
+// ----------------------------------------------------------------------------
+// InitializeCpuTimings
+// ----------------------------------------------------------------------------
+void Test6::InitializeCpuTimings()
+{
+  _CpuTimings.assign(CpuTimingCount, FpsCpuTiming());
+  _CpuTimings[CpuProcessInput]._Name = "Process input";
+  _CpuTimings[CpuUpdateGame]._Name = "Update game";
+  _CpuTimings[CpuUpdateBoids]._Name = "Update boids";
+  _CpuTimings[CpuBoidsSimulation]._Name = "Boids simulation";
+  _CpuTimings[CpuBoidsSceneSync]._Name = "Boids scene sync";
+  _CpuTimings[CpuBoidsRendererNotify]._Name = "Boids renderer notify";
+  _CpuTimings[CpuRendererUpdate]._Name = "Renderer update";
+  _CpuTimings[CpuRenderToTexture]._Name = "Render to texture call";
+  _CpuTimings[CpuRenderToScreen]._Name = "Render to screen call";
+  _CpuTimings[CpuRenderToFile]._Name = "Render to file";
+  _CpuTimings[CpuDrawUI]._Name = "Draw UI";
+  _CpuTimings[CpuSwapBuffers]._Name = "Swap buffers";
+  _DisplayedCpuTimings = _CpuTimings;
+}
+
+// ----------------------------------------------------------------------------
+// ResetCpuTimings
+// ----------------------------------------------------------------------------
+void Test6::ResetCpuTimings()
+{
+  if ( _CpuTimings.size() != CpuTimingCount )
+    InitializeCpuTimings();
+
+  for ( FpsCpuTiming & timing : _CpuTimings )
+  {
+    timing._Seconds = 0.;
+    timing._Enabled = false;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// BeginCpuTiming
+// ----------------------------------------------------------------------------
+void Test6::BeginCpuTiming( int iTimingID )
+{
+  if ( ( iTimingID < 0 ) || ( iTimingID >= CpuTimingCount ) )
+    return;
+
+  if ( _CpuTimings.size() != CpuTimingCount )
+    InitializeCpuTimings();
+
+  _CpuTimings[iTimingID]._Enabled = true;
+  _CpuTimingStart[iTimingID] = glfwGetTime();
+}
+
+// ----------------------------------------------------------------------------
+// EndCpuTiming
+// ----------------------------------------------------------------------------
+void Test6::EndCpuTiming( int iTimingID )
+{
+  if ( ( iTimingID < 0 ) || ( iTimingID >= CpuTimingCount ) )
+    return;
+
+  if ( _CpuTimings.size() != CpuTimingCount )
+    return;
+
+  _CpuTimings[iTimingID]._Seconds += glfwGetTime() - _CpuTimingStart[iTimingID];
+}
+
+// ----------------------------------------------------------------------------
+// SetCpuTimingEnabled
+// ----------------------------------------------------------------------------
+void Test6::SetCpuTimingEnabled( int iTimingID, bool iEnabled )
+{
+  if ( ( iTimingID < 0 ) || ( iTimingID >= CpuTimingCount ) )
+    return;
+
+  if ( _CpuTimings.size() != CpuTimingCount )
+    InitializeCpuTimings();
+
+  _CpuTimings[iTimingID]._Enabled = iEnabled;
+  if ( !iEnabled )
+    _CpuTimings[iTimingID]._Seconds = 0.;
+}
+
 
 // ----------------------------------------------------------------------------
 // InitializeUI
@@ -237,7 +320,8 @@ FpsGameEditorContext Test6::MakeEditorContext()
 {
   return FpsGameEditorContext(_MainWindow.get(), _Scene.get(), _Renderer.get(), _Settings, _KeyInput, _GameSettings, _GameWorld, _SceneBinding, _Map, _MapPath, _MapLoaded, _ReloadScene,
                               _FrameRate, _FrameTime, _DeltaTime, _NbRenderedFrames,
-                              _DebugMode, _DeferredDebugView, _DeferredShowWires, _SoftwareDebugView, _SoftwareShowWires);
+                              _DebugMode, _DeferredDebugView, _DeferredShowWires, _SoftwareDebugView, _SoftwareShowWires,
+                              _DisplayedCpuTimings);
 }
 
 // ----------------------------------------------------------------------------
@@ -631,12 +715,17 @@ int Test6::ProcessInput()
 // ----------------------------------------------------------------------------
 int Test6::UpdateGame()
 {
+  BeginCpuTiming(CpuUpdateGame);
+
   if ( _ReloadScene )
   {
     _ReloadScene = false;
     _Renderer.reset();
     if ( 0 != InitializeScene() )
+    {
+      EndCpuTiming(CpuUpdateGame);
       return 1;
+    }
     _ReloadRenderer = true;
   }
 
@@ -644,12 +733,19 @@ int Test6::UpdateGame()
   {
     _ReloadRenderer = false;
     if ( 0 != InitializeRenderer() )
+    {
+      EndCpuTiming(CpuUpdateGame);
       return 1;
+    }
   }
 
   if ( 0 != UpdateBoids() )
+  {
+    EndCpuTiming(CpuUpdateGame);
     return 1;
+  }
 
+  EndCpuTiming(CpuUpdateGame);
   return 0;
 }
 
@@ -658,32 +754,71 @@ int Test6::UpdateGame()
 // ----------------------------------------------------------------------------
 int Test6::UpdateBoids()
 {
+  BeginCpuTiming(CpuUpdateBoids);
+
   if ( !_Scene || ( FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode ) )
+  {
+    EndCpuTiming(CpuUpdateBoids);
+    SetCpuTimingEnabled(CpuUpdateBoids, false);
     return 0;
+  }
 
   if ( _BoidSimulations.size() != _BoidBindings.size() )
+  {
+    EndCpuTiming(CpuUpdateBoids);
     return 1;
+  }
 
   bool boidsDirty = false;
+  bool boidsUpdated = false;
   for ( int i = 0; i < static_cast<int>(_BoidSimulations.size()); ++i )
   {
     if ( i >= static_cast<int>(_BoidSettings.size()) )
+    {
+      EndCpuTiming(CpuUpdateBoids);
       return 1;
+    }
 
     if ( _BoidSettings[i]._Paused )
       continue;
 
+    BeginCpuTiming(CpuBoidsSimulation);
     if ( 0 != _BoidSimulations[i].Update(static_cast<float>(_DeltaTime), _BoidSettings[i]) )
+    {
+      EndCpuTiming(CpuBoidsSimulation);
+      EndCpuTiming(CpuUpdateBoids);
       return 1;
+    }
+    EndCpuTiming(CpuBoidsSimulation);
 
+    BeginCpuTiming(CpuBoidsSceneSync);
     if ( 0 != _BoidBindings[i].SyncTransforms(*_Scene, _BoidSimulations[i], _BoidSettings[i]) )
+    {
+      EndCpuTiming(CpuBoidsSceneSync);
+      EndCpuTiming(CpuUpdateBoids);
       return 1;
+    }
+    EndCpuTiming(CpuBoidsSceneSync);
 
+    boidsUpdated = true;
     boidsDirty = true;
   }
 
   if ( boidsDirty && _Renderer )
+  {
+    BeginCpuTiming(CpuBoidsRendererNotify);
     _Renderer -> Notify(DirtyState::SceneInstances);
+    EndCpuTiming(CpuBoidsRendererNotify);
+  }
+
+  EndCpuTiming(CpuUpdateBoids);
+  if ( !boidsUpdated )
+  {
+    SetCpuTimingEnabled(CpuUpdateBoids, false);
+    SetCpuTimingEnabled(CpuBoidsSimulation, false);
+    SetCpuTimingEnabled(CpuBoidsSceneSync, false);
+    SetCpuTimingEnabled(CpuBoidsRendererNotify, false);
+  }
 
   return 0;
 }
@@ -1005,28 +1140,51 @@ int Test6::Run()
     while ( !glfwWindowShouldClose(_MainWindow.get()) )
     {
       UpdateCPUTime();
+      ResetCpuTimings();
 
       if ( 0 != UpdateGame() )
         break;
 
+      BeginCpuTiming(CpuProcessInput);
       if ( 0 != ProcessInput() )
+      {
+        EndCpuTiming(CpuProcessInput);
         break;
+      }
+      EndCpuTiming(CpuProcessInput);
 
+      BeginCpuTiming(CpuRendererUpdate);
       _Renderer -> Update();
+      EndCpuTiming(CpuRendererUpdate);
+
+      BeginCpuTiming(CpuRenderToTexture);
       _Renderer -> RenderToTexture();
+      EndCpuTiming(CpuRenderToTexture);
+
+      BeginCpuTiming(CpuRenderToScreen);
       _Renderer -> RenderToScreen();
+      EndCpuTiming(CpuRenderToScreen);
 
       if ( _RenderToFile )
       {
+        BeginCpuTiming(CpuRenderToFile);
         _Renderer -> RenderToFile(_CaptureOutputPath);
+        EndCpuTiming(CpuRenderToFile);
         _RenderToFile = false;
       }
+      else
+        SetCpuTimingEnabled(CpuRenderToFile, false);
 
       _Renderer -> Done();
 
+      BeginCpuTiming(CpuDrawUI);
       DrawUI();
+      EndCpuTiming(CpuDrawUI);
 
+      BeginCpuTiming(CpuSwapBuffers);
       glfwSwapBuffers(_MainWindow.get());
+      EndCpuTiming(CpuSwapBuffers);
+      _DisplayedCpuTimings = _CpuTimings;
       _NbRenderedFrames++;
     }
   } while ( 0 );

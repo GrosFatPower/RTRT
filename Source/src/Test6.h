@@ -62,6 +62,11 @@ protected:
   void SetMouseCaptured( bool iCaptured );
 
   void ApplyRendererDefaults();
+  void InitializeCpuTimings();
+  void ResetCpuTimings();
+  void BeginCpuTiming( int iTimingID );
+  void EndCpuTiming( int iTimingID );
+  void SetCpuTimingEnabled( int iTimingID, bool iEnabled );
 
   FpsGameEditorContext MakeEditorContext();
   FpsGameHudContext MakeHudContext() const;
@@ -107,6 +112,27 @@ protected:
 
   bool                      _RenderToFile = false;
   std::filesystem::path     _CaptureOutputPath;
+
+  enum CpuTimingID
+  {
+    CpuProcessInput = 0,
+    CpuUpdateGame,
+    CpuUpdateBoids,
+    CpuBoidsSimulation,
+    CpuBoidsSceneSync,
+    CpuBoidsRendererNotify,
+    CpuRendererUpdate,
+    CpuRenderToTexture,
+    CpuRenderToScreen,
+    CpuRenderToFile,
+    CpuDrawUI,
+    CpuSwapBuffers,
+    CpuTimingCount
+  };
+
+  std::vector<FpsCpuTiming> _CpuTimings;
+  std::vector<FpsCpuTiming> _DisplayedCpuTimings;
+  double                    _CpuTimingStart[CpuTimingCount] = {};
 };
 
 }

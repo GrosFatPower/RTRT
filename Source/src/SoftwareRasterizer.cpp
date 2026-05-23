@@ -110,6 +110,14 @@ SoftwareRasterizer::SoftwareRasterizer(Scene& iScene, RenderSettings& iSettings)
 // ----------------------------------------------------------------------------
 SoftwareRasterizer::~SoftwareRasterizer()
 {
+  for ( auto & timerIDs : _TimerIDs )
+  {
+    if ( timerIDs[0] )
+      glDeleteQueries(1, &timerIDs[0]);
+    if ( timerIDs[1] )
+      glDeleteQueries(1, &timerIDs[1]);
+  }
+
   GLUtil::DeleteFBO(_RenderTargetFBO);
 
   GLUtil::DeleteTEX(_RenderTargetTEX);
@@ -138,6 +146,12 @@ int SoftwareRasterizer::Initialize()
   if (0 != InitializeFrameBuffers())
   {
     std::cout << "SoftwareRasterizer : Failed to initialize frame buffers !" << std::endl;
+    return 1;
+  }
+
+  if ( 0 != InitializeStats() )
+  {
+    std::cout << "SoftwareRasterizer : Failed to initialize frame statistics !" << std::endl;
     return 1;
   }
 
@@ -178,6 +192,8 @@ int SoftwareRasterizer::UpdateNumberOfWorkers(bool iForce)
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::Update()
 {
+  UpdateStats();
+
   if (_DirtyStates & (unsigned long)DirtyState::RenderSettings)
   {
     this->ResizeRenderTarget();
@@ -219,6 +235,125 @@ int SoftwareRasterizer::Done()
 
   CleanStates();
 
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeStats
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::InitializeStats()
+{
+  _PassTimes.fill(0.);
+  _PassEnabled.fill(false);
+  _TimerWritten.fill(false);
+
+  for ( auto & timerIDs : _TimerIDs )
+  {
+    if ( !timerIDs[0] )
+      glGenQueries(1, &timerIDs[0]);
+    if ( !timerIDs[1] )
+      glGenQueries(1, &timerIDs[1]);
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateStats
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::UpdateStats()
+{
+  if ( _TimerWritten[TimingCopyToRenderTarget] )
+    _PassTimes[TimingCopyToRenderTarget] = ReadTimer(TimingCopyToRenderTarget);
+  else
+    _PassTimes[TimingCopyToRenderTarget] = 0.;
+
+  if ( _TimerWritten[TimingCompositeScreen] )
+    _PassTimes[TimingCompositeScreen] = ReadTimer(TimingCompositeScreen);
+  else
+    _PassTimes[TimingCompositeScreen] = 0.;
+
+  _PassEnabled.fill(false);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// BeginTimer
+// ----------------------------------------------------------------------------
+void SoftwareRasterizer::BeginTimer( int iTimerID )
+{
+  if ( ( iTimerID < 0 ) || ( iTimerID >= TimingCount ) )
+    return;
+
+  _PassEnabled[iTimerID] = true;
+  _TimerWritten[iTimerID] = true;
+#if defined(__APPLE__)
+  glBeginQuery(GL_TIME_ELAPSED, _TimerIDs[iTimerID][0]);
+#else
+  glQueryCounter(_TimerIDs[iTimerID][0], GL_TIMESTAMP);
+#endif
+}
+
+// ----------------------------------------------------------------------------
+// EndTimer
+// ----------------------------------------------------------------------------
+void SoftwareRasterizer::EndTimer( int iTimerID )
+{
+  if ( ( iTimerID < 0 ) || ( iTimerID >= TimingCount ) )
+    return;
+
+#if defined(__APPLE__)
+  glEndQuery(GL_TIME_ELAPSED);
+#else
+  glQueryCounter(_TimerIDs[iTimerID][1], GL_TIMESTAMP);
+#endif
+}
+
+// ----------------------------------------------------------------------------
+// ReadTimer
+// ----------------------------------------------------------------------------
+double SoftwareRasterizer::ReadTimer( int iTimerID )
+{
+  if ( ( iTimerID < 0 ) || ( iTimerID >= TimingCount ) )
+    return 0.;
+
+  GLuint64 startTime = 0, endTime = 0, executionTime = 0;
+  GLint resultAvailable = 0;
+
+#if defined(__APPLE__)
+  while ( !resultAvailable )
+    glGetQueryObjectiv(_TimerIDs[iTimerID][0], GL_QUERY_RESULT_AVAILABLE, &resultAvailable);
+  glGetQueryObjectui64v(_TimerIDs[iTimerID][0], GL_QUERY_RESULT, &executionTime);
+#else
+  while ( !resultAvailable )
+    glGetQueryObjectiv(_TimerIDs[iTimerID][0], GL_QUERY_RESULT_AVAILABLE, &resultAvailable);
+  glGetQueryObjectui64v(_TimerIDs[iTimerID][0], GL_QUERY_RESULT, &startTime);
+
+  resultAvailable = 0;
+  while ( !resultAvailable )
+    glGetQueryObjectiv(_TimerIDs[iTimerID][1], GL_QUERY_RESULT_AVAILABLE, &resultAvailable);
+  glGetQueryObjectui64v(_TimerIDs[iTimerID][1], GL_QUERY_RESULT, &endTime);
+
+  executionTime = endTime - startTime;
+#endif
+
+  return (double)executionTime / 1000000000.;
+}
+
+// ----------------------------------------------------------------------------
+// GetRenderPassTimings
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::GetRenderPassTimings( std::vector<RenderPassTiming> & oTimings ) const
+{
+  oTimings.clear();
+  oTimings.push_back({ "Process vertices", _PassTimes[TimingProcessVertices], false, _PassEnabled[TimingProcessVertices] });
+  oTimings.push_back({ "Clip triangles", _PassTimes[TimingClipTriangles], false, _PassEnabled[TimingClipTriangles] });
+  oTimings.push_back({ "Rasterize", _PassTimes[TimingRasterize], false, _PassEnabled[TimingRasterize] });
+  oTimings.push_back({ "Process fragments", _PassTimes[TimingProcessFragments], false, _PassEnabled[TimingProcessFragments] });
+  oTimings.push_back({ "Render scene", _PassTimes[TimingRenderScene], false, _PassEnabled[TimingRenderScene] });
+  oTimings.push_back({ "Copy to render target", _PassTimes[TimingCopyToRenderTarget], true, _PassEnabled[TimingCopyToRenderTarget] });
+  oTimings.push_back({ "Composite / screen", _PassTimes[TimingCompositeScreen], true, _PassEnabled[TimingCompositeScreen] });
   return 0;
 }
 
@@ -292,12 +427,16 @@ int SoftwareRasterizer::BindRenderToTextureTextures()
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::RenderToTexture()
 {
+  BeginTimer(TimingCopyToRenderTarget);
+
   glBindFramebuffer(GL_FRAMEBUFFER, _RenderTargetFBO._Handle);
   glViewport(0, 0, RenderWidth(), RenderHeight());
 
   this->BindRenderToTextureTextures();
 
   _Quad.Render(*_RenderToTextureShader);
+
+  EndTimer(TimingCopyToRenderTarget);
 
   return 0;
 }
@@ -336,12 +475,16 @@ int SoftwareRasterizer::BindRenderToScreenTextures()
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::RenderToScreen()
 {
+  BeginTimer(TimingCompositeScreen);
+
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
 
   this->BindRenderToScreenTextures();
 
   _Quad.Render(*_RenderToScreenShader);
+
+  EndTimer(TimingCompositeScreen);
 
   return 0;
 }
@@ -1086,21 +1229,48 @@ void SoftwareRasterizer::RenderBackground(Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY, 
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::RenderScene()
 {
+  const double sceneStartTime = glfwGetTime();
+  _PassEnabled[TimingRenderScene] = true;
+  _PassEnabled[TimingProcessVertices] = true;
+  _PassEnabled[TimingClipTriangles] = false;
+  _PassEnabled[TimingRasterize] = false;
+  _PassEnabled[TimingProcessFragments] = false;
+  _PassTimes[TimingClipTriangles] = 0.;
+  _PassTimes[TimingRasterize] = 0.;
+  _PassTimes[TimingProcessFragments] = 0.;
+
+  const double verticesStartTime = glfwGetTime();
   int ko = ProcessVertices();
+  _PassTimes[TimingProcessVertices] = glfwGetTime() - verticesStartTime;
 
   if (!ko)
   {
     Mat4x4 RasterM;
     _Scene.GetCamera().ComputeRasterMatrix(RenderWidth(), RenderHeight(), RasterM);
 
+    _PassEnabled[TimingClipTriangles] = true;
+    const double clipStartTime = glfwGetTime();
     ko = ClipTriangles(RasterM);
+    _PassTimes[TimingClipTriangles] = glfwGetTime() - clipStartTime;
   }
 
   if (!ko)
+  {
+    _PassEnabled[TimingRasterize] = true;
+    const double rasterStartTime = glfwGetTime();
     ko = Rasterize();
+    _PassTimes[TimingRasterize] = glfwGetTime() - rasterStartTime;
+  }
 
   if (!ko)
+  {
+    _PassEnabled[TimingProcessFragments] = true;
+    const double fragmentsStartTime = glfwGetTime();
     ko = ProcessFragments();
+    _PassTimes[TimingProcessFragments] = glfwGetTime() - fragmentsStartTime;
+  }
+
+  _PassTimes[TimingRenderScene] = glfwGetTime() - sceneStartTime;
 
   return ko;
 }

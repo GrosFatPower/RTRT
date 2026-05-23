@@ -78,6 +78,14 @@ DeferredRenderer::DeferredRenderer(Scene& iScene, RenderSettings& iSettings)
 // ----------------------------------------------------------------------------
 DeferredRenderer::~DeferredRenderer()
 {
+  for ( auto & timerIDs : _TimerIDs )
+  {
+    if ( timerIDs[0] )
+      glDeleteQueries(1, &timerIDs[0]);
+    if ( timerIDs[1] )
+      glDeleteQueries(1, &timerIDs[1]);
+  }
+
   GLUtil::DeleteFBO(_GBufferFBO);
   GLUtil::DeleteFBO(_LightingFBO);
   GLUtil::DeleteFBO(_BRDFFBO);
@@ -158,6 +166,12 @@ int DeferredRenderer::Initialize()
     return 1;
   }
 
+  if ( 0 != InitializeStats() )
+  {
+    std::cout << "DeferredRenderer : Failed to initialize frame statistics !" << std::endl;
+    return 1;
+  }
+
   return 0;
 }
 
@@ -166,6 +180,8 @@ int DeferredRenderer::Initialize()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::Update()
 {
+  UpdateStats();
+
   if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
   {
     this -> ResizeRenderTarget();
@@ -215,6 +231,138 @@ int DeferredRenderer::Done()
 
   CleanStates();
 
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeStats
+// ----------------------------------------------------------------------------
+int DeferredRenderer::InitializeStats()
+{
+  _PassTimes.fill(0.);
+  _PassEnabled.fill(false);
+  _TimerWritten.fill(false);
+
+  for ( auto & timerIDs : _TimerIDs )
+  {
+    if ( !timerIDs[0] )
+      glGenQueries(1, &timerIDs[0]);
+    if ( !timerIDs[1] )
+      glGenQueries(1, &timerIDs[1]);
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateStats
+// ----------------------------------------------------------------------------
+int DeferredRenderer::UpdateStats()
+{
+  for ( int i = 0; i < TimingCount; ++i )
+  {
+    if ( _TimerWritten[i] )
+      _PassTimes[i] = ReadTimer(i);
+    else
+      _PassTimes[i] = 0.;
+  }
+
+  _PassEnabled.fill(false);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// BeginTimer
+// ----------------------------------------------------------------------------
+void DeferredRenderer::BeginTimer( int iTimerID )
+{
+  if ( ( iTimerID < 0 ) || ( iTimerID >= TimingCount ) )
+    return;
+
+  _PassEnabled[iTimerID] = true;
+  _TimerWritten[iTimerID] = true;
+#if defined(__APPLE__)
+  glBeginQuery(GL_TIME_ELAPSED, _TimerIDs[iTimerID][0]);
+#else
+  glQueryCounter(_TimerIDs[iTimerID][0], GL_TIMESTAMP);
+#endif
+}
+
+// ----------------------------------------------------------------------------
+// EndTimer
+// ----------------------------------------------------------------------------
+void DeferredRenderer::EndTimer( int iTimerID )
+{
+  if ( ( iTimerID < 0 ) || ( iTimerID >= TimingCount ) )
+    return;
+
+#if defined(__APPLE__)
+  glEndQuery(GL_TIME_ELAPSED);
+#else
+  glQueryCounter(_TimerIDs[iTimerID][1], GL_TIMESTAMP);
+#endif
+}
+
+// ----------------------------------------------------------------------------
+// ReadTimer
+// ----------------------------------------------------------------------------
+double DeferredRenderer::ReadTimer( int iTimerID )
+{
+  if ( ( iTimerID < 0 ) || ( iTimerID >= TimingCount ) )
+    return 0.;
+
+  GLuint64 startTime = 0, endTime = 0, executionTime = 0;
+  GLint resultAvailable = 0;
+
+#if defined(__APPLE__)
+  while ( !resultAvailable )
+    glGetQueryObjectiv(_TimerIDs[iTimerID][0], GL_QUERY_RESULT_AVAILABLE, &resultAvailable);
+  glGetQueryObjectui64v(_TimerIDs[iTimerID][0], GL_QUERY_RESULT, &executionTime);
+#else
+  while ( !resultAvailable )
+    glGetQueryObjectiv(_TimerIDs[iTimerID][0], GL_QUERY_RESULT_AVAILABLE, &resultAvailable);
+  glGetQueryObjectui64v(_TimerIDs[iTimerID][0], GL_QUERY_RESULT, &startTime);
+
+  resultAvailable = 0;
+  while ( !resultAvailable )
+    glGetQueryObjectiv(_TimerIDs[iTimerID][1], GL_QUERY_RESULT_AVAILABLE, &resultAvailable);
+  glGetQueryObjectui64v(_TimerIDs[iTimerID][1], GL_QUERY_RESULT, &endTime);
+
+  executionTime = endTime - startTime;
+#endif
+
+  return (double)executionTime / 1000000000.;
+}
+
+// ----------------------------------------------------------------------------
+// SetTimingEnabled
+// ----------------------------------------------------------------------------
+void DeferredRenderer::SetTimingEnabled( int iTimerID, bool iEnabled )
+{
+  if ( ( iTimerID < 0 ) || ( iTimerID >= TimingCount ) )
+    return;
+
+  _PassEnabled[iTimerID] = iEnabled;
+  if ( !iEnabled )
+    _PassTimes[iTimerID] = 0.;
+}
+
+// ----------------------------------------------------------------------------
+// GetRenderPassTimings
+// ----------------------------------------------------------------------------
+int DeferredRenderer::GetRenderPassTimings( std::vector<RenderPassTiming> & oTimings ) const
+{
+  oTimings.clear();
+  oTimings.push_back({ "Shadow map", _PassTimes[TimingShadowMap], true, _PassEnabled[TimingShadowMap] });
+  oTimings.push_back({ "G-buffer", _PassTimes[TimingGBuffer], true, _PassEnabled[TimingGBuffer] });
+  oTimings.push_back({ "SSAO", _PassTimes[TimingSSAO], true, _PassEnabled[TimingSSAO] });
+  oTimings.push_back({ "SSR", _PassTimes[TimingSSR], true, _PassEnabled[TimingSSR] });
+  oTimings.push_back({ "Lighting", _PassTimes[TimingLighting], true, _PassEnabled[TimingLighting] });
+  oTimings.push_back({ "Transparency", _PassTimes[TimingTransparency], true, _PassEnabled[TimingTransparency] });
+  oTimings.push_back({ "Wireframe", _PassTimes[TimingWireframe], true, _PassEnabled[TimingWireframe] });
+  oTimings.push_back({ "SSR source copy", _PassTimes[TimingSSRSourceCopy], true, _PassEnabled[TimingSSRSourceCopy] });
+  oTimings.push_back({ "Composite / screen", _PassTimes[TimingCompositeScreen], true, _PassEnabled[TimingCompositeScreen] });
   return 0;
 }
 
@@ -1975,11 +2123,19 @@ int DeferredRenderer::RenderTransparent()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::RenderToTexture()
 {
+  _PassEnabled.fill(false);
+
   if ( _Settings._ShadowMapping && _HasShadowLight )
+  {
+    BeginTimer(TimingShadowMap);
     RenderShadowMap();
+    EndTimer(TimingShadowMap);
+  }
 
   if (_GeometryShader)
   {
+    BeginTimer(TimingGBuffer);
+
     // Geometry pass: render scene into G-buffer
     glBindFramebuffer(GL_FRAMEBUFFER, _GBufferFBO._Handle);
     glViewport(0, 0, RenderWidth(), RenderHeight());
@@ -2032,13 +2188,33 @@ int DeferredRenderer::RenderToTexture()
     glDisable(GL_CULL_FACE);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    EndTimer(TimingGBuffer);
+  }
+  else
+    SetTimingEnabled(TimingGBuffer, false);
+
+  const bool ssaoPassEnabled = _Settings._SSAO || ( 0 != ( _DebugMode & (int)DeferredDebugModes::SSAO ) );
+  const bool ssrPassEnabled = _Settings._SSR || ( 0 != ( _DebugMode & (int)DeferredDebugModes::SSR ) );
+
+  if ( ssaoPassEnabled )
+  {
+    BeginTimer(TimingSSAO);
+    RenderSSAO();
+    EndTimer(TimingSSAO);
   }
 
-  RenderSSAO();
-  RenderSSR();
+  if ( ssrPassEnabled )
+  {
+    BeginTimer(TimingSSR);
+    RenderSSR();
+    EndTimer(TimingSSR);
+  }
 
   if (_LightingShader)
   {
+    BeginTimer(TimingLighting);
+
     // Lighting pass: sample G-buffer and compute shading into lighting FBO
     glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
     glViewport(0, 0, RenderWidth(), RenderHeight());
@@ -2057,13 +2233,21 @@ int DeferredRenderer::RenderToTexture()
 
     // At this point _LightingTEX contains the shaded image
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    EndTimer(TimingLighting);
   }
 
+  BeginTimer(TimingTransparency);
   RenderTransparent();
+  EndTimer(TimingTransparency);
+  if ( !_Settings._Transparency || _TransparentMeshInstanceIDs.empty() )
+    SetTimingEnabled(TimingTransparency, false);
 
   // DEBUG : Wireframe overlay. Render lines into lighting target on top of shaded image
   if ( ( _DebugMode & (int)DeferredDebugModes::Wires ) && _WireframeShader )
   { 
+    BeginTimer(TimingWireframe);
+
     glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
     glViewport(0, 0, RenderWidth(), RenderHeight());
 
@@ -2116,10 +2300,16 @@ int DeferredRenderer::RenderToTexture()
 
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    EndTimer(TimingWireframe);
   }
 
   if ( 0 == ( _DebugMode & ~(int)DeferredDebugModes::Wires ) )
+  {
+    BeginTimer(TimingSSRSourceCopy);
     UpdateSSRSource();
+    EndTimer(TimingSSRSourceCopy);
+  }
 
   return 0;
 }
@@ -2137,6 +2327,8 @@ int DeferredRenderer::RenderToScreen()
 
   if ( _CompositeShader )
   {
+    BeginTimer(TimingCompositeScreen);
+
     _CompositeShader -> Use();
 
     this -> BindRenderToScreenTextures();
@@ -2144,7 +2336,11 @@ int DeferredRenderer::RenderToScreen()
     _Quad.Render(*_CompositeShader);
 
     _CompositeShader -> StopUsing();
+
+    EndTimer(TimingCompositeScreen);
   }
+  else
+    SetTimingEnabled(TimingCompositeScreen, false);
 
   return 0;
 }
