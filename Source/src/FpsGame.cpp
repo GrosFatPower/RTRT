@@ -75,9 +75,10 @@ static std::string MakePropResourceName( const FpsMapProp & iProp, int iPropInde
 
 static int RemapMaterialTextureID( float & ioTextureID, const std::vector<int> & iTextureIDs )
 {
-  const int srcID = static_cast<int>(ioTextureID + 0.5f);
-  if ( srcID < 0 )
+  if ( ioTextureID < 0.f )
     return 0;
+
+  const int srcID = static_cast<int>(ioTextureID + 0.5f);
   if ( srcID >= static_cast<int>(iTextureIDs.size()) )
     return 1;
 
