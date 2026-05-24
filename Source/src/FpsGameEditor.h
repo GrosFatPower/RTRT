@@ -5,6 +5,7 @@
 #include "FpsGameMap.h"
 #include "KeyInput.h"
 #include "RenderSettings.h"
+#include "RenderStatsUI.h"
 
 #include <filesystem>
 #include <string>
@@ -152,11 +153,7 @@ protected:
   bool               _ShowRenderSettingsPanel = true;
   bool               _ShowPerformancePanel = true;
   bool               _ResetDockLayout = false;
-  std::vector<float> _FrameRateHistory;
-  int                _LastFrameRateIndex = -1;
-  unsigned int       _LastFrameRateFrame = 0;
-  double             _FrameRateAccumTime = 0.;
-  float              _MaxFrameRate = 300.f;
+  RenderStatsUIState _RenderStatsState;
   FpsEditorSelection _Selection;
   int                _SelectedMaterial = 0;
   char               _SavePath[512] = {};

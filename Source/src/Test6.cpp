@@ -994,7 +994,7 @@ int Test6::DrawGameSettingsUI()
 {
   if ( ImGui::CollapsingHeader("Game tuning") )
   {
-    ImGui::SliderFloat("Move speed", &_GameSettings._MoveSpeed, 1.f, 12.f);
+    ImGui::SliderFloat("Move speed", &_GameSettings._MoveSpeed, 1.f, 100.f);
     ImGui::SliderFloat("Sprint speed", &_GameSettings._SprintSpeed, 1.f, 16.f);
     ImGui::SliderFloat("Mouse sensitivity", &_GameSettings._MouseSensitivity, 0.01f, 0.25f);
     ImGui::SliderFloat("Player radius", &_GameSettings._PlayerRadius, 0.15f, 0.8f);

@@ -10,6 +10,7 @@
 #include "KeyInput.h"
 #include "MouseInput.h"
 #include "GLUtil.h"
+#include "RenderStatsUI.h"
 #include "GL/glew.h"
 
 #include <memory>
@@ -121,6 +122,8 @@ protected:
   int                        _CurBackgroundId  = -1;
   bool                       _ReloadScene      = false;
   bool                       _ReloadBackground = false;
+  bool                       _ShowRenderStatsPanel = true;
+  RenderStatsUIState         _RenderStatsState;
   GLTexture                  _AlbedoTEX        = { 0, GL_TEXTURE_2D, 31, GL_RGBA32F, GL_RGBA, GL_FLOAT };
   GLTexture                  _MetalRoughTEX    = { 0, GL_TEXTURE_2D, 31, GL_RGBA32F, GL_RGBA, GL_FLOAT };
   GLTexture                  _NormalMapTEX     = { 0, GL_TEXTURE_2D, 31, GL_RGBA32F, GL_RGBA, GL_FLOAT };

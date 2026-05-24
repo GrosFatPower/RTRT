@@ -10,6 +10,7 @@
 #include "PathUtils.h"
 #include "PathTracer.h"
 #include "Renderer.h"
+#include "RenderStatsUI.h"
 #include "Scene.h"
 #include "SoftwareRasterizer.h"
 
@@ -2228,38 +2229,8 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
 // ----------------------------------------------------------------------------
 int FpsGameEditor::DrawPerformanceUI( FpsGameEditorContext & ioContext )
 {
-  if ( _FrameRateHistory.empty() )
-  {
-    _FrameRateHistory.assign(120, 0.f);
-    _LastFrameRateIndex = 0;
-    _LastFrameRateFrame = ioContext._NbRenderedFrames;
-    _FrameRateHistory[_LastFrameRateIndex] = (float)ioContext._FrameRate;
-  }
-
-  if ( _LastFrameRateFrame != ioContext._NbRenderedFrames )
-  {
-    _LastFrameRateFrame = ioContext._NbRenderedFrames;
-    _FrameRateAccumTime += ioContext._DeltaTime;
-    while ( _FrameRateAccumTime > ( 1. / 60. ) )
-    {
-      _FrameRateAccumTime -= 0.1;
-      _MaxFrameRate = std::max(1.f, *std::max_element(_FrameRateHistory.begin(), _FrameRateHistory.end()));
-      _LastFrameRateIndex++;
-      if ( _LastFrameRateIndex >= 120 )
-        _LastFrameRateIndex = 0;
-      _FrameRateHistory[_LastFrameRateIndex] = (float)ioContext._FrameRate;
-    }
-  }
-
-  const int offset = ( _LastFrameRateIndex >= 119 ) ? 0 : _LastFrameRateIndex + 1;
-  char overlay[32];
-  std::snprintf(overlay, 32, "%.1f FPS", ioContext._FrameRate);
-  ImGui::PlotLines("Frame rate", &_FrameRateHistory[0], static_cast<int>(_FrameRateHistory.size()), offset, overlay, -0.1f, _MaxFrameRate, ImVec2(0.f, 80.f));
-
-  ImGui::Text("Window width : %d height : %d", ioContext._Settings._WindowResolution.x, ioContext._Settings._WindowResolution.y);
-  ImGui::Text("Render width : %d height : %d", ioContext._Settings._RenderResolution.x, ioContext._Settings._RenderResolution.y);
-  ImGui::Text("Render time           : %.3f ms/frame", ioContext._FrameTime * 1000.);
-  ImGui::Text("Rendered frames       : %u", ioContext._NbRenderedFrames);
+  RenderStatsUI::DrawFrameRateGraph(_RenderStatsState, ioContext._FrameRate, ioContext._DeltaTime, ioContext._NbRenderedFrames);
+  RenderStatsUI::DrawRenderOverview(ioContext._Settings, ioContext._FrameTime, ioContext._NbRenderedFrames);
 
   if ( !ioContext._CpuTimings.empty() )
   {
@@ -2279,54 +2250,9 @@ int FpsGameEditor::DrawPerformanceUI( FpsGameEditorContext & ioContext )
     ImGui::Text("CPU frame total       : %.3f ms", cpuFrameTotal * 1000.);
   }
 
-  if ( ioContext._Renderer )
-  {
-    std::vector<RenderPassTiming> timings;
-    ioContext._Renderer -> GetRenderPassTimings(timings);
-    if ( !timings.empty() )
-    {
-      double cpuTotal = 0.;
-      double gpuTotal = 0.;
-      ImGui::Separator();
-      ImGui::Text("Render passes");
-
-      for ( const RenderPassTiming & timing : timings )
-      {
-        if ( timing._Enabled )
-        {
-          ImGui::Text("%-24s : %.3f ms [%s]", timing._Name, timing._Seconds * 1000., timing._GPU ? "GPU" : "CPU");
-          if ( timing._GPU )
-            gpuTotal += timing._Seconds;
-          else
-            cpuTotal += timing._Seconds;
-        }
-        else
-          ImGui::Text("%-24s : -- [%s]", timing._Name, timing._GPU ? "GPU" : "CPU");
-      }
-
-      ImGui::Text("CPU pass total        : %.3f ms", cpuTotal * 1000.);
-      ImGui::Text("GPU pass total        : %.3f ms", gpuTotal * 1000.);
-    }
-  }
-
-  if ( ( FpsRendererMode::PhotoPathTracer == ioContext._GameSettings._RendererMode ) && ioContext._Renderer )
-  {
-    PathTracer * pathTracer = ioContext._Renderer -> AsPathTracer();
-    if ( pathTracer )
-    {
-      ImGui::Separator();
-      ImGui::Text("Frame number          : %d", pathTracer -> GetFrameNum());
-      ImGui::Text("Nb complete frames    : %d", pathTracer -> GetNbCompleteFrames());
-    }
-  }
-
-  if ( ioContext._Scene )
-  {
-    ImGui::Separator();
-    ImGui::Text("Nb vertices           : %d", (int)ioContext._Scene -> GetVertices().size());
-    ImGui::Text("Nb triangles          : %d", (int)ioContext._Scene -> GetIndices().size() / 3);
-    ImGui::Text("Nb meshes instances   : %d", ioContext._Scene -> GetNbMeshInstances());
-  }
+  RenderStatsUI::DrawRenderPassTimings(ioContext._Renderer);
+  RenderStatsUI::DrawPathTracerStats(ioContext._Renderer);
+  RenderStatsUI::DrawSceneStats(ioContext._Scene);
 
   return 0;
 }

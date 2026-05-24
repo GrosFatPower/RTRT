@@ -10,6 +10,7 @@
 #include "Util.h"
 #include "PathUtils.h"
 #include "Mesh.h"
+#include "RenderStatsUI.h"
 
 #include <string>
 #include <iostream>
@@ -293,39 +294,6 @@ int Test5::DrawUI()
   {
     ImGui::Begin("Test 5 : Viewer");
 
-    // FPS graph
-    {
-      static std::vector<float> s_FrameRateHistory;
-      static int                s_LastFrameIndex = -1;
-      static double             s_AccumTime = 0.f;
-      static float              s_Max = 300.;
-
-      if ( -1 == s_LastFrameIndex )
-      {
-        s_FrameRateHistory.assign( 120, 0.f );
-        s_LastFrameIndex = 0;
-        s_FrameRateHistory[s_LastFrameIndex] = (float)_FrameRate;
-      }
-
-      s_AccumTime += _DeltaTime;
-      while ( s_AccumTime > ( 1.f / 60 ) )
-      {
-        s_AccumTime -= 0.1;
-        s_Max = *std::max_element( s_FrameRateHistory.begin(), s_FrameRateHistory.end() );
-
-        s_LastFrameIndex++;
-        if ( s_LastFrameIndex >= 120 )
-          s_LastFrameIndex = 0;
-        s_FrameRateHistory[s_LastFrameIndex] = (float)_FrameRate;
-      }
-
-      int offset = ( s_LastFrameIndex >= 119 ) ? ( 0 ) : ( s_LastFrameIndex + 1 );
-
-      char overlay[32];
-      snprintf( overlay, 32, "%.1f FPS", _FrameRate );
-      ImGui::PlotLines( "Frame rate", &s_FrameRateHistory[0], static_cast<int>(s_FrameRateHistory.size()), offset, overlay, -0.1f, s_Max, ImVec2( 0, 80.0f ) );
-    }
-
     // Renderer selection
     {
       static const char * Renderers[] = {"PathTracer", "SoftwareRasterizer", "OpenGLRasterizer"};
@@ -356,6 +324,8 @@ int Test5::DrawUI()
         ImGui::Text("Dropped scene: %s", _DroppedSceneName.c_str());
     }
 
+    ImGui::Checkbox("Show rendering stats", &_ShowRenderStatsPanel);
+
     if ( ImGui::Button( "Capture image" ) )
     {
       const std::string sceneName = _DroppedSceneName.empty() ? std::string(_SceneNames[_CurSceneId]) : _DroppedSceneName;
@@ -363,7 +333,6 @@ int Test5::DrawUI()
       _RenderToFile = true;
     }
 
-    DrawRenderStatsUI();
     DrawSettingsUI();
     DrawCameraUI();
     DrawMeshInstanceUI();
@@ -374,6 +343,8 @@ int Test5::DrawUI()
 
     ImGui::End();
   }
+
+  DrawRenderStatsUI();
 
   if ( _SelectedLightID >= 0 )
     DrawLightGizmo();
@@ -487,31 +458,22 @@ void Test5::ComputeBoidsBoundsFromScene()
 // ----------------------------------------------------------------------------
 int Test5::DrawRenderStatsUI()
 {
-  if (ImGui::CollapsingHeader("Rendering stats"))
+  if ( !_ShowRenderStatsPanel )
+    return 0;
+
+  if ( !ImGui::Begin("Test5 Rendering Stats", &_ShowRenderStatsPanel) )
   {
-    ImGui::Text("Window width : %d height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
-    ImGui::Text("Render width : %d height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
-
-    ImGui::Text( "Render time           : %.3f ms/frame", _FrameTime * 1000. );
-
-    if ( RendererType::PathTracer == _RendererType )
-    {
-      ImGui::Text("Path trace time       : %.3f ms", _Renderer -> AsPathTracer() -> GetPathTraceTime() * 1000.);
-      ImGui::Text("Accumulate time       : %.3f ms", _Renderer -> AsPathTracer() -> GetAccumulateTime() * 1000.);
-      ImGui::Text("Denoise time          : %.3f ms", _Renderer -> AsPathTracer() -> GetDenoiseTime() * 1000.);
-      ImGui::Text("Render to screen time : %.3f ms", _Renderer -> AsPathTracer() -> GetRenderToScreenTime() * 1000.);
-
-      ImGui::Text("Frame number          : %d", _Renderer -> AsPathTracer() -> GetFrameNum());
-      ImGui::Text("Nb complete frames    : %d", _Renderer -> AsPathTracer() -> GetNbCompleteFrames());
-    }
-
-    if ( _Scene )
-    {
-      ImGui::Text("Nb vertices           : %d", (int)_Scene -> GetVertices().size());
-      ImGui::Text("Nb triangles          : %d", (int)_Scene -> GetIndices().size()/3);
-      ImGui::Text("Nb meshes instances   : %d", _Scene -> GetNbMeshInstances());
-    }
+    ImGui::End();
+    return 0;
   }
+
+  RenderStatsUI::DrawFrameRateGraph(_RenderStatsState, _FrameRate, _DeltaTime, _NbRenderedFrames);
+  RenderStatsUI::DrawRenderOverview(_Settings, _FrameTime, _NbRenderedFrames);
+  RenderStatsUI::DrawRenderPassTimings(_Renderer.get());
+  RenderStatsUI::DrawPathTracerStats(_Renderer.get());
+  RenderStatsUI::DrawSceneStats(_Scene.get());
+
+  ImGui::End();
 
   return 0;
 }
