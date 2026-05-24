@@ -24,6 +24,12 @@
 namespace RTRT
 {
 
+// ----------------------------------------------------------------------------
+// Global variables
+// ----------------------------------------------------------------------------
+static constexpr int g_ScreenWidth  = 1280;
+static constexpr int g_ScreenHeight = 720;
+
 const char * Test6::GetTestHeader() { return "Basic FPS"; }
 
 // ----------------------------------------------------------------------------
@@ -126,10 +132,10 @@ Test6::Test6( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iSc
 {
   InitializeCpuTimings();
 
-  _Settings._WindowResolution.x = iScreenWidth;
-  _Settings._WindowResolution.y = iScreenHeight;
-  _Settings._RenderResolution.x = iScreenWidth;
-  _Settings._RenderResolution.y = iScreenHeight;
+  _Settings._WindowResolution.x = g_ScreenWidth;
+  _Settings._WindowResolution.y = g_ScreenHeight;
+  _Settings._RenderResolution.x = _Settings._WindowResolution.x;
+  _Settings._RenderResolution.y = _Settings._WindowResolution.y;
   _Settings._BackgroundColor = Vec3(0.015f, 0.018f, 0.022f);
   _Settings._EnableSkybox = true;
   _Settings._EnableBackGround = true;
@@ -586,6 +592,12 @@ int Test6::ProcessInput()
       {
         _GameSettings._RendererMode = requestedRendererMode;
         _ReloadRenderer = true;
+      }
+
+      if ( _KeyInput.IsKeyReleased(GLFW_KEY_DELETE) )
+      {
+        FpsGameEditorContext editorContext = MakeEditorContext();
+        _Editor.DeleteSelectedItem(editorContext);
       }
     }
 
@@ -1162,6 +1174,9 @@ int Test6::Run()
     glfwMakeContextCurrent(_MainWindow.get());
     glfwSwapInterval(0);
 
+    glfwSetWindowSize(_MainWindow.get(), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
+    SyncFramebufferResolution();
+
     if ( 0 != InitializeUI() )
     {
       ret = 1;
@@ -1190,8 +1205,6 @@ int Test6::Run()
       break;
     }
 
-    glfwSetWindowSize(_MainWindow.get(), _Settings._WindowResolution.x, _Settings._WindowResolution.y);
-    SyncFramebufferResolution();
     glDisable(GL_DEPTH_TEST);
 
     while ( !glfwWindowShouldClose(_MainWindow.get()) )
