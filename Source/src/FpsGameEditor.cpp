@@ -127,7 +127,7 @@ static bool EditorIsPropAssetPath( const std::filesystem::path & iPath )
 {
   std::string ext = iPath.extension().string();
   std::transform(ext.begin(), ext.end(), ext.begin(), []( unsigned char c ) { return static_cast<char>(std::tolower(c)); });
-  return ( ".obj" == ext ) || ( ".gltf" == ext ) || ( ".glb" == ext );
+  return ( ".gltf" == ext ) || ( ".glb" == ext );
 }
 
 static bool EditorPropAssetCombo( const char * iLabel, const std::vector<std::string> & iAssets, std::string & ioPath )
@@ -603,8 +603,8 @@ void FpsGameEditor::RefreshPropAssets()
     return;
   }
 
-  std::filesystem::directory_iterator it(assetsDir, std::filesystem::directory_options::skip_permission_denied, ec);
-  std::filesystem::directory_iterator end;
+  std::filesystem::recursive_directory_iterator it(assetsDir, std::filesystem::directory_options::skip_permission_denied, ec);
+  std::filesystem::recursive_directory_iterator end;
   while ( !ec && it != end )
   {
     const std::filesystem::directory_entry entry = *it;
@@ -1406,7 +1406,7 @@ void FpsGameEditor::DrawScenePanel( FpsGameEditorContext & ioContext )
     if ( ImGui::Button("Refresh prop list") )
     {
       RefreshPropAssets();
-      SetStatus("Found " + std::to_string(_PropAssetPaths.size()) + " root asset props");
+      SetStatus("Found " + std::to_string(_PropAssetPaths.size()) + " asset props");
     }
 
     const bool hasPropAssets = !_PropAssetPaths.empty();
@@ -1694,7 +1694,7 @@ void FpsGameEditor::DrawInspectorPanel( FpsGameEditorContext & ioContext )
 
       propDirty |= ImGui::DragFloat3("Prop position", &prop._Position.x, 0.05f, -100.f, 100.f, "%.3f");
       propDirty |= ImGui::DragFloat3("Prop rotation", &prop._Rotation.x, 0.5f, -360.f, 360.f, "%.2f");
-      propDirty |= ImGui::DragFloat3("Prop scale", &prop._Scale.x, 0.05f, 0.01f, 100.f, "%.3f");
+      propDirty |= ImGui::DragFloat3("Prop scale", &prop._Scale.x, 0.05f, 0.001f, 100.f, "%.3f");
       propDirty |= ImGui::Checkbox("Prop visible", &prop._Visible);
       bool propCollision = ( FpsPropCollisionMode::Bounds == prop._CollisionMode );
       if ( ImGui::Checkbox("Prop collision", &propCollision) )
@@ -1705,7 +1705,7 @@ void FpsGameEditor::DrawInspectorPanel( FpsGameEditorContext & ioContext )
 
       if ( propDirty )
       {
-        prop._Scale = MathUtil::Max(prop._Scale, Vec3(0.01f));
+        prop._Scale = MathUtil::Max(prop._Scale, Vec3(0.001f));
         MarkDirty();
         if ( reloadProp )
           ioContext._ReloadScene = true;
@@ -1800,7 +1800,7 @@ void FpsGameEditor::DrawInspectorPanel( FpsGameEditorContext & ioContext )
         boidsDirty = true;
       }
 
-      boidsDirty |= ImGui::DragFloat("Scale", &settings._Scale, 0.01f, 0.01f, 1.f, "%.3f");
+      boidsDirty |= ImGui::DragFloat("Scale", &settings._Scale, 0.01f, 0.001f, 1.f, "%.3f");
       if ( ImGui::DragFloat("Min speed", &settings._MinSpeed, 0.01f, 0.01f, 10.f, "%.3f") )
       {
         settings._MinSpeed = std::min(settings._MinSpeed, settings._MaxSpeed);
@@ -1832,7 +1832,7 @@ void FpsGameEditor::DrawInspectorPanel( FpsGameEditorContext & ioContext )
         settings._Count = std::max(0, settings._Count);
         settings._BoundsRadius = std::max(0.1f, settings._BoundsRadius);
         settings._BoundsHeight = std::max(0.1f, settings._BoundsHeight);
-        settings._Scale = std::max(0.01f, settings._Scale);
+        settings._Scale = std::max(0.001f, settings._Scale);
         settings._MinSpeed = std::max(0.01f, settings._MinSpeed);
         settings._MaxSpeed = std::max(settings._MaxSpeed, settings._MinSpeed);
         settings._MaxForce = std::max(0.01f, settings._MaxForce);
@@ -2027,7 +2027,7 @@ void FpsGameEditor::DrawSettingsPanel( FpsGameEditorContext & ioContext )
   if ( ImGui::Button("Refresh prop list") )
   {
     RefreshPropAssets();
-    SetStatus("Found " + std::to_string(_PropAssetPaths.size()) + " root asset props");
+    SetStatus("Found " + std::to_string(_PropAssetPaths.size()) + " asset props");
   }
   ImGui::SameLine();
   if ( ImGui::Button("Reset editor layout") )
@@ -2482,9 +2482,9 @@ int FpsGameEditor::DrawGizmo( FpsGameEditorContext & ioContext )
       else if ( ImGuizmo::SCALE == operation )
       {
         prop._Position = Vec3(transform[3]);
-        prop._Scale.x = std::max(0.01f, glm::length(Vec3(transform[0])));
-        prop._Scale.y = std::max(0.01f, glm::length(Vec3(transform[1])));
-        prop._Scale.z = std::max(0.01f, glm::length(Vec3(transform[2])));
+        prop._Scale.x = std::max(0.001f, glm::length(Vec3(transform[0])));
+        prop._Scale.y = std::max(0.001f, glm::length(Vec3(transform[1])));
+        prop._Scale.z = std::max(0.001f, glm::length(Vec3(transform[2])));
       }
       else
         prop._Position = Vec3(transform[3]);
