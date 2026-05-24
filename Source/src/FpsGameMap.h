@@ -30,6 +30,7 @@ struct FpsMapProp
   Vec3        _Rotation = Vec3(0.f);
   Vec3        _Scale = Vec3(1.f);
   bool        _Visible = true;
+  FpsPropCollisionMode _CollisionMode = FpsPropCollisionMode::None;
 };
 
 struct FpsMapWeapon

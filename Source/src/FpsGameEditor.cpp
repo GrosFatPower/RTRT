@@ -349,6 +349,19 @@ static Mat4x4 EditorPropGizmoTransform( const FpsMapProp & iProp )
   return transform;
 }
 
+static void EditorRefreshPropCollisionBoxes( FpsGameEditorContext & ioContext )
+{
+  if ( !ioContext._Scene )
+  {
+    ioContext._GameWorld.ClearPropCollisionBoxes();
+    return;
+  }
+
+  std::vector<FpsPropCollisionBox> boxes;
+  if ( 0 == ioContext._SceneBinding.BuildPropCollisionBoxes(*ioContext._Scene, ioContext._Map, boxes) )
+    ioContext._GameWorld.SetPropCollisionBoxes(boxes);
+}
+
 static Mat4x4 EditorBoidsTransform( const FpsMapBoids & iBoids )
 {
   const BoidSettings & settings = iBoids._Settings;
@@ -660,6 +673,7 @@ bool FpsGameEditor::AddDroppedProp( FpsGameEditorContext & ioContext, const std:
   _Selection._Index = propIndex;
   _Selection._SceneInstanceID = -1;
   MarkDirty();
+  EditorRefreshPropCollisionBoxes(ioContext);
 
   if ( ioContext._Renderer )
   {
@@ -762,6 +776,7 @@ void FpsGameEditor::SyncProp( FpsGameEditorContext & ioContext, int iPropIndex )
   if ( 0 != ioContext._SceneBinding.SyncProp(*ioContext._Scene, ioContext._Map, iPropIndex) )
     return;
 
+  EditorRefreshPropCollisionBoxes(ioContext);
   if ( ioContext._Renderer )
     ioContext._Renderer -> Notify(DirtyState::SceneInstances);
 }
@@ -1681,6 +1696,12 @@ void FpsGameEditor::DrawInspectorPanel( FpsGameEditorContext & ioContext )
       propDirty |= ImGui::DragFloat3("Prop rotation", &prop._Rotation.x, 0.5f, -360.f, 360.f, "%.2f");
       propDirty |= ImGui::DragFloat3("Prop scale", &prop._Scale.x, 0.05f, 0.01f, 100.f, "%.3f");
       propDirty |= ImGui::Checkbox("Prop visible", &prop._Visible);
+      bool propCollision = ( FpsPropCollisionMode::Bounds == prop._CollisionMode );
+      if ( ImGui::Checkbox("Prop collision", &propCollision) )
+      {
+        prop._CollisionMode = propCollision ? FpsPropCollisionMode::Bounds : FpsPropCollisionMode::None;
+        propDirty = true;
+      }
 
       if ( propDirty )
       {
@@ -2310,6 +2331,17 @@ int FpsGameEditor::DrawOverlays( FpsGameEditorContext & ioContext )
   if ( FpsEditableKind::Prop == _Selection._Kind )
   {
     const int propIndex = _Selection._Index;
+    if ( ( propIndex >= 0 ) && ( propIndex < static_cast<int>(ioContext._Map._Props.size()) )
+      && ( FpsPropCollisionMode::Bounds == ioContext._Map._Props[propIndex]._CollisionMode ) )
+    {
+      const ImU32 collisionColor = IM_COL32(255, 190, 45, 230);
+      for ( const FpsPropCollisionBox & box : ioContext._GameWorld.GetPropCollisionBoxes() )
+      {
+        if ( box._PropIndex == propIndex )
+          EditorDrawTransformedAABB(box._Bounds, Mat4x4(1.f), view, proj, drawList, collisionColor, 2.0f);
+      }
+    }
+
     const std::vector<int> * instanceIDs = ioContext._SceneBinding.GetPropInstanceIDs(propIndex);
     if ( instanceIDs )
     {

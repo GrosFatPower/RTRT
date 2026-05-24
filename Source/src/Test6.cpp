@@ -460,6 +460,9 @@ int Test6::InitializeScene()
     std::cout << "Test6 : Failed to load default environment map" << std::endl;
 
   _Scene = std::move(newScene);
+  if ( 0 != RefreshPropCollisionBoxes() )
+    return 1;
+
   if ( 0 != InitializeMapBoids(true) )
     return 1;
 
@@ -467,6 +470,25 @@ int Test6::InitializeScene()
   _Editor.ApplyObjectVisibility(editorContext);
   _Editor.SetPathBuffers(_MapPath);
   _Editor.RefreshPropAssets();
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// RefreshPropCollisionBoxes
+// ----------------------------------------------------------------------------
+int Test6::RefreshPropCollisionBoxes()
+{
+  if ( !_Scene )
+  {
+    _GameWorld.ClearPropCollisionBoxes();
+    return 0;
+  }
+
+  std::vector<FpsPropCollisionBox> boxes;
+  if ( 0 != _SceneBinding.BuildPropCollisionBoxes(*_Scene, _Map, boxes) )
+    return 1;
+
+  _GameWorld.SetPropCollisionBoxes(boxes);
   return 0;
 }
 

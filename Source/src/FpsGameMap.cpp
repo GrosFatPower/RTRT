@@ -203,6 +203,28 @@ static const char * MaterialSlotName( FpsMaterialSlot iMaterial )
   }
 }
 
+static bool ParsePropCollisionMode( const std::string & iToken, FpsPropCollisionMode & oMode )
+{
+  if ( IsEqual(iToken, "none") || IsEqual(iToken, "false") || IsEqual(iToken, "0") )
+    oMode = FpsPropCollisionMode::None;
+  else if ( IsEqual(iToken, "bounds") || IsEqual(iToken, "true") || IsEqual(iToken, "1") )
+    oMode = FpsPropCollisionMode::Bounds;
+  else
+    return false;
+
+  return true;
+}
+
+static const char * PropCollisionModeName( FpsPropCollisionMode iMode )
+{
+  switch ( iMode )
+  {
+    case FpsPropCollisionMode::Bounds: return "bounds";
+    case FpsPropCollisionMode::None:
+    default:                           return "none";
+  }
+}
+
 static bool ParseAlphaMode( const std::string & iToken, float & oAlphaMode )
 {
   if ( IsEqual(iToken, "opaque") )
@@ -744,6 +766,11 @@ protected:
         if ( !ParseBool(tokens[1], prop._Visible) )
           return Error("invalid prop visible flag");
       }
+      else if ( IsEqual(tokens[0], "collision") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParsePropCollisionMode(tokens[1], prop._CollisionMode) )
+          return Error("invalid prop collision mode");
+      }
       else
         return Error("invalid prop field");
     }
@@ -1044,6 +1071,7 @@ bool FpsGameMapLoader::Save( const std::string & iFilename, const FpsGameMap & i
     WriteVec3(file, "rotation", prop._Rotation);
     WriteVec3(file, "scale", prop._Scale);
     file << "  visible " << ( prop._Visible ? "true" : "false" ) << "\n";
+    file << "  collision " << PropCollisionModeName(prop._CollisionMode) << "\n";
     file << "}\n\n";
   }
 

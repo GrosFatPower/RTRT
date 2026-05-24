@@ -160,6 +160,28 @@ static Vec3 ObjectCollisionHalfExtents( const FpsSceneObject & iObject )
   return halfExtents;
 }
 
+static Vec3 BoxCenter( const AABB<Vec3> & iBox )
+{
+  return 0.5f * ( iBox._Low + iBox._High );
+}
+
+static Vec3 BoxHalfExtents( const AABB<Vec3> & iBox )
+{
+  return 0.5f * ( iBox._High - iBox._Low );
+}
+
+static AABB<Vec3> TransformAABB( const AABB<Vec3> & iBox, const Mat4x4 & iTransform )
+{
+  Vec3 corners[8];
+  iBox.Corners(corners);
+
+  AABB<Vec3> result;
+  for ( int i = 0; i < 8; ++i )
+    result.Insert(MathUtil::TransformPoint(corners[i], iTransform));
+
+  return result;
+}
+
 static Material MakeMaterial( const Vec3 & iAlbedo, float iRoughness, float iMetallic = 0.f, float iReflectance = 0.5f )
 {
   Material material;
@@ -547,6 +569,44 @@ void FpsGameWorld::MoveProjectileAxis( FpsProjectile & ioProjectile, int iAxis, 
 
     _ProjectilesDirty = true;
   }
+
+  for ( const FpsPropCollisionBox & box : _PropCollisionBoxes )
+  {
+    const Vec3 boxCenter = BoxCenter(box._Bounds);
+    const Vec3 boxHalf = BoxHalfExtents(box._Bounds);
+    const Vec3 delta = ioProjectile._Position - boxCenter;
+    const Vec3 sumHalf = boxHalf + Vec3(radius);
+    if ( ( std::abs(delta.x) >= sumHalf.x )
+      || ( std::abs(delta.y) >= sumHalf.y )
+      || ( std::abs(delta.z) >= sumHalf.z ) )
+      continue;
+
+    const Vec3 overlap = sumHalf - Vec3(std::abs(delta.x), std::abs(delta.y), std::abs(delta.z));
+    int minAxis = 0;
+    if ( overlap.y < overlap[minAxis] )
+      minAxis = 1;
+    if ( overlap.z < overlap[minAxis] )
+      minAxis = 2;
+    if ( minAxis != iAxis )
+      continue;
+
+    if ( iDelta > 0.f )
+      ioProjectile._Position[iAxis] -= overlap[iAxis];
+    else
+      ioProjectile._Position[iAxis] += overlap[iAxis];
+
+    ioProjectile._Velocity[iAxis] = -ioProjectile._Velocity[iAxis] * bounciness;
+    if ( std::abs(ioProjectile._Velocity[iAxis]) < 0.15f )
+      ioProjectile._Velocity[iAxis] = 0.f;
+
+    for ( int axis = 0; axis < 3; ++axis )
+    {
+      if ( axis != iAxis )
+        ioProjectile._Velocity[axis] *= 0.96f;
+    }
+
+    _ProjectilesDirty = true;
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -555,6 +615,7 @@ void FpsGameWorld::MoveProjectileAxis( FpsProjectile & ioProjectile, int iAxis, 
 void FpsGameWorld::BuildDefaultArena()
 {
   _Objects.clear();
+  _PropCollisionBoxes.clear();
   _SpawnPosition = Vec3(0.f, 0.05f, -8.f);
   _SpawnYaw = 90.f;
   _SpawnPitch = 0.f;
@@ -583,6 +644,7 @@ void FpsGameWorld::BuildDefaultArena()
 void FpsGameWorld::BuildFromMap( const FpsGameMap & iMap )
 {
   _Objects = iMap._Objects;
+  _PropCollisionBoxes.clear();
   _SpawnPosition = iMap._Player._Position;
   _SpawnYaw = iMap._Player._Yaw;
   _SpawnPitch = iMap._Player._Pitch;
@@ -626,6 +688,30 @@ void FpsGameWorld::MoveAxis( int iAxis, float iDelta, const FpsGameSettings & iS
     if ( ( 1 == iAxis ) && ( iDelta < 0.f ) )
       _Player._Grounded = true;
   }
+
+  for ( const FpsPropCollisionBox & box : _PropCollisionBoxes )
+  {
+    Vec3 overlap(0.f);
+    if ( !OverlapPlayerBox(box._Bounds, iSettings, overlap) )
+      continue;
+
+    int minAxis = 0;
+    if ( overlap.y < overlap[minAxis] )
+      minAxis = 1;
+    if ( overlap.z < overlap[minAxis] )
+      minAxis = 2;
+    if ( minAxis != iAxis )
+      continue;
+
+    if ( iDelta > 0.f )
+      _Player._Position[iAxis] -= overlap[iAxis];
+    else
+      _Player._Position[iAxis] += overlap[iAxis];
+
+    _Player._Velocity[iAxis] = 0.f;
+    if ( ( 1 == iAxis ) && ( iDelta < 0.f ) )
+      _Player._Grounded = true;
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -639,6 +725,29 @@ bool FpsGameWorld::OverlapPlayerObject( const FpsSceneObject & iObject, const Fp
   const Vec3 playerCenter = _Player._Position + Vec3(0.f, playerHalf.y, 0.f);
   const Vec3 delta = playerCenter - iObject._Center;
   const Vec3 sumHalf = playerHalf + ObjectCollisionHalfExtents(iObject);
+
+  if ( ( std::abs(delta.x) >= sumHalf.x )
+    || ( std::abs(delta.y) >= sumHalf.y )
+    || ( std::abs(delta.z) >= sumHalf.z ) )
+    return false;
+
+  oOverlap = sumHalf - Vec3(std::abs(delta.x), std::abs(delta.y), std::abs(delta.z));
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// OverlapPlayerBox
+// ----------------------------------------------------------------------------
+bool FpsGameWorld::OverlapPlayerBox( const AABB<Vec3> & iBox, const FpsGameSettings & iSettings, Vec3 & oOverlap ) const
+{
+  const Vec3 playerHalf(std::max(iSettings._PlayerRadius, 0.05f),
+                        std::max(iSettings._PlayerHeight * 0.5f, 0.1f),
+                        std::max(iSettings._PlayerRadius, 0.05f));
+  const Vec3 playerCenter = _Player._Position + Vec3(0.f, playerHalf.y, 0.f);
+  const Vec3 boxCenter = BoxCenter(iBox);
+  const Vec3 boxHalf = BoxHalfExtents(iBox);
+  const Vec3 delta = playerCenter - boxCenter;
+  const Vec3 sumHalf = playerHalf + boxHalf;
 
   if ( ( std::abs(delta.x) >= sumHalf.x )
     || ( std::abs(delta.y) >= sumHalf.y )
@@ -859,6 +968,51 @@ const std::vector<int> * FpsGameSceneBinding::GetPropInstanceIDs( int iPropIndex
   if ( ( iPropIndex < 0 ) || ( iPropIndex >= static_cast<int>(_PropInstanceIDs.size()) ) )
     return nullptr;
   return &_PropInstanceIDs[iPropIndex];
+}
+
+// ----------------------------------------------------------------------------
+// BuildPropCollisionBoxes
+// ----------------------------------------------------------------------------
+int FpsGameSceneBinding::BuildPropCollisionBoxes( Scene & iScene, const FpsGameMap & iMap, std::vector<FpsPropCollisionBox> & oBoxes ) const
+{
+  oBoxes.clear();
+
+  const std::vector<MeshInstance> & instances = iScene.GetMeshInstances();
+  const std::vector<Mesh*> & meshes = iScene.GetMeshes();
+
+  for ( int propIndex = 0; propIndex < static_cast<int>(iMap._Props.size()); ++propIndex )
+  {
+    const FpsMapProp & prop = iMap._Props[propIndex];
+    if ( ( FpsPropCollisionMode::Bounds != prop._CollisionMode ) || !prop._Visible )
+      continue;
+
+    if ( propIndex >= static_cast<int>(_PropInstanceIDs.size()) )
+      continue;
+
+    const std::vector<int> & instanceIDs = _PropInstanceIDs[propIndex];
+    for ( int instanceID : instanceIDs )
+    {
+      if ( ( instanceID < 0 ) || ( instanceID >= static_cast<int>(instances.size()) ) )
+        continue;
+
+      const MeshInstance & instance = instances[instanceID];
+      if ( !instance._Visible )
+        continue;
+      if ( ( instance._MeshID < 0 ) || ( instance._MeshID >= static_cast<int>(meshes.size()) ) )
+        continue;
+
+      const Mesh * mesh = meshes[instance._MeshID];
+      if ( !mesh )
+        continue;
+
+      FpsPropCollisionBox box;
+      box._PropIndex = propIndex;
+      box._Bounds = TransformAABB(mesh -> GetBoundingBox(), instance._Transform);
+      oBoxes.push_back(box);
+    }
+  }
+
+  return 0;
 }
 
 // ----------------------------------------------------------------------------
