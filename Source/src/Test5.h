@@ -48,6 +48,7 @@ protected:
   static void MouseButtonCallback( GLFWwindow * iWindow, const int iButton, const int iAction, const int iMods );
   static void MouseScrollCallback( GLFWwindow * iWindow, const double iOffsetX, const double iOffsetY );
   static void FramebufferSizeCallback( GLFWwindow* iWindow, const int iWidth, const int iHeight );
+  static void DropCallback( GLFWwindow * iWindow, int iCount, const char ** iPaths );
 
 protected:
 
@@ -76,6 +77,7 @@ protected:
 
   int UpdateCPUTime();
   void SyncFramebufferResolution( bool iNotifyRenderer = false );
+  void HandleDroppedFiles( int iCount, const char ** iPaths );
 
   int DrawMeshInstanceGizmo();
   int DrawLightGizmo();
@@ -113,6 +115,8 @@ protected:
   std::vector<std::string>   _BackgroundFiles;
   std::vector<const char*>   _BackgroundNames;
   std::vector<std::string>   _MaterialNames;
+  std::filesystem::path      _DroppedScenePath;
+  std::string                _DroppedSceneName;
   int                        _CurSceneId       = -1;
   int                        _CurBackgroundId  = -1;
   bool                       _ReloadScene      = false;

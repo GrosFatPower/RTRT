@@ -3,6 +3,7 @@
 #include "Test6.h"
 
 #include "DeferredRenderer.h"
+#include "DroppedFileUtils.h"
 #include "FpsGameMap.h"
 #include "PathTracer.h"
 #include "PathUtils.h"
@@ -16,7 +17,6 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <algorithm>
-#include <cctype>
 #include <cstdio>
 #include <iostream>
 #include <thread>
@@ -42,13 +42,6 @@ static void ApplyMapSettings( const FpsGameMap & iMap, FpsGameSettings & ioSetti
   ioSettings._ViewWeaponOffset = iMap._Weapon._Offset;
   ioSettings._ViewWeaponRotation = iMap._Weapon._Rotation;
   ioSettings._ViewWeaponScale = iMap._Weapon._Scale;
-}
-
-static bool Test6IsDroppedPropPath( const std::filesystem::path & iPath )
-{
-  std::string ext = iPath.extension().string();
-  std::transform(ext.begin(), ext.end(), ext.begin(), []( unsigned char c ) { return static_cast<char>(std::tolower(c)); });
-  return ( ".gltf" == ext ) || ( ".glb" == ext );
 }
 
 // ----------------------------------------------------------------------------
@@ -223,10 +216,10 @@ void Test6::HandleDroppedFiles( int iCount, const char ** iPaths )
     if ( !iPaths[i] || !iPaths[i][0] )
       continue;
 
-    const std::filesystem::path filepath(iPaths[i]);
-    if ( !Test6IsDroppedPropPath(filepath) )
+    const std::filesystem::path filepath(DroppedFileUtils::NormalizeDroppedPath(iPaths[i]));
+    if ( !DroppedFileUtils::IsDroppedPropPath(filepath) )
     {
-      _Editor.SetStatus("Unsupported dropped file: " + filepath.filename().string());
+      _Editor.SetStatus("Unsupported dropped file: " + DroppedFileUtils::DisplayName(filepath));
       continue;
     }
 

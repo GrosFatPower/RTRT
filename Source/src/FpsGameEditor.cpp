@@ -3,6 +3,7 @@
 #include "FpsGameEditor.h"
 
 #include "DeferredRenderer.h"
+#include "DroppedFileUtils.h"
 #include "FpsGameMap.h"
 #include "Mesh.h"
 #include "MeshInstance.h"
@@ -126,13 +127,6 @@ static bool EditorIsPropAssetPath( const std::filesystem::path & iPath )
   std::string ext = iPath.extension().string();
   std::transform(ext.begin(), ext.end(), ext.begin(), []( unsigned char c ) { return static_cast<char>(std::tolower(c)); });
   return ( ".obj" == ext ) || ( ".gltf" == ext ) || ( ".glb" == ext );
-}
-
-static bool EditorIsDroppedPropAssetPath( const std::filesystem::path & iPath )
-{
-  std::string ext = iPath.extension().string();
-  std::transform(ext.begin(), ext.end(), ext.begin(), []( unsigned char c ) { return static_cast<char>(std::tolower(c)); });
-  return ( ".gltf" == ext ) || ( ".glb" == ext );
 }
 
 static bool EditorPropAssetCombo( const char * iLabel, const std::vector<std::string> & iAssets, std::string & ioPath )
@@ -621,14 +615,11 @@ void FpsGameEditor::RefreshPropAssets()
 // ----------------------------------------------------------------------------
 bool FpsGameEditor::AddDroppedProp( FpsGameEditorContext & ioContext, const std::filesystem::path & iPath, const Vec3 & iPosition )
 {
-  if ( !ioContext._Scene || !EditorIsDroppedPropAssetPath(iPath) )
+  if ( !ioContext._Scene || !DroppedFileUtils::IsDroppedPropPath(iPath) )
     return false;
 
   std::error_code ec;
-  std::filesystem::path filepath = std::filesystem::absolute(iPath, ec);
-  if ( ec )
-    filepath = iPath;
-  filepath = filepath.lexically_normal();
+  std::filesystem::path filepath = DroppedFileUtils::NormalizeDroppedPath(iPath);
 
   if ( !std::filesystem::exists(filepath, ec) || ec )
   {

@@ -2,6 +2,7 @@
 
 #include "Test5.h"
 
+#include "DroppedFileUtils.h"
 #include "Loader.h"
 #include "PathTracer.h"
 #include "SoftwareRasterizer.h"
@@ -102,6 +103,18 @@ void Test5::FramebufferSizeCallback(GLFWwindow* iWindow, const int iWidth, const
 }
 
 // ----------------------------------------------------------------------------
+// DropCallback
+// ----------------------------------------------------------------------------
+void Test5::DropCallback( GLFWwindow * iWindow, int iCount, const char ** iPaths )
+{
+  auto * const this_ = static_cast<Test5*>(glfwGetWindowUserPointer(iWindow));
+  if ( !this_ )
+    return;
+
+  this_ -> HandleDroppedFiles(iCount, iPaths);
+}
+
+// ----------------------------------------------------------------------------
 // CTOR
 // ----------------------------------------------------------------------------
 Test5::Test5( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iScreenHeight )
@@ -153,6 +166,41 @@ void Test5::SyncFramebufferResolution( bool iNotifyRenderer )
 
   if ( iNotifyRenderer && _Renderer )
     _Renderer -> Notify(DirtyState::RenderSettings);
+}
+
+// ----------------------------------------------------------------------------
+// HandleDroppedFiles
+// ----------------------------------------------------------------------------
+void Test5::HandleDroppedFiles( int iCount, const char ** iPaths )
+{
+  if ( !iPaths || ( iCount <= 0 ) )
+    return;
+
+  for ( int i = 0; i < iCount; ++i )
+  {
+    if ( !iPaths[i] || !iPaths[i][0] )
+      continue;
+
+    const std::filesystem::path filepath(DroppedFileUtils::NormalizeDroppedPath(iPaths[i]));
+    if ( !DroppedFileUtils::IsDroppedScenePath(filepath) )
+    {
+      std::cout << "Test5 : unsupported dropped file " << DroppedFileUtils::DisplayName(filepath) << std::endl;
+      continue;
+    }
+
+    std::error_code ec;
+    if ( !std::filesystem::exists(filepath, ec) || ec )
+    {
+      std::cout << "Test5 : dropped scene does not exist " << filepath.generic_string() << std::endl;
+      continue;
+    }
+
+    _DroppedScenePath = filepath;
+    _DroppedSceneName = DroppedFileUtils::DisplayName(filepath);
+    _ReloadScene = true;
+    std::cout << "Test5 : dropped scene " << filepath.generic_string() << std::endl;
+    return;
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -298,14 +346,20 @@ int Test5::DrawUI()
         if ( selectedSceneId != _CurSceneId )
         {
           _CurSceneId = selectedSceneId;
+          _DroppedScenePath.clear();
+          _DroppedSceneName.clear();
           _ReloadScene = true;
         }
       }
+
+      if ( !_DroppedSceneName.empty() )
+        ImGui::Text("Dropped scene: %s", _DroppedSceneName.c_str());
     }
 
     if ( ImGui::Button( "Capture image" ) )
     {
-      _CaptureOutputPath = "./" + std::string( _SceneNames[_CurSceneId] ) + "_" + std::to_string( _NbRenderedFrames ) + "frames.png";
+      const std::string sceneName = _DroppedSceneName.empty() ? std::string(_SceneNames[_CurSceneId]) : _DroppedSceneName;
+      _CaptureOutputPath = "./" + sceneName + "_" + std::to_string( _NbRenderedFrames ) + "frames.png";
       _RenderToFile = true;
     }
 
@@ -1988,9 +2042,12 @@ int Test5::ProcessInput()
 int Test5::InitializeScene()
 {
   Scene * newScene = new Scene;
-  if ( !newScene || ( _CurSceneId < 0 ) || !Loader::LoadScene(_SceneFiles[_CurSceneId], *newScene, _Settings) )
+  const bool useDroppedScene = !_DroppedScenePath.empty();
+  const std::string scenePath = useDroppedScene ? _DroppedScenePath.generic_string()
+                                                : ( ( _CurSceneId >= 0 ) ? _SceneFiles[_CurSceneId] : "" );
+  if ( !newScene || scenePath.empty() || !Loader::LoadScene(scenePath, *newScene, _Settings) )
   {
-    std::cout << "Failed to load scene : " << _SceneFiles[_CurSceneId] << std::endl;
+    std::cout << "Failed to load scene : " << scenePath << std::endl;
     return 1;
   }
   _Scene.reset(newScene);
@@ -2223,6 +2280,7 @@ int Test5::Run()
     glfwSetMouseButtonCallback( _MainWindow.get(), Test5::MouseButtonCallback );
     glfwSetScrollCallback( _MainWindow.get(), Test5::MouseScrollCallback );
     glfwSetKeyCallback( _MainWindow.get(), Test5::KeyCallback );
+    glfwSetDropCallback( _MainWindow.get(), Test5::DropCallback );
 
     glfwMakeContextCurrent( _MainWindow.get() );
     glfwSwapInterval( 0 ); // Disable vsync
@@ -2305,7 +2363,9 @@ int Test5::Run()
 
   glfwSetFramebufferSizeCallback( _MainWindow.get(), nullptr );
   glfwSetMouseButtonCallback( _MainWindow.get(), nullptr );
+  glfwSetScrollCallback( _MainWindow.get(), nullptr );
   glfwSetKeyCallback( _MainWindow.get(), nullptr );
+  glfwSetDropCallback( _MainWindow.get(), nullptr );
 
   return ret;
 }
