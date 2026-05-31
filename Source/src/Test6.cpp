@@ -51,6 +51,96 @@ static void ApplyMapSettings( const FpsGameMap & iMap, FpsGameSettings & ioSetti
 }
 
 // ----------------------------------------------------------------------------
+// ApplyMapRenderSettings
+// ----------------------------------------------------------------------------
+static void ApplyMapRenderSettings( const FpsGameMap & iMap, FpsGameSettings & ioGameSettings, RenderSettings & ioRenderSettings )
+{
+  if ( !iMap._RenderSettings._HasRenderSettings )
+    return;
+
+  const FpsMapRenderSettings & settings = iMap._RenderSettings;
+  ioGameSettings._RendererMode = settings._RendererMode;
+  ioGameSettings._CameraZNear = std::max(0.001f, settings._CameraZNear);
+  ioGameSettings._CameraZFar = std::max(ioGameSettings._CameraZNear + 0.001f, settings._CameraZFar);
+
+  ioRenderSettings._RenderScale = MathUtil::Clamp(settings._RenderScale, 25, 150);
+  ioRenderSettings._ShowLights = settings._ShowLights;
+  ioRenderSettings._ToneMapping = settings._ToneMapping;
+  ioRenderSettings._Gamma = std::max(0.001f, settings._Gamma);
+  ioRenderSettings._Exposure = std::max(0.f, settings._Exposure);
+
+  ioRenderSettings._ShadowMapping = settings._ShadowMapping;
+  ioRenderSettings._ShadowMapResolution = std::max(256, settings._ShadowMapResolution);
+  ioRenderSettings._ShadowBias = std::max(0.f, settings._ShadowBias);
+  ioRenderSettings._MaxShadowCastingLights = std::max(1, settings._MaxShadowCastingLights);
+
+  ioRenderSettings._SSAO = settings._SSAO;
+  ioRenderSettings._SSAOBlur = settings._SSAOBlur;
+  ioRenderSettings._SSAORadius = std::max(0.001f, settings._SSAORadius);
+  ioRenderSettings._SSAOBias = std::max(0.f, settings._SSAOBias);
+  ioRenderSettings._SSAOIntensity = std::max(0.f, settings._SSAOIntensity);
+  ioRenderSettings._SSAOKernelSize = MathUtil::Clamp(settings._SSAOKernelSize, 4, 32);
+
+  ioRenderSettings._SSR = settings._SSR;
+  ioRenderSettings._SSRIntensity = std::max(0.f, settings._SSRIntensity);
+  ioRenderSettings._SSRMaxRoughness = MathUtil::Clamp(settings._SSRMaxRoughness, 0.f, 1.f);
+  ioRenderSettings._SSRMaxSteps = std::max(1, settings._SSRMaxSteps);
+  ioRenderSettings._SSRStepSize = std::max(0.001f, settings._SSRStepSize);
+  ioRenderSettings._SSRMaxDistance = std::max(0.001f, settings._SSRMaxDistance);
+  ioRenderSettings._SSRThickness = std::max(0.001f, settings._SSRThickness);
+  ioRenderSettings._SSRFade = MathUtil::Clamp(settings._SSRFade, 0.f, 1.f);
+
+  ioRenderSettings._PBRDirectLighting = settings._PBRDirectLighting;
+  ioRenderSettings._DirectLightIntensity = std::max(0.f, settings._DirectLightIntensity);
+  ioRenderSettings._SpecularIBLMaxRoughness = MathUtil::Clamp(settings._SpecularIBLMaxRoughness, 0.f, 1.f);
+
+  ioRenderSettings._Bounces = std::max(1, settings._Bounces);
+  ioRenderSettings._NbSamplesPerPixel = std::max(1, settings._NbSamplesPerPixel);
+  ioRenderSettings._Denoise = settings._Denoise;
+}
+
+// ----------------------------------------------------------------------------
+// CaptureMapRenderSettings
+// ----------------------------------------------------------------------------
+static void CaptureMapRenderSettings( FpsGameMap & ioMap, const FpsGameSettings & iGameSettings, const RenderSettings & iRenderSettings )
+{
+  FpsMapRenderSettings & settings = ioMap._RenderSettings;
+  settings._HasRenderSettings = true;
+  settings._RendererMode = iGameSettings._RendererMode;
+  settings._CameraZNear = iGameSettings._CameraZNear;
+  settings._CameraZFar = iGameSettings._CameraZFar;
+  settings._RenderScale = iRenderSettings._RenderScale;
+  settings._ShowLights = iRenderSettings._ShowLights;
+  settings._ToneMapping = iRenderSettings._ToneMapping;
+  settings._Gamma = iRenderSettings._Gamma;
+  settings._Exposure = iRenderSettings._Exposure;
+  settings._ShadowMapping = iRenderSettings._ShadowMapping;
+  settings._ShadowMapResolution = iRenderSettings._ShadowMapResolution;
+  settings._ShadowBias = iRenderSettings._ShadowBias;
+  settings._MaxShadowCastingLights = iRenderSettings._MaxShadowCastingLights;
+  settings._SSAO = iRenderSettings._SSAO;
+  settings._SSAOBlur = iRenderSettings._SSAOBlur;
+  settings._SSAORadius = iRenderSettings._SSAORadius;
+  settings._SSAOBias = iRenderSettings._SSAOBias;
+  settings._SSAOIntensity = iRenderSettings._SSAOIntensity;
+  settings._SSAOKernelSize = iRenderSettings._SSAOKernelSize;
+  settings._SSR = iRenderSettings._SSR;
+  settings._SSRIntensity = iRenderSettings._SSRIntensity;
+  settings._SSRMaxRoughness = iRenderSettings._SSRMaxRoughness;
+  settings._SSRMaxSteps = iRenderSettings._SSRMaxSteps;
+  settings._SSRStepSize = iRenderSettings._SSRStepSize;
+  settings._SSRMaxDistance = iRenderSettings._SSRMaxDistance;
+  settings._SSRThickness = iRenderSettings._SSRThickness;
+  settings._SSRFade = iRenderSettings._SSRFade;
+  settings._PBRDirectLighting = iRenderSettings._PBRDirectLighting;
+  settings._DirectLightIntensity = iRenderSettings._DirectLightIntensity;
+  settings._SpecularIBLMaxRoughness = iRenderSettings._SpecularIBLMaxRoughness;
+  settings._Bounces = iRenderSettings._Bounces;
+  settings._NbSamplesPerPixel = iRenderSettings._NbSamplesPerPixel;
+  settings._Denoise = iRenderSettings._Denoise;
+}
+
+// ----------------------------------------------------------------------------
 // KeyCallback
 // ----------------------------------------------------------------------------
 void Test6::KeyCallback( GLFWwindow * iWindow, const int iKey, const int iScancode, const int iAction, const int iMods )
@@ -421,6 +511,7 @@ int Test6::InitializeScene()
   {
     FpsGameMapLoader::SeedDefaultMaterials(_Map);
     ApplyMapSettings(_Map, _GameSettings);
+    ApplyMapRenderSettings(_Map, _GameSettings, _Settings);
     if ( _Editor.IsEnabled() )
     {
       _GameSettings._ShowViewWeapon = false;
@@ -543,6 +634,7 @@ int Test6::InitializeRenderer()
     return 1;
 
   ApplyRendererDefaults();
+  ApplyMapRenderSettings(_Map, _GameSettings, _Settings);
 
   Renderer * newRenderer = nullptr;
   if ( FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode )
@@ -613,7 +705,9 @@ int Test6::ProcessInput()
       if ( requestedRendererMode != _GameSettings._RendererMode )
       {
         _GameSettings._RendererMode = requestedRendererMode;
+        CaptureMapRenderSettings(_Map, _GameSettings, _Settings);
         _ReloadRenderer = true;
+        _Editor.MarkDirty();
       }
 
       if ( _KeyInput.IsKeyReleased(GLFW_KEY_DELETE) )
@@ -739,6 +833,7 @@ int Test6::ProcessInput()
     if ( requestedRendererMode != _GameSettings._RendererMode )
     {
       _GameSettings._RendererMode = requestedRendererMode;
+      CaptureMapRenderSettings(_Map, _GameSettings, _Settings);
       _ReloadRenderer = true;
     }
 
@@ -966,7 +1061,10 @@ void Test6::DrawDebugPanel()
     if ( rendererMode != (int)_GameSettings._RendererMode )
     {
       _GameSettings._RendererMode = (FpsRendererMode)rendererMode;
+      CaptureMapRenderSettings(_Map, _GameSettings, _Settings);
       _ReloadRenderer = true;
+      if ( _Editor.IsEnabled() )
+        _Editor.MarkDirty();
     }
   }
 

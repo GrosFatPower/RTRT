@@ -737,6 +737,41 @@ void FpsGameEditor::SyncMapFromRuntimeSettings( FpsGameEditorContext & ioContext
   ioContext._Map._Weapon._Offset = ioContext._GameSettings._ViewWeaponOffset;
   ioContext._Map._Weapon._Rotation = ioContext._GameSettings._ViewWeaponRotation;
   ioContext._Map._Weapon._Scale = ioContext._GameSettings._ViewWeaponScale;
+
+  FpsMapRenderSettings & renderSettings = ioContext._Map._RenderSettings;
+  renderSettings._HasRenderSettings = true;
+  renderSettings._RendererMode = ioContext._GameSettings._RendererMode;
+  renderSettings._CameraZNear = ioContext._GameSettings._CameraZNear;
+  renderSettings._CameraZFar = ioContext._GameSettings._CameraZFar;
+  renderSettings._RenderScale = ioContext._Settings._RenderScale;
+  renderSettings._ShowLights = ioContext._Settings._ShowLights;
+  renderSettings._ToneMapping = ioContext._Settings._ToneMapping;
+  renderSettings._Gamma = ioContext._Settings._Gamma;
+  renderSettings._Exposure = ioContext._Settings._Exposure;
+  renderSettings._ShadowMapping = ioContext._Settings._ShadowMapping;
+  renderSettings._ShadowMapResolution = ioContext._Settings._ShadowMapResolution;
+  renderSettings._ShadowBias = ioContext._Settings._ShadowBias;
+  renderSettings._MaxShadowCastingLights = ioContext._Settings._MaxShadowCastingLights;
+  renderSettings._SSAO = ioContext._Settings._SSAO;
+  renderSettings._SSAOBlur = ioContext._Settings._SSAOBlur;
+  renderSettings._SSAORadius = ioContext._Settings._SSAORadius;
+  renderSettings._SSAOBias = ioContext._Settings._SSAOBias;
+  renderSettings._SSAOIntensity = ioContext._Settings._SSAOIntensity;
+  renderSettings._SSAOKernelSize = ioContext._Settings._SSAOKernelSize;
+  renderSettings._SSR = ioContext._Settings._SSR;
+  renderSettings._SSRIntensity = ioContext._Settings._SSRIntensity;
+  renderSettings._SSRMaxRoughness = ioContext._Settings._SSRMaxRoughness;
+  renderSettings._SSRMaxSteps = ioContext._Settings._SSRMaxSteps;
+  renderSettings._SSRStepSize = ioContext._Settings._SSRStepSize;
+  renderSettings._SSRMaxDistance = ioContext._Settings._SSRMaxDistance;
+  renderSettings._SSRThickness = ioContext._Settings._SSRThickness;
+  renderSettings._SSRFade = ioContext._Settings._SSRFade;
+  renderSettings._PBRDirectLighting = ioContext._Settings._PBRDirectLighting;
+  renderSettings._DirectLightIntensity = ioContext._Settings._DirectLightIntensity;
+  renderSettings._SpecularIBLMaxRoughness = ioContext._Settings._SpecularIBLMaxRoughness;
+  renderSettings._Bounces = ioContext._Settings._Bounces;
+  renderSettings._NbSamplesPerPixel = ioContext._Settings._NbSamplesPerPixel;
+  renderSettings._Denoise = ioContext._Settings._Denoise;
 }
 
 // ----------------------------------------------------------------------------
@@ -2244,11 +2279,18 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
     return 0;
   }
 
+  auto notifyPersistedRenderSettingsChanged = [&ioContext, this]()
+  {
+    ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    MarkDirty();
+  };
+
   int renderScale = ioContext._Settings._RenderScale;
   if ( ImGui::SliderInt("Render scale", &renderScale, 25, 150) )
   {
     ioContext._Settings._RenderScale = renderScale;
     EditorSyncFramebufferResolution(ioContext, true);
+    MarkDirty();
   }
 
   bool cameraDirty = false;
@@ -2274,20 +2316,24 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
     if ( ioContext._Scene )
       ioContext._SceneBinding.SyncCamera(*ioContext._Scene, ioContext._GameWorld, ioContext._GameSettings);
     ioContext._Renderer -> Notify(DirtyState::SceneCamera);
+    MarkDirty();
   }
 
   if ( ImGui::Checkbox("Show lights", &ioContext._Settings._ShowLights) )
+  {
     ioContext._Renderer -> Notify(DirtyState::SceneLights);
+    MarkDirty();
+  }
 
   if ( ImGui::Checkbox("Tone mapping", &ioContext._Settings._ToneMapping) )
-    ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    notifyPersistedRenderSettingsChanged();
 
   if ( ioContext._Settings._ToneMapping )
   {
     if ( ImGui::SliderFloat("Gamma", &ioContext._Settings._Gamma, 0.5f, 3.f) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     if ( ImGui::SliderFloat("Exposure", &ioContext._Settings._Exposure, 0.1f, 5.f) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
   }
 
   ImGui::Separator();
@@ -2295,63 +2341,63 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
   if ( FpsRendererMode::Deferred == ioContext._GameSettings._RendererMode )
   {
     if ( ImGui::Checkbox("Shadow mapping", &ioContext._Settings._ShadowMapping) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     int shadowMapResolution = ioContext._Settings._ShadowMapResolution;
     if ( ImGui::SliderInt( "Shadow map resolution", &shadowMapResolution, 256, 4096 ) )
     {
       shadowMapResolution = std::max(256, ( shadowMapResolution / 64 ) * 64);
       ioContext._Settings._ShadowMapResolution = shadowMapResolution;
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     }
     if ( ImGui::SliderFloat( "Shadow bias", &ioContext._Settings._ShadowBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic ) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
 
     if ( ImGui::Checkbox("SSAO", &ioContext._Settings._SSAO) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     if ( ImGui::Checkbox("SSAO blur", &ioContext._Settings._SSAOBlur) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     if ( ImGui::SliderFloat("SSAO radius", &ioContext._Settings._SSAORadius, 0.05f, 5.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     if ( ImGui::SliderFloat("SSAO bias", &ioContext._Settings._SSAOBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     if ( ImGui::SliderFloat("SSAO intensity", &ioContext._Settings._SSAOIntensity, 0.f, 3.f) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     int ssaoKernelSize = ioContext._Settings._SSAOKernelSize;
     if ( ImGui::SliderInt("SSAO kernel size", &ssaoKernelSize, 4, 32) )
     {
       ioContext._Settings._SSAOKernelSize = std::max(4, std::min(32, ssaoKernelSize));
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     }
     if ( ImGui::SliderInt("Max shadow casting lights", &ioContext._Settings._MaxShadowCastingLights, 1, 8) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
 
     if ( ImGui::Checkbox("SSR", &ioContext._Settings._SSR) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     if ( ImGui::SliderFloat("SSR intensity", &ioContext._Settings._SSRIntensity, 0.f, 2.f) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     if ( ImGui::SliderFloat("SSR max roughness", &ioContext._Settings._SSRMaxRoughness, 0.05f, 1.f) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     int ssrMaxSteps = ioContext._Settings._SSRMaxSteps;
     if ( ImGui::SliderInt("SSR max steps", &ssrMaxSteps, 4, 128) )
     {
       ioContext._Settings._SSRMaxSteps = std::max(4, std::min(128, ssrMaxSteps));
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     }
     if ( ImGui::SliderFloat("SSR step size", &ioContext._Settings._SSRStepSize, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     if ( ImGui::SliderFloat("SSR max distance", &ioContext._Settings._SSRMaxDistance, 1.f, 100.f) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     if ( ImGui::SliderFloat("SSR thickness", &ioContext._Settings._SSRThickness, 0.01f, 2.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     if ( ImGui::SliderFloat("SSR edge fade", &ioContext._Settings._SSRFade, 0.01f, 0.5f) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
 
     if ( ImGui::Checkbox("PBR direct lighting", &ioContext._Settings._PBRDirectLighting) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     if ( ImGui::SliderFloat("Direct light intensity", &ioContext._Settings._DirectLightIntensity, 0.f, 8.f) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     if ( ImGui::SliderFloat("IBL max roughness", &ioContext._Settings._SpecularIBLMaxRoughness, 0.05f, 1.f) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
 
     static const char * DEBUG_VIEWS[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params", "SSR", "Direct diffuse", "Direct specular" };
     if ( ImGui::Combo("Debug view", &ioContext._DeferredDebugView, DEBUG_VIEWS, 10) )
@@ -2412,11 +2458,11 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
   else if ( FpsRendererMode::PhotoPathTracer == ioContext._GameSettings._RendererMode )
   {
     if ( ImGui::SliderInt("Bounces", &ioContext._Settings._Bounces, 1, 8) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     if ( ImGui::SliderInt("SPP", &ioContext._Settings._NbSamplesPerPixel, 1, 8) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
     if ( ImGui::Checkbox("Denoise", &ioContext._Settings._Denoise) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      notifyPersistedRenderSettingsChanged();
 
     static const char * DEBUG_VIEWS[] = { "Off", "Tiles", "Albedo", "Metalness", "Roughness", "Normals", "UV", "BLAS" };
     if ( ImGui::Combo("Debug view", &ioContext._DebugMode, DEBUG_VIEWS, 8) )

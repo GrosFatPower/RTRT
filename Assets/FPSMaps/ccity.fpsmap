@@ -19,6 +19,91 @@ settings {
   projectileammorefill 0.500000
 }
 
+render {
+  renderer deferred
+  cameraZNear 0.050000
+  cameraZFar 501.500000
+  renderScale 100
+  showLights false
+  toneMapping true
+  gamma 2.000000
+  exposure 1.500000
+  shadowMapping true
+  shadowMapResolution 2048
+  shadowBias 0.000900
+  maxShadowCastingLights 4
+  ssao true
+  ssaoBlur true
+  ssaoRadius 0.500000
+  ssaoBias 0.025000
+  ssaoIntensity 1.000000
+  ssaoKernelSize 16
+  ssr true
+  ssrIntensity 0.600000
+  ssrMaxRoughness 0.550000
+  ssrMaxSteps 48
+  ssrStepSize 0.180000
+  ssrMaxDistance 35.000000
+  ssrThickness 0.250000
+  ssrFade 0.180000
+  pbrDirectLighting true
+  directLightIntensity 1.000000
+  iblMaxRoughness 0.500000
+  bounces 1
+  spp 1
+  denoise false
+}
+
+material "wall" {
+  albedo 0.340000 0.370000 0.420000
+  roughness 0.650000
+  metallic 0.000000
+  reflectance 0.500000
+  emission 0.000000 0.000000 0.000000
+  opacity 1.000000
+  alphamode opaque
+}
+
+box "Box 0" {
+  center -68.095139 2.000000 25.846018
+  rotation 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  half 262.307098 3.000000 0.500000
+  material "wall"
+  collidable true
+  visible true
+}
+
+box "Box 0 Copy" {
+  center -67.095139 2.000000 -205.541016
+  rotation 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  half 262.307098 3.000000 0.500000
+  material "wall"
+  collidable true
+  visible true
+}
+
+box "Box 0 Copy 2" {
+  center -329.626373 2.000000 -90.479301
+  rotation 180.000000 90.000000 180.000000
+  orientation 0.000000 0.707107 0.000000 0.707107
+  half 118.699921 3.000000 0.010000
+  material "wall"
+  collidable true
+  visible true
+}
+
+box "Box 0 Copy 2 Copy" {
+  center 192.031052 2.000000 -89.479301
+  rotation 180.000000 90.000000 180.000000
+  orientation 0.000000 0.707107 0.000000 0.707107
+  half 118.699921 3.000000 0.010000
+  material "wall"
+  collidable true
+  visible true
+}
+
 prop "City" {
   path "ccity_building_set_1/scene.gltf"
   position 49.461674 -0.428779 17.956234
