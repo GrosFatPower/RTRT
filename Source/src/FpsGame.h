@@ -2,6 +2,7 @@
 #define _FpsGame_
 
 #include "FpsCollision.h"
+#include "FpsProjectiles.h"
 #include "MathUtil.h"
 
 #include <map>
@@ -113,14 +114,6 @@ struct FpsSceneObject
   bool            _Visible = true;
 };
 
-struct FpsProjectile
-{
-  bool  _Active = false;
-  Vec3  _Position = Vec3(0.f);
-  Vec3  _Velocity = Vec3(0.f);
-  float _Age = 0.f;
-};
-
 class FpsGameWorld
 {
 public:
@@ -138,31 +131,23 @@ public:
   const std::vector<FpsCollisionObb> & GetPropCollisionColliders() const { return _PropCollisionColliders; }
   void SetPropCollisionColliders( const std::vector<FpsCollisionObb> & iColliders ) { _PropCollisionColliders = iColliders; }
   void ClearPropCollisionColliders() { _PropCollisionColliders.clear(); }
-  const std::vector<FpsProjectile> & GetProjectiles() const { return _Projectiles; }
-  int GetActiveProjectileCount() const;
-  int GetProjectileAmmo() const { return _ProjectileAmmo; }
-  bool ConsumeProjectilesDirty();
+  const std::vector<FpsProjectile> & GetProjectiles() const { return _Projectiles.GetProjectiles(); }
+  int GetActiveProjectileCount() const { return _Projectiles.GetActiveCount(); }
+  int GetProjectileAmmo() const { return _Projectiles.GetAmmo(); }
+  bool ConsumeProjectilesDirty() { return _Projectiles.ConsumeDirty(); }
 
 protected:
   void BuildDefaultArena();
   void BuildFromMap( const FpsGameMap & iMap );
   void MoveAxis( int iAxis, float iDelta, const FpsGameSettings & iSettings );
   bool OverlapPlayerObject( const FpsSceneObject & iObject, const FpsGameSettings & iSettings, Vec3 & oOverlap ) const;
-  void FireProjectile( const FpsGameSettings & iSettings );
-  void UpdateProjectiles( float iDeltaTime, const FpsGameSettings & iSettings );
-  void MoveProjectileAxis( FpsProjectile & ioProjectile, int iAxis, float iDelta, const FpsGameSettings & iSettings );
   Vec3 PlayerForward() const;
 
 protected:
   FpsPlayer                  _Player;
   std::vector<FpsSceneObject> _Objects;
   std::vector<FpsCollisionObb>     _PropCollisionColliders;
-  std::vector<FpsProjectile> _Projectiles;
-  float                      _ProjectileCooldownTimer = 0.f;
-  float                      _ProjectileAmmoRefillTimer = 0.f;
-  int                        _ProjectileAmmo = 32;
-  int                        _PendingProjectileShots = 0;
-  bool                       _ProjectilesDirty = false;
+  FpsProjectiles             _Projectiles;
   Vec3                       _SpawnPosition = Vec3(0.f, 0.05f, -8.f);
   float                      _SpawnYaw = 90.f;
   float                      _SpawnPitch = 0.f;
