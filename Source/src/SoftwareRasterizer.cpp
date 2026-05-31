@@ -362,9 +362,15 @@ int SoftwareRasterizer::GetRenderPassTimings( std::vector<RenderPassTiming> & oT
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::UpdateTextures()
 {
-  glBindTexture(GL_TEXTURE_2D, _ColorBufferTEX._Handle);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, &_ImageBuffer._ColorBuffer[0]);
-  glBindTexture(GL_TEXTURE_2D, 0);
+  if ( !_ColorBufferTEX._Handle || ( RenderWidth() <= 0 ) || ( RenderHeight() <= 0 ) || _ImageBuffer._ColorBuffer.empty() )
+    return 0;
+
+  const size_t expectedSize = static_cast<size_t>(RenderWidth()) * static_cast<size_t>(RenderHeight());
+  if ( _ImageBuffer._ColorBuffer.size() < expectedSize )
+    return 1;
+
+  if ( !GLUtil::UpdateTexture2D(_ColorBufferTEX, RenderWidth(), RenderHeight(), &_ImageBuffer._ColorBuffer[0]) )
+    return 1;
 
   return 0;
 }
@@ -582,6 +588,8 @@ int SoftwareRasterizer::ResizeRenderTarget()
   UpdateRenderResolution();
 
   GLUtil::ResizeFBO(_RenderTargetFBO, RenderWidth(), RenderHeight());
+  if ( _ColorBufferTEX._Handle )
+    GLUtil::ResizeTexture(_ColorBufferTEX, RenderWidth(), RenderHeight());
 
   return 0;
 }
@@ -619,7 +627,6 @@ int SoftwareRasterizer::InitializeFrameBuffers()
   colorBufferDesc._InternalFormat = _ColorBufferTEX._InternalFormat;
   colorBufferDesc._DataFormat     = _ColorBufferTEX._DataFormat;
   colorBufferDesc._DataType       = _ColorBufferTEX._DataType;
-  colorBufferDesc._Data           = &_ImageBuffer._ColorBuffer[0];
   colorBufferDesc._MinFilter      = GL_LINEAR;
   colorBufferDesc._MagFilter      = GL_LINEAR;
   GLUtil::CreateTexture(colorBufferDesc, _ColorBufferTEX);
