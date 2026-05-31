@@ -30,7 +30,7 @@ render {
   gamma 2.000000
   exposure 1.500000
   shadowMapping true
-  shadowMapResolution 2048
+  shadowMapResolution 4096
   shadowBias 0.000900
   maxShadowCastingLights 4
   ssao true

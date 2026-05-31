@@ -200,7 +200,7 @@ int DeferredRenderer::Update()
     BuildDeferredDrawLists();
 
   if ( _DirtyStates & (unsigned long)DirtyState::SceneInstances )
-    ComputeSceneBounds();
+    ComputeSceneBounds(false);
 
   UpdateShadowState();
   int shadowMapSize = std::clamp(_Settings._ShadowMapResolution, 256, 4096);
@@ -393,6 +393,7 @@ int DeferredRenderer::UnloadScene()
   _ShadowCasters.clear();
   _LocalShadowCasterCount = 0;
   _DirectionalShadowCasterCount = 0;
+  _ShadowSceneBoundsInitialized = false;
 
   return 0;
 }
@@ -400,7 +401,7 @@ int DeferredRenderer::UnloadScene()
 // ----------------------------------------------------------------------------
 // ComputeSceneBounds
 // ----------------------------------------------------------------------------
-void DeferredRenderer::ComputeSceneBounds()
+void DeferredRenderer::ComputeSceneBounds( bool iResetShadowBounds )
 {
   bool initialized = false;
   Vec3 low(-10.f), high(10.f);
@@ -442,6 +443,19 @@ void DeferredRenderer::ComputeSceneBounds()
   _SceneBounds._Low = low;
   _SceneBounds._High = high;
   _SceneBoundsRadius = std::max( glm::length( high - low ) * 0.5f, 1.f );
+
+  if ( iResetShadowBounds || !_ShadowSceneBoundsInitialized )
+  {
+    _ShadowSceneBounds = _SceneBounds;
+    _ShadowSceneBoundsRadius = _SceneBoundsRadius;
+    _ShadowSceneBoundsInitialized = true;
+  }
+  else
+  {
+    MathUtil::Minimize(_ShadowSceneBounds._Low, _SceneBounds._Low);
+    MathUtil::Maximize(_ShadowSceneBounds._High, _SceneBounds._High);
+    _ShadowSceneBoundsRadius = std::max( glm::length( _ShadowSceneBounds._High - _ShadowSceneBounds._Low ) * 0.5f, 1.f );
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -450,7 +464,7 @@ void DeferredRenderer::ComputeSceneBounds()
 float DeferredRenderer::ComputeAutoShadowFar( const Vec3 & iLightPos ) const
 {
   Vec3 corners[8];
-  _SceneBounds.Corners(corners);
+  _ShadowSceneBounds.Corners(corners);
 
   float maxDistance = 1.f;
   for ( const Vec3 & corner : corners )
@@ -674,7 +688,7 @@ int DeferredRenderer::UpdateShadowState()
   _LocalShadowCasterCount = 0;
   _DirectionalShadowCasterCount = 0;
   _HasShadowLight = false;
-  _ShadowFar = ( _Settings._ShadowFar > 0.f ) ? ( _Settings._ShadowFar ) : ( std::max( _SceneBoundsRadius * 2.f, 25.f ) );
+  _ShadowFar = ( _Settings._ShadowFar > 0.f ) ? ( _Settings._ShadowFar ) : ( std::max( _ShadowSceneBoundsRadius * 2.f, 25.f ) );
 
   if ( !_Settings._ShadowMapping )
     return 0;
@@ -779,13 +793,13 @@ int DeferredRenderer::UpdateShadowState()
     {
       caster._Layer = _DirectionalShadowCasterCount++;
 
-      float lightDistance = std::max( _SceneBoundsRadius * 2.f, 10.f );
-      Vec3 lightPos = _SceneBounds.Center() + caster._Dir * lightDistance;
+      float lightDistance = std::max( _ShadowSceneBoundsRadius * 2.f, 10.f );
+      Vec3 lightPos = _ShadowSceneBounds.Center() + caster._Dir * lightDistance;
       Vec3 up = ( std::abs(glm::dot(caster._Dir, Vec3(0.f, 1.f, 0.f))) > 0.99f ) ? ( Vec3(0.f, 0.f, 1.f) ) : ( Vec3(0.f, 1.f, 0.f) );
-      Mat4x4 lightView = glm::lookAt(lightPos, _SceneBounds.Center(), up);
+      Mat4x4 lightView = glm::lookAt(lightPos, _ShadowSceneBounds.Center(), up);
 
       Vec3 corners[8];
-      _SceneBounds.Corners(corners);
+      _ShadowSceneBounds.Corners(corners);
 
       Vec3 lightSpaceLow( MAX_FLOAT );
       Vec3 lightSpaceHigh( -MAX_FLOAT );
@@ -796,9 +810,9 @@ int DeferredRenderer::UpdateShadowState()
         MathUtil::Maximize(lightSpaceHigh, Vec3(lightSpaceCorner));
       }
 
-      float padXY = std::max( _SceneBoundsRadius * 0.1f, 1.f );
+      float padXY = std::max( _ShadowSceneBoundsRadius * 0.1f, 1.f );
       float nearPlane = 0.1f;
-      float farPlane = lightDistance + _SceneBoundsRadius * 4.f;
+      float farPlane = lightDistance + _ShadowSceneBoundsRadius * 4.f;
       Mat4x4 shadowProj = glm::ortho(lightSpaceLow.x - padXY, lightSpaceHigh.x + padXY,
                                      lightSpaceLow.y - padXY, lightSpaceHigh.y + padXY,
                                      nearPlane, farPlane);
@@ -1185,7 +1199,7 @@ int DeferredRenderer::ReloadScene()
     BuildTransparentMeshTriangleData(mi, gpuPositions, outIndices);
   }
 
-  ComputeSceneBounds();
+  ComputeSceneBounds(true);
 
   // Materials
   if ( _Scene.GetTextureArrayIDs().size() )

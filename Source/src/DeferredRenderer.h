@@ -122,7 +122,7 @@ protected:
   double ReadTimer( int iTimerID );
   void SetTimingEnabled( int iTimerID, bool iEnabled );
 
-  void ComputeSceneBounds();
+  void ComputeSceneBounds( bool iResetShadowBounds = false );
   float ComputeAutoShadowFar(const Vec3 & iLightPos) const;
 
   struct ShadowCaster
@@ -212,6 +212,9 @@ protected:
   // Scene bounds
   AABB<Vec3> _SceneBounds;
   float      _SceneBoundsRadius = 1.f;
+  AABB<Vec3> _ShadowSceneBounds;
+  float      _ShadowSceneBoundsRadius = 1.f;
+  bool       _ShadowSceneBoundsInitialized = false;
 
   // Shadow state
   float _ShadowNear                 = 0.1f;
