@@ -22,6 +22,14 @@ struct FpsMapPlayer
   int   _Armor = -1;
 };
 
+struct FpsMapPropCollider
+{
+  std::string _Name = "Collider";
+  Vec3        _Center = Vec3(0.f);
+  Vec3        _Rotation = Vec3(0.f);
+  Vec3        _HalfExtents = Vec3(0.5f);
+};
+
 struct FpsMapProp
 {
   std::string _Name;
@@ -31,6 +39,7 @@ struct FpsMapProp
   Vec3        _Scale = Vec3(1.f);
   bool        _Visible = true;
   FpsPropCollisionMode _CollisionMode = FpsPropCollisionMode::None;
+  std::vector<FpsMapPropCollider> _Colliders;
 };
 
 struct FpsMapWeapon

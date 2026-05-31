@@ -1,6 +1,7 @@
 #ifndef _FpsGame_
 #define _FpsGame_
 
+#include "FpsCollision.h"
 #include "MathUtil.h"
 
 #include <map>
@@ -13,6 +14,7 @@ namespace RTRT
 class Scene;
 struct FpsGameMap;
 struct FpsMapProp;
+struct FpsMapPropCollider;
 
 enum class FpsRendererMode
 {
@@ -35,6 +37,7 @@ enum class FpsPropCollisionMode
 {
   None = 0,
   Bounds,
+  Compound,
 };
 
 struct FpsGameSettings
@@ -43,6 +46,8 @@ struct FpsGameSettings
   float           _MoveSpeed    = 5.0f;
   float           _SprintSpeed  = 8.0f;
   float           _MouseSensitivity = 0.08f;
+  float           _CameraZNear = 0.05f;
+  float           _CameraZFar = 200.f;
   float           _PlayerHeight = 1.8f;
   float           _PlayerRadius = 0.35f;
   float           _EyeHeight    = 1.62f;
@@ -116,12 +121,6 @@ struct FpsProjectile
   float _Age = 0.f;
 };
 
-struct FpsPropCollisionBox
-{
-  int        _PropIndex = -1;
-  AABB<Vec3> _Bounds;
-};
-
 class FpsGameWorld
 {
 public:
@@ -136,9 +135,9 @@ public:
   FpsPlayer & GetPlayer() { return _Player; }
   const std::vector<FpsSceneObject> & GetObjects() const { return _Objects; }
   std::vector<FpsSceneObject> & GetObjects() { return _Objects; }
-  const std::vector<FpsPropCollisionBox> & GetPropCollisionBoxes() const { return _PropCollisionBoxes; }
-  void SetPropCollisionBoxes( const std::vector<FpsPropCollisionBox> & iBoxes ) { _PropCollisionBoxes = iBoxes; }
-  void ClearPropCollisionBoxes() { _PropCollisionBoxes.clear(); }
+  const std::vector<FpsCollisionObb> & GetPropCollisionColliders() const { return _PropCollisionColliders; }
+  void SetPropCollisionColliders( const std::vector<FpsCollisionObb> & iColliders ) { _PropCollisionColliders = iColliders; }
+  void ClearPropCollisionColliders() { _PropCollisionColliders.clear(); }
   const std::vector<FpsProjectile> & GetProjectiles() const { return _Projectiles; }
   int GetActiveProjectileCount() const;
   int GetProjectileAmmo() const { return _ProjectileAmmo; }
@@ -149,7 +148,6 @@ protected:
   void BuildFromMap( const FpsGameMap & iMap );
   void MoveAxis( int iAxis, float iDelta, const FpsGameSettings & iSettings );
   bool OverlapPlayerObject( const FpsSceneObject & iObject, const FpsGameSettings & iSettings, Vec3 & oOverlap ) const;
-  bool OverlapPlayerBox( const AABB<Vec3> & iBox, const FpsGameSettings & iSettings, Vec3 & oOverlap ) const;
   void FireProjectile( const FpsGameSettings & iSettings );
   void UpdateProjectiles( float iDeltaTime, const FpsGameSettings & iSettings );
   void MoveProjectileAxis( FpsProjectile & ioProjectile, int iAxis, float iDelta, const FpsGameSettings & iSettings );
@@ -158,7 +156,7 @@ protected:
 protected:
   FpsPlayer                  _Player;
   std::vector<FpsSceneObject> _Objects;
-  std::vector<FpsPropCollisionBox> _PropCollisionBoxes;
+  std::vector<FpsCollisionObb>     _PropCollisionColliders;
   std::vector<FpsProjectile> _Projectiles;
   float                      _ProjectileCooldownTimer = 0.f;
   float                      _ProjectileAmmoRefillTimer = 0.f;
@@ -181,7 +179,8 @@ public:
   int SyncTransforms( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
   int SyncProp( Scene & iScene, const FpsGameMap & iMap, int iPropIndex );
   int LoadProp( Scene & iScene, const FpsGameMap & iMap, int iPropIndex );
-  int BuildPropCollisionBoxes( Scene & iScene, const FpsGameMap & iMap, std::vector<FpsPropCollisionBox> & oBoxes ) const;
+  int BuildPropCollisionColliders( Scene & iScene, const FpsGameMap & iMap, std::vector<FpsCollisionObb> & oColliders ) const;
+  int BuildPropBoundsColliders( Scene & iScene, const FpsGameMap & iMap, int iPropIndex, std::vector<FpsMapPropCollider> & oColliders ) const;
   int SetObjectInstanceVisible( Scene & iScene, int iObjectIndex, bool iVisible );
   const std::vector<int> * GetPropInstanceIDs( int iPropIndex ) const;
   bool HasViewWeapon() const { return !_WeaponInstanceIDs.empty(); }

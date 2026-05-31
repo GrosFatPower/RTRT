@@ -209,6 +209,8 @@ static bool ParsePropCollisionMode( const std::string & iToken, FpsPropCollision
     oMode = FpsPropCollisionMode::None;
   else if ( IsEqual(iToken, "bounds") || IsEqual(iToken, "true") || IsEqual(iToken, "1") )
     oMode = FpsPropCollisionMode::Bounds;
+  else if ( IsEqual(iToken, "compound") )
+    oMode = FpsPropCollisionMode::Compound;
   else
     return false;
 
@@ -219,6 +221,7 @@ static const char * PropCollisionModeName( FpsPropCollisionMode iMode )
 {
   switch ( iMode )
   {
+    case FpsPropCollisionMode::Compound: return "compound";
     case FpsPropCollisionMode::Bounds: return "bounds";
     case FpsPropCollisionMode::None:
     default:                           return "none";
@@ -771,8 +774,70 @@ protected:
         if ( !ParsePropCollisionMode(tokens[1], prop._CollisionMode) )
           return Error("invalid prop collision mode");
       }
+      else if ( IsEqual(tokens[0], "collider") )
+      {
+        std::string colliderName;
+        bool hasOpenBracket = false;
+        for ( int i = 1; i < static_cast<int>(tokens.size()); ++i )
+        {
+          if ( "{" == tokens[i] )
+            hasOpenBracket = true;
+          else if ( colliderName.empty() )
+            colliderName = tokens[i];
+          else
+            return Error("invalid prop collider header");
+        }
+
+        if ( !hasOpenBracket )
+        {
+          std::vector<std::string> openTokens;
+          if ( !ReadRequiredLine(ioFile, openTokens) )
+            return false;
+          if ( ( 1 != static_cast<int>(openTokens.size()) ) || ( "{" != openTokens[0] ) )
+            return Error("expected prop collider opening bracket");
+        }
+
+        if ( !ParsePropColliderBlock(ioFile, colliderName, prop) )
+          return false;
+      }
       else
         return Error("invalid prop field");
+    }
+    return false;
+  }
+
+  bool ParsePropColliderBlock( std::ifstream & ioFile, const std::string & iName, FpsMapProp & ioProp )
+  {
+    FpsMapPropCollider collider;
+    collider._Name = iName.empty() ? "Collider" : iName;
+
+    std::vector<std::string> tokens;
+    while ( ReadRequiredLine(ioFile, tokens) )
+    {
+      if ( IsClosingBracket(tokens) )
+      {
+        collider._HalfExtents = MathUtil::Max(collider._HalfExtents, Vec3(0.001f));
+        ioProp._Colliders.push_back(collider);
+        return true;
+      }
+
+      if ( IsEqual(tokens[0], "center") )
+      {
+        if ( !ParseVec3(tokens, collider._Center) )
+          return Error("invalid prop collider center");
+      }
+      else if ( IsEqual(tokens[0], "rotation") )
+      {
+        if ( !ParseVec3(tokens, collider._Rotation) )
+          return Error("invalid prop collider rotation");
+      }
+      else if ( IsEqual(tokens[0], "half") )
+      {
+        if ( !ParseVec3(tokens, collider._HalfExtents) )
+          return Error("invalid prop collider half extents");
+      }
+      else
+        return Error("invalid prop collider field");
     }
     return false;
   }
@@ -1072,6 +1137,21 @@ bool FpsGameMapLoader::Save( const std::string & iFilename, const FpsGameMap & i
     WriteVec3(file, "scale", prop._Scale);
     file << "  visible " << ( prop._Visible ? "true" : "false" ) << "\n";
     file << "  collision " << PropCollisionModeName(prop._CollisionMode) << "\n";
+    if ( FpsPropCollisionMode::Compound == prop._CollisionMode )
+    {
+      for ( const FpsMapPropCollider & collider : prop._Colliders )
+      {
+        file << "\n";
+        file << "  collider \"" << collider._Name << "\" {\n";
+        file << "  ";
+        WriteVec3(file, "center", collider._Center);
+        file << "  ";
+        WriteVec3(file, "rotation", collider._Rotation);
+        file << "  ";
+        WriteVec3(file, "half", collider._HalfExtents);
+        file << "  }\n";
+      }
+    }
     file << "}\n\n";
   }
 

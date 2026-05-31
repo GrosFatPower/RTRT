@@ -46,7 +46,7 @@ protected:
   int InitializeScene();
   int InitializeRenderer();
   int InitializeMapBoids( bool iResetSimulation );
-  int RefreshPropCollisionBoxes();
+  int RefreshPropCollisionColliders();
 
   int ProcessInput();
   int UpdateGame();

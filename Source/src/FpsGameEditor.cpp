@@ -349,17 +349,51 @@ static Mat4x4 EditorPropGizmoTransform( const FpsMapProp & iProp )
   return transform;
 }
 
-static void EditorRefreshPropCollisionBoxes( FpsGameEditorContext & ioContext )
+static void EditorDrawTransformedBox( const Mat4x4 & iTransform, const Mat4x4 & iView, const Mat4x4 & iProj, ImDrawList * ioDrawList, ImU32 iColor, float iLineWidth );
+
+static Mat4x4 EditorPropColliderTransform( const FpsMapProp & iProp, const FpsMapPropCollider & iCollider )
+{
+  Mat4x4 transform = EditorPropTransform(iProp);
+  transform = transform * glm::translate(iCollider._Center);
+  transform = transform * EditorEulerTransform(iCollider._Rotation);
+  transform = transform * glm::scale(iCollider._HalfExtents * 2.f);
+  return transform;
+}
+
+static Mat4x4 EditorPropColliderGizmoTransform( const FpsMapProp & iProp, const FpsMapPropCollider & iCollider )
+{
+  Mat4x4 transform = EditorPropTransform(iProp);
+  transform = transform * glm::translate(iCollider._Center);
+  transform = transform * EditorEulerTransform(iCollider._Rotation);
+  return transform;
+}
+
+static Mat4x4 EditorPropLocalInverseTransform( const FpsMapProp & iProp )
+{
+  return glm::inverse(EditorPropTransform(iProp));
+}
+
+static void EditorDrawCollisionObb( const FpsCollisionObb & iCollider, const Mat4x4 & iView, const Mat4x4 & iProj, ImDrawList * ioDrawList, ImU32 iColor, float iLineWidth )
+{
+  Mat4x4 transform(1.f);
+  transform[0] = Vec4(iCollider._Axis[0] * iCollider._HalfExtents.x * 2.f, 0.f);
+  transform[1] = Vec4(iCollider._Axis[1] * iCollider._HalfExtents.y * 2.f, 0.f);
+  transform[2] = Vec4(iCollider._Axis[2] * iCollider._HalfExtents.z * 2.f, 0.f);
+  transform[3] = Vec4(iCollider._Center, 1.f);
+  EditorDrawTransformedBox(transform, iView, iProj, ioDrawList, iColor, iLineWidth);
+}
+
+static void EditorRefreshPropCollisionColliders( FpsGameEditorContext & ioContext )
 {
   if ( !ioContext._Scene )
   {
-    ioContext._GameWorld.ClearPropCollisionBoxes();
+    ioContext._GameWorld.ClearPropCollisionColliders();
     return;
   }
 
-  std::vector<FpsPropCollisionBox> boxes;
-  if ( 0 == ioContext._SceneBinding.BuildPropCollisionBoxes(*ioContext._Scene, ioContext._Map, boxes) )
-    ioContext._GameWorld.SetPropCollisionBoxes(boxes);
+  std::vector<FpsCollisionObb> colliders;
+  if ( 0 == ioContext._SceneBinding.BuildPropCollisionColliders(*ioContext._Scene, ioContext._Map, colliders) )
+    ioContext._GameWorld.SetPropCollisionColliders(colliders);
 }
 
 static Mat4x4 EditorBoidsTransform( const FpsMapBoids & iBoids )
@@ -671,9 +705,10 @@ bool FpsGameEditor::AddDroppedProp( FpsGameEditorContext & ioContext, const std:
 
   _Selection._Kind = FpsEditableKind::Prop;
   _Selection._Index = propIndex;
+  _Selection._SubIndex = -1;
   _Selection._SceneInstanceID = -1;
   MarkDirty();
-  EditorRefreshPropCollisionBoxes(ioContext);
+  EditorRefreshPropCollisionColliders(ioContext);
 
   if ( ioContext._Renderer )
   {
@@ -776,7 +811,7 @@ void FpsGameEditor::SyncProp( FpsGameEditorContext & ioContext, int iPropIndex )
   if ( 0 != ioContext._SceneBinding.SyncProp(*ioContext._Scene, ioContext._Map, iPropIndex) )
     return;
 
-  EditorRefreshPropCollisionBoxes(ioContext);
+  EditorRefreshPropCollisionColliders(ioContext);
   if ( ioContext._Renderer )
     ioContext._Renderer -> Notify(DirtyState::SceneInstances);
 }
@@ -828,6 +863,21 @@ bool FpsGameEditor::DeleteSelectedItem( FpsGameEditorContext & ioContext )
   {
     if ( ( index < 0 ) || ( index >= static_cast<int>(ioContext._Map._Props.size()) ) )
       return false;
+
+    FpsMapProp & prop = ioContext._Map._Props[index];
+    if ( ( FpsPropCollisionMode::Compound == prop._CollisionMode )
+      && ( _Selection._SubIndex >= 0 )
+      && ( _Selection._SubIndex < static_cast<int>(prop._Colliders.size()) ) )
+    {
+      const int colliderIndex = _Selection._SubIndex;
+      const std::string name = prop._Colliders[colliderIndex]._Name;
+      prop._Colliders.erase(prop._Colliders.begin() + colliderIndex);
+      _Selection._SubIndex = prop._Colliders.empty() ? -1 : std::min(colliderIndex, static_cast<int>(prop._Colliders.size()) - 1);
+      MarkDirty();
+      SyncProp(ioContext, index);
+      SetStatus("Deleted " + name);
+      return true;
+    }
 
     const std::string name = ioContext._Map._Props[index]._Name;
     ioContext._Map._Props.erase(ioContext._Map._Props.begin() + index);
@@ -915,6 +965,7 @@ bool FpsGameEditor::DuplicateSelectedItem( FpsGameEditorContext & ioContext )
     ioContext._Map._Props.push_back(prop);
     _Selection._Kind = FpsEditableKind::Prop;
     _Selection._Index = static_cast<int>(ioContext._Map._Props.size()) - 1;
+    _Selection._SubIndex = -1;
     MarkDirty();
     ioContext._ReloadScene = true;
     SetStatus("Duplicated " + prop._Name);
@@ -1449,6 +1500,7 @@ void FpsGameEditor::DrawScenePanel( FpsGameEditorContext & ioContext )
       ioContext._MapLoaded = true;
       _Selection._Kind = FpsEditableKind::Prop;
       _Selection._Index = static_cast<int>(ioContext._Map._Props.size()) - 1;
+      _Selection._SubIndex = -1;
       MarkDirty();
       ioContext._ReloadScene = true;
     }
@@ -1468,6 +1520,7 @@ void FpsGameEditor::DrawScenePanel( FpsGameEditorContext & ioContext )
         {
           _Selection._Kind = FpsEditableKind::Prop;
           _Selection._Index = i;
+          _Selection._SubIndex = -1;
         }
         if ( selected )
           ImGui::SetItemDefaultFocus();
@@ -1696,11 +1749,117 @@ void FpsGameEditor::DrawInspectorPanel( FpsGameEditorContext & ioContext )
       propDirty |= ImGui::DragFloat3("Prop rotation", &prop._Rotation.x, 0.5f, -360.f, 360.f, "%.2f");
       propDirty |= ImGui::DragFloat3("Prop scale", &prop._Scale.x, 0.05f, 0.001f, 100.f, "%.3f");
       propDirty |= ImGui::Checkbox("Prop visible", &prop._Visible);
-      bool propCollision = ( FpsPropCollisionMode::Bounds == prop._CollisionMode );
-      if ( ImGui::Checkbox("Prop collision", &propCollision) )
+
+      static const char * collisionModes[] = { "None", "Bounds", "Compound" };
+      int collisionMode = ( FpsPropCollisionMode::Compound == prop._CollisionMode ) ? 2
+                        : ( FpsPropCollisionMode::Bounds == prop._CollisionMode ? 1 : 0 );
+      if ( ImGui::Combo("Prop collision", &collisionMode, collisionModes, 3) )
       {
-        prop._CollisionMode = propCollision ? FpsPropCollisionMode::Bounds : FpsPropCollisionMode::None;
+        const FpsPropCollisionMode previousMode = prop._CollisionMode;
+        prop._CollisionMode = ( 2 == collisionMode ) ? FpsPropCollisionMode::Compound
+                            : ( 1 == collisionMode ? FpsPropCollisionMode::Bounds : FpsPropCollisionMode::None );
+        if ( ( FpsPropCollisionMode::Compound == prop._CollisionMode )
+          && ( FpsPropCollisionMode::Compound != previousMode )
+          && prop._Colliders.empty()
+          && ioContext._Scene )
+        {
+          std::vector<FpsMapPropCollider> generatedColliders;
+          if ( 0 == ioContext._SceneBinding.BuildPropBoundsColliders(*ioContext._Scene, ioContext._Map, index, generatedColliders) )
+            prop._Colliders = generatedColliders;
+          if ( !prop._Colliders.empty() )
+            _Selection._SubIndex = 0;
+        }
+        if ( FpsPropCollisionMode::Compound != prop._CollisionMode )
+          _Selection._SubIndex = -1;
         propDirty = true;
+      }
+
+      if ( FpsPropCollisionMode::Compound == prop._CollisionMode )
+      {
+        ImGui::Separator();
+        ImGui::Text("Compound colliders");
+        if ( prop._Colliders.empty() )
+          ImGui::TextUnformatted("Warning: compound prop has no collider boxes");
+
+        if ( ImGui::Button("Add collider box") )
+        {
+          FpsMapPropCollider collider;
+          collider._Name = "Collider " + std::to_string(static_cast<int>(prop._Colliders.size()));
+          collider._Center = Vec3(0.f, 0.5f, 0.f);
+          collider._HalfExtents = Vec3(0.5f);
+          prop._Colliders.push_back(collider);
+          _Selection._SubIndex = static_cast<int>(prop._Colliders.size()) - 1;
+          propDirty = true;
+        }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!ioContext._Scene);
+        if ( ImGui::Button("Generate from bounds") )
+        {
+          std::vector<FpsMapPropCollider> generatedColliders;
+          if ( ioContext._Scene && ( 0 == ioContext._SceneBinding.BuildPropBoundsColliders(*ioContext._Scene, ioContext._Map, index, generatedColliders) ) )
+          {
+            prop._Colliders = generatedColliders;
+            _Selection._SubIndex = prop._Colliders.empty() ? -1 : 0;
+            propDirty = true;
+          }
+        }
+        ImGui::EndDisabled();
+
+        if ( _Selection._SubIndex >= static_cast<int>(prop._Colliders.size()) )
+          _Selection._SubIndex = static_cast<int>(prop._Colliders.size()) - 1;
+
+        if ( ImGui::BeginListBox("Collider boxes", ImVec2(-FLT_MIN, 96.f)) )
+        {
+          for ( int colliderIndex = 0; colliderIndex < static_cast<int>(prop._Colliders.size()); ++colliderIndex )
+          {
+            const bool selected = ( _Selection._SubIndex == colliderIndex );
+            const std::string label = prop._Colliders[colliderIndex]._Name + "##propCollider" + std::to_string(colliderIndex);
+            if ( ImGui::Selectable(label.c_str(), selected) )
+              _Selection._SubIndex = colliderIndex;
+            if ( selected )
+              ImGui::SetItemDefaultFocus();
+          }
+          ImGui::EndListBox();
+        }
+
+        const int colliderIndex = _Selection._SubIndex;
+        ImGui::BeginDisabled(( colliderIndex < 0 ) || ( colliderIndex >= static_cast<int>(prop._Colliders.size())));
+        if ( ImGui::Button("Duplicate collider") )
+        {
+          std::vector<std::string> usedNames;
+          for ( const FpsMapPropCollider & usedCollider : prop._Colliders )
+            usedNames.push_back(usedCollider._Name);
+          FpsMapPropCollider collider = prop._Colliders[colliderIndex];
+          collider._Name = EditorUniqueName(collider._Name, usedNames);
+          collider._Center += Vec3(0.25f, 0.f, 0.25f);
+          prop._Colliders.push_back(collider);
+          _Selection._SubIndex = static_cast<int>(prop._Colliders.size()) - 1;
+          propDirty = true;
+        }
+        ImGui::SameLine();
+        if ( ImGui::Button("Delete collider") )
+        {
+          prop._Colliders.erase(prop._Colliders.begin() + colliderIndex);
+          _Selection._SubIndex = std::min(colliderIndex, static_cast<int>(prop._Colliders.size()) - 1);
+          propDirty = true;
+        }
+        ImGui::EndDisabled();
+
+        if ( ( _Selection._SubIndex >= 0 ) && ( _Selection._SubIndex < static_cast<int>(prop._Colliders.size()) ) )
+        {
+          FpsMapPropCollider & collider = prop._Colliders[_Selection._SubIndex];
+          char colliderName[128];
+          std::snprintf(colliderName, sizeof(colliderName), "%s", collider._Name.c_str());
+          if ( ImGui::InputText("Collider name", colliderName, sizeof(colliderName)) )
+          {
+            collider._Name = colliderName;
+            propDirty = true;
+          }
+          propDirty |= ImGui::DragFloat3("Collider center", &collider._Center.x, 0.05f, -100.f, 100.f, "%.3f");
+          propDirty |= ImGui::DragFloat3("Collider rotation", &collider._Rotation.x, 0.5f, -360.f, 360.f, "%.2f");
+          propDirty |= ImGui::DragFloat3("Collider half extents", &collider._HalfExtents.x, 0.05f, 0.001f, 100.f, "%.3f");
+          collider._HalfExtents = MathUtil::Max(collider._HalfExtents, Vec3(0.001f));
+        }
       }
 
       if ( propDirty )
@@ -2092,6 +2251,31 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
     EditorSyncFramebufferResolution(ioContext, true);
   }
 
+  bool cameraDirty = false;
+  ioContext._GameSettings._CameraZNear = std::max(0.001f, ioContext._GameSettings._CameraZNear);
+  ioContext._GameSettings._CameraZFar = std::max(ioContext._GameSettings._CameraZNear + 0.001f, ioContext._GameSettings._CameraZFar);
+  float zNear = ioContext._GameSettings._CameraZNear;
+  float zFar = ioContext._GameSettings._CameraZFar;
+  if ( ImGui::SliderFloat("zNear", &zNear, 0.01f, std::min(10.f, zFar - 0.001f), "%.3f", ImGuiSliderFlags_Logarithmic) )
+  {
+    ioContext._GameSettings._CameraZNear = std::min(std::max(0.001f, zNear), ioContext._GameSettings._CameraZFar - 0.001f);
+    cameraDirty = true;
+  }
+
+  zFar = ioContext._GameSettings._CameraZFar;
+  if ( ImGui::SliderFloat("zFar", &zFar, ioContext._GameSettings._CameraZNear + 0.001f, 10000.f, "%.1f", ImGuiSliderFlags_Logarithmic) )
+  {
+    ioContext._GameSettings._CameraZFar = std::max(ioContext._GameSettings._CameraZNear + 0.001f, zFar);
+    cameraDirty = true;
+  }
+
+  if ( cameraDirty )
+  {
+    if ( ioContext._Scene )
+      ioContext._SceneBinding.SyncCamera(*ioContext._Scene, ioContext._GameWorld, ioContext._GameSettings);
+    ioContext._Renderer -> Notify(DirtyState::SceneCamera);
+  }
+
   if ( ImGui::Checkbox("Show lights", &ioContext._Settings._ShowLights) )
     ioContext._Renderer -> Notify(DirtyState::SceneLights);
 
@@ -2332,13 +2516,17 @@ int FpsGameEditor::DrawOverlays( FpsGameEditorContext & ioContext )
   {
     const int propIndex = _Selection._Index;
     if ( ( propIndex >= 0 ) && ( propIndex < static_cast<int>(ioContext._Map._Props.size()) )
-      && ( FpsPropCollisionMode::Bounds == ioContext._Map._Props[propIndex]._CollisionMode ) )
+      && ( FpsPropCollisionMode::None != ioContext._Map._Props[propIndex]._CollisionMode ) )
     {
       const ImU32 collisionColor = IM_COL32(255, 190, 45, 230);
-      for ( const FpsPropCollisionBox & box : ioContext._GameWorld.GetPropCollisionBoxes() )
+      for ( const FpsCollisionObb & collider : ioContext._GameWorld.GetPropCollisionColliders() )
       {
-        if ( box._PropIndex == propIndex )
-          EditorDrawTransformedAABB(box._Bounds, Mat4x4(1.f), view, proj, drawList, collisionColor, 2.0f);
+        if ( collider._PropIndex != propIndex )
+          continue;
+
+        const bool activeCollider = ( FpsPropCollisionMode::Compound == ioContext._Map._Props[propIndex]._CollisionMode )
+                                 && ( _Selection._SubIndex == collider._ColliderIndex );
+        EditorDrawCollisionObb(collider, view, proj, drawList, activeCollider ? selectedColor : collisionColor, activeCollider ? 2.5f : 2.0f);
       }
     }
 
@@ -2469,6 +2657,33 @@ int FpsGameEditor::DrawGizmo( FpsGameEditorContext & ioContext )
       return 0;
 
     FpsMapProp & prop = ioContext._Map._Props[index];
+    if ( ( FpsPropCollisionMode::Compound == prop._CollisionMode )
+      && ( _Selection._SubIndex >= 0 )
+      && ( _Selection._SubIndex < static_cast<int>(prop._Colliders.size()) ) )
+    {
+      FpsMapPropCollider & collider = prop._Colliders[_Selection._SubIndex];
+      Mat4x4 transform = ( ImGuizmo::ROTATE == operation ) ? EditorPropColliderGizmoTransform(prop, collider) : EditorPropColliderTransform(prop, collider);
+      if ( ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
+                                operation, ImGuizmo::WORLD,
+                                glm::value_ptr(transform)) )
+      {
+        const Mat4x4 localTransform = EditorPropLocalInverseTransform(prop) * transform;
+        collider._Center = Vec3(localTransform[3]);
+        if ( ImGuizmo::ROTATE == operation )
+          collider._Rotation = EditorEulerFromMatrix(localTransform);
+        else if ( ImGuizmo::SCALE == operation )
+        {
+          collider._HalfExtents.x = std::max(0.001f, glm::length(Vec3(localTransform[0])) * 0.5f);
+          collider._HalfExtents.y = std::max(0.001f, glm::length(Vec3(localTransform[1])) * 0.5f);
+          collider._HalfExtents.z = std::max(0.001f, glm::length(Vec3(localTransform[2])) * 0.5f);
+        }
+
+        SyncProp(ioContext, index);
+        MarkDirty();
+      }
+      return 0;
+    }
+
     Mat4x4 transform = ( ImGuizmo::ROTATE == operation ) ? EditorPropGizmoTransform(prop) : EditorPropTransform(prop);
     if ( ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
                               operation, ImGuizmo::WORLD,

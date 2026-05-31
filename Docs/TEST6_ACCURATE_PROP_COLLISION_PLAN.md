@@ -2,17 +2,21 @@
 
 ## Summary
 
-Improve Test6 prop collision in two increments while keeping collision lightweight:
+Improve Test6 prop collision in two increments while keeping collision lightweight and modular:
 
 1. Replace each collidable prop mesh instance's conservative world-space AABB with an oriented box derived from its local mesh bounds and instance transform.
 2. Add optional authored compound box colliders per prop in `.fpsmap` and the FPS editor.
 
 Retain cheap world-AABB broad-phase rejection, then perform OBB narrow-phase tests only for nearby prop colliders. Keep existing arena box/collider behavior unchanged.
 
+Collision math must live in a dedicated helper module, not directly inside `FpsGameWorld`.
+
 ## Key Changes
 
 ### Runtime Collision
 
+- Add a focused `FpsCollision.h/.cpp` helper module for runtime OBB data, broad-phase bounds, AABB-vs-OBB overlap, sphere-vs-OBB hits, and movement-axis correction helpers.
+- Keep `FpsGameWorld` responsible for gameplay state and applying correction results; keep `FpsGameSceneBinding` responsible for building runtime collision data from scene/map data.
 - Extend `FpsPropCollisionMode` with `Compound`; existing `none` and `bounds` map values remain compatible.
 - Replace `FpsPropCollisionBox` with an oriented collision representation storing the prop index, world center, normalized world axes, world half extents, and a conservative world AABB for broad phase.
 - Keep `Bounds` mode automatic: create one oriented collider for each visible prop mesh instance using its mesh local bounding box and render transform.

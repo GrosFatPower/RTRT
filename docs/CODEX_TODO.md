@@ -72,3 +72,10 @@ Recommended SSR follow-ups:
 2. Add confidence or mask-only debug output separate from reflected color.
 3. Add temporal accumulation with history rejection after the broader TAA/history policy is clearer.
 4. Consider hierarchical-Z tracing only after simpler stability improvements are exhausted.
+
+## Test6 Collision Follow-Ups
+
+After the oriented/compound prop collision upgrade:
+
+1. Replace the player box with a vertical capsule and add capsule-versus-OBB movement resolution for smoother corners, slopes, and narrow obstacles.
+2. Add optional BVH-backed triangle collision queries for projectiles or specially marked static props where authored boxes are insufficient. Do not use render-mesh collision as the default player path.

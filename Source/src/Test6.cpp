@@ -460,7 +460,7 @@ int Test6::InitializeScene()
     std::cout << "Test6 : Failed to load default environment map" << std::endl;
 
   _Scene = std::move(newScene);
-  if ( 0 != RefreshPropCollisionBoxes() )
+  if ( 0 != RefreshPropCollisionColliders() )
     return 1;
 
   if ( 0 != InitializeMapBoids(true) )
@@ -474,21 +474,21 @@ int Test6::InitializeScene()
 }
 
 // ----------------------------------------------------------------------------
-// RefreshPropCollisionBoxes
+// RefreshPropCollisionColliders
 // ----------------------------------------------------------------------------
-int Test6::RefreshPropCollisionBoxes()
+int Test6::RefreshPropCollisionColliders()
 {
   if ( !_Scene )
   {
-    _GameWorld.ClearPropCollisionBoxes();
+    _GameWorld.ClearPropCollisionColliders();
     return 0;
   }
 
-  std::vector<FpsPropCollisionBox> boxes;
-  if ( 0 != _SceneBinding.BuildPropCollisionBoxes(*_Scene, _Map, boxes) )
+  std::vector<FpsCollisionObb> colliders;
+  if ( 0 != _SceneBinding.BuildPropCollisionColliders(*_Scene, _Map, colliders) )
     return 1;
 
-  _GameWorld.SetPropCollisionBoxes(boxes);
+  _GameWorld.SetPropCollisionColliders(colliders);
   return 0;
 }
 
@@ -723,6 +723,11 @@ int Test6::ProcessInput()
 
   if ( !ImGui::GetIO().WantCaptureKeyboard )
   {
+    if ( _KeyInput.IsKeyReleased(GLFW_KEY_PAGE_UP) )
+      _GameSettings._MoveSpeed = std::clamp(_GameSettings._MoveSpeed + 5.f, 1.f, 100.f);
+    if ( _KeyInput.IsKeyReleased(GLFW_KEY_PAGE_DOWN) )
+      _GameSettings._MoveSpeed = std::clamp(_GameSettings._MoveSpeed - 5.f, 1.f, 100.f);
+
     FpsRendererMode requestedRendererMode = _GameSettings._RendererMode;
     if ( _KeyInput.IsKeyDown(GLFW_KEY_J) )
       requestedRendererMode = FpsRendererMode::Deferred;

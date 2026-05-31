@@ -91,6 +91,7 @@ struct FpsEditorSelection
 {
   FpsEditableKind _Kind = FpsEditableKind::None;
   int             _Index = -1;
+  int             _SubIndex = -1;
   int             _SceneInstanceID = -1;
 };
 
