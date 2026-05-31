@@ -2333,85 +2333,101 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
     MarkDirty();
   }
 
-  if ( ImGui::Checkbox("Tone mapping", &ioContext._Settings._ToneMapping) )
-    notifyPersistedRenderSettingsChanged();
-
-  if ( ioContext._Settings._ToneMapping )
+  if ( ImGui::CollapsingHeader("Tone Mapping", ImGuiTreeNodeFlags_DefaultOpen) )
   {
-    if ( ImGui::SliderFloat("Gamma", &ioContext._Settings._Gamma, 0.5f, 3.f) )
+    if ( ImGui::Checkbox("Tone mapping", &ioContext._Settings._ToneMapping) )
       notifyPersistedRenderSettingsChanged();
-    if ( ImGui::SliderFloat("Exposure", &ioContext._Settings._Exposure, 0.1f, 5.f) )
-      notifyPersistedRenderSettingsChanged();
-  }
 
-  ImGui::Separator();
+    if ( ioContext._Settings._ToneMapping )
+    {
+      if ( ImGui::SliderFloat("Gamma", &ioContext._Settings._Gamma, 0.5f, 3.f) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("Exposure", &ioContext._Settings._Exposure, 0.1f, 5.f) )
+        notifyPersistedRenderSettingsChanged();
+    }
+  }
 
   if ( FpsRendererMode::Deferred == ioContext._GameSettings._RendererMode )
   {
-    if ( ImGui::Checkbox("Shadow mapping", &ioContext._Settings._ShadowMapping) )
-      notifyPersistedRenderSettingsChanged();
-    int shadowMapResolution = ioContext._Settings._ShadowMapResolution;
-    if ( ImGui::SliderInt( "Shadow map resolution", &shadowMapResolution, 256, 4096 ) )
+    if ( ImGui::CollapsingHeader("Shadow Mapping", ImGuiTreeNodeFlags_DefaultOpen) )
     {
-      shadowMapResolution = std::max(256, ( shadowMapResolution / 64 ) * 64);
-      ioContext._Settings._ShadowMapResolution = shadowMapResolution;
-      notifyPersistedRenderSettingsChanged();
+      if ( ImGui::Checkbox("Shadow mapping", &ioContext._Settings._ShadowMapping) )
+        notifyPersistedRenderSettingsChanged();
+      int shadowMapResolution = ioContext._Settings._ShadowMapResolution;
+      if ( ImGui::SliderInt( "Shadow map resolution", &shadowMapResolution, 256, 4096 ) )
+      {
+        shadowMapResolution = std::max(256, ( shadowMapResolution / 64 ) * 64);
+        ioContext._Settings._ShadowMapResolution = shadowMapResolution;
+        notifyPersistedRenderSettingsChanged();
+      }
+      if ( ImGui::SliderFloat( "Shadow bias", &ioContext._Settings._ShadowBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic ) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderInt("Max shadow casting lights", &ioContext._Settings._MaxShadowCastingLights, 1, 8) )
+        notifyPersistedRenderSettingsChanged();
     }
-    if ( ImGui::SliderFloat( "Shadow bias", &ioContext._Settings._ShadowBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic ) )
-      notifyPersistedRenderSettingsChanged();
 
-    if ( ImGui::Checkbox("SSAO", &ioContext._Settings._SSAO) )
-      notifyPersistedRenderSettingsChanged();
-    if ( ImGui::Checkbox("SSAO blur", &ioContext._Settings._SSAOBlur) )
-      notifyPersistedRenderSettingsChanged();
-    if ( ImGui::SliderFloat("SSAO radius", &ioContext._Settings._SSAORadius, 0.05f, 5.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
-      notifyPersistedRenderSettingsChanged();
-    if ( ImGui::SliderFloat("SSAO bias", &ioContext._Settings._SSAOBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic) )
-      notifyPersistedRenderSettingsChanged();
-    if ( ImGui::SliderFloat("SSAO intensity", &ioContext._Settings._SSAOIntensity, 0.f, 3.f) )
-      notifyPersistedRenderSettingsChanged();
-    int ssaoKernelSize = ioContext._Settings._SSAOKernelSize;
-    if ( ImGui::SliderInt("SSAO kernel size", &ssaoKernelSize, 4, 32) )
+    if ( ImGui::CollapsingHeader("SSAO", ImGuiTreeNodeFlags_DefaultOpen) )
     {
-      ioContext._Settings._SSAOKernelSize = std::max(4, std::min(32, ssaoKernelSize));
-      notifyPersistedRenderSettingsChanged();
+      if ( ImGui::Checkbox("SSAO##SSAO", &ioContext._Settings._SSAO) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::Checkbox("SSAO blur", &ioContext._Settings._SSAOBlur) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("SSAO radius", &ioContext._Settings._SSAORadius, 0.05f, 5.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("SSAO bias", &ioContext._Settings._SSAOBias, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("SSAO intensity", &ioContext._Settings._SSAOIntensity, 0.f, 3.f) )
+        notifyPersistedRenderSettingsChanged();
+      int ssaoKernelSize = ioContext._Settings._SSAOKernelSize;
+      if ( ImGui::SliderInt("SSAO kernel size", &ssaoKernelSize, 4, 32) )
+      {
+        ioContext._Settings._SSAOKernelSize = std::max(4, std::min(32, ssaoKernelSize));
+        notifyPersistedRenderSettingsChanged();
+      }
     }
-    if ( ImGui::SliderInt("Max shadow casting lights", &ioContext._Settings._MaxShadowCastingLights, 1, 8) )
-      notifyPersistedRenderSettingsChanged();
 
-    if ( ImGui::Checkbox("SSR", &ioContext._Settings._SSR) )
-      notifyPersistedRenderSettingsChanged();
-    if ( ImGui::SliderFloat("SSR intensity", &ioContext._Settings._SSRIntensity, 0.f, 2.f) )
-      notifyPersistedRenderSettingsChanged();
-    if ( ImGui::SliderFloat("SSR max roughness", &ioContext._Settings._SSRMaxRoughness, 0.05f, 1.f) )
-      notifyPersistedRenderSettingsChanged();
-    int ssrMaxSteps = ioContext._Settings._SSRMaxSteps;
-    if ( ImGui::SliderInt("SSR max steps", &ssrMaxSteps, 4, 128) )
+    if ( ImGui::CollapsingHeader("SSR", ImGuiTreeNodeFlags_DefaultOpen) )
     {
-      ioContext._Settings._SSRMaxSteps = std::max(4, std::min(128, ssrMaxSteps));
-      notifyPersistedRenderSettingsChanged();
+      if ( ImGui::Checkbox("SSR##SSR", &ioContext._Settings._SSR) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("SSR intensity", &ioContext._Settings._SSRIntensity, 0.f, 2.f) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("SSR max roughness", &ioContext._Settings._SSRMaxRoughness, 0.05f, 1.f) )
+        notifyPersistedRenderSettingsChanged();
+      int ssrMaxSteps = ioContext._Settings._SSRMaxSteps;
+      if ( ImGui::SliderInt("SSR max steps", &ssrMaxSteps, 4, 128) )
+      {
+        ioContext._Settings._SSRMaxSteps = std::max(4, std::min(128, ssrMaxSteps));
+        notifyPersistedRenderSettingsChanged();
+      }
+      if ( ImGui::SliderFloat("SSR step size", &ioContext._Settings._SSRStepSize, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("SSR max distance", &ioContext._Settings._SSRMaxDistance, 1.f, 100.f) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("SSR thickness", &ioContext._Settings._SSRThickness, 0.01f, 2.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("SSR edge fade", &ioContext._Settings._SSRFade, 0.01f, 0.5f) )
+        notifyPersistedRenderSettingsChanged();
     }
-    if ( ImGui::SliderFloat("SSR step size", &ioContext._Settings._SSRStepSize, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
-      notifyPersistedRenderSettingsChanged();
-    if ( ImGui::SliderFloat("SSR max distance", &ioContext._Settings._SSRMaxDistance, 1.f, 100.f) )
-      notifyPersistedRenderSettingsChanged();
-    if ( ImGui::SliderFloat("SSR thickness", &ioContext._Settings._SSRThickness, 0.01f, 2.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
-      notifyPersistedRenderSettingsChanged();
-    if ( ImGui::SliderFloat("SSR edge fade", &ioContext._Settings._SSRFade, 0.01f, 0.5f) )
-      notifyPersistedRenderSettingsChanged();
 
-    if ( ImGui::Checkbox("PBR direct lighting", &ioContext._Settings._PBRDirectLighting) )
-      notifyPersistedRenderSettingsChanged();
-    if ( ImGui::SliderFloat("Direct light intensity", &ioContext._Settings._DirectLightIntensity, 0.f, 8.f) )
-      notifyPersistedRenderSettingsChanged();
-    if ( ImGui::SliderFloat("IBL max roughness", &ioContext._Settings._SpecularIBLMaxRoughness, 0.05f, 1.f) )
-      notifyPersistedRenderSettingsChanged();
+    if ( ImGui::CollapsingHeader("PBR Lighting", ImGuiTreeNodeFlags_DefaultOpen) )
+    {
+      if ( ImGui::Checkbox("PBR direct lighting", &ioContext._Settings._PBRDirectLighting) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("Direct light intensity", &ioContext._Settings._DirectLightIntensity, 0.f, 8.f) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("IBL max roughness", &ioContext._Settings._SpecularIBLMaxRoughness, 0.05f, 1.f) )
+        notifyPersistedRenderSettingsChanged();
+    }
 
-    static const char * DEBUG_VIEWS[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params", "SSR", "Direct diffuse", "Direct specular" };
-    if ( ImGui::Combo("Debug view", &ioContext._DeferredDebugView, DEBUG_VIEWS, 10) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
-    if ( ImGui::Checkbox("Show wires", &ioContext._DeferredShowWires) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    if ( ImGui::CollapsingHeader("Deferred Debug") )
+    {
+      static const char * DEBUG_VIEWS[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params", "SSR", "Direct diffuse", "Direct specular" };
+      if ( ImGui::Combo("Debug view", &ioContext._DeferredDebugView, DEBUG_VIEWS, 10) )
+        ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::Checkbox("Show wires", &ioContext._DeferredShowWires) )
+        ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    }
 
     ioContext._DebugMode = 0;
     ioContext._Settings._ShowShadowMap = ( 3 == ioContext._DeferredDebugView );
@@ -2440,19 +2456,25 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
   }
   else if ( FpsRendererMode::Software == ioContext._GameSettings._RendererMode )
   {
-    const unsigned int nbThreadsMax = std::max(1u, std::thread::hardware_concurrency());
-    int numThreads = (int)ioContext._Settings._NbThreads;
-    if ( ImGui::SliderInt("Nb threads", &numThreads, 1, (int)nbThreadsMax) )
+    if ( ImGui::CollapsingHeader("Software Rasterizer", ImGuiTreeNodeFlags_DefaultOpen) )
     {
-      ioContext._Settings._NbThreads = std::max(1, numThreads);
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      const unsigned int nbThreadsMax = std::max(1u, std::thread::hardware_concurrency());
+      int numThreads = (int)ioContext._Settings._NbThreads;
+      if ( ImGui::SliderInt("Nb threads", &numThreads, 1, (int)nbThreadsMax) )
+      {
+        ioContext._Settings._NbThreads = std::max(1, numThreads);
+        ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      }
     }
 
-    static const char * DEBUG_VIEWS[] = { "Color", "Depth", "Normals" };
-    if ( ImGui::Combo("Debug view", &ioContext._SoftwareDebugView, DEBUG_VIEWS, 3) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
-    if ( ImGui::Checkbox("Show wires", &ioContext._SoftwareShowWires) )
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    if ( ImGui::CollapsingHeader("Software Debug") )
+    {
+      static const char * DEBUG_VIEWS[] = { "Color", "Depth", "Normals" };
+      if ( ImGui::Combo("Debug view", &ioContext._SoftwareDebugView, DEBUG_VIEWS, 3) )
+        ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::Checkbox("Show wires", &ioContext._SoftwareShowWires) )
+        ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+    }
 
     ioContext._DebugMode = 0;
     if ( 1 == ioContext._SoftwareDebugView )
@@ -2465,18 +2487,24 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
   }
   else if ( FpsRendererMode::PhotoPathTracer == ioContext._GameSettings._RendererMode )
   {
-    if ( ImGui::SliderInt("Bounces", &ioContext._Settings._Bounces, 1, 8) )
-      notifyPersistedRenderSettingsChanged();
-    if ( ImGui::SliderInt("SPP", &ioContext._Settings._NbSamplesPerPixel, 1, 8) )
-      notifyPersistedRenderSettingsChanged();
-    if ( ImGui::Checkbox("Denoise", &ioContext._Settings._Denoise) )
-      notifyPersistedRenderSettingsChanged();
-
-    static const char * DEBUG_VIEWS[] = { "Off", "Tiles", "Albedo", "Metalness", "Roughness", "Normals", "UV", "BLAS" };
-    if ( ImGui::Combo("Debug view", &ioContext._DebugMode, DEBUG_VIEWS, 8) )
+    if ( ImGui::CollapsingHeader("Path Tracing", ImGuiTreeNodeFlags_DefaultOpen) )
     {
-      ioContext._Renderer -> SetDebugMode(ioContext._DebugMode);
-      ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      if ( ImGui::SliderInt("Bounces", &ioContext._Settings._Bounces, 1, 8) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderInt("SPP", &ioContext._Settings._NbSamplesPerPixel, 1, 8) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::Checkbox("Denoise", &ioContext._Settings._Denoise) )
+        notifyPersistedRenderSettingsChanged();
+    }
+
+    if ( ImGui::CollapsingHeader("Path Tracer Debug") )
+    {
+      static const char * DEBUG_VIEWS[] = { "Off", "Tiles", "Albedo", "Metalness", "Roughness", "Normals", "UV", "BLAS" };
+      if ( ImGui::Combo("Debug view", &ioContext._DebugMode, DEBUG_VIEWS, 8) )
+      {
+        ioContext._Renderer -> SetDebugMode(ioContext._DebugMode);
+        ioContext._Renderer -> Notify(DirtyState::RenderSettings);
+      }
     }
   }
 
