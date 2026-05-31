@@ -49,6 +49,7 @@ struct FpsGameSettings
   float           _MouseSensitivity = 0.08f;
   float           _CameraZNear = 0.05f;
   float           _CameraZFar = 200.f;
+  float           _CameraFOV = 85.f;
   float           _PlayerHeight = 1.8f;
   float           _PlayerRadius = 0.35f;
   float           _EyeHeight    = 1.62f;

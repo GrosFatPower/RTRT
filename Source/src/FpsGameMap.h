@@ -70,6 +70,7 @@ struct FpsMapRenderSettings
   FpsRendererMode _RendererMode = FpsRendererMode::Deferred;
   float           _CameraZNear = 0.05f;
   float           _CameraZFar = 200.f;
+  float           _CameraFOV = 85.f;
   int             _RenderScale = 100;
   bool            _ShowLights = false;
   bool            _ToneMapping = true;

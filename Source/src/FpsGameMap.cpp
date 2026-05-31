@@ -546,6 +546,11 @@ protected:
         if ( !ParseFloat(tokens[1], settings._CameraZFar) )
           return Error("invalid render cameraZFar");
       }
+      else if ( ( IsEqual(tokens[0], "camerafov") || IsEqual(tokens[0], "fov") ) && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], settings._CameraFOV) )
+          return Error("invalid render cameraFOV");
+      }
       else if ( IsEqual(tokens[0], "renderscale") && ( 2 == static_cast<int>(tokens.size()) ) )
       {
         if ( !ParseInt(tokens[1], settings._RenderScale) )
@@ -1305,6 +1310,7 @@ bool FpsGameMapLoader::Save( const std::string & iFilename, const FpsGameMap & i
     file << "  renderer " << RendererModeName(settings._RendererMode) << "\n";
     file << "  cameraZNear " << settings._CameraZNear << "\n";
     file << "  cameraZFar " << settings._CameraZFar << "\n";
+    file << "  cameraFOV " << settings._CameraFOV << "\n";
     file << "  renderScale " << settings._RenderScale << "\n";
     file << "  showLights " << ( settings._ShowLights ? "true" : "false" ) << "\n";
     file << "  toneMapping " << ( settings._ToneMapping ? "true" : "false" ) << "\n";

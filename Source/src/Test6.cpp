@@ -62,6 +62,7 @@ static void ApplyMapRenderSettings( const FpsGameMap & iMap, FpsGameSettings & i
   ioGameSettings._RendererMode = settings._RendererMode;
   ioGameSettings._CameraZNear = std::max(0.001f, settings._CameraZNear);
   ioGameSettings._CameraZFar = std::max(ioGameSettings._CameraZNear + 0.001f, settings._CameraZFar);
+  ioGameSettings._CameraFOV = MathUtil::Clamp(settings._CameraFOV, 30.f, 140.f);
 
   ioRenderSettings._RenderScale = MathUtil::Clamp(settings._RenderScale, 25, 150);
   ioRenderSettings._ShowLights = settings._ShowLights;
@@ -109,6 +110,7 @@ static void CaptureMapRenderSettings( FpsGameMap & ioMap, const FpsGameSettings 
   settings._RendererMode = iGameSettings._RendererMode;
   settings._CameraZNear = iGameSettings._CameraZNear;
   settings._CameraZFar = iGameSettings._CameraZFar;
+  settings._CameraFOV = iGameSettings._CameraFOV;
   settings._RenderScale = iRenderSettings._RenderScale;
   settings._ShowLights = iRenderSettings._ShowLights;
   settings._ToneMapping = iRenderSettings._ToneMapping;

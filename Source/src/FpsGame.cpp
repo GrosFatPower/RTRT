@@ -566,7 +566,7 @@ int FpsGameSceneBinding::SyncCamera( Scene & iScene, const FpsGameWorld & iWorld
   Camera & camera = iScene.GetCamera();
   const FpsPlayer & player = iWorld.GetPlayer();
   camera.SetFreeLookPose(player.EyePosition(iSettings), player._Yaw, player._Pitch);
-  camera.SetFOVInDegrees(85.f);
+  camera.SetFOVInDegrees(MathUtil::Clamp(iSettings._CameraFOV, 30.f, 140.f));
   const float zNear = std::max(0.001f, iSettings._CameraZNear);
   const float zFar = std::max(zNear + 0.001f, iSettings._CameraZFar);
   camera.SetZNearFar(zNear, zFar);

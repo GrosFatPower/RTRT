@@ -743,6 +743,7 @@ void FpsGameEditor::SyncMapFromRuntimeSettings( FpsGameEditorContext & ioContext
   renderSettings._RendererMode = ioContext._GameSettings._RendererMode;
   renderSettings._CameraZNear = ioContext._GameSettings._CameraZNear;
   renderSettings._CameraZFar = ioContext._GameSettings._CameraZFar;
+  renderSettings._CameraFOV = ioContext._GameSettings._CameraFOV;
   renderSettings._RenderScale = ioContext._Settings._RenderScale;
   renderSettings._ShowLights = ioContext._Settings._ShowLights;
   renderSettings._ToneMapping = ioContext._Settings._ToneMapping;
@@ -2296,6 +2297,7 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
   bool cameraDirty = false;
   ioContext._GameSettings._CameraZNear = std::max(0.001f, ioContext._GameSettings._CameraZNear);
   ioContext._GameSettings._CameraZFar = std::max(ioContext._GameSettings._CameraZNear + 0.001f, ioContext._GameSettings._CameraZFar);
+  ioContext._GameSettings._CameraFOV = MathUtil::Clamp(ioContext._GameSettings._CameraFOV, 30.f, 140.f);
   float zNear = ioContext._GameSettings._CameraZNear;
   float zFar = ioContext._GameSettings._CameraZFar;
   if ( ImGui::SliderFloat("zNear", &zNear, 0.01f, std::min(10.f, zFar - 0.001f), "%.3f", ImGuiSliderFlags_Logarithmic) )
@@ -2308,6 +2310,12 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
   if ( ImGui::SliderFloat("zFar", &zFar, ioContext._GameSettings._CameraZNear + 0.001f, 10000.f, "%.1f", ImGuiSliderFlags_Logarithmic) )
   {
     ioContext._GameSettings._CameraZFar = std::max(ioContext._GameSettings._CameraZNear + 0.001f, zFar);
+    cameraDirty = true;
+  }
+  float fov = ioContext._GameSettings._CameraFOV;
+  if ( ImGui::SliderFloat("FOV", &fov, 30.f, 140.f, "%.1f") )
+  {
+    ioContext._GameSettings._CameraFOV = MathUtil::Clamp(fov, 30.f, 140.f);
     cameraDirty = true;
   }
 
