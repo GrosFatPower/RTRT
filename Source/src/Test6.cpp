@@ -409,7 +409,7 @@ int Test6::InitializeScene()
     editorPlayer = _GameWorld.GetPlayer();
 
   if ( _MapPath.empty() )
-    _MapPath = PathUtils::GetAssetPath("FPSMaps/default.fpsmap");
+    _MapPath = PathUtils::GetAssetPath("FPSMaps/ccity.fpsmap");
 
   if ( !_MapLoaded )
   {
