@@ -67,6 +67,7 @@ public:
   int Attach( Scene & iScene, const BoidSettings & iSettings );
   int Detach( Scene & iScene );
   int SyncMaterial( Scene & iScene, const BoidSettings & iSettings );
+  int SetInstancesVisible( Scene & iScene, bool iVisible );
   int SyncTransforms( Scene & iScene, const BoidSimulation & iSimulation, const BoidSettings & iSettings );
   bool ContainsInstanceID( int iInstanceID ) const;
   bool Attached() const { return !_InstanceIDs.empty(); }

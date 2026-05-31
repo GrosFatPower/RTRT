@@ -40,6 +40,7 @@ struct FpsGameEditorContext
                         std::string & iMapPath,
                         bool & iMapLoaded,
                         bool & iReloadScene,
+                        bool & iReloadBoids,
                         double iFrameRate,
                         double iFrameTime,
                         double iDeltaTime,
@@ -63,6 +64,7 @@ struct FpsGameEditorContext
   std::string           & _MapPath;
   bool                  & _MapLoaded;
   bool                  & _ReloadScene;
+  bool                  & _ReloadBoids;
   double                  _FrameRate = 0.;
   double                  _FrameTime = 0.;
   double                  _DeltaTime = 0.;

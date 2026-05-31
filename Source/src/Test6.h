@@ -46,6 +46,7 @@ protected:
   int InitializeScene();
   int InitializeRenderer();
   int InitializeMapBoids( bool iResetSimulation );
+  int RefreshMapBoids();
   int RefreshPropCollisionColliders();
 
   int ProcessInput();
@@ -79,6 +80,7 @@ protected:
   RenderSettings            _Settings;
   std::unique_ptr<Renderer> _Renderer;
   bool                      _ReloadScene = false;
+  bool                      _ReloadBoids = false;
   bool                      _ReloadRenderer = false;
 
   FpsGameSettings           _GameSettings;

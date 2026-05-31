@@ -23,6 +23,7 @@ render {
   renderer deferred
   cameraZNear 0.050000
   cameraZFar 501.500000
+  cameraFOV 85.000000
   renderScale 100
   showLights false
   toneMapping true
@@ -8253,6 +8254,26 @@ prop "City" {
     rotation 0.000000 0.000000 0.000000
     half 100.000000 187.265869 0.001000
   }
+}
+
+boids "Boids 0" {
+  visible true
+  count 100
+  seed 1337
+  center -49.739258 32.189796 -114.805084
+  radius 134.432800
+  height 35.694717
+  minspeed 3.030000
+  maxspeed 5.890000
+  maxforce 4.000000
+  neighborradius 1.200000
+  separationradius 0.350000
+  separation 1.600000
+  alignment 1.000000
+  cohesion 1.000000
+  boundsweight 2.000000
+  scale 0.480000
+  color 0.950000 0.350000 0.120000
 }
 
 light {

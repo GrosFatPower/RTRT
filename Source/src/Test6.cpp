@@ -472,7 +472,7 @@ int Test6::InitializeUI()
 // ----------------------------------------------------------------------------
 FpsGameEditorContext Test6::MakeEditorContext()
 {
-  return FpsGameEditorContext(_MainWindow.get(), _Scene.get(), _Renderer.get(), _Settings, _KeyInput, _GameSettings, _GameWorld, _SceneBinding, _Map, _MapPath, _MapLoaded, _ReloadScene,
+  return FpsGameEditorContext(_MainWindow.get(), _Scene.get(), _Renderer.get(), _Settings, _KeyInput, _GameSettings, _GameWorld, _SceneBinding, _Map, _MapPath, _MapLoaded, _ReloadScene, _ReloadBoids,
                               _FrameRate, _FrameTime, _DeltaTime, _NbRenderedFrames,
                               _DebugMode, _DeferredDebugView, _DeferredShowWires, _SoftwareDebugView, _SoftwareShowWires,
                               _DisplayedCpuTimings);
@@ -599,15 +599,14 @@ int Test6::InitializeMapBoids( bool iResetSimulation )
 
   for ( const FpsMapBoids & mapBoids : _Map._Boids )
   {
-    if ( !mapBoids._Visible )
-      continue;
-
     _BoidSettings.push_back(mapBoids._Settings);
     _BoidSimulations.push_back(BoidSimulation());
     _BoidBindings.push_back(BoidSceneBinding());
 
     BoidSettings & settings = _BoidSettings.back();
     settings._Paused = false;
+    if ( !mapBoids._Visible )
+      settings._Count = 0;
 
     BoidSimulation & simulation = _BoidSimulations.back();
     BoidSceneBinding & binding = _BoidBindings.back();
@@ -622,6 +621,88 @@ int Test6::InitializeMapBoids( bool iResetSimulation )
 
     if ( 0 != binding.SyncTransforms(*_Scene, simulation, settings) )
       return 1;
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// RefreshMapBoids
+// ----------------------------------------------------------------------------
+int Test6::RefreshMapBoids()
+{
+  auto hideCurrentMapBoids = [this]()
+  {
+    if ( !_Scene )
+      return;
+    for ( int i = static_cast<int>(_BoidBindings.size()) - 1; i >= 0; --i )
+      _BoidBindings[i].SetInstancesVisible(*_Scene, false);
+  };
+
+  if ( !_Scene || !_MapLoaded )
+  {
+    hideCurrentMapBoids();
+    _BoidSettings.clear();
+    _BoidSimulations.clear();
+    _BoidBindings.clear();
+    return 0;
+  }
+
+  if ( static_cast<int>(_Map._Boids.size()) != static_cast<int>(_BoidSettings.size()) )
+  {
+    hideCurrentMapBoids();
+    if ( 0 != InitializeMapBoids(true) )
+      return 1;
+
+    if ( _Renderer )
+    {
+      _Renderer -> Notify(DirtyState::Textures);
+      _Renderer -> Notify(DirtyState::SceneMaterials);
+      _Renderer -> Notify(DirtyState::SceneInstances);
+    }
+    return 0;
+  }
+
+  int runtimeIndex = 0;
+  bool materialsDirty = false;
+  for ( const FpsMapBoids & mapBoids : _Map._Boids )
+  {
+    BoidSettings settings = mapBoids._Settings;
+    settings._Paused = false;
+    if ( !mapBoids._Visible )
+      settings._Count = 0;
+
+    if ( runtimeIndex >= static_cast<int>(_BoidSettings.size())
+      || runtimeIndex >= static_cast<int>(_BoidSimulations.size())
+      || runtimeIndex >= static_cast<int>(_BoidBindings.size()) )
+      return 1;
+
+    const bool resetSimulation = ( settings._Seed != _BoidSettings[runtimeIndex]._Seed );
+    const bool materialDirty = glm::length(settings._Color - _BoidSettings[runtimeIndex]._Color) > 0.0001f;
+    _BoidSettings[runtimeIndex] = settings;
+
+    if ( resetSimulation )
+    {
+      if ( 0 != _BoidSimulations[runtimeIndex].Reset(settings) )
+        return 1;
+    }
+    else if ( 0 != _BoidSimulations[runtimeIndex].Resize(settings) )
+      return 1;
+
+    if ( 0 != _BoidBindings[runtimeIndex].Attach(*_Scene, settings) )
+      return 1;
+    if ( 0 != _BoidBindings[runtimeIndex].SyncTransforms(*_Scene, _BoidSimulations[runtimeIndex], settings) )
+      return 1;
+
+    materialsDirty = materialsDirty || materialDirty;
+    ++runtimeIndex;
+  }
+
+  if ( _Renderer )
+  {
+    if ( materialsDirty )
+      _Renderer -> Notify(DirtyState::SceneMaterials);
+    _Renderer -> Notify(DirtyState::SceneInstances);
   }
 
   return 0;
@@ -912,6 +993,7 @@ int Test6::UpdateGame()
   if ( _ReloadScene )
   {
     _ReloadScene = false;
+    _ReloadBoids = false;
     _Renderer.reset();
     if ( 0 != InitializeScene() )
     {
@@ -925,6 +1007,16 @@ int Test6::UpdateGame()
   {
     _ReloadRenderer = false;
     if ( 0 != InitializeRenderer() )
+    {
+      EndCpuTiming(CpuUpdateGame);
+      return 1;
+    }
+  }
+
+  if ( _ReloadBoids )
+  {
+    _ReloadBoids = false;
+    if ( 0 != RefreshMapBoids() )
     {
       EndCpuTiming(CpuUpdateGame);
       return 1;

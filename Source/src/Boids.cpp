@@ -280,8 +280,6 @@ int BoidSceneBinding::Detach( Scene & iScene )
 int BoidSceneBinding::SyncTransforms( Scene & iScene, const BoidSimulation & iSimulation, const BoidSettings & iSettings )
 {
   const std::vector<BoidState> & boids = iSimulation.GetBoids();
-  if ( boids.size() != _InstanceIDs.size() )
-    return 1;
 
   std::vector<MeshInstance> & meshInstances = iScene.GetMeshInstances();
   for ( int i = 0; i < static_cast<int>(_InstanceIDs.size()); ++i )
@@ -290,7 +288,9 @@ int BoidSceneBinding::SyncTransforms( Scene & iScene, const BoidSimulation & iSi
     if ( ( instanceID < 0 ) || ( instanceID >= static_cast<int>(meshInstances.size()) ) )
       return 1;
 
-    meshInstances[instanceID]._Transform = BuildTransform(boids[i], iSettings._Scale);
+    meshInstances[instanceID]._Visible = i < static_cast<int>(boids.size());
+    if ( i < static_cast<int>(boids.size()) )
+      meshInstances[instanceID]._Transform = BuildTransform(boids[i], iSettings._Scale);
   }
 
   return 0;
@@ -317,6 +317,21 @@ int BoidSceneBinding::SyncMaterial( Scene & iScene, const BoidSettings & iSettin
     return 1;
 
   materials[_MaterialID]._Albedo = iSettings._Color;
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// SetInstancesVisible
+// ----------------------------------------------------------------------------
+int BoidSceneBinding::SetInstancesVisible( Scene & iScene, bool iVisible )
+{
+  std::vector<MeshInstance> & meshInstances = iScene.GetMeshInstances();
+  for ( int instanceID : _InstanceIDs )
+  {
+    if ( ( instanceID < 0 ) || ( instanceID >= static_cast<int>(meshInstances.size()) ) )
+      return 1;
+    meshInstances[instanceID]._Visible = iVisible;
+  }
   return 0;
 }
 
@@ -390,12 +405,11 @@ int BoidSceneBinding::ResizeInstances( Scene & iScene, const BoidSettings & iSet
   std::vector<MeshInstance> & meshInstances = iScene.GetMeshInstances();
   const int targetCount = std::max(iSettings._Count, 0);
 
-  while ( static_cast<int>(_InstanceIDs.size()) > targetCount )
+  for ( int i = targetCount; i < static_cast<int>(_InstanceIDs.size()); ++i )
   {
-    const int instanceID = _InstanceIDs.back();
-    _InstanceIDs.pop_back();
+    const int instanceID = _InstanceIDs[i];
     if ( ( instanceID >= 0 ) && ( instanceID < static_cast<int>(meshInstances.size()) ) )
-      meshInstances.erase(meshInstances.begin() + instanceID);
+      meshInstances[instanceID]._Visible = false;
   }
 
   while ( static_cast<int>(_InstanceIDs.size()) < targetCount )

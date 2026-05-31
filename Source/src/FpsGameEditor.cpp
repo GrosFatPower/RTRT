@@ -49,6 +49,7 @@ FpsGameEditorContext::FpsGameEditorContext( GLFWwindow * iWindow,
                                             std::string & iMapPath,
                                             bool & iMapLoaded,
                                             bool & iReloadScene,
+                                            bool & iReloadBoids,
                                             double iFrameRate,
                                             double iFrameTime,
                                             double iDeltaTime,
@@ -71,6 +72,7 @@ FpsGameEditorContext::FpsGameEditorContext( GLFWwindow * iWindow,
 , _MapPath(iMapPath)
 , _MapLoaded(iMapLoaded)
 , _ReloadScene(iReloadScene)
+, _ReloadBoids(iReloadBoids)
 , _FrameRate(iFrameRate)
 , _FrameTime(iFrameTime)
 , _DeltaTime(iDeltaTime)
@@ -946,7 +948,7 @@ bool FpsGameEditor::DeleteSelectedItem( FpsGameEditorContext & ioContext )
     ioContext._Map._Boids.erase(ioContext._Map._Boids.begin() + index);
     _Selection = FpsEditorSelection();
     MarkDirty();
-    ioContext._ReloadScene = true;
+    ioContext._ReloadBoids = true;
     SetStatus("Deleted " + name);
     return true;
   }
@@ -1041,7 +1043,7 @@ bool FpsGameEditor::DuplicateSelectedItem( FpsGameEditorContext & ioContext )
     _Selection._Kind = FpsEditableKind::Boids;
     _Selection._Index = static_cast<int>(ioContext._Map._Boids.size()) - 1;
     MarkDirty();
-    ioContext._ReloadScene = true;
+    ioContext._ReloadBoids = true;
     SetStatus("Duplicated " + boids._Name);
     return true;
   }
@@ -1581,7 +1583,7 @@ void FpsGameEditor::DrawScenePanel( FpsGameEditorContext & ioContext )
       _Selection._Kind = FpsEditableKind::Boids;
       _Selection._Index = static_cast<int>(ioContext._Map._Boids.size()) - 1;
       MarkDirty();
-      ioContext._ReloadScene = true;
+      ioContext._ReloadBoids = true;
     }
 
     if ( ImGui::BeginListBox("Boids", ImVec2(-FLT_MIN, 120.f)) )
@@ -2034,7 +2036,7 @@ void FpsGameEditor::DrawInspectorPanel( FpsGameEditorContext & ioContext )
         settings._NeighborRadius = std::max(0.01f, settings._NeighborRadius);
         settings._SeparationRadius = MathUtil::Clamp(settings._SeparationRadius, 0.01f, settings._NeighborRadius);
         MarkDirty();
-        ioContext._ReloadScene = true;
+        ioContext._ReloadBoids = true;
       }
     }
   }
@@ -2839,7 +2841,7 @@ int FpsGameEditor::DrawGizmo( FpsGameEditorContext & ioContext )
         settings._BoundsHeight = std::max(0.1f, glm::length(Vec3(transform[1])));
       }
       MarkDirty();
-      ioContext._ReloadScene = true;
+      ioContext._ReloadBoids = true;
     }
   }
 
