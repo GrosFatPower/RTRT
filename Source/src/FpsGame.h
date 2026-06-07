@@ -2,6 +2,7 @@
 #define _FpsGame_
 
 #include "FpsCollision.h"
+#include "FpsHeadBob.h"
 #include "FpsProjectiles.h"
 #include "MathUtil.h"
 
@@ -67,6 +68,7 @@ struct FpsGameSettings
   int             _MaxProjectileAmmo = 32;
   float           _ProjectileAmmoRefillTime = 0.5f;
   bool            _FreeLook = false;
+  FpsHeadBobSettings _HeadBob;
   bool            _ShowViewWeapon = true;
   Vec3            _ViewWeaponOffset = Vec3(0.44f, -0.33f, 0.83f);
   Vec3            _ViewWeaponRotation = Vec3(-6.5f, -10.5f, 3.f);
@@ -98,8 +100,10 @@ struct FpsPlayer
   bool  _Grounded = false;
   int   _Health = 100;
   int   _Armor = 50;
+  FpsHeadBob _HeadBob;
 
   Vec3 EyePosition( const FpsGameSettings & iSettings ) const;
+  Vec3 ViewPosition( const FpsGameSettings & iSettings ) const;
 };
 
 struct FpsSceneObject

@@ -1220,6 +1220,16 @@ int Test6::DrawGameSettingsUI()
     ImGui::SliderFloat("Player height", &_GameSettings._PlayerHeight, 1.f, 2.4f);
     ImGui::SliderFloat("Gravity", &_GameSettings._Gravity, 1.f, 35.f);
     ImGui::SliderFloat("Jump speed", &_GameSettings._JumpSpeed, 1.f, 12.f);
+
+    if ( ImGui::TreeNode("Head bob") )
+    {
+      ImGui::Checkbox("Enabled", &_GameSettings._HeadBob._Enabled);
+      ImGui::SliderFloat("Amplitude", &_GameSettings._HeadBob._Amplitude, 0.f, 0.08f, "%.3f");
+      ImGui::SliderFloat("Frequency", &_GameSettings._HeadBob._Frequency, 0.5f, 4.f, "%.2f");
+      ImGui::SliderFloat("Sway", &_GameSettings._HeadBob._Sway, 0.f, 0.05f, "%.3f");
+      ImGui::SliderFloat("Smoothing", &_GameSettings._HeadBob._Smoothing, 1.f, 50.f, "%.1f");
+      ImGui::TreePop();
+    }
   }
 
   if ( ImGui::CollapsingHeader("Projectiles") )

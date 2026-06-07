@@ -191,6 +191,16 @@ Vec3 FpsPlayer::EyePosition( const FpsGameSettings & iSettings ) const
 }
 
 // ----------------------------------------------------------------------------
+// ViewPosition
+// ----------------------------------------------------------------------------
+Vec3 FpsPlayer::ViewPosition( const FpsGameSettings & iSettings ) const
+{
+  if ( iSettings._FreeLook )
+    return EyePosition(iSettings);
+  return EyePosition(iSettings) + _HeadBob.GetOffset();
+}
+
+// ----------------------------------------------------------------------------
 // Initialize
 // ----------------------------------------------------------------------------
 int FpsGameWorld::Initialize( const FpsGameSettings & iSettings )
@@ -220,6 +230,7 @@ int FpsGameWorld::Reset( const FpsGameSettings & iSettings )
   _Player._Grounded = false;
   _Player._Health = std::max(0, ( _SpawnHealth >= 0 ) ? _SpawnHealth : iSettings._MaxHealth);
   _Player._Armor = std::max(0, ( _SpawnArmor >= 0 ) ? _SpawnArmor : iSettings._MaxArmor);
+  _Player._HeadBob.Reset();
 
   return _Projectiles.Initialize(iSettings);
 }
@@ -321,6 +332,18 @@ int FpsGameWorld::Update( float iDeltaTime, const FpsGameInput & iInput, const F
     _Player._Grounded = false;
     MoveAxis(1, _Player._Velocity.y * dt, iSettings);
   }
+
+  const float horizontalSpeed = glm::length(Vec2(_Player._Velocity.x, _Player._Velocity.z));
+  const float yawRad = MathUtil::ToRadians(_Player._Yaw);
+  const Vec3 right(-std::sin(yawRad), 0.f, std::cos(yawRad));
+  FpsHeadBobUpdate headBobUpdate;
+  headBobUpdate._DeltaTime = dt;
+  headBobUpdate._HorizontalSpeed = horizontalSpeed;
+  headBobUpdate._Grounded = _Player._Grounded;
+  headBobUpdate._Enabled = !iSettings._FreeLook;
+  headBobUpdate._Right = right;
+  headBobUpdate._Up = Vec3(0.f, 1.f, 0.f);
+  _Player._HeadBob.Update(iSettings._HeadBob, headBobUpdate);
 
   _Projectiles.Update(0.f, dt, projectilesContext);
 
@@ -565,7 +588,7 @@ int FpsGameSceneBinding::SyncCamera( Scene & iScene, const FpsGameWorld & iWorld
 {
   Camera & camera = iScene.GetCamera();
   const FpsPlayer & player = iWorld.GetPlayer();
-  camera.SetFreeLookPose(player.EyePosition(iSettings), player._Yaw, player._Pitch);
+  camera.SetFreeLookPose(player.ViewPosition(iSettings), player._Yaw, player._Pitch);
   camera.SetFOVInDegrees(MathUtil::Clamp(iSettings._CameraFOV, 30.f, 140.f));
   const float zNear = std::max(0.001f, iSettings._CameraZNear);
   const float zFar = std::max(zNear + 0.001f, iSettings._CameraZFar);
@@ -1127,7 +1150,7 @@ Mat4x4 FpsGameSceneBinding::BuildProjectileTransform( const FpsProjectile & iPro
 Mat4x4 FpsGameSceneBinding::BuildViewWeaponTransform( const FpsPlayer & iPlayer, const FpsGameSettings & iSettings ) const
 {
   if ( !iSettings._ShowViewWeapon )
-    return glm::translate(iPlayer.EyePosition(iSettings)) * glm::scale(Vec3(std::max(0.001f, iSettings._ViewWeaponScale)));
+    return glm::translate(iPlayer.ViewPosition(iSettings)) * glm::scale(Vec3(std::max(0.001f, iSettings._ViewWeaponScale)));
 
   const float yawRad = MathUtil::ToRadians(iPlayer._Yaw);
   const float pitchRad = MathUtil::ToRadians(iPlayer._Pitch);
@@ -1144,7 +1167,7 @@ Mat4x4 FpsGameSceneBinding::BuildViewWeaponTransform( const FpsPlayer & iPlayer,
   cameraTransform[0] = Vec4(right, 0.f);
   cameraTransform[1] = Vec4(up, 0.f);
   cameraTransform[2] = Vec4(forward, 0.f);
-  cameraTransform[3] = Vec4(iPlayer.EyePosition(iSettings), 1.f);
+  cameraTransform[3] = Vec4(iPlayer.ViewPosition(iSettings), 1.f);
 
   const Vec3 rotRad(MathUtil::ToRadians(iSettings._ViewWeaponRotation.x),
                     MathUtil::ToRadians(iSettings._ViewWeaponRotation.y),
