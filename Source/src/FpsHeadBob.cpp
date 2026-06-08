@@ -29,9 +29,9 @@ void FpsHeadBob::Update( const FpsHeadBobSettings & iSettings, const FpsHeadBobU
   {
     const float frequency = std::max(0.f, iSettings._Frequency);
     const float speedScale = MathUtil::Clamp(speed / 5.f, 0.5f, 1.8f);
-    _Phase += dt * frequency * speedScale * 6.28318530718f;
-    if ( _Phase > 6.28318530718f )
-      _Phase = std::fmod(_Phase, 6.28318530718f);
+    _Phase += dt * frequency * speedScale * TWO_PI;
+    if ( _Phase > TWO_PI )
+      _Phase = std::fmod(_Phase, TWO_PI);
 
     const float amplitude = std::max(0.f, iSettings._Amplitude);
     const float sway = std::max(0.f, iSettings._Sway);

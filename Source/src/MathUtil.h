@@ -34,6 +34,7 @@ static constexpr float EPSILON    = 1e-9f;
 static constexpr float RESOLUTION = 0.001f;
 static constexpr float MAX_FLOAT  = std::numeric_limits<float>::max();
 static constexpr float INV_PI     = 1 / static_cast<float>(M_PI);
+static constexpr float TWO_PI     = 2 * static_cast<float>(M_PI);
 
 namespace RTRT
 {
