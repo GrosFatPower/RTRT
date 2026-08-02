@@ -70,6 +70,7 @@ public:
   virtual int RenderToTexture() override;
   virtual int RenderToScreen() override;
   virtual int RenderToFile(const std::filesystem::path& iFilePath) override;
+  virtual int ReadbackFinalColor( RenderImage & oImage ) override;
 
   void SetGenerateMipMaps(bool iGenerate);
   bool GetGenerateMipMaps() const { return _GenerateMipMaps; }

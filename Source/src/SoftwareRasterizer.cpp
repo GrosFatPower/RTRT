@@ -496,6 +496,27 @@ int SoftwareRasterizer::RenderToScreen()
 }
 
 // ----------------------------------------------------------------------------
+// ReadbackFinalColor
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::ReadbackFinalColor( RenderImage & oImage )
+{
+  if ( !_RenderTargetTEX._Handle || ( RenderWidth() <= 0 ) || ( RenderHeight() <= 0 ) )
+    return 1;
+
+  oImage._Width = RenderWidth();
+  oImage._Height = RenderHeight();
+  oImage._Pixels.resize((size_t)oImage._Width * (size_t)oImage._Height * 4u);
+
+  while ( GL_NO_ERROR != glGetError() ) {}
+  glBindTexture(GL_TEXTURE_2D, _RenderTargetTEX._Handle);
+  glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, oImage._Pixels.data());
+  glBindTexture(GL_TEXTURE_2D, 0);
+  FlipImageVertically(oImage);
+
+  return ( GL_NO_ERROR == glGetError() ) ? 0 : 1;
+}
+
+// ----------------------------------------------------------------------------
 // RenderToFile
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::RenderToFile(const fs::path& iFilePath)

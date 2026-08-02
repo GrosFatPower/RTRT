@@ -1,0 +1,66 @@
+#ifndef _RenderTestFramework_
+#define _RenderTestFramework_
+
+#include "Renderer.h"
+#include "RendererFactory.h"
+
+#include <filesystem>
+#include <string>
+#include <vector>
+
+namespace RTRT
+{
+
+struct RenderSettings;
+class Scene;
+
+namespace Tests
+{
+
+struct ImageMetrics
+{
+  float  _MeanAbsoluteError = 0.f;
+  float  _MaxAbsoluteError = 0.f;
+  float  _MismatchRatio = 0.f;
+  size_t _MismatchCount = 0;
+};
+
+struct RenderTestCase
+{
+  std::string     _Name;
+  std::string     _ScenePath;
+  RendererBackend _Backend = RendererBackend::DeferredRenderer;
+  int             _Width = 320;
+  int             _Height = 180;
+  int             _FrameCount = 1;
+  float           _MeanAbsoluteErrorThreshold = 0.f;
+  float           _MaxAbsoluteErrorThreshold = 0.f;
+  float           _PixelErrorThreshold = 0.f;
+  float           _MismatchRatioThreshold = 0.f;
+  std::filesystem::path _BaselinePath;
+  bool            _OverrideCamera = false;
+  Vec3            _CameraPosition = Vec3(0.f);
+  Vec3            _CameraPivot = Vec3(0.f);
+  float           _CameraFOV = 80.f;
+  float           _CameraNear = 1.f;
+  float           _CameraFar = 1000.f;
+
+  void ApplySettings( RenderSettings & ioSettings ) const;
+  void ApplyScene( Scene & ioScene ) const;
+};
+
+bool WritePFM( const std::filesystem::path & iPath, const RenderImage & iImage );
+bool ReadPFM( const std::filesystem::path & iPath, RenderImage & oImage );
+bool WriteDiagnosticPNG( const std::filesystem::path & iPath, const RenderImage & iImage, float iScale = 1.f );
+bool WriteDiffPNG( const std::filesystem::path & iPath, const RenderImage & iActual, const RenderImage & iExpected );
+bool CompareImages( const RenderImage & iActual, const RenderImage & iExpected, float iPixelErrorThreshold, ImageMetrics & oMetrics );
+bool MatchesThresholds( const ImageMetrics & iMetrics, const RenderTestCase & iTestCase );
+
+std::vector<RenderTestCase> GetRenderTestCases();
+int RunUnitTests( const std::filesystem::path & iArtifactsDir );
+
+}
+
+}
+
+#endif /* _RenderTestFramework_ */

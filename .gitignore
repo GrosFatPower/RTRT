@@ -29,6 +29,11 @@ Assets/.DS_Store?
 .vs/
 Bin/
 Build/
+Tests/Artifacts/
+shader.tmp/
+VertexShader_*.glsl
+FragmentShader_*.glsl
+ComputeShader_*.glsl
 Assets/ajax/
 Assets/Figurine/
 Assets/bedroom/

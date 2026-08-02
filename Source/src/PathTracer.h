@@ -64,6 +64,7 @@ public:
   virtual int DenoiseOutput();
   virtual int RenderToScreen() override;
   virtual int RenderToFile( const std::filesystem::path & iFilePath ) override;
+  virtual int ReadbackFinalColor( RenderImage & oImage ) override;
 
   unsigned int GetNbCompleteFrames()  const { return _NbCompleteFrames; }
   unsigned int GetFrameNum()          const { return _FrameNum; }
@@ -196,6 +197,10 @@ protected:
   unsigned int _FrameNum          = 1;
   unsigned int _NbCompleteFrames  = 0;
   bool         _DenoisedThisFrame = false;
+  bool         _PathTraceTimerWritten = false;
+  bool         _AccumulateTimerWritten = false;
+  bool         _DenoiseTimerWritten = false;
+  bool         _RenderToScreenTimerWritten = false;
 
   // Scene data
   int _NbTriangles     = 0;

@@ -54,6 +54,7 @@ public:
   virtual int RenderToTexture() override;
   virtual int RenderToScreen() override;
   virtual int RenderToFile(const std::filesystem::path& iFilePath) override;
+  virtual int ReadbackFinalColor( RenderImage & oImage ) override;
   virtual int GetRenderPassTimings( std::vector<RenderPassTiming> & oTimings ) const override;
 
   virtual SoftwareRasterizer* AsSoftwareRasterizer() override { return this; }

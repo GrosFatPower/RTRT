@@ -90,7 +90,7 @@ CTest labels:
 
 - Name: `software_textured_box`
 - Scene: `Assets/TexturedBox.scene`
-- Resolution: `320x180`
+- Resolution: `1280x720`
 - Frames: one
 - Output: final composited color
 - Thresholds: MAE `0.000001`, maximum error `0.00001`, mismatch ratio `0%`
@@ -99,18 +99,28 @@ CTest labels:
 
 - Name: `deferred_ibl_ssr`
 - Scene: `Assets/tungsten-material-testball.scene`
-- Resolution: `320x180`
+- Resolution: `1280x720`
 - Settings: specular IBL and SSR enabled
 - Frames: warm up two frames, capture frame three
 - Output: final composited color
 - Thresholds: MAE `0.003`, maximum error `0.08`, pixels above `0.02` limited to `0.5%`
 
+### Cornell cross-backend cases
+
+- Names: `software_cornell`, `deferred_cornell`, and `pathtracer_cornell`
+- Scene: `Assets/cornell_box.scene`
+- Resolution: `720x720`
+- Camera: position `(0.276, 0.265, -0.750)`, pivot `(0.276, 0.265, 0.100)`, FOV `40` degrees, near plane `0.5`
+- Software settings: one frame with strict raster thresholds
+- Deferred settings: three frames with the deferred tolerance policy
+
 ### Path tracer
 
 - Name: `pathtracer_cornell`
 - Scene: `Assets/cornell_box.scene`
-- Resolution: `320x180`
-- Settings: 16 accumulated frames, one sample per pixel, four bounces, accumulation enabled, denoising disabled
+- Resolution: `720x720`
+- Camera: position `(0.276, 0.265, -0.750)`, pivot `(0.276, 0.265, 0.100)`, FOV `40` degrees, near plane `0.5`
+- Settings: six accumulated frames, one sample per pixel, four bounces, accumulation enabled, auto-scale enabled to disable the interactive low-resolution pass, denoising disabled
 - Output: final composited color
 - Thresholds: MAE `0.02`, maximum error `0.25`, pixels above `0.08` limited to `2%`
 

@@ -33,6 +33,15 @@ struct RenderPassTiming
   bool         _Enabled = false;
 };
 
+struct RenderImage
+{
+  int                _Width = 0;
+  int                _Height = 0;
+  std::vector<float> _Pixels;
+
+  bool IsValid() const { return ( _Width > 0 ) && ( _Height > 0 ) && ( _Pixels.size() == (size_t)(_Width * _Height * 4) ); }
+};
+
 class Renderer
 {
 public:
@@ -46,6 +55,7 @@ public:
   virtual int RenderToTexture() = 0;
   virtual int RenderToScreen() = 0;
   virtual int RenderToFile( const std::filesystem::path & iFilePath ) = 0;
+  virtual int ReadbackFinalColor( RenderImage & oImage ) = 0;
   virtual int GetRenderPassTimings( std::vector<RenderPassTiming> & oTimings ) const;
 
   void Notify( DirtyState iState ) { _DirtyStates |= (unsigned long)iState; };
@@ -57,6 +67,8 @@ public:
   virtual DeferredRenderer * AsDeferredRenderer() { return nullptr; }
 
 protected:
+
+  static void FlipImageVertically( RenderImage & ioImage );
 
   bool Dirty() const { return ( _DirtyStates != (unsigned long)DirtyState::Clean ); }
   void CleanStates() { _DirtyStates = (unsigned long)DirtyState::Clean; }

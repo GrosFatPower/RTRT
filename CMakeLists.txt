@@ -5,6 +5,9 @@ project(RTRT
   VERSION 1.0
 )
 
+include(CTest)
+option(RTRT_BUILD_RENDER_REGRESSION_TESTS "Build local render regression tests" ON)
+
 SET_PROPERTY(GLOBAL PROPERTY USE_FOLDERS ON)
 
 # Detection of the system architecture
@@ -77,13 +80,21 @@ file(GLOB_RECURSE CORE_HEADER CONFIGURE_DEPENDS ./Source/src/*.h ./Source/src/*.
 file(GLOB_RECURSE EXT_SOURCE CONFIGURE_DEPENDS ./Dependencies/RadeonRays/*.cpp)
 file(GLOB_RECURSE EXT_HEADER CONFIGURE_DEPENDS ./Dependencies/RadeonRays/*.h)
 file(GLOB_RECURSE SHADERS CONFIGURE_DEPENDS ./Shaders/*.glsl)
+file(GLOB_RECURSE TEST_SOURCE CONFIGURE_DEPENDS ./Tests/*.cpp)
+file(GLOB_RECURSE TEST_HEADER CONFIGURE_DEPENDS ./Tests/*.h)
+
+set(RTRT_MAIN_SOURCE ${CMAKE_SOURCE_DIR}/Source/src/main.cpp)
+list(REMOVE_ITEM CORE_SOURCE ${RTRT_MAIN_SOURCE})
 
 source_group("src"    FILES ${CORE_SOURCE} ${EXT_SOURCE})
 source_group("header" FILES ${CORE_HEADER} ${EXT_HEADER})
 source_group("shaders" FILES ${SHADERS})
+source_group("tests" FILES ${TEST_SOURCE} ${TEST_HEADER})
 
 SET(EXE_NAME "RenderLab")
-add_executable(${EXE_NAME} ${CORE_SOURCE} ${CORE_HEADER} ${EXT_SOURCE} ${EXT_HEADER} ${SHADERS})
+add_library(RTRTCore STATIC ${CORE_SOURCE} ${CORE_HEADER} ${EXT_SOURCE} ${EXT_HEADER})
+add_executable(${EXE_NAME} ${RTRT_MAIN_SOURCE} ${SHADERS})
+target_link_libraries(${EXE_NAME} PRIVATE RTRTCore)
 
 # OpenGL
 find_package(OpenGL REQUIRED)
@@ -130,7 +141,8 @@ elseif(ARCH_X64)
   set(GLM_ENABLE_SIMD_AVX2 ON)
 endif()
 
-target_include_directories(${EXE_NAME}
+function(ConfigureRTRTTarget iTarget)
+target_include_directories(${iTarget}
   PUBLIC ${CMAKE_SOURCE_DIR}/Source/src
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glfw/include
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/imgui
@@ -145,12 +157,12 @@ target_include_directories(${EXE_NAME}
   PUBLIC ${GLEW_INCLUDE_DIRS}
 )
 
-target_link_directories(${EXE_NAME}
+target_link_directories(${iTarget}
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glew-2.1.0/lib/Release/x64/
 )
 
 if(APPLE)
-  target_link_libraries(${EXE_NAME}
+  target_link_libraries(${iTarget}
     imguizmo
     ${GLEW_LIBRARIES}
     ${OPENGL_LIBRARIES}
@@ -159,7 +171,7 @@ if(APPLE)
     ${COREVIDEO_LIBRARY}
   )
 else()
-  target_link_libraries(${EXE_NAME}
+  target_link_libraries(${iTarget}
     imguizmo
     ${GLEW_LIBRARIES}
     ${OPENGL_LIBRARIES}
@@ -167,27 +179,27 @@ else()
 endif()
 
 if(WIN32)
-  set_target_properties(${EXE_NAME} PROPERTIES
+  set_target_properties(${iTarget} PROPERTIES
   	VS_DEBUGGER_WORKING_DIRECTORY "$(Project)$(Configuration)"
   )
 endif()
 
-target_compile_definitions(${EXE_NAME}
+target_compile_definitions(${iTarget}
   PUBLIC GLEW_STATIC
   PUBLIC NOMINMAX
 )
 
-target_compile_features(${EXE_NAME}
+target_compile_features(${iTarget}
  PRIVATE cxx_std_17
 )
 
 if(APPLE)
-  target_compile_options(${EXE_NAME} 
+  target_compile_options(${iTarget}
     PRIVATE -fexperimental-library -Wno-deprecated-declarations
   )
 
   if(ARCH_ARM64)
-      set_target_properties(${EXE_NAME} PROPERTIES
+      set_target_properties(${iTarget} PROPERTIES
           OSX_ARCHITECTURES "arm64"
       )
   endif()
@@ -195,17 +207,49 @@ endif()
 
 # Define macros for architecture-specific SIMD support
 if(ARCH_ARM64)
-  target_compile_definitions(${EXE_NAME} PRIVATE SIMD_ARM_NEON)
+  target_compile_definitions(${iTarget} PRIVATE SIMD_ARM_NEON)
 elseif(ARCH_X64)
-  target_compile_definitions(${EXE_NAME} PRIVATE SIMD_AVX2)
+  target_compile_definitions(${iTarget} PRIVATE SIMD_AVX2)
 endif()
 
 # Set output directories
-set_target_properties(${EXE_NAME} PROPERTIES
+set_target_properties(${iTarget} PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
   RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/Debug
   RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/Release
 )
+endfunction()
+
+ConfigureRTRTTarget(RTRTCore)
+
+if(RTRT_BUILD_RENDER_REGRESSION_TESTS)
+  add_executable(RenderRegression ${TEST_SOURCE} ${TEST_HEADER})
+  target_link_libraries(RenderRegression RTRTCore)
+  ConfigureRTRTTarget(RenderRegression)
+
+  if(BUILD_TESTING)
+    add_test(NAME UnitImageComparison COMMAND RenderRegression --unit)
+    set_tests_properties(UnitImageComparison PROPERTIES
+      LABELS "unit"
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+
+    foreach(RENDER_CASE software_textured_box software_cornell deferred_ibl_ssr deferred_cornell pathtracer_cornell)
+      add_test(NAME Render_${RENDER_CASE} COMMAND RenderRegression --case ${RENDER_CASE})
+      set_tests_properties(Render_${RENDER_CASE} PROPERTIES
+        LABELS "render"
+        SKIP_RETURN_CODE 77
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+      )
+    endforeach()
+
+    set_tests_properties(Render_software_textured_box PROPERTIES LABELS "render;software")
+    set_tests_properties(Render_software_cornell PROPERTIES LABELS "render;software")
+    set_tests_properties(Render_deferred_ibl_ssr PROPERTIES LABELS "render;deferred")
+    set_tests_properties(Render_deferred_cornell PROPERTIES LABELS "render;deferred")
+    set_tests_properties(Render_pathtracer_cornell PROPERTIES LABELS "render;pathtracer")
+  endif()
+endif()
 
 # Display build configuration
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")

@@ -138,6 +138,10 @@ int PathTracer::InitializeStats()
   _AccumulateTime     = 0.;
   _DenoiseTime        = 0.;
   _RenderToScreenTime = 0.;
+  _PathTraceTimerWritten = false;
+  _AccumulateTimerWritten = false;
+  _DenoiseTimerWritten = false;
+  _RenderToScreenTimerWritten = false;
 
   glGenQueries( 1, &_PathTraceTimeId[0] );
   glGenQueries( 1, &_PathTraceTimeId[1] );
@@ -156,16 +160,37 @@ int PathTracer::InitializeStats()
 // ----------------------------------------------------------------------------
 int PathTracer::UpdateStats()
 {
-  _PathTraceTime = ReadTimer(_PathTraceTimeId);
-  _AccumulateTime = ReadTimer(_AccumulateTimeId);
+  if ( _PathTraceTimerWritten )
+  {
+    _PathTraceTime = ReadTimer(_PathTraceTimeId);
+    _PathTraceTimerWritten = false;
+  }
+  else
+    _PathTraceTime = 0.;
 
-  // Denoise pass
-  if ( _DenoisedThisFrame )
+  if ( _AccumulateTimerWritten )
+  {
+    _AccumulateTime = ReadTimer(_AccumulateTimeId);
+    _AccumulateTimerWritten = false;
+  }
+  else
+    _AccumulateTime = 0.;
+
+  if ( _DenoiseTimerWritten )
+  {
     _DenoiseTime = ReadTimer(_DenoiseTimeId);
+    _DenoiseTimerWritten = false;
+  }
   else
     _DenoiseTime = 0.;
 
-  _RenderToScreenTime = ReadTimer(_RenderToScreenTimeId);
+  if ( _RenderToScreenTimerWritten )
+  {
+    _RenderToScreenTime = ReadTimer(_RenderToScreenTimeId);
+    _RenderToScreenTimerWritten = false;
+  }
+  else
+    _RenderToScreenTime = 0.;
 
   return 0;
 }
@@ -540,6 +565,7 @@ int PathTracer::RenderToTexture()
   _Quad.Render(*_PathTraceShader);
 
   EndTimer(_PathTraceTimeId);
+  _PathTraceTimerWritten = true;
 
   // Accumulate
   BeginTimer(_AccumulateTimeId);
@@ -555,6 +581,7 @@ int PathTracer::RenderToTexture()
   _Quad.Render(*_AccumulateShader);
 
   EndTimer(_AccumulateTimeId);
+  _AccumulateTimerWritten = true;
 
   // Denoise
   if ( Denoise() )
@@ -598,6 +625,7 @@ int PathTracer::DenoiseOutput()
   _DenoiserShader -> StopUsing();
 
   EndTimer(_DenoiseTimeId);
+  _DenoiseTimerWritten = true;
 
   return 0;
 }
@@ -709,8 +737,31 @@ int PathTracer::RenderToScreen()
   _Quad.Render(*_RenderToScreenShader);
 
   EndTimer(_RenderToScreenTimeId);
+  _RenderToScreenTimerWritten = true;
 
   return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ReadbackFinalColor
+// ----------------------------------------------------------------------------
+int PathTracer::ReadbackFinalColor( RenderImage & oImage )
+{
+  const GLTexture & finalTexture = Denoise() ? _DenoisedTEX : _AccumulateTEX[0];
+  if ( !finalTexture._Handle || ( RenderWidth() <= 0 ) || ( RenderHeight() <= 0 ) )
+    return 1;
+
+  oImage._Width = RenderWidth();
+  oImage._Height = RenderHeight();
+  oImage._Pixels.resize((size_t)oImage._Width * (size_t)oImage._Height * 4u);
+
+  while ( GL_NO_ERROR != glGetError() ) {}
+  glBindTexture(GL_TEXTURE_2D, finalTexture._Handle);
+  glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, oImage._Pixels.data());
+  glBindTexture(GL_TEXTURE_2D, 0);
+  FlipImageVertically(oImage);
+
+  return ( GL_NO_ERROR == glGetError() ) ? 0 : 1;
 }
 
 // ----------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 #pragma warning(disable : 4100) // unreferenced formal parameter
 
 #include "Test5.h"
+#include "RendererFactory.h"
 
 #include "DroppedFileUtils.h"
 #include "Loader.h"
@@ -2090,21 +2091,21 @@ int Test5::InitializeBoidsForScene( bool iResetSimulation )
 // ----------------------------------------------------------------------------
 int Test5::InitializeRenderer()
 {
-  Renderer * newRenderer = nullptr;
-  
-  if ( RendererType::PathTracer == _RendererType )
-    newRenderer = new PathTracer(*_Scene, _Settings);
-  else if ( RendererType::SoftwareRasterizer == _RendererType )
-    newRenderer = new SoftwareRasterizer(*_Scene, _Settings);
-  else if ( RendererType::OpenGLRasterizer == _RendererType )
-    newRenderer = new DeferredRenderer(*_Scene, _Settings);
+  RendererBackend backend = RendererBackend::PathTracer;
 
-  if ( !newRenderer )
+  if ( RendererType::PathTracer == _RendererType )
+    backend = RendererBackend::PathTracer;
+  else if ( RendererType::SoftwareRasterizer == _RendererType )
+    backend = RendererBackend::SoftwareRasterizer;
+  else if ( RendererType::OpenGLRasterizer == _RendererType )
+    backend = RendererBackend::DeferredRenderer;
+
+  _Renderer = CreateRenderer(backend, *_Scene, _Settings);
+  if ( !_Renderer )
   {
     std::cout << "Failed to initialize the renderer" << std::endl;
     return 1;
   }
-  _Renderer.reset(newRenderer);
 
   _Renderer -> Initialize();
 
