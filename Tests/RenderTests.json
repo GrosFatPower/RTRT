@@ -126,7 +126,13 @@
       "name": "deferred_barbershopchair_01",
       "profile": "deferred",
       "scene": "BarberShopChair_01.scene",
-      "environment_map": "HDR/konzerthaus_4k.hdr"
+      "environment_map": "HDR/konzerthaus_4k.hdr",
+      "camera": {
+        "position": [-1.877181, 2.144519, 3.151197],
+        "pivot": [0.098960, 0.548734, -0.269350],
+        "fov": 45.0,
+        "near": 0.5
+      }
     },
     {
       "name": "pathtracer_cornell",
@@ -156,7 +162,14 @@
       "name": "pathtracer_barbershopchair_01",
       "profile": "pathtracer",
       "scene": "BarberShopChair_01.scene",
-      "environment_map": "HDR/konzerthaus_4k.hdr"
+      "environment_map": "HDR/konzerthaus_4k.hdr",
+      "camera": {
+        "position": [-1.877181, 2.144519, 3.151197],
+        "pivot": [0.098960, 0.548734, -0.269350],
+        "fov": 45.0,
+        "near": 0.5
+      },
+      "frames": 60
     }
   ]
 }
