@@ -1,0 +1,162 @@
+{
+  "version": 1,
+  "profiles": {
+    "software": {
+      "backend": "software",
+      "resolution": [1280, 720],
+      "frames": 1,
+      "thresholds": {
+        "mean_absolute_error": 0.000001,
+        "max_absolute_error": 0.00001,
+        "pixel_error": 0.00001,
+        "mismatch_ratio": 0.0
+      },
+      "settings": {
+        "specular_ibl": true,
+        "ssr": true,
+        "accumulate": true,
+        "auto_scale": true,
+        "tiled_rendering": false,
+        "denoise": false,
+        "samples_per_pixel": 1,
+        "bounces": 4
+      }
+    },
+    "deferred": {
+      "backend": "deferred",
+      "resolution": [1280, 720],
+      "frames": 3,
+      "thresholds": {
+        "mean_absolute_error": 0.003,
+        "max_absolute_error": 0.08,
+        "pixel_error": 0.02,
+        "mismatch_ratio": 0.005
+      },
+      "settings": {
+        "specular_ibl": true,
+        "ssr": true,
+        "accumulate": true,
+        "auto_scale": true,
+        "tiled_rendering": false,
+        "denoise": false,
+        "samples_per_pixel": 1,
+        "bounces": 4
+      }
+    },
+    "pathtracer": {
+      "backend": "pathtracer",
+      "resolution": [1280, 720],
+      "frames": 6,
+      "thresholds": {
+        "mean_absolute_error": 0.02,
+        "max_absolute_error": 0.25,
+        "pixel_error": 0.08,
+        "mismatch_ratio": 0.02
+      },
+      "settings": {
+        "specular_ibl": true,
+        "ssr": true,
+        "accumulate": true,
+        "auto_scale": true,
+        "tiled_rendering": false,
+        "denoise": false,
+        "samples_per_pixel": 1,
+        "bounces": 4
+      }
+    }
+  },
+  "tests": [
+    {
+      "name": "software_textured_box",
+      "profile": "software",
+      "scene": "TexturedBox.scene"
+    },
+    {
+      "name": "software_cornell",
+      "profile": "software",
+      "scene": "cornell_box.scene",
+      "resolution": [720, 720],
+      "camera": {
+        "position": [0.276, 0.265, -0.75],
+        "pivot": [0.276, 0.265, 0.1],
+        "fov": 40.0,
+        "near": 0.5
+      }
+    },
+    {
+      "name": "software_diningroom",
+      "profile": "software",
+      "scene": "diningroom.scene"
+    },
+    {
+      "name": "software_teapot_env",
+      "profile": "software",
+      "scene": "teapot.scene",
+      "environment_map": "HDR/Background_05.hdr"
+    },
+    {
+      "name": "deferred_ibl_ssr",
+      "profile": "deferred",
+      "scene": "tungsten-material-testball.scene"
+    },
+    {
+      "name": "deferred_cornell",
+      "profile": "deferred",
+      "scene": "cornell_box.scene",
+      "resolution": [720, 720],
+      "camera": {
+        "position": [0.276, 0.265, -0.75],
+        "pivot": [0.276, 0.265, 0.1],
+        "fov": 40.0,
+        "near": 0.5
+      }
+    },
+    {
+      "name": "deferred_diningroom",
+      "profile": "deferred",
+      "scene": "diningroom.scene"
+    },
+    {
+      "name": "deferred_teapot_env",
+      "profile": "deferred",
+      "scene": "teapot.scene",
+      "environment_map": "HDR/Background_05.hdr"
+    },
+    {
+      "name": "deferred_barbershopchair_01",
+      "profile": "deferred",
+      "scene": "BarberShopChair_01.scene",
+      "environment_map": "HDR/konzerthaus_4k.hdr"
+    },
+    {
+      "name": "pathtracer_cornell",
+      "profile": "pathtracer",
+      "scene": "cornell_box.scene",
+      "resolution": [720, 720],
+      "camera": {
+        "position": [0.276, 0.265, -0.75],
+        "pivot": [0.276, 0.265, 0.1],
+        "fov": 40.0,
+        "near": 0.5
+      }
+    },
+    {
+      "name": "pathtracer_diningroom",
+      "profile": "pathtracer",
+      "scene": "diningroom.scene"
+    },
+    {
+      "name": "pathtracer_teapot_env",
+      "profile": "pathtracer",
+      "scene": "teapot.scene",
+      "frames": 60,
+      "environment_map": "HDR/Background_05.hdr"
+    },
+    {
+      "name": "pathtracer_barbershopchair_01",
+      "profile": "pathtracer",
+      "scene": "BarberShopChair_01.scene",
+      "environment_map": "HDR/konzerthaus_4k.hdr"
+    }
+  ]
+}

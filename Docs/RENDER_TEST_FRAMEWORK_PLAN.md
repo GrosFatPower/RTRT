@@ -41,7 +41,23 @@ Add a local CTest-integrated framework that renders deterministic scenes through
 
 - Commit linear PFM baselines under `Tests/Baselines/`.
 - Store generated failure artifacts under ignored `Tests/Artifacts/<case>/`.
-- Define initial render cases in a C++ registry, avoiding a new scene-test parsing format in v1.
+- Define render cases in `Tests/RenderTests.json` using reusable renderer profiles.
+
+### Render-Test Manifest
+
+`Tests/RenderTests.json` is the source of truth for render cases. Each test selects a profile and supplies a scene; optional fields override its resolution, frame count, thresholds, environment map, camera, or baseline path. Omitted baselines default to `Tests/Baselines/<name>.pfm`.
+
+```json
+{
+  "name": "deferred_example",
+  "profile": "deferred",
+  "scene": "example.scene",
+  "environment_map": "HDR/example.hdr",
+  "frames": 5
+}
+```
+
+Profiles define the backend, default resolution, thresholds, and renderer settings. CMake reads the same manifest during configuration to register one labeled CTest case per entry. Changing the manifest triggers a CMake reconfigure on the next build.
 
 ### Artifacts
 
@@ -75,6 +91,7 @@ Each failed render case writes:
 - `--all`: run all registered cases.
 - `--update-baselines`: allow baseline writes for selected render cases.
 - `--artifacts <directory>`: override the default artifact directory.
+- `--manifest <file>`: load an alternate JSON render-test manifest.
 
 CTest labels:
 
@@ -167,6 +184,13 @@ CTest labels:
 4. Intentionally alter a comparison threshold or baseline pixel and confirm a non-zero exit code plus all expected artifacts.
 5. Run `RenderRegression --update-baselines --case deferred_ibl_ssr` and confirm that baseline writes occur only with the explicit flag.
 6. Confirm Test5 still uses the shared renderer factory and its interactive output is unchanged.
+
+To rebaseline one manifest case from the repository root:
+
+```powershell
+.\Build\Debug\RenderRegression.exe --case deferred_ibl_ssr --update-baselines
+git add Tests/Baselines/deferred_ibl_ssr.pfm
+```
 
 ## Assumptions and Limits
 

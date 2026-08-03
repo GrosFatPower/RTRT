@@ -224,38 +224,34 @@ ConfigureRTRTTarget(RTRTCore)
 
 if(RTRT_BUILD_RENDER_REGRESSION_TESTS)
   add_executable(RenderRegression ${TEST_SOURCE} ${TEST_HEADER})
-  target_link_libraries(RenderRegression RTRTCore)
+  target_link_libraries(RenderRegression RTRTCore nlohmann_json::nlohmann_json)
   ConfigureRTRTTarget(RenderRegression)
 
   if(BUILD_TESTING)
+    set(RENDER_TEST_MANIFEST ${CMAKE_SOURCE_DIR}/Tests/RenderTests.json)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${RENDER_TEST_MANIFEST})
+    file(READ ${RENDER_TEST_MANIFEST} RENDER_TEST_MANIFEST_JSON)
+    string(JSON RENDER_TEST_COUNT LENGTH ${RENDER_TEST_MANIFEST_JSON} tests)
+
     add_test(NAME UnitImageComparison COMMAND RenderRegression --unit)
     set_tests_properties(UnitImageComparison PROPERTIES
       LABELS "unit"
       WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     )
 
-    foreach(RENDER_CASE software_textured_box software_cornell software_diningroom software_teapot_env deferred_ibl_ssr deferred_cornell deferred_diningroom deferred_teapot_env deferred_barbershopchair_01 pathtracer_cornell pathtracer_diningroom pathtracer_teapot_env pathtracer_barbershopchair_01)
+    math(EXPR RENDER_TEST_LAST_INDEX "${RENDER_TEST_COUNT} - 1")
+    foreach(RENDER_TEST_INDEX RANGE ${RENDER_TEST_LAST_INDEX})
+      string(JSON RENDER_CASE GET ${RENDER_TEST_MANIFEST_JSON} tests ${RENDER_TEST_INDEX} name)
+      string(JSON RENDER_PROFILE GET ${RENDER_TEST_MANIFEST_JSON} tests ${RENDER_TEST_INDEX} profile)
+      string(JSON RENDER_BACKEND GET ${RENDER_TEST_MANIFEST_JSON} profiles ${RENDER_PROFILE} backend)
+
       add_test(NAME Render_${RENDER_CASE} COMMAND RenderRegression --case ${RENDER_CASE})
       set_tests_properties(Render_${RENDER_CASE} PROPERTIES
-        LABELS "render"
+        LABELS "render;${RENDER_BACKEND}"
         SKIP_RETURN_CODE 77
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
       )
     endforeach()
-
-    set_tests_properties(Render_software_textured_box PROPERTIES LABELS "render;software")
-    set_tests_properties(Render_software_cornell PROPERTIES LABELS "render;software")
-    set_tests_properties(Render_software_diningroom PROPERTIES LABELS "render;software")
-    set_tests_properties(Render_software_teapot_env PROPERTIES LABELS "render;software")
-    set_tests_properties(Render_deferred_ibl_ssr PROPERTIES LABELS "render;deferred")
-    set_tests_properties(Render_deferred_cornell PROPERTIES LABELS "render;deferred")
-    set_tests_properties(Render_deferred_diningroom PROPERTIES LABELS "render;deferred")
-    set_tests_properties(Render_deferred_teapot_env PROPERTIES LABELS "render;deferred")
-    set_tests_properties(Render_deferred_barbershopchair_01 PROPERTIES LABELS "render;deferred")
-    set_tests_properties(Render_pathtracer_cornell PROPERTIES LABELS "render;pathtracer")
-    set_tests_properties(Render_pathtracer_diningroom PROPERTIES LABELS "render;pathtracer")
-    set_tests_properties(Render_pathtracer_teapot_env PROPERTIES LABELS "render;pathtracer")
-    set_tests_properties(Render_pathtracer_barbershopchair_01 PROPERTIES LABELS "render;pathtracer")
   endif()
 endif()
 

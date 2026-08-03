@@ -45,6 +45,14 @@ struct RenderTestCase
   float           _CameraNear = 1.f;
   float           _CameraFar = 1000.f;
   std::string     _EnvironmentMapPath;
+  bool            _SpecularIBL = true;
+  bool            _SSR = true;
+  bool            _Accumulate = true;
+  bool            _AutoScale = true;
+  bool            _TiledRendering = false;
+  bool            _Denoise = false;
+  int             _SamplesPerPixel = 1;
+  int             _Bounces = 4;
 
   void ApplySettings( RenderSettings & ioSettings ) const;
   bool ApplyScene( Scene & ioScene ) const;
@@ -57,7 +65,8 @@ bool WriteDiffPNG( const std::filesystem::path & iPath, const RenderImage & iAct
 bool CompareImages( const RenderImage & iActual, const RenderImage & iExpected, float iPixelErrorThreshold, ImageMetrics & oMetrics );
 bool MatchesThresholds( const ImageMetrics & iMetrics, const RenderTestCase & iTestCase );
 
-std::vector<RenderTestCase> GetRenderTestCases();
+bool LoadRenderTestCases( const std::filesystem::path & iPath, std::vector<RenderTestCase> & oTestCases, std::string & oError );
+bool ParseRenderTestCases( const std::string & iContents, std::vector<RenderTestCase> & oTestCases, std::string & oError );
 int RunUnitTests( const std::filesystem::path & iArtifactsDir );
 
 }

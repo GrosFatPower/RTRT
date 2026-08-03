@@ -6,16 +6,21 @@
 
 #include "stb_image_write.h"
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <iostream>
+#include <set>
 
 namespace RTRT
 {
 
 namespace Tests
 {
+
+using Json = nlohmann::json;
 
 // ----------------------------------------------------------------------------
 // RenderTestCase
@@ -31,18 +36,18 @@ void RenderTestCase::ApplySettings( RenderSettings & ioSettings ) const
 
   if ( RendererBackend::DeferredRenderer == _Backend )
   {
-    ioSettings._SpecularIBL = true;
-    ioSettings._SSR = true;
+    ioSettings._SpecularIBL = _SpecularIBL;
+    ioSettings._SSR = _SSR;
   }
   else if ( RendererBackend::PathTracer == _Backend )
   {
-    ioSettings._Accumulate = true;
-    ioSettings._AutoScale = true;
-    ioSettings._TiledRendering = false;
-    ioSettings._TileResolution = Vec2i(-1, -1);
-    ioSettings._Denoise = false;
-    ioSettings._NbSamplesPerPixel = 1;
-    ioSettings._Bounces = 4;
+    ioSettings._Accumulate = _Accumulate;
+    ioSettings._AutoScale = _AutoScale;
+    ioSettings._TiledRendering = _TiledRendering;
+    ioSettings._TileResolution = _TiledRendering ? ioSettings._TileResolution : Vec2i(-1, -1);
+    ioSettings._Denoise = _Denoise;
+    ioSettings._NbSamplesPerPixel = _SamplesPerPixel;
+    ioSettings._Bounces = _Bounces;
   }
 }
 
@@ -218,27 +223,228 @@ bool MatchesThresholds( const ImageMetrics & iMetrics, const RenderTestCase & iT
          ( iMetrics._MismatchRatio <= iTestCase._MismatchRatioThreshold );
 }
 
-// ----------------------------------------------------------------------------
-// GetRenderTestCases
-// ----------------------------------------------------------------------------
-std::vector<RenderTestCase> GetRenderTestCases()
+namespace
 {
-  return
+
+bool SetManifestError( std::string & oError, const std::string & iMessage )
+{
+  oError = iMessage;
+  return false;
+}
+
+bool ReadString( const Json & iObject, const char * iName, std::string & oValue, std::string & oError, bool iRequired = true )
+{
+  if ( !iObject.contains(iName) )
+    return iRequired ? SetManifestError(oError, std::string("Missing '") + iName + "'.") : true;
+  if ( !iObject[iName].is_string() || iObject[iName].get<std::string>().empty() )
+    return SetManifestError(oError, std::string("'") + iName + "' must be a non-empty string.");
+  oValue = iObject[iName].get<std::string>();
+  return true;
+}
+
+bool ReadPositiveInt( const Json & iObject, const char * iName, int & oValue, std::string & oError, bool iRequired )
+{
+  if ( !iObject.contains(iName) )
+    return iRequired ? SetManifestError(oError, std::string("Missing '") + iName + "'.") : true;
+  if ( !iObject[iName].is_number_integer() || ( iObject[iName].get<int>() <= 0 ) )
+    return SetManifestError(oError, std::string("'") + iName + "' must be a positive integer.");
+  oValue = iObject[iName].get<int>();
+  return true;
+}
+
+bool ReadBool( const Json & iObject, const char * iName, bool & oValue, std::string & oError )
+{
+  if ( !iObject.contains(iName) )
+    return true;
+  if ( !iObject[iName].is_boolean() )
+    return SetManifestError(oError, std::string("'") + iName + "' must be a boolean.");
+  oValue = iObject[iName].get<bool>();
+  return true;
+}
+
+bool ReadResolution( const Json & iObject, int & oWidth, int & oHeight, std::string & oError, bool iRequired )
+{
+  if ( !iObject.contains("resolution") )
+    return iRequired ? SetManifestError(oError, "Missing 'resolution'.") : true;
+  const Json & resolution = iObject["resolution"];
+  if ( !resolution.is_array() || ( 2 != resolution.size() ) || !resolution[0].is_number_integer() || !resolution[1].is_number_integer() )
+    return SetManifestError(oError, "'resolution' must contain two integers.");
+  oWidth = resolution[0].get<int>();
+  oHeight = resolution[1].get<int>();
+  if ( ( oWidth <= 0 ) || ( oHeight <= 0 ) )
+    return SetManifestError(oError, "'resolution' values must be positive.");
+  return true;
+}
+
+bool ReadVec3( const Json & iValue, const char * iName, Vec3 & oValue, std::string & oError )
+{
+  if ( !iValue.is_array() || ( 3 != iValue.size() ) || !iValue[0].is_number() || !iValue[1].is_number() || !iValue[2].is_number() )
+    return SetManifestError(oError, std::string("'") + iName + "' must contain three numbers.");
+  oValue = Vec3(iValue[0].get<float>(), iValue[1].get<float>(), iValue[2].get<float>());
+  return true;
+}
+
+bool ReadThresholds( const Json & iObject, RenderTestCase & ioTestCase, std::string & oError, bool iRequired )
+{
+  if ( !iObject.contains("thresholds") )
+    return iRequired ? SetManifestError(oError, "Missing 'thresholds'.") : true;
+  const Json & thresholds = iObject["thresholds"];
+  if ( !thresholds.is_object() )
+    return SetManifestError(oError, "'thresholds' must be an object.");
+
+  const std::pair<const char *, float *> values[] =
   {
-    { "software_textured_box", "TexturedBox.scene", RendererBackend::SoftwareRasterizer, 1280, 720, 1, 0.000001f, 0.00001f, 0.00001f, 0.f, "Tests/Baselines/software_textured_box.pfm" },
-    { "software_cornell", "cornell_box.scene", RendererBackend::SoftwareRasterizer, 720, 720, 1, 0.000001f, 0.00001f, 0.00001f, 0.f, "Tests/Baselines/software_cornell.pfm", true, Vec3(.276f, .265f, -.75f), Vec3(.276f, .265f, .1f), 40.f, .5f },
-    { "software_diningroom", "diningroom.scene", RendererBackend::SoftwareRasterizer, 1280, 720, 1, 0.000001f, 0.00001f, 0.00001f, 0.f, "Tests/Baselines/software_diningroom.pfm" },
-    { "software_teapot_env", "teapot.scene", RendererBackend::SoftwareRasterizer, 1280, 720, 1, 0.000001f, 0.00001f, 0.00001f, 0.f, "Tests/Baselines/software_teapot_env.pfm", false, Vec3(0.f), Vec3(0.f), 80.f, 1.f, 1000.f, "HDR/Background_05.hdr" },
-    { "deferred_ibl_ssr", "tungsten-material-testball.scene", RendererBackend::DeferredRenderer, 1280, 720, 3, 0.003f, 0.08f, 0.02f, 0.005f, "Tests/Baselines/deferred_ibl_ssr.pfm" },
-    { "deferred_cornell", "cornell_box.scene", RendererBackend::DeferredRenderer, 720, 720, 3, 0.003f, 0.08f, 0.02f, 0.005f, "Tests/Baselines/deferred_cornell.pfm", true, Vec3(.276f, .265f, -.75f), Vec3(.276f, .265f, .1f), 40.f, .5f },
-    { "deferred_diningroom", "diningroom.scene", RendererBackend::DeferredRenderer, 1280, 720, 3, 0.003f, 0.08f, 0.02f, 0.005f, "Tests/Baselines/deferred_diningroom.pfm" },
-    { "deferred_teapot_env", "teapot.scene", RendererBackend::DeferredRenderer, 1280, 720, 3, 0.003f, 0.08f, 0.02f, 0.005f, "Tests/Baselines/deferred_teapot_env.pfm", false, Vec3(0.f), Vec3(0.f), 80.f, 1.f, 1000.f, "HDR/Background_05.hdr" },
-    { "deferred_barbershopchair_01", "BarberShopChair_01.scene", RendererBackend::DeferredRenderer, 1280, 720, 3, 0.003f, 0.08f, 0.02f, 0.005f, "Tests/Baselines/deferred_barbershopchair_01.pfm", false, Vec3(0.f), Vec3(0.f), 80.f, 1.f, 1000.f, "HDR/konzerthaus_4k.hdr" },
-    { "pathtracer_cornell", "cornell_box.scene", RendererBackend::PathTracer, 720, 720, 6, 0.02f, 0.25f, 0.08f, 0.02f, "Tests/Baselines/pathtracer_cornell.pfm", true, Vec3(.276f, .265f, -.75f), Vec3(.276f, .265f, .1f), 40.f, .5f },
-    { "pathtracer_diningroom", "diningroom.scene", RendererBackend::PathTracer, 1280, 720, 6, 0.02f, 0.25f, 0.08f, 0.02f, "Tests/Baselines/pathtracer_diningroom.pfm" },
-    { "pathtracer_teapot_env", "teapot.scene", RendererBackend::PathTracer, 1280, 720, 60, 0.02f, 0.25f, 0.08f, 0.02f, "Tests/Baselines/pathtracer_teapot_env.pfm", false, Vec3(0.f), Vec3(0.f), 80.f, 1.f, 1000.f, "HDR/Background_05.hdr" },
-    { "pathtracer_barbershopchair_01", "BarberShopChair_01.scene", RendererBackend::PathTracer, 1280, 720, 6, 0.02f, 0.25f, 0.08f, 0.02f, "Tests/Baselines/pathtracer_barbershopchair_01.pfm", false, Vec3(0.f), Vec3(0.f), 80.f, 1.f, 1000.f, "HDR/konzerthaus_4k.hdr" }
+    { "mean_absolute_error", &ioTestCase._MeanAbsoluteErrorThreshold },
+    { "max_absolute_error", &ioTestCase._MaxAbsoluteErrorThreshold },
+    { "pixel_error", &ioTestCase._PixelErrorThreshold },
+    { "mismatch_ratio", &ioTestCase._MismatchRatioThreshold }
   };
+  for ( const auto & value : values )
+  {
+    if ( !thresholds.contains(value.first) )
+    {
+      if ( iRequired )
+        return SetManifestError(oError, std::string("Missing threshold '") + value.first + "'.");
+      continue;
+    }
+    if ( !thresholds[value.first].is_number() || ( thresholds[value.first].get<float>() < 0.f ) )
+      return SetManifestError(oError, std::string("Threshold '") + value.first + "' must be non-negative.");
+    *value.second = thresholds[value.first].get<float>();
+  }
+  return true;
+}
+
+bool ReadSettings( const Json & iObject, RenderTestCase & ioTestCase, std::string & oError )
+{
+  if ( !iObject.contains("settings") )
+    return true;
+  const Json & settings = iObject["settings"];
+  if ( !settings.is_object() )
+    return SetManifestError(oError, "'settings' must be an object.");
+
+  return ReadBool(settings, "specular_ibl", ioTestCase._SpecularIBL, oError)
+      && ReadBool(settings, "ssr", ioTestCase._SSR, oError)
+      && ReadBool(settings, "accumulate", ioTestCase._Accumulate, oError)
+      && ReadBool(settings, "auto_scale", ioTestCase._AutoScale, oError)
+      && ReadBool(settings, "tiled_rendering", ioTestCase._TiledRendering, oError)
+      && ReadBool(settings, "denoise", ioTestCase._Denoise, oError)
+      && ReadPositiveInt(settings, "samples_per_pixel", ioTestCase._SamplesPerPixel, oError, false)
+      && ReadPositiveInt(settings, "bounces", ioTestCase._Bounces, oError, false);
+}
+
+bool ReadBackend( const Json & iProfile, RenderTestCase & ioTestCase, std::string & oError )
+{
+  std::string backend;
+  if ( !ReadString(iProfile, "backend", backend, oError) )
+    return false;
+  if ( "software" == backend )
+    ioTestCase._Backend = RendererBackend::SoftwareRasterizer;
+  else if ( "deferred" == backend )
+    ioTestCase._Backend = RendererBackend::DeferredRenderer;
+  else if ( "pathtracer" == backend )
+    ioTestCase._Backend = RendererBackend::PathTracer;
+  else
+    return SetManifestError(oError, "'backend' must be software, deferred, or pathtracer.");
+  return true;
+}
+
+}
+
+// ----------------------------------------------------------------------------
+// ParseRenderTestCases
+// ----------------------------------------------------------------------------
+bool ParseRenderTestCases( const std::string & iContents, std::vector<RenderTestCase> & oTestCases, std::string & oError )
+{
+  oTestCases.clear();
+  oError.clear();
+
+  try
+  {
+    const Json manifest = Json::parse(iContents);
+    if ( !manifest.is_object() || !manifest.contains("version") || !manifest["version"].is_number_integer() || ( 1 != manifest["version"].get<int>() ) )
+      return SetManifestError(oError, "Manifest version must be the integer 1.");
+    if ( !manifest.contains("profiles") || !manifest["profiles"].is_object() )
+      return SetManifestError(oError, "Manifest must contain a 'profiles' object.");
+    if ( !manifest.contains("tests") || !manifest["tests"].is_array() )
+      return SetManifestError(oError, "Manifest must contain a 'tests' array.");
+
+    const Json & profiles = manifest["profiles"];
+    std::set<std::string> names;
+    for ( const Json & test : manifest["tests"] )
+    {
+      if ( !test.is_object() )
+        return SetManifestError(oError, "Each test must be an object.");
+
+      RenderTestCase testCase;
+      std::string profileName;
+      if ( !ReadString(test, "name", testCase._Name, oError) || !ReadString(test, "profile", profileName, oError) || !ReadString(test, "scene", testCase._ScenePath, oError) )
+        return false;
+      if ( !names.insert(testCase._Name).second )
+        return SetManifestError(oError, "Duplicate test name: " + testCase._Name);
+      if ( !profiles.contains(profileName) || !profiles[profileName].is_object() )
+        return SetManifestError(oError, "Unknown profile: " + profileName);
+
+      const Json & profile = profiles[profileName];
+      if ( !ReadBackend(profile, testCase, oError) || !ReadResolution(profile, testCase._Width, testCase._Height, oError, true)
+        || !ReadPositiveInt(profile, "frames", testCase._FrameCount, oError, true) || !ReadThresholds(profile, testCase, oError, true)
+        || !ReadSettings(profile, testCase, oError) )
+        return false;
+
+      if ( !ReadResolution(test, testCase._Width, testCase._Height, oError, false) || !ReadPositiveInt(test, "frames", testCase._FrameCount, oError, false)
+        || !ReadThresholds(test, testCase, oError, false) || !ReadString(test, "environment_map", testCase._EnvironmentMapPath, oError, false) )
+        return false;
+
+      std::string baseline;
+      if ( !ReadString(test, "baseline", baseline, oError, false) )
+        return false;
+      testCase._BaselinePath = baseline.empty() ? ( std::filesystem::path("Tests/Baselines") / ( testCase._Name + ".pfm" ) ) : std::filesystem::path(baseline);
+
+      if ( test.contains("camera") )
+      {
+        const Json & camera = test["camera"];
+        if ( !camera.is_object() || !camera.contains("position") || !camera.contains("pivot") || !camera.contains("fov")
+          || !ReadVec3(camera["position"], "camera.position", testCase._CameraPosition, oError)
+          || !ReadVec3(camera["pivot"], "camera.pivot", testCase._CameraPivot, oError)
+          || !camera["fov"].is_number() || ( camera["fov"].get<float>() <= 0.f ) )
+          return SetManifestError(oError, "Camera requires position, pivot, and a positive fov.");
+        testCase._OverrideCamera = true;
+        testCase._CameraFOV = camera["fov"].get<float>();
+        if ( camera.contains("near") )
+        {
+          if ( !camera["near"].is_number() || ( camera["near"].get<float>() <= 0.f ) )
+            return SetManifestError(oError, "Camera near plane must be positive.");
+          testCase._CameraNear = camera["near"].get<float>();
+        }
+        if ( camera.contains("far") )
+        {
+          if ( !camera["far"].is_number() || ( camera["far"].get<float>() <= testCase._CameraNear ) )
+            return SetManifestError(oError, "Camera far plane must be greater than near plane.");
+          testCase._CameraFar = camera["far"].get<float>();
+        }
+      }
+
+      oTestCases.push_back(testCase);
+    }
+  }
+  catch ( const Json::exception & error )
+  {
+    return SetManifestError(oError, std::string("JSON parse error: ") + error.what());
+  }
+
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// LoadRenderTestCases
+// ----------------------------------------------------------------------------
+bool LoadRenderTestCases( const std::filesystem::path & iPath, std::vector<RenderTestCase> & oTestCases, std::string & oError )
+{
+  std::ifstream input(iPath);
+  if ( !input )
+    return SetManifestError(oError, "Unable to open manifest: " + iPath.string());
+
+  const std::string contents((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+  return ParseRenderTestCases(contents, oTestCases, oError);
 }
 
 // ----------------------------------------------------------------------------
@@ -272,6 +478,51 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir )
   {
     std::cerr << "Unit test failed: diagnostic image output." << std::endl;
     return 1;
+  }
+
+  const std::string validManifest = R"({
+    "version": 1,
+    "profiles": {
+      "test": {
+        "backend": "deferred",
+        "resolution": [64, 32],
+        "frames": 3,
+        "thresholds": { "mean_absolute_error": 0.1, "max_absolute_error": 0.2, "pixel_error": 0.3, "mismatch_ratio": 0.4 },
+        "settings": { "specular_ibl": true, "ssr": false }
+      }
+    },
+    "tests": [
+      { "name": "valid", "profile": "test", "scene": "test.scene", "frames": 4,
+        "camera": { "position": [1, 2, 3], "pivot": [0, 0, 0], "fov": 40, "near": 0.5 } }
+    ]
+  })";
+  std::vector<RenderTestCase> parsedCases;
+  std::string parseError;
+  if ( !ParseRenderTestCases(validManifest, parsedCases, parseError) || ( 1u != parsedCases.size() )
+    || ( 4 != parsedCases[0]._FrameCount ) || !parsedCases[0]._OverrideCamera || parsedCases[0]._SSR
+    || ( "Tests/Baselines/valid.pfm" != parsedCases[0]._BaselinePath.generic_string() ) )
+  {
+    std::cerr << "Unit test failed: valid render-test manifest. " << parseError << std::endl;
+    return 1;
+  }
+
+  const std::string invalidManifests[] =
+  {
+    R"({ "version": 2, "profiles": {}, "tests": [] })",
+    R"({ "version": 1, "profiles": { "test": { "backend": "invalid", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene" }] })",
+    R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "missing", "scene": "test.scene" }] })",
+    R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test" }] })",
+    R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene" }, { "name": "test", "profile": "test", "scene": "test.scene" }] })",
+    R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 0, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene" }] })",
+    R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "camera": { "position": [0, 0], "pivot": [0, 0, 0], "fov": 40 } }] })"
+  };
+  for ( const std::string & invalidManifest : invalidManifests )
+  {
+    if ( ParseRenderTestCases(invalidManifest, parsedCases, parseError) )
+    {
+      std::cerr << "Unit test failed: invalid render-test manifest." << std::endl;
+      return 1;
+    }
   }
 
   std::cout << "Unit tests passed." << std::endl;

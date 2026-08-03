@@ -60,7 +60,7 @@ private:
 
 void PrintUsage( const char * iExeName )
 {
-  std::cout << "Usage: " << iExeName << " [--list|--unit|--case <name>|--all] [--update-baselines] [--artifacts <directory>]" << std::endl;
+  std::cout << "Usage: " << iExeName << " [--list|--unit|--case <name>|--all] [--update-baselines] [--artifacts <directory>] [--manifest <file>]" << std::endl;
 }
 
 bool WriteMetrics( const fs::path & iPath, const RTRT::Tests::ImageMetrics & iMetrics )
@@ -183,19 +183,18 @@ int main( int iArgc, char ** iArgv )
   bool runUnitTests = false;
   bool runAll = false;
   bool updateBaselines = false;
+  bool listCases = false;
+  bool customManifest = false;
   std::string caseName;
   fs::path artifactsDir = "Tests/Artifacts";
+  fs::path manifestPath;
 
   for ( int i = 1; i < iArgc; ++i )
   {
     const std::string argument = iArgv[i];
     if ( "--list" == argument )
-    {
-      for ( const RTRT::Tests::RenderTestCase & testCase : RTRT::Tests::GetRenderTestCases() )
-        std::cout << testCase._Name << std::endl;
-      return 0;
-    }
-    if ( "--unit" == argument )
+      listCases = true;
+    else if ( "--unit" == argument )
       runUnitTests = true;
     else if ( "--all" == argument )
       runAll = true;
@@ -205,6 +204,11 @@ int main( int iArgc, char ** iArgv )
       caseName = iArgv[++i];
     else if ( "--artifacts" == argument && ( i + 1 < iArgc ) )
       artifactsDir = iArgv[++i];
+    else if ( "--manifest" == argument && ( i + 1 < iArgc ) )
+    {
+      manifestPath = iArgv[++i];
+      customManifest = true;
+    }
     else
     {
       PrintUsage(iArgv[0]);
@@ -212,13 +216,16 @@ int main( int iArgc, char ** iArgv )
     }
   }
 
-  if ( !runUnitTests && !runAll && caseName.empty() )
+  if ( !listCases && !runUnitTests && !runAll && caseName.empty() )
   {
     PrintUsage(iArgv[0]);
     return 1;
   }
 
   RTRT::PathUtils::Initialize(iArgv[0]);
+  if ( !customManifest )
+    manifestPath = fs::path(RTRT::PathUtils::GetAssetPath("..")) / "Tests/RenderTests.json";
+
   if ( runUnitTests || runAll )
   {
     const int result = RTRT::Tests::RunUnitTests(artifactsDir / "unit");
@@ -226,8 +233,26 @@ int main( int iArgc, char ** iArgv )
       return result;
   }
 
+  std::vector<RTRT::Tests::RenderTestCase> allTestCases;
+  if ( listCases || runAll || !caseName.empty() )
+  {
+    std::string manifestError;
+    if ( !RTRT::Tests::LoadRenderTestCases(manifestPath, allTestCases, manifestError) )
+    {
+      std::cerr << "Failed to load render-test manifest '" << manifestPath << "': " << manifestError << std::endl;
+      return 1;
+    }
+  }
+
+  if ( listCases )
+  {
+    for ( const RTRT::Tests::RenderTestCase & testCase : allTestCases )
+      std::cout << testCase._Name << std::endl;
+    return 0;
+  }
+
   std::vector<RTRT::Tests::RenderTestCase> selectedCases;
-  for ( const RTRT::Tests::RenderTestCase & testCase : RTRT::Tests::GetRenderTestCases() )
+  for ( const RTRT::Tests::RenderTestCase & testCase : allTestCases )
   {
     if ( runAll || ( testCase._Name == caseName ) )
       selectedCases.push_back(testCase);
