@@ -36,6 +36,8 @@ void RenderTestCase::ApplySettings( RenderSettings & ioSettings ) const
   {
     ioSettings._Accumulate = true;
     ioSettings._AutoScale = true;
+    ioSettings._TiledRendering = false;
+    ioSettings._TileResolution = Vec2i(-1, -1);
     ioSettings._Denoise = false;
     ioSettings._NbSamplesPerPixel = 1;
     ioSettings._Bounces = 4;
@@ -218,9 +220,12 @@ std::vector<RenderTestCase> GetRenderTestCases()
   {
     { "software_textured_box", "TexturedBox.scene", RendererBackend::SoftwareRasterizer, 1280, 720, 1, 0.000001f, 0.00001f, 0.00001f, 0.f, "Tests/Baselines/software_textured_box.pfm" },
     { "software_cornell", "cornell_box.scene", RendererBackend::SoftwareRasterizer, 720, 720, 1, 0.000001f, 0.00001f, 0.00001f, 0.f, "Tests/Baselines/software_cornell.pfm", true, Vec3(.276f, .265f, -.75f), Vec3(.276f, .265f, .1f), 40.f, .5f },
+    { "software_diningroom", "diningroom.scene", RendererBackend::SoftwareRasterizer, 1280, 720, 1, 0.000001f, 0.00001f, 0.00001f, 0.f, "Tests/Baselines/software_diningroom.pfm" },
     { "deferred_ibl_ssr", "tungsten-material-testball.scene", RendererBackend::DeferredRenderer, 1280, 720, 3, 0.003f, 0.08f, 0.02f, 0.005f, "Tests/Baselines/deferred_ibl_ssr.pfm" },
     { "deferred_cornell", "cornell_box.scene", RendererBackend::DeferredRenderer, 720, 720, 3, 0.003f, 0.08f, 0.02f, 0.005f, "Tests/Baselines/deferred_cornell.pfm", true, Vec3(.276f, .265f, -.75f), Vec3(.276f, .265f, .1f), 40.f, .5f },
-    { "pathtracer_cornell", "cornell_box.scene", RendererBackend::PathTracer, 720, 720, 6, 0.02f, 0.25f, 0.08f, 0.02f, "Tests/Baselines/pathtracer_cornell.pfm", true, Vec3(.276f, .265f, -.75f), Vec3(.276f, .265f, .1f), 40.f, .5f }
+    { "deferred_diningroom", "diningroom.scene", RendererBackend::DeferredRenderer, 1280, 720, 3, 0.003f, 0.08f, 0.02f, 0.005f, "Tests/Baselines/deferred_diningroom.pfm" },
+    { "pathtracer_cornell", "cornell_box.scene", RendererBackend::PathTracer, 720, 720, 6, 0.02f, 0.25f, 0.08f, 0.02f, "Tests/Baselines/pathtracer_cornell.pfm", true, Vec3(.276f, .265f, -.75f), Vec3(.276f, .265f, .1f), 40.f, .5f },
+    { "pathtracer_diningroom", "diningroom.scene", RendererBackend::PathTracer, 1280, 720, 6, 0.02f, 0.25f, 0.08f, 0.02f, "Tests/Baselines/pathtracer_diningroom.pfm" }
   };
 }
 

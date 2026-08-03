@@ -114,6 +114,15 @@ CTest labels:
 - Software settings: one frame with strict raster thresholds
 - Deferred settings: three frames with the deferred tolerance policy
 
+### Dining Room cross-backend cases
+
+- Names: `software_diningroom`, `deferred_diningroom`, and `pathtracer_diningroom`
+- Scene: `Assets/diningroom.scene`, using its authored camera
+- Resolution: `1280x720`
+- Software settings: one frame with strict raster thresholds
+- Deferred settings: three frames with the deferred tolerance policy
+- Path-tracer settings: six accumulated frames, one sample per pixel, four bounces, and the full-resolution path enabled
+
 ### Path tracer
 
 - Name: `pathtracer_cornell`
