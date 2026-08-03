@@ -233,9 +233,11 @@ std::vector<RenderTestCase> GetRenderTestCases()
     { "deferred_cornell", "cornell_box.scene", RendererBackend::DeferredRenderer, 720, 720, 3, 0.003f, 0.08f, 0.02f, 0.005f, "Tests/Baselines/deferred_cornell.pfm", true, Vec3(.276f, .265f, -.75f), Vec3(.276f, .265f, .1f), 40.f, .5f },
     { "deferred_diningroom", "diningroom.scene", RendererBackend::DeferredRenderer, 1280, 720, 3, 0.003f, 0.08f, 0.02f, 0.005f, "Tests/Baselines/deferred_diningroom.pfm" },
     { "deferred_teapot_env", "teapot.scene", RendererBackend::DeferredRenderer, 1280, 720, 3, 0.003f, 0.08f, 0.02f, 0.005f, "Tests/Baselines/deferred_teapot_env.pfm", false, Vec3(0.f), Vec3(0.f), 80.f, 1.f, 1000.f, "HDR/Background_05.hdr" },
+    { "deferred_barbershopchair_01", "BarberShopChair_01.scene", RendererBackend::DeferredRenderer, 1280, 720, 3, 0.003f, 0.08f, 0.02f, 0.005f, "Tests/Baselines/deferred_barbershopchair_01.pfm", false, Vec3(0.f), Vec3(0.f), 80.f, 1.f, 1000.f, "HDR/konzerthaus_4k.hdr" },
     { "pathtracer_cornell", "cornell_box.scene", RendererBackend::PathTracer, 720, 720, 6, 0.02f, 0.25f, 0.08f, 0.02f, "Tests/Baselines/pathtracer_cornell.pfm", true, Vec3(.276f, .265f, -.75f), Vec3(.276f, .265f, .1f), 40.f, .5f },
     { "pathtracer_diningroom", "diningroom.scene", RendererBackend::PathTracer, 1280, 720, 6, 0.02f, 0.25f, 0.08f, 0.02f, "Tests/Baselines/pathtracer_diningroom.pfm" },
-    { "pathtracer_teapot_env", "teapot.scene", RendererBackend::PathTracer, 1280, 720, 60, 0.02f, 0.25f, 0.08f, 0.02f, "Tests/Baselines/pathtracer_teapot_env.pfm", false, Vec3(0.f), Vec3(0.f), 80.f, 1.f, 1000.f, "HDR/Background_05.hdr" }
+    { "pathtracer_teapot_env", "teapot.scene", RendererBackend::PathTracer, 1280, 720, 60, 0.02f, 0.25f, 0.08f, 0.02f, "Tests/Baselines/pathtracer_teapot_env.pfm", false, Vec3(0.f), Vec3(0.f), 80.f, 1.f, 1000.f, "HDR/Background_05.hdr" },
+    { "pathtracer_barbershopchair_01", "BarberShopChair_01.scene", RendererBackend::PathTracer, 1280, 720, 6, 0.02f, 0.25f, 0.08f, 0.02f, "Tests/Baselines/pathtracer_barbershopchair_01.pfm", false, Vec3(0.f), Vec3(0.f), 80.f, 1.f, 1000.f, "HDR/konzerthaus_4k.hdr" }
   };
 }
 

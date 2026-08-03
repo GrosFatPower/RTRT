@@ -133,6 +133,15 @@ CTest labels:
 - Deferred settings: three frames with specular IBL and SSR enabled
 - Path-tracer settings: 60 accumulated full-resolution frames, one sample per pixel, four bounces, tiled rendering disabled, and denoising disabled
 
+### Barber Shop Chair cross-backend cases
+
+- Names: `deferred_barbershopchair_01` and `pathtracer_barbershopchair_01`
+- Scene: `Assets/BarberShopChair_01.scene`, using its authored camera
+- Environment map: `Assets/HDR/konzerthaus_4k.hdr`, loaded explicitly by the test runner with environment mapping enabled
+- Resolution: `1280x720`
+- Deferred settings: three frames with specular IBL and SSR enabled
+- Path-tracer settings: six accumulated full-resolution frames, one sample per pixel, four bounces, tiled rendering disabled, and denoising disabled
+
 ### Path tracer
 
 - Name: `pathtracer_cornell`

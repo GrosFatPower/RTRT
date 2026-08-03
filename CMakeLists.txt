@@ -234,7 +234,7 @@ if(RTRT_BUILD_RENDER_REGRESSION_TESTS)
       WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     )
 
-    foreach(RENDER_CASE software_textured_box software_cornell software_diningroom software_teapot_env deferred_ibl_ssr deferred_cornell deferred_diningroom deferred_teapot_env pathtracer_cornell pathtracer_diningroom pathtracer_teapot_env)
+    foreach(RENDER_CASE software_textured_box software_cornell software_diningroom software_teapot_env deferred_ibl_ssr deferred_cornell deferred_diningroom deferred_teapot_env deferred_barbershopchair_01 pathtracer_cornell pathtracer_diningroom pathtracer_teapot_env pathtracer_barbershopchair_01)
       add_test(NAME Render_${RENDER_CASE} COMMAND RenderRegression --case ${RENDER_CASE})
       set_tests_properties(Render_${RENDER_CASE} PROPERTIES
         LABELS "render"
@@ -251,9 +251,11 @@ if(RTRT_BUILD_RENDER_REGRESSION_TESTS)
     set_tests_properties(Render_deferred_cornell PROPERTIES LABELS "render;deferred")
     set_tests_properties(Render_deferred_diningroom PROPERTIES LABELS "render;deferred")
     set_tests_properties(Render_deferred_teapot_env PROPERTIES LABELS "render;deferred")
+    set_tests_properties(Render_deferred_barbershopchair_01 PROPERTIES LABELS "render;deferred")
     set_tests_properties(Render_pathtracer_cornell PROPERTIES LABELS "render;pathtracer")
     set_tests_properties(Render_pathtracer_diningroom PROPERTIES LABELS "render;pathtracer")
     set_tests_properties(Render_pathtracer_teapot_env PROPERTIES LABELS "render;pathtracer")
+    set_tests_properties(Render_pathtracer_barbershopchair_01 PROPERTIES LABELS "render;pathtracer")
   endif()
 endif()
 

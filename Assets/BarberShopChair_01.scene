@@ -12,8 +12,8 @@ renderer
 
 camera
 {
-	position -4.29 0.8 -0.4
-	lookat 0 0.8 -0.4
+	position -1.533945 1.867347 2.557082
+	lookat 0.09896 0.548734 -0.269350
 	fov 45
 }
 
