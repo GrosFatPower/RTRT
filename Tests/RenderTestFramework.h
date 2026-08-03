@@ -44,9 +44,10 @@ struct RenderTestCase
   float           _CameraFOV = 80.f;
   float           _CameraNear = 1.f;
   float           _CameraFar = 1000.f;
+  std::string     _EnvironmentMapPath;
 
   void ApplySettings( RenderSettings & ioSettings ) const;
-  void ApplyScene( Scene & ioScene ) const;
+  bool ApplyScene( Scene & ioScene ) const;
 };
 
 bool WritePFM( const std::filesystem::path & iPath, const RenderImage & iImage );

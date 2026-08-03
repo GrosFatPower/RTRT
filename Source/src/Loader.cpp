@@ -1176,6 +1176,13 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
       else
         parsingError++;
     }
+    else if ( IsEqual("intensity", tokens[0]) )
+    {
+      if ( 2 == nbTokens )
+        newLight._Intensity = std::max(0.f, std::stof(tokens[1]));
+      else
+        parsingError++;
+    }
     else if ( IsEqual("v1", tokens[0]) )
     {
       if ( 4 == nbTokens )

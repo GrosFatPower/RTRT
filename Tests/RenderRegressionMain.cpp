@@ -90,7 +90,11 @@ int RunRenderCase( const RTRT::Tests::RenderTestCase & iTestCase, bool iUpdateBa
   }
 
   iTestCase.ApplySettings(settings);
-  iTestCase.ApplyScene(scene);
+  if ( !iTestCase.ApplyScene(scene) )
+  {
+    std::cerr << "Failed to load environment map for " << iTestCase._Name << std::endl;
+    return 1;
+  }
   std::unique_ptr<RTRT::Renderer> renderer = RTRT::CreateRenderer(iTestCase._Backend, scene, settings);
   if ( !renderer || ( 0 != renderer->Initialize() ) )
   {

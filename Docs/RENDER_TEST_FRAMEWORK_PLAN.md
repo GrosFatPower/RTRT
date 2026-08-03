@@ -123,6 +123,16 @@ CTest labels:
 - Deferred settings: three frames with the deferred tolerance policy
 - Path-tracer settings: six accumulated frames, one sample per pixel, four bounces, and the full-resolution path enabled
 
+### Teapot environment cross-backend cases
+
+- Names: `software_teapot_env`, `deferred_teapot_env`, and `pathtracer_teapot_env`
+- Scene: `Assets/teapot.scene`, using its authored camera
+- Environment map: `Assets/HDR/Background_05.hdr`, loaded explicitly by the test runner with environment mapping enabled
+- Resolution: `1280x720`
+- Software settings: one frame with strict raster thresholds
+- Deferred settings: three frames with specular IBL and SSR enabled
+- Path-tracer settings: six accumulated full-resolution frames, one sample per pixel, four bounces, tiled rendering disabled, and denoising disabled
+
 ### Path tracer
 
 - Name: `pathtracer_cornell`
