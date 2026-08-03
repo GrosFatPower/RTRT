@@ -131,7 +131,7 @@ CTest labels:
 - Resolution: `1280x720`
 - Software settings: one frame with strict raster thresholds
 - Deferred settings: three frames with specular IBL and SSR enabled
-- Path-tracer settings: six accumulated full-resolution frames, one sample per pixel, four bounces, tiled rendering disabled, and denoising disabled
+- Path-tracer settings: 60 accumulated full-resolution frames, one sample per pixel, four bounces, tiled rendering disabled, and denoising disabled
 
 ### Path tracer
 
