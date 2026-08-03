@@ -21,3 +21,14 @@ gltf
 {
 	file BarberShopChair_01_4k.gltf
 }
+
+light
+{
+	type sphere
+	position -1 1.6 1.4
+	emission 1.0 1.0 1.0
+	intensity 1
+	radius 0.500
+	castshadow true
+	shadowradius 0.000
+}
