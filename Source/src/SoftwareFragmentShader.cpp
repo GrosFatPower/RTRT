@@ -112,7 +112,7 @@ Vec3 BRDF( const Vec3 & iN, const Vec3 & iV, const Vec3 & iL, const Material & i
 // ----------------------------------------------------------------------------
 // SetupMaterial
 // ----------------------------------------------------------------------------
-void SetupMaterial(const RasterData::Fragment& iFrag, const RasterData::DefaultUniform & iUniforms, int iMatID, Material & oMat, Vec3 & oF0 )
+void SetupMaterial(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri, const RasterData::DefaultUniform & iUniforms, int iMatID, Material & oMat, Vec3 & oF0, Vec3 & oNormal )
 {
   oMat = (*iUniforms._Materials)[iMatID];
 
@@ -143,9 +143,7 @@ void SetupMaterial(const RasterData::Fragment& iFrag, const RasterData::DefaultU
 
       texNormal = glm::normalize(texNormal * 2.f - 1.f);
 
-      Vec3 T, BT;
-      ComputeOnB( iFrag._Attrib._Normal, T, BT );
-      texNormal = glm::normalize(T * texNormal.x + BT * texNormal.y + iFrag._Attrib._Normal * texNormal.z);
+      oNormal = glm::normalize(iTri._Tangent * texNormal.x + iTri._Bitangent * texNormal.y + oNormal * texNormal.z);
     }
   }
 
@@ -244,7 +242,8 @@ Vec4 PBRFragmentShader::Process(const RasterData::Fragment& iFrag, const RasterD
 
   Material mat;
   Vec3 F0;
-  SetupMaterial(iFrag, _Uniforms, iTri._MatID, mat, F0);
+  Vec3 normal = glm::normalize(iFrag._Attrib._Normal);
+  SetupMaterial(iFrag, iTri, _Uniforms, iTri._MatID, mat, F0, normal);
 
   Vec3 outColor(0.f);
 
@@ -259,9 +258,9 @@ Vec4 PBRFragmentShader::Process(const RasterData::Fragment& iFrag, const RasterD
     float invDistToLight = 1.f / glm::max(distToLight, EPSILON);
     L = L * invDistToLight;
     
-    float irradiance = std::max(glm::dot(L, iFrag._Attrib._Normal), 0.f) * invDistToLight * invDistToLight + ambientStrength;
+    float irradiance = std::max(glm::dot(L, normal), 0.f) * invDistToLight * invDistToLight + ambientStrength;
     if ( irradiance > 0.f )
-      outColor += BRDF(iFrag._Attrib._Normal, V, L, mat, F0) * light._Emission * irradiance;
+      outColor += BRDF(normal, V, L, mat, F0) * light._Emission * irradiance;
   }
 
   // Image based lighting
@@ -298,7 +297,12 @@ Vec4 DepthFragmentShader::Process(const RasterData::Fragment& iFrag, const Raste
 // ----------------------------------------------------------------------------
 Vec4 NormalFragmentShader::Process(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri)
 {
-  Vec3 normal = glm::abs(iFrag._Attrib._Normal);
+  Material mat;
+  Vec3 F0;
+  Vec3 normal = glm::normalize(iFrag._Attrib._Normal);
+  if ( iTri._MatID >= 0 )
+    SetupMaterial(iFrag, iTri, _Uniforms, iTri._MatID, mat, F0, normal);
+  normal = glm::abs(normal);
   return Vec4(normal, 1.f);
 }
 

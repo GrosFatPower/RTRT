@@ -1536,6 +1536,26 @@ void SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, i
       rasterTri._MatID = tri._MatID;
       rasterTri._Normal = tri._Normal;
 
+      const rd::Varying & v0 = _ProjVerticesBuf[tri._Indices[0]]._Attrib;
+      const rd::Varying & v1 = _ProjVerticesBuf[tri._Indices[1]]._Attrib;
+      const rd::Varying & v2 = _ProjVerticesBuf[tri._Indices[2]]._Attrib;
+      Vec3 dp1 = v1._WorldPos - v0._WorldPos;
+      Vec3 dp2 = v2._WorldPos - v0._WorldPos;
+      Vec2 duv1 = v1._UV - v0._UV;
+      Vec2 duv2 = v2._UV - v0._UV;
+      float determinant = duv1.x * duv2.y - duv1.y * duv2.x;
+      if ( abs(determinant) > EPSILON )
+      {
+        rasterTri._Tangent = glm::normalize((dp1 * duv2.y - dp2 * duv1.y) / determinant);
+        rasterTri._Bitangent = glm::normalize(glm::cross(rasterTri._Normal, rasterTri._Tangent)) * glm::sign(determinant);
+      }
+      else
+      {
+        Vec3 up = ( abs(rasterTri._Normal.z) < 0.999f ) ? Vec3(0.f, 0.f, 1.f) : Vec3(1.f, 0.f, 0.f);
+        rasterTri._Tangent = glm::normalize(glm::cross(up, rasterTri._Normal));
+        rasterTri._Bitangent = glm::cross(rasterTri._Normal, rasterTri._Tangent);
+      }
+
       this -> ComputeLOD(rasterTri);
 
       _RasterTrianglesBuf[iThreadBin].emplace_back(std::move(rasterTri));

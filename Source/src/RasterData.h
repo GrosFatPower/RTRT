@@ -194,6 +194,8 @@ namespace RasterData
     float      _InvArea;
     AABB<Vec2> _BBox;
     Vec3       _Normal;
+    Vec3       _Tangent;
+    Vec3       _Bitangent;
     int        _MatID;
     float      _LOD = 0.f;
   };
