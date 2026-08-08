@@ -1,6 +1,7 @@
 #include "RenderTestFramework.h"
 
 #include "RenderSettings.h"
+#include "RasterData.h"
 #include "Scene.h"
 #include "PathUtils.h"
 
@@ -38,6 +39,10 @@ void RenderTestCase::ApplySettings( RenderSettings & ioSettings ) const
   {
     ioSettings._SpecularIBL = _SpecularIBL;
     ioSettings._SSR = _SSR;
+  }
+  else if ( RendererBackend::SoftwareRasterizer == _Backend )
+  {
+    ioSettings._TiledRendering = _TiledRendering;
   }
   else if ( RendererBackend::PathTracer == _Backend )
   {
@@ -498,6 +503,39 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor )
     return 1;
   }
   PrintPassed("image_comparison");
+
+  const Vec3 diagonalA[3] = { Vec3(0.f, 0.f, 0.f), Vec3(2.f, 0.f, 0.f), Vec3(0.f, 2.f, 0.f) };
+  const Vec3 diagonalB[3] = { Vec3(2.f, 0.f, 0.f), Vec3(2.f, 2.f, 0.f), Vec3(0.f, 2.f, 0.f) };
+  const Vec3 horizontalA[3] = { Vec3(0.f, 0.f, 0.f), Vec3(2.f, 0.f, 0.f), Vec3(0.f, 2.f, 0.f) };
+  const Vec3 horizontalB[3] = { Vec3(0.f, 0.f, 0.f), Vec3(0.f, -2.f, 0.f), Vec3(2.f, 0.f, 0.f) };
+  const Vec3 verticalA[3] = { Vec3(0.f, 0.f, 0.f), Vec3(2.f, 0.f, 0.f), Vec3(0.f, 2.f, 0.f) };
+  const Vec3 verticalB[3] = { Vec3(0.f, 0.f, 0.f), Vec3(0.f, 2.f, 0.f), Vec3(-2.f, 0.f, 0.f) };
+  const Vec3 bounds[3] = { Vec3(.25f, .25f, 0.f), Vec3(2.75f, .25f, 0.f), Vec3(.25f, 2.75f, 0.f) };
+  const Vec3 degenerate[3] = { Vec3(0.f, 0.f, 0.f), Vec3(.001f, 0.f, 0.f), Vec3(0.f, .001f, 0.f) };
+  RasterData::CoverageTriangle triangleDiagonalA;
+  RasterData::CoverageTriangle triangleDiagonalB;
+  RasterData::CoverageTriangle triangleHorizontalA;
+  RasterData::CoverageTriangle triangleHorizontalB;
+  RasterData::CoverageTriangle triangleVerticalA;
+  RasterData::CoverageTriangle triangleVerticalB;
+  RasterData::CoverageTriangle triangleBounds;
+  RasterData::CoverageTriangle triangleDegenerate;
+  const int64_t sample = RasterData::CoverageTriangle::_SubPixelScale;
+  if ( !triangleDiagonalA.Initialize(diagonalA) || !triangleDiagonalB.Initialize(diagonalB)
+    || !triangleHorizontalA.Initialize(horizontalA) || !triangleHorizontalB.Initialize(horizontalB)
+    || !triangleVerticalA.Initialize(verticalA) || !triangleVerticalB.Initialize(verticalB)
+    || !triangleBounds.Initialize(bounds) || triangleDegenerate.Initialize(degenerate)
+    || ( triangleDiagonalA.CoversPixel(1, 0) == triangleDiagonalB.CoversPixel(1, 0) )
+    || ( triangleHorizontalA.CoversPoint(sample, 0) == triangleHorizontalB.CoversPoint(sample, 0) )
+    || ( triangleVerticalA.CoversPoint(0, sample) == triangleVerticalB.CoversPoint(0, sample) )
+    || ( 0 != triangleBounds._PixelMinX ) || ( 2 != triangleBounds._PixelMaxX )
+    || ( 0 != triangleBounds._PixelMinY ) || ( 2 != triangleBounds._PixelMaxY ) )
+  {
+    std::cerr << "Unit test failed: deterministic raster coverage." << std::endl;
+    PrintFailed("raster_coverage");
+    return 1;
+  }
+  PrintPassed("raster_coverage");
 
   if ( !WriteDiffPNG(iArtifactsDir / "unit_diff.png", changed, image) )
   {

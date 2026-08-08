@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "profiles": {
+    "software_strict": {
+      "backend": "software",
+      "resolution": [1280, 720],
+      "frames": 1,
+      "thresholds": {
+        "mean_absolute_error": 0.000001,
+        "max_absolute_error": 0.00001,
+        "pixel_error": 0.00001,
+        "mismatch_ratio": 0.0
+      },
+      "settings": {
+        "tiled_rendering": false
+      }
+    },
+    "software_strict_tiled": {
+      "backend": "software",
+      "resolution": [1280, 720],
+      "frames": 1,
+      "thresholds": {
+        "mean_absolute_error": 0.000001,
+        "max_absolute_error": 0.00001,
+        "pixel_error": 0.00001,
+        "mismatch_ratio": 0.0
+      },
+      "settings": {
+        "tiled_rendering": true
+      }
+    }
+  },
+  "tests": [
+    {
+      "name": "strict_software_textured_box",
+      "profile": "software_strict",
+      "scene": "TexturedBox.scene",
+      "baseline": "Tests/Baselines/software_textured_box.pfm"
+    },
+    {
+      "name": "strict_software_cornell",
+      "profile": "software_strict",
+      "scene": "cornell_box.scene",
+      "resolution": [720, 720],
+      "camera": {
+        "position": [0.276, 0.265, -0.75],
+        "pivot": [0.276, 0.265, 0.1],
+        "fov": 40.0,
+        "near": 0.5
+      },
+      "baseline": "Tests/Baselines/software_cornell.pfm"
+    },
+    {
+      "name": "strict_software_diningroom",
+      "profile": "software_strict",
+      "scene": "diningroom.scene",
+      "baseline": "Tests/Baselines/software_diningroom.pfm"
+    },
+    {
+      "name": "strict_software_teapot_env",
+      "profile": "software_strict",
+      "scene": "teapot.scene",
+      "environment_map": "HDR/Background_05.hdr",
+      "baseline": "Tests/Baselines/software_teapot_env.pfm"
+    },
+    {
+      "name": "strict_tiled_software_textured_box",
+      "profile": "software_strict_tiled",
+      "scene": "TexturedBox.scene",
+      "baseline": "Tests/Baselines/software_textured_box.pfm"
+    },
+    {
+      "name": "strict_tiled_software_cornell",
+      "profile": "software_strict_tiled",
+      "scene": "cornell_box.scene",
+      "resolution": [720, 720],
+      "camera": {
+        "position": [0.276, 0.265, -0.75],
+        "pivot": [0.276, 0.265, 0.1],
+        "fov": 40.0,
+        "near": 0.5
+      },
+      "baseline": "Tests/Baselines/software_cornell.pfm"
+    },
+    {
+      "name": "strict_tiled_software_diningroom",
+      "profile": "software_strict_tiled",
+      "scene": "diningroom.scene",
+      "baseline": "Tests/Baselines/software_diningroom.pfm"
+    },
+    {
+      "name": "strict_tiled_software_teapot_env",
+      "profile": "software_strict_tiled",
+      "scene": "teapot.scene",
+      "environment_map": "HDR/Background_05.hdr",
+      "baseline": "Tests/Baselines/software_teapot_env.pfm"
+    }
+  ]
+}

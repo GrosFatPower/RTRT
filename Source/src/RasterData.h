@@ -8,6 +8,8 @@
 #include "Texture.h"
 #include "SIMDUtils.h"
 #include "RenderSettings.h"
+#include <cmath>
+#include <cstdint>
 #include <vector>
 
 namespace RTRT
@@ -15,6 +17,109 @@ namespace RTRT
 
 namespace RasterData
 {
+  struct CoverageTriangle
+  {
+    static const int _SubPixelBits = 8;
+    static const int64_t _SubPixelScale = 1ll << _SubPixelBits;
+    static const int64_t _SampleOffset = _SubPixelScale / 2;
+
+    int64_t _X[3] = { 0, 0, 0 };
+    int64_t _Y[3] = { 0, 0, 0 };
+    int64_t _EdgeA[3] = { 0, 0, 0 };
+    int64_t _EdgeB[3] = { 0, 0, 0 };
+    int64_t _EdgeC[3] = { 0, 0, 0 };
+    bool    _TopLeft[3] = { false, false, false };
+    int     _PixelMinX = 0;
+    int     _PixelMaxX = -1;
+    int     _PixelMinY = 0;
+    int     _PixelMaxY = -1;
+    bool    _Valid = false;
+
+    bool Initialize( const Vec3 iVertices[3] )
+    {
+      _Valid = false;
+      for ( int i = 0; i < 3; ++i )
+      {
+        _X[i] = static_cast<int64_t>(std::llround(iVertices[i].x * static_cast<float>(_SubPixelScale)));
+        _Y[i] = static_cast<int64_t>(std::llround(iVertices[i].y * static_cast<float>(_SubPixelScale)));
+      }
+
+      const int64_t area = EdgeValue(0, _X[0], _Y[0]);
+      if ( area <= 0 )
+        return false;
+
+      int64_t minX = _X[0];
+      int64_t maxX = _X[0];
+      int64_t minY = _Y[0];
+      int64_t maxY = _Y[0];
+      for ( int i = 0; i < 3; ++i )
+      {
+        const int start = ( i + 1 ) % 3;
+        const int end = ( i + 2 ) % 3;
+        const int64_t dx = _X[end] - _X[start];
+        const int64_t dy = _Y[end] - _Y[start];
+
+        _EdgeA[i] = _Y[start] - _Y[end];
+        _EdgeB[i] = _X[end] - _X[start];
+        _EdgeC[i] = _X[start] * _Y[end] - _X[end] * _Y[start];
+        _TopLeft[i] = ( dy < 0 ) || ( ( 0 == dy ) && ( dx > 0 ) );
+
+        minX = std::min(minX, _X[i]);
+        maxX = std::max(maxX, _X[i]);
+        minY = std::min(minY, _Y[i]);
+        maxY = std::max(maxY, _Y[i]);
+      }
+
+      _PixelMinX = static_cast<int>(CeilDiv(minX - _SampleOffset, _SubPixelScale));
+      _PixelMaxX = static_cast<int>(FloorDiv(maxX - _SampleOffset, _SubPixelScale));
+      _PixelMinY = static_cast<int>(CeilDiv(minY - _SampleOffset, _SubPixelScale));
+      _PixelMaxY = static_cast<int>(FloorDiv(maxY - _SampleOffset, _SubPixelScale));
+
+      _Valid = ( _PixelMinX <= _PixelMaxX ) && ( _PixelMinY <= _PixelMaxY );
+      return _Valid;
+    }
+
+    bool CoversPixel( int iX, int iY ) const
+    {
+      return CoversPoint(static_cast<int64_t>(iX) * _SubPixelScale + _SampleOffset,
+                         static_cast<int64_t>(iY) * _SubPixelScale + _SampleOffset);
+    }
+
+    bool CoversPoint( int64_t iX, int64_t iY ) const
+    {
+      for ( int i = 0; i < 3; ++i )
+      {
+        const int64_t edge = _EdgeA[i] * iX + _EdgeB[i] * iY + _EdgeC[i];
+        if ( ( edge < 0 ) || ( ( 0 == edge ) && !_TopLeft[i] ) )
+          return false;
+      }
+
+      return true;
+    }
+
+  private:
+    static int64_t FloorDiv( int64_t iValue, int64_t iDivisor )
+    {
+      if ( iValue >= 0 )
+        return iValue / iDivisor;
+      return -(( -iValue + iDivisor - 1 ) / iDivisor);
+    }
+
+    static int64_t CeilDiv( int64_t iValue, int64_t iDivisor )
+    {
+      if ( iValue >= 0 )
+        return ( iValue + iDivisor - 1 ) / iDivisor;
+      return -(( -iValue ) / iDivisor);
+    }
+
+    int64_t EdgeValue( int iEdge, int64_t iX, int64_t iY ) const
+    {
+      const int start = ( iEdge + 1 ) % 3;
+      const int end = ( iEdge + 2 ) % 3;
+      return ( _X[end] - _X[start] ) * ( iY - _Y[start] ) - ( _Y[end] - _Y[start] ) * ( iX - _X[start] );
+    }
+  };
+
   struct SIMD_ALIGN64 FrameBuffer
   {
     SIMD_ALIGN64 std::vector<RGBA8> _ColorBuffer;
@@ -193,6 +298,7 @@ namespace RasterData
     float      _InvW[3];
     float      _InvArea;
     AABB<Vec2> _BBox;
+    CoverageTriangle _Coverage;
     Vec3       _Normal;
     Vec3       _Tangent;
     Vec3       _Bitangent;

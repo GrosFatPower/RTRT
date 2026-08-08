@@ -1509,6 +1509,8 @@ void SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, i
           if (rasterTri._InvArea < 0.f)
             continue;
 
+          rasterTri._Coverage.Initialize(rasterTri._V);
+
           rasterTri._MatID = tri._MatID;
           rasterTri._Normal = tri._Normal;
 
@@ -1544,6 +1546,8 @@ void SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, i
 
       if (rasterTri._InvArea < 0.f)
         continue;
+
+      rasterTri._Coverage.Initialize(rasterTri._V);
 
       rasterTri._MatID = tri._MatID;
       rasterTri._Normal = tri._Normal;
@@ -1687,6 +1691,8 @@ int SoftwareRasterizer::Rasterize(int iThreadBin, int iStartY, int iEndY)
     for (int j = 0; j < _RasterTrianglesBuf[i].size(); ++j)
     {
       rd::RasterTriangle& tri = _RasterTrianglesBuf[i][j];
+      if ( !tri._Coverage._Valid )
+        continue;
 
       // Backface culling
       if (0)
@@ -1698,10 +1704,10 @@ int SoftwareRasterizer::Rasterize(int iThreadBin, int iStartY, int iEndY)
           continue;
       }
 
-      int xMin = std::max(0, std::min(static_cast<int>(std::floorf(tri._BBox._Low.x)), RenderWidth() - 1));
-      int yMin = std::max(iStartY, std::min(static_cast<int>(std::floorf(tri._BBox._Low.y)), iEndY - 1));
-      int xMax = std::max(0, std::min(static_cast<int>(std::floorf(tri._BBox._High.x)), RenderWidth() - 1));
-      int yMax = std::max(iStartY, std::min(static_cast<int>(std::floorf(tri._BBox._High.y)), iEndY - 1));
+      int xMin = std::max(0, std::min(tri._Coverage._PixelMinX, RenderWidth() - 1));
+      int yMin = std::max(iStartY, std::min(tri._Coverage._PixelMinY, iEndY - 1));
+      int xMax = std::max(0, std::min(tri._Coverage._PixelMaxX, RenderWidth() - 1));
+      int yMax = std::max(iStartY, std::min(tri._Coverage._PixelMaxY, iEndY - 1));
 
       for (int y = yMin; y <= yMax; ++y)
       {
@@ -1710,11 +1716,12 @@ int SoftwareRasterizer::Rasterize(int iThreadBin, int iStartY, int iEndY)
           // Frag coord
           Vec3 coord(x + .5f, y + .5f, 0.f);
 
+          if ( !tri._Coverage.CoversPixel(x, y) )
+            continue;
+
           // Barycentric coordinates
           float W[3] = { 0.f };
-          bool isIn = MathUtil::EvalBarycentricCoordinates(coord, tri._EdgeA, tri._EdgeB, tri._EdgeC, W);
-          if (!isIn)
-            continue;
+          MathUtil::ComputeBarycentricCoordinates(coord, tri._EdgeA, tri._EdgeB, tri._EdgeC, W);
 
           // Perspective correct Z
           W[0] *= tri._InvW[0];
@@ -1776,13 +1783,13 @@ int SoftwareRasterizer::Rasterize(rd::Tile& ioTile)
     for (int j = 0; j < ioTile._RasterTrisBins[i].size(); ++j)
     {
       const rd::RasterTriangle * tri = ioTile._RasterTrisBins[i][j];
-      if (!tri)
+      if ( !tri || !tri->_Coverage._Valid )
         continue;
 
-      int startX = std::max(ioTile._X, static_cast<int>(std::floor(tri->_BBox._Low.x)));
-      int endX = std::min(ioTile._X + ioTile._Width - 1, static_cast<int>(std::ceil(tri->_BBox._High.x)));
-      int startY = std::max(ioTile._Y, static_cast<int>(std::floor(tri->_BBox._Low.y)));
-      int endY = std::min(ioTile._Y + ioTile._Height - 1, static_cast<int>(std::ceil(tri->_BBox._High.y)));
+      int startX = std::max(ioTile._X, tri->_Coverage._PixelMinX);
+      int endX = std::min(ioTile._X + ioTile._Width - 1, tri->_Coverage._PixelMaxX);
+      int startY = std::max(ioTile._Y, tri->_Coverage._PixelMinY);
+      int endY = std::min(ioTile._Y + ioTile._Height - 1, tri->_Coverage._PixelMaxY);
 
       for (int y = startY; y <= endY; ++y)
       {
@@ -1791,11 +1798,12 @@ int SoftwareRasterizer::Rasterize(rd::Tile& ioTile)
           // Frag coord
           Vec3 coord(x + .5f, y + .5f, 0.f);
 
+          if ( !tri->_Coverage.CoversPixel(x, y) )
+            continue;
+
           // Barycentric coordinates
           float W[3] = { 0.f };
-          bool isIn = MathUtil::EvalBarycentricCoordinates(coord, tri->_EdgeA, tri->_EdgeB, tri->_EdgeC, W);
-          if (!isIn)
-            continue;
+          MathUtil::ComputeBarycentricCoordinates(coord, tri->_EdgeA, tri->_EdgeB, tri->_EdgeC, W);
 
           // Perspective correct Z
           W[0] *= tri->_InvW[0];
@@ -2175,15 +2183,32 @@ void SoftwareRasterizer::BinTrianglesToTiles(unsigned int iBufferIndex)
 
   for (rd::RasterTriangle& tri : _RasterTrianglesBuf[iBufferIndex])
   {
-    float xMin = std::max(0.f, std::min(tri._BBox._Low.x, static_cast<float>(RenderWidth() - 1.f)));
-    float yMin = std::max(0.f, std::min(tri._BBox._Low.y, static_cast<float>(RenderHeight() - 1.f)));
-    float xMax = std::max(0.f, std::min(tri._BBox._High.x, static_cast<float>(RenderWidth() - 1.f)));
-    float yMax = std::max(0.f, std::min(tri._BBox._High.y, static_cast<float>(RenderHeight() - 1.f)));
+    int tileXMin = 0;
+    int tileYMin = 0;
+    int tileXMax = _TileCountX - 1;
+    int tileYMax = _TileCountY - 1;
+    if ( !_EnableSIMD )
+    {
+      if ( !tri._Coverage._Valid )
+        continue;
 
-    int tileXMin = std::max(0, static_cast<int>(xMin / _TileSize));
-    int tileYMin = std::max(0, static_cast<int>(yMin / _TileSize));
-    int tileXMax = std::min(_TileCountX - 1, static_cast<int>(xMax / _TileSize));
-    int tileYMax = std::min(_TileCountY - 1, static_cast<int>(yMax / _TileSize));
+      tileXMin = std::max(0, tri._Coverage._PixelMinX / static_cast<int>(_TileSize));
+      tileYMin = std::max(0, tri._Coverage._PixelMinY / static_cast<int>(_TileSize));
+      tileXMax = std::min(_TileCountX - 1, tri._Coverage._PixelMaxX / static_cast<int>(_TileSize));
+      tileYMax = std::min(_TileCountY - 1, tri._Coverage._PixelMaxY / static_cast<int>(_TileSize));
+    }
+    else
+    {
+      float xMin = std::max(0.f, std::min(tri._BBox._Low.x, static_cast<float>(RenderWidth() - 1.f)));
+      float yMin = std::max(0.f, std::min(tri._BBox._Low.y, static_cast<float>(RenderHeight() - 1.f)));
+      float xMax = std::max(0.f, std::min(tri._BBox._High.x, static_cast<float>(RenderWidth() - 1.f)));
+      float yMax = std::max(0.f, std::min(tri._BBox._High.y, static_cast<float>(RenderHeight() - 1.f)));
+
+      tileXMin = std::max(0, static_cast<int>(xMin / _TileSize));
+      tileYMin = std::max(0, static_cast<int>(yMin / _TileSize));
+      tileXMax = std::min(_TileCountX - 1, static_cast<int>(xMax / _TileSize));
+      tileYMax = std::min(_TileCountY - 1, static_cast<int>(yMax / _TileSize));
+    }
 
     for (int ty = tileYMin; ty <= tileYMax; ++ty)
     {

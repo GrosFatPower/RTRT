@@ -378,12 +378,16 @@ public:
     return true;
   }
 
-  static bool EvalBarycentricCoordinates( const Vec3 & iFragCoord, const float iEdgeA[3], const float iEdgeB[3], const float iEdgeC[3], float oBaryCoord[3])
+  static void ComputeBarycentricCoordinates( const Vec3 & iFragCoord, const float iEdgeA[3], const float iEdgeB[3], const float iEdgeC[3], float oBaryCoord[3])
   {
     oBaryCoord[0] = iEdgeA[0] * iFragCoord.x + iEdgeB[0] * iFragCoord.y + iEdgeC[0];
     oBaryCoord[1] = iEdgeA[1] * iFragCoord.x + iEdgeB[1] * iFragCoord.y + iEdgeC[1];
-    //oBaryCoord[2] = iEdgeA[2] * iFragCoord.x + iEdgeB[2] * iFragCoord.y + iEdgeC[2];
     oBaryCoord[2] = 1.f - oBaryCoord[0] - oBaryCoord[1];
+  }
+
+  static bool EvalBarycentricCoordinates( const Vec3 & iFragCoord, const float iEdgeA[3], const float iEdgeB[3], const float iEdgeC[3], float oBaryCoord[3])
+  {
+    ComputeBarycentricCoordinates(iFragCoord, iEdgeA, iEdgeB, iEdgeC, oBaryCoord);
     if ( (oBaryCoord[0] < 0.f)
       || (oBaryCoord[1] < 0.f)
       || (oBaryCoord[2] < 0.f))
