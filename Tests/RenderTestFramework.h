@@ -67,7 +67,7 @@ bool MatchesThresholds( const ImageMetrics & iMetrics, const RenderTestCase & iT
 
 bool LoadRenderTestCases( const std::filesystem::path & iPath, std::vector<RenderTestCase> & oTestCases, std::string & oError );
 bool ParseRenderTestCases( const std::string & iContents, std::vector<RenderTestCase> & oTestCases, std::string & oError );
-int RunUnitTests( const std::filesystem::path & iArtifactsDir );
+int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor = false );
 
 }
 

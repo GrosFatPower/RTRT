@@ -5,6 +5,7 @@
 #include "RenderSettings.h"
 #include "Scene.h"
 
+#include <windows.h>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
@@ -12,6 +13,9 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <chrono>
+#include <cstdio>
+#include <io.h>
 
 namespace fs = std::filesystem;
 
@@ -19,6 +23,72 @@ namespace
 {
 
 static const int S_SkipReturnCode = 77;
+
+enum class RenderCaseStatus
+{
+  Passed,
+  Failed,
+  Skipped,
+  Updated
+};
+
+struct RenderCaseOutcome
+{
+  RenderCaseStatus _Status = RenderCaseStatus::Failed;
+  std::string _Reason;
+};
+
+class TraceCapture
+{
+public:
+  explicit TraceCapture( const fs::path & iPath )
+  {
+    std::error_code error;
+    fs::create_directories(iPath.parent_path(), error);
+    fopen_s(&_File, iPath.string().c_str(), "w");
+    if ( !_File )
+      return;
+
+    std::cout.flush();
+    std::cerr.flush();
+    fflush(stdout);
+    fflush(stderr);
+    _StdOut = _dup(_fileno(stdout));
+    _StdErr = _dup(_fileno(stderr));
+    if ( ( _StdOut < 0 ) || ( _StdErr < 0 ) )
+      return;
+    _dup2(_fileno(_File), _fileno(stdout));
+    _dup2(_fileno(_File), _fileno(stderr));
+    _Active = true;
+  }
+
+  ~TraceCapture()
+  {
+    if ( _Active )
+    {
+      std::cout.flush();
+      std::cerr.flush();
+      fflush(stdout);
+      fflush(stderr);
+      _dup2(_StdOut, _fileno(stdout));
+      _dup2(_StdErr, _fileno(stderr));
+    }
+    if ( _StdOut >= 0 )
+      _close(_StdOut);
+    if ( _StdErr >= 0 )
+      _close(_StdErr);
+    if ( _File )
+      fclose(_File);
+  }
+
+  bool IsActive() const { return _Active; }
+
+private:
+  FILE * _File = nullptr;
+  int _StdOut = -1;
+  int _StdErr = -1;
+  bool _Active = false;
+};
 
 class GLTestContext
 {
@@ -78,28 +148,32 @@ bool WriteMetrics( const fs::path & iPath, const RTRT::Tests::ImageMetrics & iMe
   return output.good();
 }
 
-int RunRenderCase( const RTRT::Tests::RenderTestCase & iTestCase, bool iUpdateBaselines, const fs::path & iArtifactsDir )
+RenderCaseOutcome RunRenderCase( const RTRT::Tests::RenderTestCase & iTestCase, bool iUpdateBaselines, const fs::path & iArtifactsDir )
 {
+  RenderCaseOutcome outcome;
   RTRT::Scene scene;
   RTRT::RenderSettings settings;
   const std::string scenePath = RTRT::PathUtils::GetAssetPath(iTestCase._ScenePath);
   if ( !RTRT::Loader::LoadScene(scenePath, scene, settings) )
   {
     std::cerr << "Failed to load scene: " << scenePath << std::endl;
-    return 1;
+    outcome._Reason = "scene load failed";
+    return outcome;
   }
 
   iTestCase.ApplySettings(settings);
   if ( !iTestCase.ApplyScene(scene) )
   {
     std::cerr << "Failed to load environment map for " << iTestCase._Name << std::endl;
-    return 1;
+    outcome._Reason = "environment map load failed";
+    return outcome;
   }
   std::unique_ptr<RTRT::Renderer> renderer = RTRT::CreateRenderer(iTestCase._Backend, scene, settings);
   if ( !renderer || ( 0 != renderer->Initialize() ) )
   {
     std::cerr << "Failed to initialize renderer for " << iTestCase._Name << std::endl;
-    return 1;
+    outcome._Reason = "renderer initialization failed";
+    return outcome;
   }
 
   int result = 0;
@@ -108,6 +182,7 @@ int RunRenderCase( const RTRT::Tests::RenderTestCase & iTestCase, bool iUpdateBa
     if ( ( 0 != renderer->Update() ) || ( 0 != renderer->RenderToTexture() ) )
     {
       std::cerr << "Failed to render frame " << frame << " for " << iTestCase._Name << std::endl;
+      outcome._Reason = "render failed at frame " + std::to_string(frame);
       result = 1;
       break;
     }
@@ -117,6 +192,7 @@ int RunRenderCase( const RTRT::Tests::RenderTestCase & iTestCase, bool iUpdateBa
     if ( 0 != renderer->Done() )
     {
       std::cerr << "Failed to finalize frame " << frame << " for " << iTestCase._Name << std::endl;
+      outcome._Reason = "finalization failed at frame " + std::to_string(frame);
       result = 1;
       break;
     }
@@ -126,11 +202,12 @@ int RunRenderCase( const RTRT::Tests::RenderTestCase & iTestCase, bool iUpdateBa
   if ( ( 0 == result ) && ( 0 != renderer->ReadbackFinalColor(actual) ) )
   {
     std::cerr << "Failed to read back final color for " << iTestCase._Name << std::endl;
+    outcome._Reason = "final color readback failed";
     result = 1;
   }
 
   if ( 0 != result )
-    return result;
+    return outcome;
 
   const fs::path baselinePath = fs::path(RTRT::PathUtils::GetAssetPath("..")) / iTestCase._BaselinePath;
   if ( iUpdateBaselines )
@@ -138,31 +215,35 @@ int RunRenderCase( const RTRT::Tests::RenderTestCase & iTestCase, bool iUpdateBa
     if ( !RTRT::Tests::WritePFM(baselinePath, actual) )
     {
       std::cerr << "Failed to write baseline: " << baselinePath << std::endl;
-      return 1;
+      outcome._Reason = "baseline write failed";
+      return outcome;
     }
     RTRT::Tests::WriteDiagnosticPNG(iArtifactsDir / iTestCase._Name / "actual.png", actual);
-    std::cout << "Updated baseline: " << baselinePath << std::endl;
-    return 0;
+    outcome._Status = RenderCaseStatus::Updated;
+    return outcome;
   }
 
   RTRT::RenderImage expected;
   if ( !RTRT::Tests::ReadPFM(baselinePath, expected) )
   {
     std::cerr << "Baseline is not initialized: " << baselinePath << std::endl;
-    return S_SkipReturnCode;
+    outcome._Status = RenderCaseStatus::Skipped;
+    outcome._Reason = "baseline is not initialized";
+    return outcome;
   }
 
   RTRT::Tests::ImageMetrics metrics;
   if ( !RTRT::Tests::CompareImages(actual, expected, iTestCase._PixelErrorThreshold, metrics) )
   {
     std::cerr << "Image dimensions do not match for " << iTestCase._Name << std::endl;
-    return 1;
+    outcome._Reason = "image dimensions do not match";
+    return outcome;
   }
 
   if ( RTRT::Tests::MatchesThresholds(metrics, iTestCase) )
   {
-    std::cout << "Render test passed: " << iTestCase._Name << std::endl;
-    return 0;
+    outcome._Status = RenderCaseStatus::Passed;
+    return outcome;
   }
 
   const fs::path artifactPath = iArtifactsDir / iTestCase._Name;
@@ -172,8 +253,35 @@ int RunRenderCase( const RTRT::Tests::RenderTestCase & iTestCase, bool iUpdateBa
   RTRT::Tests::WriteDiagnosticPNG(artifactPath / "expected.png", expected);
   RTRT::Tests::WriteDiffPNG(artifactPath / "diff.png", actual, expected);
   WriteMetrics(artifactPath / "metrics.txt", metrics);
-  std::cerr << "Render test failed: " << iTestCase._Name << std::endl;
-  return 1;
+  outcome._Reason = "image mismatch";
+  return outcome;
+}
+
+bool EnableConsoleColors()
+{
+  HANDLE output = GetStdHandle(STD_OUTPUT_HANDLE);
+  DWORD mode = 0;
+  if ( ( INVALID_HANDLE_VALUE == output ) || !GetConsoleMode(output, &mode) )
+    return false;
+  return SetConsoleMode(output, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0;
+}
+
+void PrintCaseStatus( const RTRT::Tests::RenderTestCase & iTestCase, const RenderCaseOutcome & iOutcome, double iSeconds, const fs::path & iArtifactsDir, bool iUseColor )
+{
+  const char * label = "FAIL";
+  const char * color = "\x1b[31m";
+  if ( RenderCaseStatus::Passed == iOutcome._Status ) { label = "PASS"; color = "\x1b[32m"; }
+  if ( RenderCaseStatus::Skipped == iOutcome._Status ) { label = "SKIP"; color = "\x1b[33m"; }
+  if ( RenderCaseStatus::Updated == iOutcome._Status ) { label = "UPDATED"; color = "\x1b[32m"; }
+  if ( iUseColor ) std::cout << color;
+  std::cout << "[" << label << "]";
+  if ( iUseColor ) std::cout << "\x1b[0m";
+  std::cout << " " << iTestCase._Name << " (" << iSeconds << " s)";
+  if ( !iOutcome._Reason.empty() )
+    std::cout << " - " << iOutcome._Reason;
+  if ( RenderCaseStatus::Failed == iOutcome._Status )
+    std::cout << "; see " << ( iArtifactsDir / iTestCase._Name ).generic_string();
+  std::cout << std::endl;
 }
 
 }
@@ -223,12 +331,13 @@ int main( int iArgc, char ** iArgv )
   }
 
   RTRT::PathUtils::Initialize(iArgv[0]);
+  const bool useColor = EnableConsoleColors();
   if ( !customManifest )
     manifestPath = fs::path(RTRT::PathUtils::GetAssetPath("..")) / "Tests/RenderTests.json";
 
   if ( runUnitTests || runAll )
   {
-    const int result = RTRT::Tests::RunUnitTests(artifactsDir / "unit");
+    const int result = RTRT::Tests::RunUnitTests(artifactsDir / "unit", useColor);
     if ( 0 != result )
       return result;
   }
@@ -274,12 +383,36 @@ int main( int iArgc, char ** iArgv )
     return S_SkipReturnCode;
   }
 
+  int passed = 0;
+  int failed = 0;
+  int skipped = 0;
+  int updated = 0;
   for ( const RTRT::Tests::RenderTestCase & testCase : selectedCases )
   {
-    const int result = RunRenderCase(testCase, updateBaselines, artifactsDir);
-    if ( 0 != result )
-      return result;
+    const auto start = std::chrono::steady_clock::now();
+    const fs::path caseArtifactsDir = artifactsDir / testCase._Name;
+    RenderCaseOutcome outcome;
+    {
+      TraceCapture trace(caseArtifactsDir / "trace.log");
+      if ( !trace.IsActive() )
+      {
+        outcome._Reason = "unable to create trace log";
+      }
+      else
+        outcome = RunRenderCase(testCase, updateBaselines, artifactsDir);
+    }
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    PrintCaseStatus(testCase, outcome, seconds, artifactsDir, useColor);
+    if ( RenderCaseStatus::Passed == outcome._Status ) ++passed;
+    else if ( RenderCaseStatus::Skipped == outcome._Status ) ++skipped;
+    else if ( RenderCaseStatus::Updated == outcome._Status ) ++updated;
+    else ++failed;
   }
 
+  std::cout << "Summary: " << passed << " passed, " << failed << " failed, " << skipped << " skipped, " << updated << " updated." << std::endl;
+  if ( failed > 0 )
+    return 1;
+  if ( ( 0 == passed ) && ( 0 == updated ) && ( skipped > 0 ) )
+    return S_SkipReturnCode;
   return 0;
 }

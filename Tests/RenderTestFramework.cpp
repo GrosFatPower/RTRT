@@ -450,8 +450,29 @@ bool LoadRenderTestCases( const std::filesystem::path & iPath, std::vector<Rende
 // ----------------------------------------------------------------------------
 // RunUnitTests
 // ----------------------------------------------------------------------------
-int RunUnitTests( const std::filesystem::path & iArtifactsDir )
+int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor )
 {
+  int passed = 0;
+  const auto PrintPassed = [&passed, iUseColor]( const char * iName )
+  {
+    if ( iUseColor )
+      std::cout << "\x1b[32m";
+    std::cout << "[PASS] unit_" << iName;
+    if ( iUseColor )
+      std::cout << "\x1b[0m";
+    std::cout << std::endl;
+    ++passed;
+  };
+  const auto PrintFailed = [iUseColor]( const char * iName )
+  {
+    if ( iUseColor )
+      std::cerr << "\x1b[31m";
+    std::cerr << "[FAIL] unit_" << iName;
+    if ( iUseColor )
+      std::cerr << "\x1b[0m";
+    std::cerr << std::endl;
+  };
+
   RenderImage image;
   image._Width = 2;
   image._Height = 1;
@@ -462,8 +483,10 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir )
   if ( !WritePFM(imagePath, image) || !ReadPFM(imagePath, loaded) || ( loaded._Pixels != image._Pixels ) )
   {
     std::cerr << "Unit test failed: PFM read/write." << std::endl;
+    PrintFailed("pfm_io");
     return 1;
   }
+  PrintPassed("pfm_io");
 
   RenderImage changed = image;
   changed._Pixels[0] = .5f;
@@ -471,14 +494,18 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir )
   if ( !CompareImages(changed, image, .1f, metrics) || ( metrics._MismatchCount != 1u ) || ( metrics._MaxAbsoluteError != .5f ) )
   {
     std::cerr << "Unit test failed: image comparison." << std::endl;
+    PrintFailed("image_comparison");
     return 1;
   }
+  PrintPassed("image_comparison");
 
   if ( !WriteDiffPNG(iArtifactsDir / "unit_diff.png", changed, image) )
   {
     std::cerr << "Unit test failed: diagnostic image output." << std::endl;
+    PrintFailed("diagnostic_image_output");
     return 1;
   }
+  PrintPassed("diagnostic_image_output");
 
   const std::string validManifest = R"({
     "version": 1,
@@ -503,8 +530,10 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir )
     || ( "Tests/Baselines/valid.pfm" != parsedCases[0]._BaselinePath.generic_string() ) )
   {
     std::cerr << "Unit test failed: valid render-test manifest. " << parseError << std::endl;
+    PrintFailed("manifest_valid");
     return 1;
   }
+  PrintPassed("manifest_valid");
 
   const std::string invalidManifests[] =
   {
@@ -521,11 +550,13 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir )
     if ( ParseRenderTestCases(invalidManifest, parsedCases, parseError) )
     {
       std::cerr << "Unit test failed: invalid render-test manifest." << std::endl;
+      PrintFailed("manifest_validation");
       return 1;
     }
   }
+  PrintPassed("manifest_validation");
 
-  std::cout << "Unit tests passed." << std::endl;
+  std::cout << "Unit summary: " << passed << " passed, 0 failed." << std::endl;
   return 0;
 }
 

@@ -31,6 +31,8 @@ Run the framework unit tests only:
 ctest --test-dir Build -C Debug -L unit --output-on-failure
 ```
 
+The runner reports the individual unit groups before its unit summary. Current coverage includes PFM I/O, image comparison, diagnostic-image creation, valid manifest parsing, and invalid manifest validation.
+
 Run one render case:
 
 ```powershell
@@ -57,12 +59,23 @@ Run unit and render cases directly through the runner:
 .\Build\Debug\RenderRegression.exe --all
 ```
 
+The runner prints one compact status line per render case and a final summary:
+
+```text
+[PASS] deferred_teapot_env (2.41 s)
+[FAIL] deferred_example (1.02 s) - image mismatch; see Tests/Artifacts/deferred_example
+Summary: 12 passed, 1 failed, 0 skipped, 0 updated.
+```
+
+Interactive Windows consoles use color for pass, failure, skip, and baseline-update states. Color is disabled automatically when output is redirected or captured by CTest.
+
 The runner creates a hidden OpenGL context. A machine without a compatible OpenGL context reports CTest skip code `77`; image mismatches and rendering failures remain failures.
 
 ## Review Failures
 
 Regular runs never modify baselines. A failed render writes diagnostics to `Tests/Artifacts/<case-name>/`:
 
+- `trace.log`: loader, renderer, shader, and runner diagnostics captured for this case.
 - `actual.pfm`: newly rendered linear image.
 - `expected.pfm`: committed baseline copied for comparison.
 - `actual.png` and `expected.png`: tone-mapped images for quick inspection.
@@ -73,6 +86,12 @@ Use `--artifacts` to keep an experiment separate from the default artifacts dire
 
 ```powershell
 .\Build\Debug\RenderRegression.exe --case deferred_teapot_env --artifacts Tests\Artifacts\teapot-investigation
+```
+
+Every render case writes a trace log, including passing cases. Inspect it when a concise status line needs more context:
+
+```powershell
+Get-Content Tests\Artifacts\deferred_teapot_env\trace.log
 ```
 
 PFM files are linear floating-point images and may appear vertically flipped in a generic viewer. Prefer the generated PNG diagnostics for visual review.
