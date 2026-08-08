@@ -5,7 +5,12 @@
 #include "RenderSettings.h"
 #include "Scene.h"
 
+#if defined(_WIN32)
 #include <windows.h>
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
@@ -15,7 +20,6 @@
 #include <memory>
 #include <chrono>
 #include <cstdio>
-#include <io.h>
 
 namespace fs = std::filesystem;
 
@@ -23,6 +27,53 @@ namespace
 {
 
 static const int S_SkipReturnCode = 77;
+
+FILE * OpenTraceFile( const fs::path & iPath )
+{
+#if defined(_WIN32)
+  FILE * file = nullptr;
+  fopen_s(&file, iPath.string().c_str(), "w");
+  return file;
+#else
+  return fopen(iPath.string().c_str(), "w");
+#endif
+}
+
+int DuplicateFileDescriptor( int iDescriptor )
+{
+#if defined(_WIN32)
+  return _dup(iDescriptor);
+#else
+  return dup(iDescriptor);
+#endif
+}
+
+int GetFileDescriptor( FILE * iFile )
+{
+#if defined(_WIN32)
+  return _fileno(iFile);
+#else
+  return fileno(iFile);
+#endif
+}
+
+int RedirectFileDescriptor( int iSource, int iDestination )
+{
+#if defined(_WIN32)
+  return _dup2(iSource, iDestination);
+#else
+  return dup2(iSource, iDestination);
+#endif
+}
+
+void CloseFileDescriptor( int iDescriptor )
+{
+#if defined(_WIN32)
+  _close(iDescriptor);
+#else
+  close(iDescriptor);
+#endif
+}
 
 enum class RenderCaseStatus
 {
@@ -45,7 +96,7 @@ public:
   {
     std::error_code error;
     fs::create_directories(iPath.parent_path(), error);
-    fopen_s(&_File, iPath.string().c_str(), "w");
+    _File = OpenTraceFile(iPath);
     if ( !_File )
       return;
 
@@ -53,12 +104,12 @@ public:
     std::cerr.flush();
     fflush(stdout);
     fflush(stderr);
-    _StdOut = _dup(_fileno(stdout));
-    _StdErr = _dup(_fileno(stderr));
+    _StdOut = DuplicateFileDescriptor(GetFileDescriptor(stdout));
+    _StdErr = DuplicateFileDescriptor(GetFileDescriptor(stderr));
     if ( ( _StdOut < 0 ) || ( _StdErr < 0 ) )
       return;
-    _dup2(_fileno(_File), _fileno(stdout));
-    _dup2(_fileno(_File), _fileno(stderr));
+    RedirectFileDescriptor(GetFileDescriptor(_File), GetFileDescriptor(stdout));
+    RedirectFileDescriptor(GetFileDescriptor(_File), GetFileDescriptor(stderr));
     _Active = true;
   }
 
@@ -70,13 +121,13 @@ public:
       std::cerr.flush();
       fflush(stdout);
       fflush(stderr);
-      _dup2(_StdOut, _fileno(stdout));
-      _dup2(_StdErr, _fileno(stderr));
+      RedirectFileDescriptor(_StdOut, GetFileDescriptor(stdout));
+      RedirectFileDescriptor(_StdErr, GetFileDescriptor(stderr));
     }
     if ( _StdOut >= 0 )
-      _close(_StdOut);
+      CloseFileDescriptor(_StdOut);
     if ( _StdErr >= 0 )
-      _close(_StdErr);
+      CloseFileDescriptor(_StdErr);
     if ( _File )
       fclose(_File);
   }
@@ -259,11 +310,15 @@ RenderCaseOutcome RunRenderCase( const RTRT::Tests::RenderTestCase & iTestCase, 
 
 bool EnableConsoleColors()
 {
+#if defined(_WIN32)
   HANDLE output = GetStdHandle(STD_OUTPUT_HANDLE);
   DWORD mode = 0;
   if ( ( INVALID_HANDLE_VALUE == output ) || !GetConsoleMode(output, &mode) )
     return false;
   return SetConsoleMode(output, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0;
+#else
+  return isatty(GetFileDescriptor(stdout)) != 0;
+#endif
 }
 
 void PrintCaseStatus( const RTRT::Tests::RenderTestCase & iTestCase, const RenderCaseOutcome & iOutcome, double iSeconds, const fs::path & iArtifactsDir, bool iUseColor )
