@@ -500,20 +500,32 @@ int SoftwareRasterizer::RenderToScreen()
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::ReadbackFinalColor( RenderImage & oImage )
 {
-  if ( !_RenderTargetTEX._Handle || ( RenderWidth() <= 0 ) || ( RenderHeight() <= 0 ) )
+  if ( ( RenderWidth() <= 0 ) || ( RenderHeight() <= 0 ) )
     return 1;
 
   oImage._Width = RenderWidth();
   oImage._Height = RenderHeight();
+  const size_t pixelCount = (size_t)oImage._Width * (size_t)oImage._Height;
+  if ( _ImageBuffer._ColorBuffer.size() < pixelCount )
+    return 1;
+
   oImage._Pixels.resize((size_t)oImage._Width * (size_t)oImage._Height * 4u);
 
-  while ( GL_NO_ERROR != glGetError() ) {}
-  glBindTexture(GL_TEXTURE_2D, _RenderTargetTEX._Handle);
-  glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, oImage._Pixels.data());
-  glBindTexture(GL_TEXTURE_2D, 0);
-  FlipImageVertically(oImage);
+  for ( int y = 0; y < oImage._Height; ++y )
+  {
+    const int sourceY = oImage._Height - 1 - y;
+    for ( int x = 0; x < oImage._Width; ++x )
+    {
+      const RGBA8 & color = _ImageBuffer._ColorBuffer[(size_t)sourceY * (size_t)oImage._Width + (size_t)x];
+      const size_t pixelIndex = ((size_t)y * (size_t)oImage._Width + (size_t)x) * 4u;
+      oImage._Pixels[pixelIndex + 0] = color._R / 255.f;
+      oImage._Pixels[pixelIndex + 1] = color._G / 255.f;
+      oImage._Pixels[pixelIndex + 2] = color._B / 255.f;
+      oImage._Pixels[pixelIndex + 3] = color._A / 255.f;
+    }
+  }
 
-  return ( GL_NO_ERROR == glGetError() ) ? 0 : 1;
+  return 0;
 }
 
 // ----------------------------------------------------------------------------
