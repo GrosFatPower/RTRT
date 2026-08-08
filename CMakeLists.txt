@@ -94,7 +94,7 @@ source_group("tests" FILES ${TEST_SOURCE} ${TEST_HEADER})
 SET(EXE_NAME "RenderLab")
 add_library(RTRTCore STATIC ${CORE_SOURCE} ${CORE_HEADER} ${EXT_SOURCE} ${EXT_HEADER})
 add_executable(${EXE_NAME} ${RTRT_MAIN_SOURCE} ${SHADERS})
-target_link_libraries(${EXE_NAME} PRIVATE RTRTCore)
+target_link_libraries(${EXE_NAME} RTRTCore)
 
 # OpenGL
 find_package(OpenGL REQUIRED)
@@ -221,6 +221,7 @@ set_target_properties(${iTarget} PROPERTIES
 endfunction()
 
 ConfigureRTRTTarget(RTRTCore)
+ConfigureRTRTTarget(${EXE_NAME})
 
 if(RTRT_BUILD_RENDER_REGRESSION_TESTS)
   add_executable(RenderRegression ${TEST_SOURCE} ${TEST_HEADER})
