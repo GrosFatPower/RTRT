@@ -51,6 +51,8 @@ struct RenderTestCase
   bool            _AutoScale = true;
   bool            _TiledRendering = false;
   bool            _Denoise = false;
+  int             _DebugMode = 0;
+  bool            _DiagnosticOnly = false;
   int             _SamplesPerPixel = 1;
   int             _Bounces = 4;
 

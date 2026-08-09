@@ -252,6 +252,16 @@ bool ReadPositiveInt( const Json & iObject, const char * iName, int & oValue, st
   return true;
 }
 
+bool ReadNonNegativeInt( const Json & iObject, const char * iName, int & oValue, std::string & oError )
+{
+  if ( !iObject.contains(iName) )
+    return true;
+  if ( !iObject[iName].is_number_integer() || ( iObject[iName].get<int>() < 0 ) )
+    return SetManifestError(oError, std::string("'") + iName + "' must be a non-negative integer.");
+  oValue = iObject[iName].get<int>();
+  return true;
+}
+
 bool ReadBool( const Json & iObject, const char * iName, bool & oValue, std::string & oError )
 {
   if ( !iObject.contains(iName) )
@@ -391,7 +401,8 @@ bool ParseRenderTestCases( const std::string & iContents, std::vector<RenderTest
         return false;
 
       if ( !ReadResolution(test, testCase._Width, testCase._Height, oError, false) || !ReadPositiveInt(test, "frames", testCase._FrameCount, oError, false)
-        || !ReadThresholds(test, testCase, oError, false) || !ReadString(test, "environment_map", testCase._EnvironmentMapPath, oError, false) )
+        || !ReadThresholds(test, testCase, oError, false) || !ReadString(test, "environment_map", testCase._EnvironmentMapPath, oError, false)
+        || !ReadNonNegativeInt(test, "debug_mode", testCase._DebugMode, oError) || !ReadBool(test, "diagnostic_only", testCase._DiagnosticOnly, oError) )
         return false;
 
       std::string baseline;
@@ -519,7 +530,7 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor )
       }
     },
     "tests": [
-      { "name": "valid", "profile": "test", "scene": "test.scene", "frames": 4,
+      { "name": "valid", "profile": "test", "scene": "test.scene", "frames": 4, "debug_mode": 16, "diagnostic_only": true,
         "camera": { "position": [1, 2, 3], "pivot": [0, 0, 0], "fov": 40, "near": 0.5 } }
     ]
   })";
@@ -527,6 +538,7 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor )
   std::string parseError;
   if ( !ParseRenderTestCases(validManifest, parsedCases, parseError) || ( 1u != parsedCases.size() )
     || ( 4 != parsedCases[0]._FrameCount ) || !parsedCases[0]._OverrideCamera || parsedCases[0]._SSR
+    || ( 16 != parsedCases[0]._DebugMode ) || !parsedCases[0]._DiagnosticOnly
     || ( "Tests/Baselines/valid.pfm" != parsedCases[0]._BaselinePath.generic_string() ) )
   {
     std::cerr << "Unit test failed: valid render-test manifest. " << parseError << std::endl;
@@ -543,7 +555,8 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor )
     R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test" }] })",
     R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene" }, { "name": "test", "profile": "test", "scene": "test.scene" }] })",
     R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 0, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene" }] })",
-    R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "camera": { "position": [0, 0], "pivot": [0, 0, 0], "fov": 40 } }] })"
+    R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "camera": { "position": [0, 0], "pivot": [0, 0, 0], "fov": 40 } }] })",
+    R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "debug_mode": -1 }] })"
   };
   for ( const std::string & invalidManifest : invalidManifests )
   {

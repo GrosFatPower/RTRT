@@ -80,7 +80,8 @@ enum class RenderCaseStatus
   Passed,
   Failed,
   Skipped,
-  Updated
+  Updated,
+  Captured
 };
 
 struct RenderCaseOutcome
@@ -220,7 +221,14 @@ RenderCaseOutcome RunRenderCase( const RTRT::Tests::RenderTestCase & iTestCase, 
     return outcome;
   }
   std::unique_ptr<RTRT::Renderer> renderer = RTRT::CreateRenderer(iTestCase._Backend, scene, settings);
-  if ( !renderer || ( 0 != renderer->Initialize() ) )
+  if ( !renderer )
+  {
+    std::cerr << "Failed to create renderer for " << iTestCase._Name << std::endl;
+    outcome._Reason = "renderer creation failed";
+    return outcome;
+  }
+  renderer->SetDebugMode(iTestCase._DebugMode);
+  if ( 0 != renderer->Initialize() )
   {
     std::cerr << "Failed to initialize renderer for " << iTestCase._Name << std::endl;
     outcome._Reason = "renderer initialization failed";
@@ -259,6 +267,20 @@ RenderCaseOutcome RunRenderCase( const RTRT::Tests::RenderTestCase & iTestCase, 
 
   if ( 0 != result )
     return outcome;
+
+  if ( iTestCase._DiagnosticOnly )
+  {
+    const fs::path artifactPath = iArtifactsDir / iTestCase._Name;
+    if ( !RTRT::Tests::WritePFM(artifactPath / "actual.pfm", actual) || !RTRT::Tests::WriteDiagnosticPNG(artifactPath / "actual.png", actual) )
+    {
+      std::cerr << "Failed to write diagnostic capture for " << iTestCase._Name << std::endl;
+      outcome._Reason = "diagnostic write failed";
+      return outcome;
+    }
+    outcome._Status = RenderCaseStatus::Captured;
+    outcome._Reason = "diagnostic capture";
+    return outcome;
+  }
 
   const fs::path baselinePath = fs::path(RTRT::PathUtils::GetAssetPath("..")) / iTestCase._BaselinePath;
   if ( iUpdateBaselines )
@@ -328,6 +350,7 @@ void PrintCaseStatus( const RTRT::Tests::RenderTestCase & iTestCase, const Rende
   if ( RenderCaseStatus::Passed == iOutcome._Status ) { label = "PASS"; color = "\x1b[32m"; }
   if ( RenderCaseStatus::Skipped == iOutcome._Status ) { label = "SKIP"; color = "\x1b[33m"; }
   if ( RenderCaseStatus::Updated == iOutcome._Status ) { label = "UPDATED"; color = "\x1b[32m"; }
+  if ( RenderCaseStatus::Captured == iOutcome._Status ) { label = "CAPTURED"; color = "\x1b[32m"; }
   if ( iUseColor ) std::cout << color;
   std::cout << "[" << label << "]";
   if ( iUseColor ) std::cout << "\x1b[0m";
@@ -442,6 +465,7 @@ int main( int iArgc, char ** iArgv )
   int failed = 0;
   int skipped = 0;
   int updated = 0;
+  int captured = 0;
   for ( const RTRT::Tests::RenderTestCase & testCase : selectedCases )
   {
     const auto start = std::chrono::steady_clock::now();
@@ -461,13 +485,14 @@ int main( int iArgc, char ** iArgv )
     if ( RenderCaseStatus::Passed == outcome._Status ) ++passed;
     else if ( RenderCaseStatus::Skipped == outcome._Status ) ++skipped;
     else if ( RenderCaseStatus::Updated == outcome._Status ) ++updated;
+    else if ( RenderCaseStatus::Captured == outcome._Status ) ++captured;
     else ++failed;
   }
 
-  std::cout << "Summary: " << passed << " passed, " << failed << " failed, " << skipped << " skipped, " << updated << " updated." << std::endl;
+  std::cout << "Summary: " << passed << " passed, " << failed << " failed, " << skipped << " skipped, " << updated << " updated, " << captured << " captured." << std::endl;
   if ( failed > 0 )
     return 1;
-  if ( ( 0 == passed ) && ( 0 == updated ) && ( skipped > 0 ) )
+  if ( ( 0 == passed ) && ( 0 == updated ) && ( 0 == captured ) && ( skipped > 0 ) )
     return S_SkipReturnCode;
   return 0;
 }

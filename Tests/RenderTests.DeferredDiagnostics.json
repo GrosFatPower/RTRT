@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "profiles": {
+    "deferred_diagnostic": {
+      "backend": "deferred",
+      "resolution": [1280, 720],
+      "frames": 3,
+      "thresholds": {
+        "mean_absolute_error": 0.003,
+        "max_absolute_error": 0.08,
+        "pixel_error": 0.02,
+        "mismatch_ratio": 0.005
+      },
+      "settings": {
+        "specular_ibl": true,
+        "ssr": true
+      }
+    }
+  },
+  "tests": [
+    { "name": "deferred_diningroom_normals", "profile": "deferred_diagnostic", "scene": "diningroom.scene", "debug_mode": 2, "diagnostic_only": true },
+    { "name": "deferred_diningroom_shadows", "profile": "deferred_diagnostic", "scene": "diningroom.scene", "debug_mode": 8, "diagnostic_only": true },
+    { "name": "deferred_diningroom_ssao", "profile": "deferred_diagnostic", "scene": "diningroom.scene", "debug_mode": 16, "diagnostic_only": true },
+    { "name": "deferred_diningroom_direct_diffuse", "profile": "deferred_diagnostic", "scene": "diningroom.scene", "debug_mode": 256, "diagnostic_only": true },
+    { "name": "deferred_diningroom_direct_specular", "profile": "deferred_diagnostic", "scene": "diningroom.scene", "debug_mode": 512, "diagnostic_only": true },
+    { "name": "deferred_teapot_env_normals", "profile": "deferred_diagnostic", "scene": "teapot.scene", "environment_map": "HDR/Background_05.hdr", "debug_mode": 2, "diagnostic_only": true },
+    { "name": "deferred_teapot_env_ssao", "profile": "deferred_diagnostic", "scene": "teapot.scene", "environment_map": "HDR/Background_05.hdr", "debug_mode": 16, "diagnostic_only": true },
+    { "name": "deferred_teapot_env_specular_ibl", "profile": "deferred_diagnostic", "scene": "teapot.scene", "environment_map": "HDR/Background_05.hdr", "debug_mode": 32, "diagnostic_only": true },
+    { "name": "deferred_teapot_env_ssr", "profile": "deferred_diagnostic", "scene": "teapot.scene", "environment_map": "HDR/Background_05.hdr", "debug_mode": 128, "diagnostic_only": true },
+    { "name": "deferred_teapot_env_direct_specular", "profile": "deferred_diagnostic", "scene": "teapot.scene", "environment_map": "HDR/Background_05.hdr", "debug_mode": 512, "diagnostic_only": true },
+    { "name": "deferred_barbershopchair_01_normals", "profile": "deferred_diagnostic", "scene": "BarberShopChair_01.scene", "environment_map": "HDR/konzerthaus_4k.hdr", "camera": { "position": [-1.877181, 2.144519, 3.151197], "pivot": [0.098960, 0.548734, -0.269350], "fov": 45.0, "near": 0.5 }, "debug_mode": 2, "diagnostic_only": true },
+    { "name": "deferred_barbershopchair_01_ssao", "profile": "deferred_diagnostic", "scene": "BarberShopChair_01.scene", "environment_map": "HDR/konzerthaus_4k.hdr", "camera": { "position": [-1.877181, 2.144519, 3.151197], "pivot": [0.098960, 0.548734, -0.269350], "fov": 45.0, "near": 0.5 }, "debug_mode": 16, "diagnostic_only": true },
+    { "name": "deferred_barbershopchair_01_specular_ibl", "profile": "deferred_diagnostic", "scene": "BarberShopChair_01.scene", "environment_map": "HDR/konzerthaus_4k.hdr", "camera": { "position": [-1.877181, 2.144519, 3.151197], "pivot": [0.098960, 0.548734, -0.269350], "fov": 45.0, "near": 0.5 }, "debug_mode": 32, "diagnostic_only": true },
+    { "name": "deferred_barbershopchair_01_ssr", "profile": "deferred_diagnostic", "scene": "BarberShopChair_01.scene", "environment_map": "HDR/konzerthaus_4k.hdr", "camera": { "position": [-1.877181, 2.144519, 3.151197], "pivot": [0.098960, 0.548734, -0.269350], "fov": 45.0, "near": 0.5 }, "debug_mode": 128, "diagnostic_only": true },
+    { "name": "deferred_barbershopchair_01_direct_specular", "profile": "deferred_diagnostic", "scene": "BarberShopChair_01.scene", "environment_map": "HDR/konzerthaus_4k.hdr", "camera": { "position": [-1.877181, 2.144519, 3.151197], "pivot": [0.098960, 0.548734, -0.269350], "fov": 45.0, "near": 0.5 }, "debug_mode": 512, "diagnostic_only": true }
+  ]
+}
