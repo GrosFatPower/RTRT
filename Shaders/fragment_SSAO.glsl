@@ -14,6 +14,7 @@ uniform vec2 u_Resolution;
 uniform int u_EnableSSAO = 1;
 uniform float u_SSAORadius = 0.5;
 uniform float u_SSAOBias = 0.025;
+uniform float u_SSAOComparisonSoftness = 0.01;
 uniform int u_KernelSize = 16;
 uniform vec3 u_KernelSamples[32];
 
@@ -65,7 +66,9 @@ void main()
     vec3 samplePosFetchedVS = (u_View * vec4(sampleWorldPos, 1.0)).xyz;
 
     float rangeCheck = smoothstep(0.0, 1.0, u_SSAORadius / (abs(fragPosVS.z - samplePosFetchedVS.z) + 0.0001));
-    occlusion += ( samplePosFetchedVS.z >= samplePosVS.z + u_SSAOBias ? 1.0 : 0.0 ) * rangeCheck;
+    float depthDifference = samplePosFetchedVS.z - samplePosVS.z - u_SSAOBias;
+    float occluded = smoothstep(-u_SSAOComparisonSoftness, u_SSAOComparisonSoftness, depthDifference);
+    occlusion += occluded * rangeCheck;
   }
 
   float ao = 1.0 - ( occlusion / float(kernelSize) );
