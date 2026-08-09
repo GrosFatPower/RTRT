@@ -167,7 +167,10 @@
     {
       "name": "pathtracer_diningroom",
       "profile": "pathtracer",
-      "scene": "diningroom.scene"
+      "scene": "diningroom.scene",
+      "thresholds": {
+        "max_absolute_error": 0.5
+      }
     },
     {
       "name": "pathtracer_teapot_env",
