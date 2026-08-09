@@ -851,15 +851,12 @@ int DeferredRenderer::InitializeShadowMap()
   _ShadowLocalCapacity = _LocalShadowCasterCount;
   _ShadowDirectionalCapacity = _DirectionalShadowCasterCount;
 
-  if ( !_HasShadowLight )
-    return 0;
-
   GLTextureDesc shadowCubeDesc;
   shadowCubeDesc._Target         = _ShadowCubeMapTEX._Target;
   shadowCubeDesc._Slot           = _ShadowCubeMapTEX._Slot;
-  shadowCubeDesc._Width          = shadowMapSize;
-  shadowCubeDesc._Height         = shadowMapSize;
-  shadowCubeDesc._Depth          = std::max(1, _ShadowLocalCapacity * 6);
+  shadowCubeDesc._Width          = ( _ShadowLocalCapacity > 0 ) ? shadowMapSize : 1;
+  shadowCubeDesc._Height         = ( _ShadowLocalCapacity > 0 ) ? shadowMapSize : 1;
+  shadowCubeDesc._Depth          = std::max(6, _ShadowLocalCapacity * 6);
   shadowCubeDesc._InternalFormat = _ShadowCubeMapTEX._InternalFormat;
   shadowCubeDesc._DataFormat     = _ShadowCubeMapTEX._DataFormat;
   shadowCubeDesc._DataType       = _ShadowCubeMapTEX._DataType;
@@ -868,15 +865,18 @@ int DeferredRenderer::InitializeShadowMap()
   shadowCubeDesc._WrapS          = GL_CLAMP_TO_EDGE;
   shadowCubeDesc._WrapT          = GL_CLAMP_TO_EDGE;
   shadowCubeDesc._WrapR          = GL_CLAMP_TO_EDGE;
-  if ( _ShadowLocalCapacity > 0 )
-    GLUtil::CreateTexture(shadowCubeDesc, _ShadowCubeMapTEX);
+  GLUtil::CreateTexture(shadowCubeDesc, _ShadowCubeMapTEX);
 
   GLTextureDesc shadow2DDesc = shadowCubeDesc;
   shadow2DDesc._Target = _Shadow2DMapTEX._Target;
   shadow2DDesc._Slot   = _Shadow2DMapTEX._Slot;
+  shadow2DDesc._Width  = ( _ShadowDirectionalCapacity > 0 ) ? shadowMapSize : 1;
+  shadow2DDesc._Height = ( _ShadowDirectionalCapacity > 0 ) ? shadowMapSize : 1;
   shadow2DDesc._Depth  = std::max(1, _ShadowDirectionalCapacity);
-  if ( _ShadowDirectionalCapacity > 0 )
-    GLUtil::CreateTexture(shadow2DDesc, _Shadow2DMapTEX);
+  GLUtil::CreateTexture(shadow2DDesc, _Shadow2DMapTEX);
+
+  if ( !_HasShadowLight )
+    return 0;
 
   glGenFramebuffers(1, &_ShadowFBO._Handle);
   glBindFramebuffer(GL_FRAMEBUFFER, _ShadowFBO._Handle);
