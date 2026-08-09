@@ -158,8 +158,8 @@ protected:
   // SSAO targets
   GLFrameBuffer _SSAOFBO;
   GLFrameBuffer _SSAOBlurFBO;
-  GLTexture     _SSAOTEX      = { 0, GL_TEXTURE_2D, DeferredTexSlot::_SSAO, GL_R16F, GL_RED, GL_FLOAT };
-  GLTexture     _SSAOBlurTEX  = { 0, GL_TEXTURE_2D, DeferredTexSlot::_SSAOBlur, GL_R16F, GL_RED, GL_FLOAT };
+  GLTexture     _SSAOTEX      = { 0, GL_TEXTURE_2D, DeferredTexSlot::_SSAO, GL_R32F, GL_RED, GL_FLOAT };
+  GLTexture     _SSAOBlurTEX  = { 0, GL_TEXTURE_2D, DeferredTexSlot::_SSAOBlur, GL_R32F, GL_RED, GL_FLOAT };
   GLTexture     _SSAONoiseTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_SSAONoise, GL_RGBA16F, GL_RGBA, GL_FLOAT };
 
   // SSR targets
