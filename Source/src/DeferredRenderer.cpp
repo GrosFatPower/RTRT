@@ -31,16 +31,6 @@ static Vec3 S_WireColor = Vec3(1.f, 0.f, 0.f);
 static float S_WireWidth = 3.0f;
 static const float S_TransparentSpecTransThreshold = 0.001f;
 
-static float NextRandomFloat( std::mt19937 & ioRng )
-{
-  return (float)( static_cast<uint32_t>(ioRng()) >> 8 ) * ( 1.f / 16777216.f );
-}
-
-static float NextRandomSignedFloat( std::mt19937 & ioRng )
-{
-  return NextRandomFloat(ioRng) * 2.f - 1.f;
-}
-
 // ----------------------------------------------------------------------------
 // HELPER TYPES
 // ----------------------------------------------------------------------------
@@ -954,14 +944,16 @@ int DeferredRenderer::InitializeSSAO()
   }
 
   std::mt19937 rng(1337u);
+  std::uniform_real_distribution<float> dist01(0.f, 1.f);
+  std::uniform_real_distribution<float> dist11(-1.f, 1.f);
 
   for ( int i = 0; i < (int)_SSAOKernel.size(); ++i )
   {
-    Vec3 sample(NextRandomSignedFloat(rng), NextRandomSignedFloat(rng), NextRandomFloat(rng));
+    Vec3 sample(dist11(rng), dist11(rng), dist01(rng));
     if ( glm::length(sample) > 0.f )
       sample = glm::normalize(sample);
 
-    sample *= NextRandomFloat(rng);
+    sample *= dist01(rng);
     float scale = float(i) / float(_SSAOKernel.size());
     scale = MathUtil::Lerp(0.1f, 1.0f, scale * scale);
     _SSAOKernel[i] = sample * scale;
@@ -971,7 +963,7 @@ int DeferredRenderer::InitializeSSAO()
   noiseData.reserve(16);
   for ( int i = 0; i < 16; ++i )
   {
-    Vec3 noise(NextRandomSignedFloat(rng), NextRandomSignedFloat(rng), 0.f);
+    Vec3 noise(dist11(rng), dist11(rng), 0.f);
     if ( glm::length(noise) > 0.f )
       noise = glm::normalize(noise);
     noiseData.push_back(Vec4(noise, 1.f));
