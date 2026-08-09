@@ -136,7 +136,7 @@ Required test fields are `name`, `profile`, and `scene`. Names must be unique an
 
 Supported optional test fields are `resolution`, `frames`, `thresholds`, `environment_map`, `camera`, `baseline`, `debug_mode`, and `diagnostic_only`. Resolution values and frame counts must be positive. A camera requires three-number `position` and `pivot` arrays plus a positive `fov`; `near` is positive and `far` must be greater than `near`.
 
-`debug_mode` is a non-negative renderer debug-mode bit mask. Set `diagnostic_only` to `true` with a debug mode to save `actual.pfm` and `actual.png` without reading, comparing, or modifying a baseline. The runner reports these cases as `CAPTURED`; use the same diagnostic manifest on two platforms and compare the generated artifacts when isolating a renderer difference.
+`debug_mode` is a non-negative renderer debug-mode bit mask. Set `diagnostic_only` to `true` with a debug mode to save `actual.pfm` and `actual.png` without reading, comparing, or modifying a baseline. Deferred diagnostic captures render background pixels black so environment-map filtering cannot affect a pass comparison. The runner reports these cases as `CAPTURED`; use the same diagnostic manifest on two platforms and compare the generated artifacts when isolating a renderer difference.
 
 Use a separate manifest while experimenting, without editing the committed catalog:
 

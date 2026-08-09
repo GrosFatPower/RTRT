@@ -54,7 +54,9 @@ enum class DeferredDebugModes
   MaterialParams = 0x040,
   SSR            = 0x080,
   DirectDiffuse  = 0x100,
-  DirectSpecular = 0x200
+  DirectSpecular = 0x200,
+  Diagnostic     = 0x400,
+  Position       = 0x800
 };
 
 class DeferredRenderer : public Renderer

@@ -1,5 +1,6 @@
 #include "RenderTestFramework.h"
 
+#include "DeferredRenderer.h"
 #include "Loader.h"
 #include "PathUtils.h"
 #include "RenderSettings.h"
@@ -227,7 +228,10 @@ RenderCaseOutcome RunRenderCase( const RTRT::Tests::RenderTestCase & iTestCase, 
     outcome._Reason = "renderer creation failed";
     return outcome;
   }
-  renderer->SetDebugMode(iTestCase._DebugMode);
+  int debugMode = iTestCase._DebugMode;
+  if ( iTestCase._DiagnosticOnly && ( RTRT::RendererBackend::DeferredRenderer == iTestCase._Backend ) )
+    debugMode |= (int)RTRT::DeferredDebugModes::Diagnostic;
+  renderer->SetDebugMode(debugMode);
   if ( 0 != renderer->Initialize() )
   {
     std::cerr << "Failed to initialize renderer for " << iTestCase._Name << std::endl;
