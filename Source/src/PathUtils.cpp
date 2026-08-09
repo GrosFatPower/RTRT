@@ -210,6 +210,14 @@ std::string GetAssetPath( const std::string & iAssetName )
 }
 
 // ----------------------------------------------------------------------------
+// GetBenchmarkPath
+// ----------------------------------------------------------------------------
+std::string GetBenchmarkPath( const std::string & iBenchmarkName )
+{
+  return BuildPath( ResolveRepoRoot() / "BenchmarkResults", iBenchmarkName );
+}
+
+// ----------------------------------------------------------------------------
 // GetDataPath
 // ----------------------------------------------------------------------------
 std::string GetDataPath( const std::string & iDataName )

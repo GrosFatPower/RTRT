@@ -6,9 +6,9 @@ map "Default FPS Arena" {
 }
 
 player {
-  position 0.000000 0.050000 -8.000000
-  yaw 90.000000
-  pitch 0.000000
+  position 17.065000 -0.229000 -45.187000
+  yaw -147.340000
+  pitch 0.990000
   health 100
   armor 50
 }

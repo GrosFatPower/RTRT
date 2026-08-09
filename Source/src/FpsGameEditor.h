@@ -3,6 +3,7 @@
 
 #include "FpsGame.h"
 #include "FpsGameMap.h"
+#include "FpsGameTiming.h"
 #include "KeyInput.h"
 #include "RenderSettings.h"
 #include "RenderStatsUI.h"
@@ -18,13 +19,6 @@ namespace RTRT
 
 class Renderer;
 class Scene;
-
-struct FpsCpuTiming
-{
-  const char * _Name = "";
-  double       _Seconds = 0.;
-  bool         _Enabled = false;
-};
 
 struct FpsGameEditorContext
 {

@@ -444,6 +444,85 @@ void Test6::SetCpuTimingEnabled( int iTimingID, bool iEnabled )
     _CpuTimings[iTimingID]._Seconds = 0.;
 }
 
+// ----------------------------------------------------------------------------
+// ApplyBenchmarkPose
+// ----------------------------------------------------------------------------
+void Test6::ApplyBenchmarkPose()
+{
+  FpsPlayer & player = _GameWorld.GetPlayer();
+  player._Position = FpsGameBenchmark::GetPosition();
+  player._Velocity = Vec3(0.f);
+  player._Yaw = FpsGameBenchmark::GetYaw();
+  player._Pitch = FpsGameBenchmark::GetPitch();
+  player._Grounded = false;
+
+  _GameWorld.ClearProjectiles();
+  if ( _Scene )
+  {
+    _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings);
+    _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings);
+  }
+
+  if ( _Renderer )
+  {
+    _Renderer -> Notify(DirtyState::SceneCamera);
+    _Renderer -> Notify(DirtyState::SceneInstances);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// StartBenchmark
+// ----------------------------------------------------------------------------
+void Test6::StartBenchmark()
+{
+  _Benchmark.Start(_GameSettings._RendererMode);
+  SetMouseCaptured(false);
+  _GameSettings._FreeLook = true;
+  ApplyBenchmarkPose();
+
+  std::cout << "Test6 " << FpsGameBenchmark::GetRendererName(_Benchmark.GetRendererMode()) << " benchmark started." << std::endl;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateBenchmark
+// ----------------------------------------------------------------------------
+void Test6::UpdateBenchmark()
+{
+  if ( !_Renderer )
+    return;
+
+  const bool wasRunning = _Benchmark.IsRunning();
+  _Benchmark.Update(_CpuTimings, *_Renderer, _GameSettings._RendererMode, !_ReloadRenderer && !_ReloadScene);
+  if ( wasRunning && !_Benchmark.IsRunning() && _Benchmark.IsCompleted() )
+    FinishBenchmark();
+  else if ( wasRunning && !_Benchmark.IsRunning() )
+    std::cout << "Test6 benchmark " << _Benchmark.GetStatus() << "." << std::endl;
+}
+
+// ----------------------------------------------------------------------------
+// FinishBenchmark
+// ----------------------------------------------------------------------------
+void Test6::FinishBenchmark()
+{
+  FpsGameMap sceneSnapshot = _Map;
+  sceneSnapshot._Player._Position = FpsGameBenchmark::GetPosition();
+  sceneSnapshot._Player._Yaw = FpsGameBenchmark::GetYaw();
+  sceneSnapshot._Player._Pitch = FpsGameBenchmark::GetPitch();
+  CaptureMapRenderSettings(sceneSnapshot, _GameSettings, _Settings);
+
+  FpsGameBenchmarkSaveContext saveContext;
+  saveContext._MapPath = _MapPath;
+  saveContext._SceneSnapshot = sceneSnapshot;
+  saveContext._Player = _GameWorld.GetPlayer();
+  saveContext._Scene = _Scene.get();
+  saveContext._Settings = &_Settings;
+
+  if ( _Benchmark.SaveResult(saveContext) )
+    std::cout << "Test6 benchmark saved: " << _Benchmark.GetResultPath() << std::endl;
+  else
+    std::cout << "Test6 benchmark completed but result saving failed." << std::endl;
+}
+
 
 // ----------------------------------------------------------------------------
 // InitializeUI
@@ -1201,9 +1280,81 @@ void Test6::DrawDebugPanel()
     _RenderToFile = true;
   }
 
+  DrawBenchmarkUI();
   DrawGameSettingsUI();
 
   ImGui::End();
+}
+
+// ----------------------------------------------------------------------------
+// DrawBenchmarkUI
+// ----------------------------------------------------------------------------
+int Test6::DrawBenchmarkUI()
+{
+  if ( !ImGui::CollapsingHeader("Benchmark") )
+    return 0;
+
+  ImGui::Text("Active renderer: %s", FpsGameBenchmark::GetRendererName(_GameSettings._RendererMode));
+  ImGui::Text("Pose: %.3f %.3f %.3f / yaw %.2f / pitch %.2f",
+              FpsGameBenchmark::GetPosition().x,
+              FpsGameBenchmark::GetPosition().y,
+              FpsGameBenchmark::GetPosition().z,
+              FpsGameBenchmark::GetYaw(),
+              FpsGameBenchmark::GetPitch());
+
+  ImGui::InputInt("Warmup frames", &_Benchmark.GetWarmupFrames());
+  ImGui::InputInt("Sample frames", &_Benchmark.GetSampleFrames());
+  _Benchmark.GetWarmupFrames() = std::max(0, _Benchmark.GetWarmupFrames());
+  _Benchmark.GetSampleFrames() = std::max(1, _Benchmark.GetSampleFrames());
+
+  if ( !_Benchmark.IsRunning() )
+  {
+    if ( ImGui::Button("Run benchmark") )
+      StartBenchmark();
+  }
+  else
+  {
+    ImGui::Text("Running: warmup %d / %d, samples %d / %d",
+                _Benchmark.GetWarmupDone(),
+                _Benchmark.GetWarmupFrames(),
+                _Benchmark.GetSamplesDone(),
+                _Benchmark.GetSampleFrames());
+    if ( ImGui::Button("Cancel benchmark") )
+      _Benchmark.Cancel();
+  }
+
+  if ( _Benchmark.IsCompleted() && _Benchmark.GetSamplesDone() > 0 )
+  {
+    const int samples = std::max(1, _Benchmark.GetSamplesDone());
+    ImGui::Separator();
+    ImGui::Text("Last %s result over %d frames", FpsGameBenchmark::GetRendererName(_Benchmark.GetRendererMode()), samples);
+    if ( !_Benchmark.GetResultPath().empty() )
+      ImGui::TextWrapped("Saved: %s", _Benchmark.GetResultPath().c_str());
+    ImGui::Text("CPU frame average: %.3f ms", _Benchmark.GetCpuFrameSeconds() * 1000. / samples);
+    ImGui::Text("Renderer pass average: %.3f ms", _Benchmark.GetRendererFrameSeconds() * 1000. / samples);
+
+    if ( ImGui::TreeNode("CPU timings") )
+    {
+      for ( const FpsCpuTiming & timing : _Benchmark.GetCpuTotals() )
+      {
+        if ( timing._Enabled )
+          ImGui::Text("%-24s : %.3f ms", timing._Name, timing._Seconds * 1000. / samples);
+      }
+      ImGui::TreePop();
+    }
+
+    if ( ImGui::TreeNode("Renderer pass timings") )
+    {
+      for ( const FpsGameBenchmarkPassTiming & timing : _Benchmark.GetRendererTotals() )
+      {
+        if ( timing._Enabled )
+          ImGui::Text("%-24s : %.3f ms %s", timing._Name.c_str(), timing._Seconds * 1000. / samples, timing._GPU ? "[GPU]" : "[CPU]");
+      }
+      ImGui::TreePop();
+    }
+  }
+
+  return 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -1484,6 +1635,7 @@ int Test6::Run()
       glfwSwapBuffers(_MainWindow.get());
       EndCpuTiming(CpuSwapBuffers);
       _DisplayedCpuTimings = _CpuTimings;
+      UpdateBenchmark();
       _NbRenderedFrames++;
     }
   } while ( 0 );

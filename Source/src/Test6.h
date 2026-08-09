@@ -4,6 +4,7 @@
 #include "BaseTest.h"
 #include "Boids.h"
 #include "FpsGame.h"
+#include "FpsGameBenchmark.h"
 #include "FpsGameEditor.h"
 #include "FpsGameHud.h"
 #include "FpsGameMap.h"
@@ -59,11 +60,16 @@ protected:
   int DrawGameSettingsUI();
   int DrawRenderSettingsUI();
   int DrawRenderStatsUI();
+  int DrawBenchmarkUI();
 
   void SyncFramebufferResolution( bool iNotifyRenderer = false );
 
   void SetMouseCaptured( bool iCaptured );
   void HandleDroppedFiles( int iCount, const char ** iPaths );
+  void ApplyBenchmarkPose();
+  void StartBenchmark();
+  void UpdateBenchmark();
+  void FinishBenchmark();
 
   void ApplyRendererDefaults();
   void InitializeCpuTimings();
@@ -138,6 +144,8 @@ protected:
   std::vector<FpsCpuTiming> _CpuTimings;
   std::vector<FpsCpuTiming> _DisplayedCpuTimings;
   double                    _CpuTimingStart[CpuTimingCount] = {};
+
+  FpsGameBenchmark _Benchmark;
 };
 
 }

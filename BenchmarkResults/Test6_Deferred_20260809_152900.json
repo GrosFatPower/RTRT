@@ -1,0 +1,80 @@
+{
+  "benchmark": "Test6 Deferred Renderer",
+  "timestamp": "20260809_152900",
+  "machine": {
+    "os": "Darwin 25.6.0 arm64",
+    "cpu": "Apple M4",
+    "hardware_threads": 10,
+    "compiler": "Clang 21.0.0",
+    "build_mode": "Release",
+    "gl_vendor": "Apple",
+    "gl_renderer": "Apple M4",
+    "gl_version": "4.1 Metal - 90.5"
+  },
+  "scene": {
+    "map_path": "/Users/griffon/Documents/Dev/RTRT/Assets/FPSMaps/ccity.fpsmap",
+    "scene_setup_snapshot": "/Users/griffon/Documents/Dev/RTRT/BenchmarkResults/Test6_Deferred_20260809_152900.fpsmap",
+    "scene_setup_snapshot_saved": true,
+    "map_name": "Default FPS Arena",
+    "environment": "HDR/syferfontein_18d_clear_1k.hdr",
+    "objects": 4,
+    "props": 1,
+    "boids": 1,
+    "materials": 5,
+    "lights": 1,
+    "scene_meshes": 1363,
+    "scene_mesh_instances": 1496,
+    "scene_materials": 32
+  },
+  "camera": {
+    "position": [17.065, -0.229, -45.187],
+    "yaw": -147.34,
+    "pitch": 0.99,
+    "benchmark_position": [17.065, -0.229, -45.187],
+    "benchmark_yaw": -147.34,
+    "benchmark_pitch": 0.99
+  },
+  "render_settings": {
+    "renderer": "Deferred",
+    "window_resolution": [2560, 1440],
+    "render_resolution": [2560, 1440],
+    "render_scale": 100,
+    "tile_resolution": [-1, -1],
+    "tiled_rendering": false,
+    "nb_threads": 1,
+    "sampling": 1,
+    "shading_type": 1,
+    "w_buffer": true,
+    "tone_mapping": true,
+    "gamma": 2,
+    "exposure": 1.5
+  },
+  "samples": {
+    "warmup_frames": 10,
+    "sample_frames": 120,
+    "cpu_frame_average_ms": 18.7988,
+    "renderer_pass_average_ms": 11.732
+  },
+  "cpu_timings_ms": {
+    "Process input": 0.216949,
+    "Update game": 0.0144253,
+    "Update boids": 0.0143097,
+    "Boids simulation": 0.0129201,
+    "Boids scene sync": 0.00125243,
+    "Boids renderer notify": 1.80556e-05,
+    "Renderer update": 0.156452,
+    "Render to texture call": 4.92706,
+    "Render to screen call": 12.0753,
+    "Draw UI": 0.493823,
+    "Swap buffers": 1.0453
+  },
+  "renderer_timings_ms": {
+    "Shadow map": 0.893725,
+    "G-buffer": 2.80652,
+    "SSAO": 3.92833,
+    "SSR": 0.997182,
+    "Lighting": 2.26475,
+    "SSR source copy": 0,
+    "Composite / screen": 0.841468
+  }
+}
