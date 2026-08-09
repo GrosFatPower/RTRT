@@ -114,13 +114,25 @@
     {
       "name": "deferred_diningroom",
       "profile": "deferred",
-      "scene": "diningroom.scene"
+      "scene": "diningroom.scene",
+      "thresholds": {
+        "mean_absolute_error": 0.003,
+        "max_absolute_error": 12.5,
+        "pixel_error": 0.02,
+        "mismatch_ratio": 0.012
+      }
     },
     {
       "name": "deferred_teapot_env",
       "profile": "deferred",
       "scene": "teapot.scene",
-      "environment_map": "HDR/Background_05.hdr"
+      "environment_map": "HDR/Background_05.hdr",
+      "thresholds": {
+        "mean_absolute_error": 0.003,
+        "max_absolute_error": 12.5,
+        "pixel_error": 0.02,
+        "mismatch_ratio": 0.012
+      }
     },
     {
       "name": "deferred_barbershopchair_01",
@@ -132,6 +144,12 @@
         "pivot": [0.098960, 0.548734, -0.269350],
         "fov": 45.0,
         "near": 0.5
+      },
+      "thresholds": {
+        "mean_absolute_error": 0.003,
+        "max_absolute_error": 12.5,
+        "pixel_error": 0.02,
+        "mismatch_ratio": 0.012
       }
     },
     {
