@@ -3,11 +3,13 @@
 #include "PathUtils.h"
 #include "RenderSettings.h"
 #include "Scene.h"
+#include "SoftwareRasterizer.h"
 
 #include <GL/glew.h>
 #include <algorithm>
 #include <chrono>
 #include <ctime>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <thread>
@@ -27,9 +29,9 @@ namespace RTRT
 namespace
 {
 
-const Vec3 g_BenchmarkPosition(17.065f, -0.229f, -45.187f);
-constexpr float g_BenchmarkYaw = -147.34f;
-constexpr float g_BenchmarkPitch = 0.99f;
+Vec3 g_BenchmarkPosition(17.065f, -0.229f, -45.187f);
+float g_BenchmarkYaw = -147.34f;
+float g_BenchmarkPitch = 0.99f;
 
 std::string JsonEscape( const std::string & iText )
 {
@@ -131,6 +133,27 @@ std::string BenchmarkGLString( GLenum iName )
   return value ? reinterpret_cast<const char *>(value) : "";
 }
 
+void WriteDistribution( std::ofstream & ioFile, const FpsGameBenchmarkDistribution & iDistribution, const char * iIndent )
+{
+  ioFile << iIndent << "\"mean_ms\": " << iDistribution._Mean * 1000. << ",\n";
+  ioFile << iIndent << "\"median_ms\": " << iDistribution._Median * 1000. << ",\n";
+  ioFile << iIndent << "\"minimum_ms\": " << iDistribution._Minimum * 1000. << ",\n";
+  ioFile << iIndent << "\"p95_ms\": " << iDistribution._P95 * 1000. << ",\n";
+  ioFile << iIndent << "\"standard_deviation_ms\": " << iDistribution._StandardDeviation * 1000. << "\n";
+}
+
+void WriteSamples( std::ofstream & ioFile, const std::vector<double> & iSamples )
+{
+  ioFile << "[";
+  for ( size_t i = 0; i < iSamples.size(); ++i )
+  {
+    if ( i )
+      ioFile << ", ";
+    ioFile << iSamples[i] * 1000.;
+  }
+  ioFile << "]";
+}
+
 }
 
 // ----------------------------------------------------------------------------
@@ -144,11 +167,16 @@ void FpsGameBenchmark::Start( FpsRendererMode iRendererMode )
   _ResultPath.clear();
   _WarmupDone = 0;
   _SamplesDone = 0;
+  _CurrentRepetition = 0;
   _RendererMode = iRendererMode;
   _CpuFrameSeconds = 0.;
   _RendererFrameSeconds = 0.;
   _CpuTotals.clear();
   _RendererTotals.clear();
+  _CpuFrameSamples.clear();
+  _CpuTimingSamples.clear();
+  _CpuFrameDistribution = {};
+  _SoftwareCounterTotals.clear();
 }
 
 // ----------------------------------------------------------------------------
@@ -188,7 +216,12 @@ void FpsGameBenchmark::Update( const std::vector<FpsCpuTiming> & iCpuTimings,
   }
 
   if ( _CpuTotals.empty() )
+  {
     _CpuTotals = iCpuTimings;
+    _CpuTimingSamples.resize(iCpuTimings.size());
+    for ( FpsCpuTiming & timing : _CpuTotals )
+      timing._Seconds = 0.;
+  }
 
   double cpuFrameSeconds = 0.;
   for ( int i = 0; i < static_cast<int>(iCpuTimings.size()); ++i )
@@ -204,6 +237,12 @@ void FpsGameBenchmark::Update( const std::vector<FpsCpuTiming> & iCpuTimings,
     }
   }
   _CpuFrameSeconds += cpuFrameSeconds;
+  _CpuFrameSamples.push_back(cpuFrameSeconds);
+  for ( int i = 0; i < static_cast<int>(iCpuTimings.size()) && i < static_cast<int>(_CpuTimingSamples.size()); ++i )
+  {
+    if ( iCpuTimings[i]._Enabled )
+      _CpuTimingSamples[i].push_back(iCpuTimings[i]._Seconds);
+  }
 
   std::vector<RenderPassTiming> renderTimings;
   if ( 0 == iRenderer.GetRenderPassTimings(renderTimings) )
@@ -216,6 +255,7 @@ void FpsGameBenchmark::Update( const std::vector<FpsCpuTiming> & iCpuTimings,
         FpsGameBenchmarkPassTiming total;
         total._Name = timing._Name ? timing._Name : "";
         total._GPU = timing._GPU;
+        total._Inclusive = timing._Inclusive;
         _RendererTotals.push_back(total);
       }
     }
@@ -227,20 +267,87 @@ void FpsGameBenchmark::Update( const std::vector<FpsCpuTiming> & iCpuTimings,
       if ( !timing._Enabled )
         continue;
 
-      rendererFrameSeconds += timing._Seconds;
+      if ( !timing._Inclusive )
+        rendererFrameSeconds += timing._Seconds;
       _RendererTotals[i]._Enabled = true;
       _RendererTotals[i]._Seconds += timing._Seconds;
+      _RendererTotals[i]._Samples.push_back(timing._Seconds);
     }
     _RendererFrameSeconds += rendererFrameSeconds;
+  }
+
+  if ( const SoftwareRasterizer * software = const_cast<Renderer &>(iRenderer).AsSoftwareRasterizer() )
+  {
+    const SoftwareRasterizerStats & stats = software -> GetStats();
+    _SoftwareCounterTotals["input_instances"] += stats._InputInstances;
+    _SoftwareCounterTotals["visible_instances"] += stats._VisibleInstances;
+    _SoftwareCounterTotals["rejected_instances"] += stats._RejectedInstances;
+    _SoftwareCounterTotals["avoided_vertices"] += stats._AvoidedVertices;
+    _SoftwareCounterTotals["avoided_triangles"] += stats._AvoidedTriangles;
+    _SoftwareCounterTotals["changed_instances"] += stats._ChangedInstances;
+    _SoftwareCounterTotals["transformed_vertices"] += stats._TransformedVertices;
+    _SoftwareCounterTotals["refreshed_vertices"] += stats._RefreshedVertices;
+    _SoftwareCounterTotals["refreshed_triangles"] += stats._RefreshedTriangles;
+    _SoftwareCounterTotals["input_triangles"] += stats._InputTriangles;
+    _SoftwareCounterTotals["clipped_triangles"] += stats._ClippedTriangles;
+    _SoftwareCounterTotals["binned_triangles"] += stats._BinnedTriangles;
+    _SoftwareCounterTotals["depth_winning_pixels"] += stats._DepthWinningPixels;
+    _SoftwareCounterTotals["covered_pixels"] += stats._CoveredPixels;
+    _SoftwareCounterTotals["shaded_pixels"] += stats._ShadedPixels;
+    _SoftwareCounterTotals["tile_jobs"] += stats._TileJobs;
+    _SoftwareCounterTotals["copied_bytes"] += stats._CopiedBytes;
+    _SoftwareCounterTotals["hit_buffer_bytes"] += stats._HitBufferBytes;
   }
 
   ++_SamplesDone;
   if ( _SamplesDone >= std::max(1, _SampleFrames) )
   {
-    _Running = false;
-    _Completed = true;
-    _Status = "Completed";
+    ++_CurrentRepetition;
+    if ( _CurrentRepetition < std::max(1, _Repetitions) )
+    {
+      _WarmupDone = 0;
+      _SamplesDone = 0;
+      _Status = "Running repetition " + std::to_string(_CurrentRepetition + 1);
+    }
+    else
+    {
+      _Running = false;
+      _Completed = true;
+      _Status = "Completed";
+      _CpuFrameDistribution = ComputeDistribution(_CpuFrameSamples);
+      for ( FpsGameBenchmarkPassTiming & timing : _RendererTotals )
+        timing._Distribution = ComputeDistribution(timing._Samples);
+    }
   }
+}
+
+// ----------------------------------------------------------------------------
+// ComputeDistribution
+// ----------------------------------------------------------------------------
+FpsGameBenchmarkDistribution FpsGameBenchmark::ComputeDistribution( const std::vector<double> & iSamples )
+{
+  FpsGameBenchmarkDistribution result;
+  if ( iSamples.empty() )
+    return result;
+
+  std::vector<double> sorted = iSamples;
+  std::sort(sorted.begin(), sorted.end());
+  for ( double value : sorted )
+    result._Mean += value;
+  result._Mean /= sorted.size();
+  result._Minimum = sorted.front();
+  const size_t middle = sorted.size() / 2;
+  result._Median = ( sorted.size() % 2 ) ? sorted[middle] : ( sorted[middle - 1] + sorted[middle] ) * .5;
+  result._P95 = sorted[std::min(sorted.size() - 1, static_cast<size_t>(std::ceil(sorted.size() * .95)) - 1)];
+
+  double variance = 0.;
+  for ( double value : sorted )
+  {
+    const double delta = value - result._Mean;
+    variance += delta * delta;
+  }
+  result._StandardDeviation = std::sqrt(variance / sorted.size());
+  return result;
 }
 
 // ----------------------------------------------------------------------------
@@ -248,7 +355,7 @@ void FpsGameBenchmark::Update( const std::vector<FpsCpuTiming> & iCpuTimings,
 // ----------------------------------------------------------------------------
 bool FpsGameBenchmark::SaveResult( const FpsGameBenchmarkSaveContext & iContext )
 {
-  if ( !_Completed || ( _SamplesDone <= 0 ) || !iContext._Settings )
+  if ( !_Completed || _CpuFrameSamples.empty() || !iContext._Settings )
     return false;
 
   std::error_code ec;
@@ -268,9 +375,11 @@ bool FpsGameBenchmark::SaveResult( const FpsGameBenchmarkSaveContext & iContext 
     return false;
 
   const RenderSettings & settings = *iContext._Settings;
-  const int samples = std::max(1, _SamplesDone);
+  const int samples = static_cast<int>(_CpuFrameSamples.size());
   file << "{\n";
+  file << "  \"schema_version\": 2,\n";
   file << "  \"benchmark\": \"Test6 " << JsonEscape(rendererName) << " Renderer\",\n";
+  file << "  \"label\": \"" << JsonEscape(_Label) << "\",\n";
   file << "  \"timestamp\": \"" << JsonEscape(timestamp) << "\",\n";
   file << "  \"machine\": {\n";
   file << "    \"os\": \"" << JsonEscape(BenchmarkOSName()) << "\",\n";
@@ -327,25 +436,35 @@ bool FpsGameBenchmark::SaveResult( const FpsGameBenchmarkSaveContext & iContext 
   file << "    \"exposure\": " << settings._Exposure << "\n";
   file << "  },\n";
   file << "  \"samples\": {\n";
+  file << "    \"repetitions\": " << _Repetitions << ",\n";
   file << "    \"warmup_frames\": " << _WarmupFrames << ",\n";
-  file << "    \"sample_frames\": " << samples << ",\n";
-  file << "    \"cpu_frame_average_ms\": " << ( _CpuFrameSeconds * 1000. / samples ) << ",\n";
-  file << "    \"renderer_pass_average_ms\": " << ( _RendererFrameSeconds * 1000. / samples ) << "\n";
+  file << "    \"sample_frames_per_repetition\": " << _SampleFrames << ",\n";
+  file << "    \"total_sample_frames\": " << samples << ",\n";
+  file << "    \"cpu_frame\": {\n";
+  WriteDistribution(file, _CpuFrameDistribution, "      ");
+  file << "    },\n";
+  file << "    \"cpu_frame_samples_ms\": ";
+  WriteSamples(file, _CpuFrameSamples);
+  file << "\n";
   file << "  },\n";
-  file << "  \"cpu_timings_ms\": {\n";
+  file << "  \"cpu_timings\": {\n";
   bool first = true;
-  for ( const FpsCpuTiming & timing : _CpuTotals )
+  for ( int i = 0; i < static_cast<int>(_CpuTotals.size()); ++i )
   {
+    const FpsCpuTiming & timing = _CpuTotals[i];
     if ( !timing._Enabled )
       continue;
     if ( !first )
       file << ",\n";
-    file << "    \"" << JsonEscape(timing._Name ? timing._Name : "") << "\": " << ( timing._Seconds * 1000. / samples );
+    const FpsGameBenchmarkDistribution distribution = ( i < static_cast<int>(_CpuTimingSamples.size()) ) ? ComputeDistribution(_CpuTimingSamples[i]) : FpsGameBenchmarkDistribution();
+    file << "    \"" << JsonEscape(timing._Name ? timing._Name : "") << "\": {\n";
+    WriteDistribution(file, distribution, "      ");
+    file << "    }";
     first = false;
   }
   file << "\n";
   file << "  },\n";
-  file << "  \"renderer_timings_ms\": {\n";
+  file << "  \"renderer_timings\": {\n";
   first = true;
   for ( const FpsGameBenchmarkPassTiming & timing : _RendererTotals )
   {
@@ -353,11 +472,45 @@ bool FpsGameBenchmark::SaveResult( const FpsGameBenchmarkSaveContext & iContext 
       continue;
     if ( !first )
       file << ",\n";
-    file << "    \"" << JsonEscape(timing._Name) << "\": " << ( timing._Seconds * 1000. / samples );
+    file << "    \"" << JsonEscape(timing._Name) << "\": {\n";
+    file << "      \"device\": \"" << ( timing._GPU ? "GPU" : "CPU" ) << "\",\n";
+    file << "      \"inclusive\": " << ( timing._Inclusive ? "true" : "false" ) << ",\n";
+    WriteDistribution(file, timing._Distribution, "      ");
+    file << "    }";
     first = false;
   }
   file << "\n";
-  file << "  }\n";
+  file << "  }";
+
+  if ( const SoftwareRasterizer * software = iContext._Renderer ? const_cast<Renderer *>(iContext._Renderer) -> AsSoftwareRasterizer() : nullptr )
+  {
+    file << ",\n";
+    file << "  \"software_configuration\": {\n";
+    file << "    \"simd_enabled\": " << ( software -> GetEnableSIMD() ? "true" : "false" ) << ",\n";
+    file << "    \"simd_mode\": \"" << software -> GetSIMDMode() << "\",\n";
+    file << "    \"tile_size\": " << software -> GetTileSize() << ",\n";
+    file << "    \"thread_count\": " << settings._NbThreads << ",\n";
+    file << "    \"debug_mode\": " << software -> GetDebugMode() << ",\n";
+    file << "    \"optimization_flags\": {\n";
+    file << "      \"incremental_instance_refresh\": " << ( software -> GetEnableIncrementalRefresh() ? "true" : "false" ) << ",\n";
+    file << "      \"compact_hits\": " << ( software -> GetEnableCompactHits() ? "true" : "false" ) << ",\n";
+    file << "      \"direct_color_writes\": " << ( software -> GetEnableDirectColorWrites() ? "true" : "false" ) << ",\n";
+    file << "      \"frustum_culling\": " << ( software -> GetEnableFrustumCulling() ? "true" : "false" ) << ",\n";
+    file << "      \"pbo_upload\": " << ( software -> GetEnablePBOUpload() ? "true" : "false" ) << "\n";
+    file << "    }\n";
+    file << "  },\n";
+    file << "  \"software_counters_average\": {\n";
+    first = true;
+    for ( const auto & counter : _SoftwareCounterTotals )
+    {
+      if ( !first )
+        file << ",\n";
+      file << "    \"" << JsonEscape(counter.first) << "\": " << counter.second / samples;
+      first = false;
+    }
+    file << "\n  }";
+  }
+  file << "\n";
   file << "}\n";
 
   _ResultPath = outputPath.string();
@@ -378,6 +531,16 @@ float FpsGameBenchmark::GetYaw() { return g_BenchmarkYaw; }
 // GetPitch
 // ----------------------------------------------------------------------------
 float FpsGameBenchmark::GetPitch() { return g_BenchmarkPitch; }
+
+// ----------------------------------------------------------------------------
+// SetPose
+// ----------------------------------------------------------------------------
+void FpsGameBenchmark::SetPose( const Vec3 & iPosition, float iYaw, float iPitch )
+{
+  g_BenchmarkPosition = iPosition;
+  g_BenchmarkYaw = iYaw;
+  g_BenchmarkPitch = iPitch;
+}
 
 // ----------------------------------------------------------------------------
 // GetRendererName

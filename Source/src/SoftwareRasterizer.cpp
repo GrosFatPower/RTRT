@@ -19,6 +19,7 @@
 #include <unordered_map>
 //#include <omp.h>
 #include <thread>
+#include <cstring>
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
@@ -110,6 +111,14 @@ SoftwareRasterizer::SoftwareRasterizer(Scene& iScene, RenderSettings& iSettings)
 // ----------------------------------------------------------------------------
 SoftwareRasterizer::~SoftwareRasterizer()
 {
+  for ( GLsync & fence : _UploadFences )
+  {
+    if ( fence )
+      glDeleteSync(fence);
+    fence = nullptr;
+  }
+  if ( _UploadPBOs[0] || _UploadPBOs[1] )
+    glDeleteBuffers(2, _UploadPBOs.data());
   for ( auto & timerIDs : _TimerIDs )
   {
     if ( timerIDs[0] )
@@ -124,6 +133,22 @@ SoftwareRasterizer::~SoftwareRasterizer()
   GLUtil::DeleteTEX(_ColorBufferTEX);
 
   UnloadScene();
+}
+
+// ----------------------------------------------------------------------------
+// GetSIMDMode
+// ----------------------------------------------------------------------------
+const char * SoftwareRasterizer::GetSIMDMode() const
+{
+  if ( !_EnableSIMD )
+    return "Scalar";
+#if defined(SIMD_AVX2)
+  return "AVX2";
+#elif defined(SIMD_ARM_NEON)
+  return "NEON";
+#else
+  return "Scalar fallback";
+#endif
 }
 
 // ----------------------------------------------------------------------------
@@ -193,7 +218,26 @@ int SoftwareRasterizer::UpdateNumberOfWorkers(bool iForce)
 int SoftwareRasterizer::Update()
 {
   UpdateStats();
+  for ( int timing = TimingInstanceRefresh; timing <= TimingColorUpload; ++timing )
+  {
+    if ( ( timing != TimingCopyToRenderTarget ) && ( timing != TimingCompositeScreen ) )
+      _PassTimes[timing] = 0.;
+  }
+  _Stats._InputInstances = _Scene.GetNbMeshInstances();
+  _Stats._VisibleInstances = _CachedVisibleMeshInstanceCount;
+  _Stats._InputTriangles = _Triangles.size();
+  _Stats._ChangedInstances = 0;
+  _Stats._RefreshedVertices = 0;
+  _Stats._RefreshedTriangles = 0;
+  _Stats._ClippedTriangles = 0;
+  _Stats._BinnedTriangles = 0;
+  _Stats._DepthWinningPixels = 0;
+  _Stats._CoveredPixels = 0;
+  _Stats._ShadedPixels = 0;
+  _Stats._TileJobs = 0;
+  _Stats._CopiedBytes = 0;
 
+  const double updateStartTime = glfwGetTime();
   if (_DirtyStates & (unsigned long)DirtyState::RenderSettings)
   {
     this->ResizeRenderTarget();
@@ -205,21 +249,37 @@ int SoftwareRasterizer::Update()
 
   if (_DirtyStates & (unsigned long)DirtyState::SceneInstances)
   {
+    const double refreshStartTime = glfwGetTime();
+    _PassEnabled[TimingInstanceRefresh] = true;
     if ( CanRefreshSceneInstanceTransforms() )
     {
-      if ( 0 != this->RefreshSceneInstanceTransforms() )
+      const int refreshResult = _EnableIncrementalRefresh ? this->RefreshSceneInstanceTransforms() : this->RefreshAllSceneInstanceTransforms();
+      if ( 0 != refreshResult )
         return 1;
     }
     else if ( 0 != this->ReloadScene() )
       return 1;
+    _PassTimes[TimingInstanceRefresh] = glfwGetTime() - refreshStartTime;
   }
 
   this->UpdateImageBuffer();
 
+  const double uploadStartTime = glfwGetTime();
+  _PassEnabled[TimingColorUpload] = true;
   this->UpdateTextures();
+  _PassTimes[TimingColorUpload] = glfwGetTime() - uploadStartTime;
+  _Stats._CopiedBytes += static_cast<unsigned long long>(_ImageBuffer._ColorBuffer.size()) * sizeof(RGBA8);
 
   this->UpdateRenderToTextureUniforms();
   this->UpdateRenderToScreenUniforms();
+  _PassEnabled[TimingUniformUpdate] = true;
+  _PassTimes[TimingUniformUpdate] = glfwGetTime() - updateStartTime
+    - _PassTimes[TimingInstanceRefresh]
+    - _PassTimes[TimingFrameClear]
+    - _PassTimes[TimingBackground]
+    - _PassTimes[TimingRenderScene]
+    - _PassTimes[TimingColorUpload];
+  _PassTimes[TimingUniformUpdate] = std::max(0., _PassTimes[TimingUniformUpdate]);
 
   return 0;
 }
@@ -347,11 +407,16 @@ double SoftwareRasterizer::ReadTimer( int iTimerID )
 int SoftwareRasterizer::GetRenderPassTimings( std::vector<RenderPassTiming> & oTimings ) const
 {
   oTimings.clear();
+  oTimings.push_back({ "Instance transform refresh", _PassTimes[TimingInstanceRefresh], false, _PassEnabled[TimingInstanceRefresh] });
+  oTimings.push_back({ "Frame / tile clear", _PassTimes[TimingFrameClear], false, _PassEnabled[TimingFrameClear] });
+  oTimings.push_back({ "Environment background", _PassTimes[TimingBackground], false, _PassEnabled[TimingBackground] });
+  oTimings.push_back({ "Uniform / update overhead", _PassTimes[TimingUniformUpdate], false, _PassEnabled[TimingUniformUpdate] });
   oTimings.push_back({ "Process vertices", _PassTimes[TimingProcessVertices], false, _PassEnabled[TimingProcessVertices] });
   oTimings.push_back({ "Clip triangles", _PassTimes[TimingClipTriangles], false, _PassEnabled[TimingClipTriangles] });
   oTimings.push_back({ "Rasterize", _PassTimes[TimingRasterize], false, _PassEnabled[TimingRasterize] });
   oTimings.push_back({ "Process fragments", _PassTimes[TimingProcessFragments], false, _PassEnabled[TimingProcessFragments] });
-  oTimings.push_back({ "Render scene", _PassTimes[TimingRenderScene], false, _PassEnabled[TimingRenderScene] });
+  oTimings.push_back({ "Render scene", _PassTimes[TimingRenderScene], false, _PassEnabled[TimingRenderScene], true });
+  oTimings.push_back({ "CPU color-buffer upload", _PassTimes[TimingColorUpload], false, _PassEnabled[TimingColorUpload] });
   oTimings.push_back({ "Copy to render target", _PassTimes[TimingCopyToRenderTarget], true, _PassEnabled[TimingCopyToRenderTarget] });
   oTimings.push_back({ "Composite / screen", _PassTimes[TimingCompositeScreen], true, _PassEnabled[TimingCompositeScreen] });
   return 0;
@@ -369,7 +434,49 @@ int SoftwareRasterizer::UpdateTextures()
   if ( _ImageBuffer._ColorBuffer.size() < expectedSize )
     return 1;
 
-  if ( !GLUtil::UpdateTexture2D(_ColorBufferTEX, RenderWidth(), RenderHeight(), &_ImageBuffer._ColorBuffer[0]) )
+  if ( _EnablePBOUpload )
+  {
+    const size_t uploadSize = expectedSize * sizeof(RGBA8);
+    if ( !_UploadPBOs[0] )
+      glGenBuffers(2, _UploadPBOs.data());
+    if ( _UploadPBOSize != uploadSize )
+    {
+      for ( unsigned int index = 0; index < _UploadPBOs.size(); ++index )
+      {
+        if ( _UploadFences[index] )
+        {
+          glClientWaitSync(_UploadFences[index], GL_SYNC_FLUSH_COMMANDS_BIT, GL_TIMEOUT_IGNORED);
+          glDeleteSync(_UploadFences[index]);
+          _UploadFences[index] = nullptr;
+        }
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, _UploadPBOs[index]);
+        glBufferData(GL_PIXEL_UNPACK_BUFFER, uploadSize, nullptr, GL_STREAM_DRAW);
+      }
+      _UploadPBOSize = uploadSize;
+    }
+    const unsigned int pboIndex = _UploadPBOIndex++ % 2;
+    if ( _UploadFences[pboIndex] )
+    {
+      glClientWaitSync(_UploadFences[pboIndex], GL_SYNC_FLUSH_COMMANDS_BIT, GL_TIMEOUT_IGNORED);
+      glDeleteSync(_UploadFences[pboIndex]);
+      _UploadFences[pboIndex] = nullptr;
+    }
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, _UploadPBOs[pboIndex]);
+    void * mapped = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, uploadSize, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+    if ( !mapped )
+    {
+      glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+      return 1;
+    }
+    std::memcpy(mapped, _ImageBuffer._ColorBuffer.data(), uploadSize);
+    glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+    glActiveTexture(GL_TEXTURE0 + _ColorBufferTEX._Slot);
+    glBindTexture(_ColorBufferTEX._Target, _ColorBufferTEX._Handle);
+    glTexSubImage2D(_ColorBufferTEX._Target, 0, 0, 0, RenderWidth(), RenderHeight(), _ColorBufferTEX._DataFormat, _ColorBufferTEX._DataType, nullptr);
+    _UploadFences[pboIndex] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+  }
+  else if ( !GLUtil::UpdateTexture2D(_ColorBufferTEX, RenderWidth(), RenderHeight(), &_ImageBuffer._ColorBuffer[0]) )
     return 1;
 
   return 0;
@@ -387,6 +494,8 @@ int SoftwareRasterizer::UpdateImageBuffer()
   float zNear, zFar = 1.f;
   if (_Settings._WBuffer)
     _Scene.GetCamera().GetZNearFar(zNear, zFar);
+  const double clearStartTime = glfwGetTime();
+  _PassEnabled[TimingFrameClear] = true;
   std::fill(policy, _ImageBuffer._DepthBuffer.begin(), _ImageBuffer._DepthBuffer.end(), zFar);
 
   float top, right;
@@ -394,10 +503,26 @@ int SoftwareRasterizer::UpdateImageBuffer()
   _Scene.GetCamera().ComputePerspectiveProjMatrix(ratio, P, &top, &right);
 
   ResetTiles();
+  _PassTimes[TimingFrameClear] = glfwGetTime() - clearStartTime;
 
-  RenderBackground(top, right);
+  const bool directColorWrites = TiledRendering() && _EnableCompactHits && _EnableDirectColorWrites;
+  if ( !directColorWrites )
+  {
+    const double backgroundStartTime = glfwGetTime();
+    _PassEnabled[TimingBackground] = true;
+    RenderBackground(top, right);
+    _PassTimes[TimingBackground] = glfwGetTime() - backgroundStartTime;
+  }
 
   RenderScene();
+
+  if ( directColorWrites )
+  {
+    const double backgroundStartTime = glfwGetTime();
+    _PassEnabled[TimingBackground] = true;
+    RenderUncoveredBackground(top, right);
+    _PassTimes[TimingBackground] = glfwGetTime() - backgroundStartTime;
+  }
 
   return 0;
 }
@@ -703,6 +828,7 @@ int SoftwareRasterizer::UnloadScene()
   _VertexBuffer.clear();
   _VertexSources.clear();
   _Triangles.clear();
+  _InstanceRanges.clear();
   _ProjVerticesBuf.clear();
   for ( auto & rasterTriangles : _RasterTrianglesBuf )
     rasterTriangles.clear();
@@ -729,10 +855,19 @@ int SoftwareRasterizer::ReloadScene()
 
   _CachedMeshInstanceCount = static_cast<int>(meshInstances.size());
   _CachedVisibleMeshInstanceCount = 0;
+  _InstanceRanges.resize(meshInstances.size());
+  _Stats._InputInstances = meshInstances.size();
 
   for ( int instID = 0; instID < static_cast<int>(meshInstances.size()); ++instID )
   {
     const MeshInstance & meshInst = meshInstances[instID];
+    CompiledInstanceRange & instanceRange = _InstanceRanges[instID];
+    instanceRange._MeshID = meshInst._MeshID;
+    instanceRange._MaterialID = meshInst._MaterialID;
+    instanceRange._Visible = meshInst._Visible;
+    instanceRange._Transform = meshInst._Transform;
+    instanceRange._VertexStart = static_cast<int>(_VertexBuffer.size());
+    instanceRange._TriangleStart = static_cast<int>(_Triangles.size());
     if ( !meshInst._Visible )
       continue;
 
@@ -819,10 +954,18 @@ int SoftwareRasterizer::ReloadScene()
 
       _Triangles.push_back(tri);
     }
+
+    instanceRange._VertexCount = static_cast<int>(_VertexBuffer.size()) - instanceRange._VertexStart;
+    instanceRange._TriangleCount = static_cast<int>(_Triangles.size()) - instanceRange._TriangleStart;
+    UpdateInstanceBounds(instanceRange);
   }
 
-  this -> UpdateMipMaps();
+  _Stats._VisibleInstances = _CachedVisibleMeshInstanceCount;
+  _Stats._InputTriangles = _Triangles.size();
+  _Stats._TransformedVertices = _VertexBuffer.size();
+  _TriangleVisible.assign(_Triangles.size(), 1);
 
+  this -> UpdateMipMaps();
   return 0;
 }
 
@@ -837,6 +980,9 @@ bool SoftwareRasterizer::CanRefreshSceneInstanceTransforms() const
   if ( _CachedMeshInstanceCount != _Scene.GetNbMeshInstances() )
     return false;
 
+  if ( _InstanceRanges.size() != static_cast<size_t>(_CachedMeshInstanceCount) )
+    return false;
+
   const std::vector<MeshInstance> & meshInstances = _Scene.GetMeshInstances();
   const std::vector<Mesh*>        & meshes        = _Scene.GetMeshes();
 
@@ -849,26 +995,20 @@ bool SoftwareRasterizer::CanRefreshSceneInstanceTransforms() const
   if ( visibleMeshInstanceCount != _CachedVisibleMeshInstanceCount )
     return false;
 
-  for ( const RasterSourceVertex & sourceVertex : _VertexSources )
+  for ( int instID = 0; instID < static_cast<int>(meshInstances.size()); ++instID )
   {
-    if ( ( sourceVertex._MeshInstanceID < 0 ) || ( sourceVertex._MeshInstanceID >= static_cast<int>(meshInstances.size()) ) )
+    const MeshInstance & meshInst = meshInstances[instID];
+    const CompiledInstanceRange & instanceRange = _InstanceRanges[instID];
+    if ( meshInst._Visible != instanceRange._Visible )
       return false;
-
-    const MeshInstance & meshInst = meshInstances[sourceVertex._MeshInstanceID];
+    if ( meshInst._MeshID != instanceRange._MeshID )
+      return false;
     if ( !meshInst._Visible )
+      continue;
+    if ( ( meshInst._MeshID < 0 ) || ( meshInst._MeshID >= static_cast<int>(meshes.size()) ) )
       return false;
-
-    if ( meshInst._MeshID != sourceVertex._MeshID )
-      return false;
-
-    if ( ( sourceVertex._MeshID < 0 ) || ( sourceVertex._MeshID >= static_cast<int>(meshes.size()) ) )
-      return false;
-
-    Mesh * curMesh = meshes[sourceVertex._MeshID];
+    Mesh * curMesh = meshes[meshInst._MeshID];
     if ( !curMesh )
-      return false;
-
-    if ( ( sourceVertex._VertexID < 0 ) || ( sourceVertex._VertexID >= static_cast<int>(curMesh -> GetVertices().size()) ) )
       return false;
   }
 
@@ -883,37 +1023,151 @@ int SoftwareRasterizer::RefreshSceneInstanceTransforms()
   const std::vector<MeshInstance> & meshInstances = _Scene.GetMeshInstances();
   const std::vector<Mesh*>        & meshes        = _Scene.GetMeshes();
 
-  for ( int i = 0; i < static_cast<int>(_VertexBuffer.size()); ++i )
+  _Stats._ChangedInstances = 0;
+  _Stats._RefreshedVertices = 0;
+  _Stats._RefreshedTriangles = 0;
+
+  for ( int instID = 0; instID < static_cast<int>(_InstanceRanges.size()); ++instID )
   {
-    const RasterSourceVertex & sourceVertex = _VertexSources[i];
-    const MeshInstance & meshInst = meshInstances[sourceVertex._MeshInstanceID];
-    Mesh * curMesh = meshes[sourceVertex._MeshID];
+    CompiledInstanceRange & instanceRange = _InstanceRanges[instID];
+    const MeshInstance & meshInst = meshInstances[instID];
+    const bool transformChanged = 0 != std::memcmp(&instanceRange._Transform, &meshInst._Transform, sizeof(Mat4x4));
+    const bool materialChanged = instanceRange._MaterialID != meshInst._MaterialID;
+    if ( !transformChanged && !materialChanged )
+      continue;
+
+    _Stats._ChangedInstances++;
+    Mesh * curMesh = meshes[meshInst._MeshID];
 
     const std::vector<Vec3> & vertices = curMesh -> GetVertices();
     const std::vector<Vec3> & normals = curMesh -> GetNormals();
+    const Mat4x4 trInvTransfo = transformChanged ? glm::transpose(glm::inverse(meshInst._Transform)) : Mat4x4(1.f);
 
-    Vec4 transformedVtx = meshInst._Transform * Vec4(vertices[sourceVertex._VertexID], 1.f);
-    _VertexBuffer[i]._WorldPos = Vec3(transformedVtx);
-
-    if ( ( sourceVertex._NormalID >= 0 ) && ( sourceVertex._NormalID < static_cast<int>(normals.size()) ) )
+    if ( transformChanged )
     {
-      Mat4x4 trInvTransfo = glm::transpose(glm::inverse(meshInst._Transform));
-      Vec4 transformedNormal = trInvTransfo * Vec4(normals[sourceVertex._NormalID], 0.f);
-      _VertexBuffer[i]._Normal = glm::normalize(Vec3(transformedNormal));
+      for ( int i = instanceRange._VertexStart; i < instanceRange._VertexStart + instanceRange._VertexCount; ++i )
+      {
+        const RasterSourceVertex & sourceVertex = _VertexSources[i];
+        Vec4 transformedVtx = meshInst._Transform * Vec4(vertices[sourceVertex._VertexID], 1.f);
+        _VertexBuffer[i]._WorldPos = Vec3(transformedVtx);
+        if ( ( sourceVertex._NormalID >= 0 ) && ( sourceVertex._NormalID < static_cast<int>(normals.size()) ) )
+        {
+          Vec4 transformedNormal = trInvTransfo * Vec4(normals[sourceVertex._NormalID], 0.f);
+          _VertexBuffer[i]._Normal = glm::normalize(Vec3(transformedNormal));
+        }
+      }
+      _Stats._RefreshedVertices += instanceRange._VertexCount;
     }
-  }
 
-  for ( RasterData::Triangle & tri : _Triangles )
-  {
-    const Vec3 & p0 = _VertexBuffer[tri._Indices[0]]._WorldPos;
-    const Vec3 & p1 = _VertexBuffer[tri._Indices[1]]._WorldPos;
-    const Vec3 & p2 = _VertexBuffer[tri._Indices[2]]._WorldPos;
-    tri._Normal = glm::normalize(glm::cross(p1 - p0, p2 - p0));
+    for ( int i = instanceRange._TriangleStart; i < instanceRange._TriangleStart + instanceRange._TriangleCount; ++i )
+    {
+      RasterData::Triangle & tri = _Triangles[i];
+      if ( transformChanged )
+      {
+        const Vec3 & p0 = _VertexBuffer[tri._Indices[0]]._WorldPos;
+        const Vec3 & p1 = _VertexBuffer[tri._Indices[1]]._WorldPos;
+        const Vec3 & p2 = _VertexBuffer[tri._Indices[2]]._WorldPos;
+        tri._Normal = glm::normalize(glm::cross(p1 - p0, p2 - p0));
+      }
+      if ( materialChanged )
+        tri._MatID = meshInst._MaterialID;
+    }
+    _Stats._RefreshedTriangles += instanceRange._TriangleCount;
+    instanceRange._Transform = meshInst._Transform;
+    instanceRange._MaterialID = meshInst._MaterialID;
+    if ( transformChanged )
+      UpdateInstanceBounds(instanceRange);
   }
 
   _FrameNum = 0;
 
   return 0;
+}
+
+// ----------------------------------------------------------------------------
+// RefreshAllSceneInstanceTransforms
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::RefreshAllSceneInstanceTransforms()
+{
+  const std::vector<MeshInstance> & meshInstances = _Scene.GetMeshInstances();
+  const std::vector<Mesh*> & meshes = _Scene.GetMeshes();
+  _Stats._ChangedInstances = _CachedVisibleMeshInstanceCount;
+  _Stats._RefreshedVertices = _VertexBuffer.size();
+  _Stats._RefreshedTriangles = _Triangles.size();
+
+  for ( int i = 0; i < static_cast<int>(_VertexBuffer.size()); ++i )
+  {
+    const RasterSourceVertex & sourceVertex = _VertexSources[i];
+    const MeshInstance & meshInst = meshInstances[sourceVertex._MeshInstanceID];
+    Mesh * mesh = meshes[sourceVertex._MeshID];
+    const std::vector<Vec3> & vertices = mesh -> GetVertices();
+    const std::vector<Vec3> & normals = mesh -> GetNormals();
+    _VertexBuffer[i]._WorldPos = Vec3(meshInst._Transform * Vec4(vertices[sourceVertex._VertexID], 1.f));
+    if ( sourceVertex._NormalID >= 0 && sourceVertex._NormalID < static_cast<int>(normals.size()) )
+    {
+      const Mat4x4 inverseTranspose = glm::transpose(glm::inverse(meshInst._Transform));
+      _VertexBuffer[i]._Normal = glm::normalize(Vec3(inverseTranspose * Vec4(normals[sourceVertex._NormalID], 0.f)));
+    }
+  }
+
+  for ( RasterData::Triangle & triangle : _Triangles )
+  {
+    const Vec3 & p0 = _VertexBuffer[triangle._Indices[0]]._WorldPos;
+    const Vec3 & p1 = _VertexBuffer[triangle._Indices[1]]._WorldPos;
+    const Vec3 & p2 = _VertexBuffer[triangle._Indices[2]]._WorldPos;
+    triangle._Normal = glm::normalize(glm::cross(p1 - p0, p2 - p0));
+  }
+  for ( int instanceID = 0; instanceID < static_cast<int>(_InstanceRanges.size()); ++instanceID )
+  {
+    CompiledInstanceRange & range = _InstanceRanges[instanceID];
+    range._Transform = meshInstances[instanceID]._Transform;
+    range._MaterialID = meshInstances[instanceID]._MaterialID;
+    if ( range._Visible )
+      UpdateInstanceBounds(range);
+  }
+  _FrameNum = 0;
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateInstanceBounds
+// ----------------------------------------------------------------------------
+void SoftwareRasterizer::UpdateInstanceBounds( CompiledInstanceRange & ioRange )
+{
+  ioRange._WorldBounds = AABB<Vec3>();
+  for ( int i = ioRange._VertexStart; i < ioRange._VertexStart + ioRange._VertexCount; ++i )
+    ioRange._WorldBounds.Insert(_VertexBuffer[i]._WorldPos);
+}
+
+// ----------------------------------------------------------------------------
+// IsInstanceVisible
+// ----------------------------------------------------------------------------
+bool SoftwareRasterizer::IsInstanceVisible( const CompiledInstanceRange & iRange, const Mat4x4 & iViewProjection ) const
+{
+  if ( !_EnableFrustumCulling || !iRange._Visible || !iRange._VertexCount )
+    return iRange._Visible;
+  if ( !std::isfinite(iRange._WorldBounds._Low.x) || !std::isfinite(iRange._WorldBounds._High.x) )
+    return true;
+
+  Vec3 corners[8];
+  iRange._WorldBounds.Corners(corners);
+  bool outside[6] = { true, true, true, true, true, true };
+  for ( const Vec3 & corner : corners )
+  {
+    const Vec4 clip = iViewProjection * Vec4(corner, 1.f);
+    outside[0] = outside[0] && ( clip.x < -clip.w );
+    outside[1] = outside[1] && ( clip.x >  clip.w );
+    outside[2] = outside[2] && ( clip.y < -clip.w );
+    outside[3] = outside[3] && ( clip.y >  clip.w );
+    outside[4] = outside[4] && ( clip.z < -clip.w );
+    outside[5] = outside[5] && ( clip.z >  clip.w );
+  }
+  for ( bool planeOutside : outside )
+  {
+    if ( planeOutside )
+      return false;
+  }
+  return true;
 }
 
 // ----------------------------------------------------------------------------
@@ -986,6 +1240,13 @@ void SoftwareRasterizer::ResizeTileMap()
       curTile._CoveredPixels.resize(curTile._Width * curTile._Height);
       std::fill(policy, curTile._CoveredPixels.begin(), curTile._CoveredPixels.end(), false);
 
+      curTile._CompactHits.clear();
+      curTile._CompactHits.resize(curTile._Width * curTile._Height);
+      curTile._CompactHitGenerations.assign(curTile._Width * curTile._Height, 0);
+      curTile._CoveredIndices.clear();
+      curTile._CoveredIndices.reserve(curTile._Width * curTile._Height);
+      curTile._CompactGeneration = 1;
+
       if (_NbJobs)
         curTile._RasterTrisBins.resize(_NbJobs);
     }
@@ -1017,6 +1278,10 @@ void SoftwareRasterizer::ResetTiles()
 
   for (auto& tile : _Tiles)
   {
+    tile._BinnedTriangles = 0;
+    tile._DepthWins = 0;
+    tile._CoveredCount = 0;
+    tile._ShadedCount = 0;
     for (auto& bin : tile._RasterTrisBins)
     {
       bin.clear();
@@ -1026,10 +1291,32 @@ void SoftwareRasterizer::ResetTiles()
     //tile._Fragments.clear();
     //tile._Fragments.reserve(tile._Width * tile._Height);
 
-    std::fill(policy, tile._CoveredPixels.begin(), tile._CoveredPixels.end(), false);
+    if ( _EnableCompactHits )
+    {
+      ++tile._CompactGeneration;
+      if ( 0 == tile._CompactGeneration )
+      {
+        std::fill(policy, tile._CompactHitGenerations.begin(), tile._CompactHitGenerations.end(), 0);
+        tile._CompactGeneration = 1;
+      }
+      tile._CoveredIndices.clear();
+    }
+    else
+      std::fill(policy, tile._CoveredPixels.begin(), tile._CoveredPixels.end(), false);
 
-    std::fill(policy, tile._LocalFB._ColorBuffer.begin(), tile._LocalFB._ColorBuffer.end(), S_DefaultColor);
+    if ( !_EnableDirectColorWrites || !_EnableCompactHits )
+      std::fill(policy, tile._LocalFB._ColorBuffer.begin(), tile._LocalFB._ColorBuffer.end(), S_DefaultColor);
     std::fill(policy, tile._LocalFB._DepthBuffer.begin(), tile._LocalFB._DepthBuffer.end(), MAX_FLOAT);
+  }
+
+  _Stats._HitBufferBytes = 0;
+  for ( const auto & tile : _Tiles )
+  {
+    _Stats._HitBufferBytes += _EnableCompactHits
+      ? tile._CompactHits.size() * sizeof(rd::CompactHit) +
+        tile._CompactHitGenerations.size() * sizeof(unsigned int) +
+        tile._CoveredIndices.capacity() * sizeof(unsigned int)
+      : tile._Fragments.size() * sizeof(rd::Fragment) + tile._CoveredPixels.size() / 8;
   }
 }
 
@@ -1204,16 +1491,17 @@ int SoftwareRasterizer::RenderBackground(float iTop, float iRight)
 
     if (TiledRendering())
     {
-      for (auto& tile : _Tiles)
+      for ( auto & tile : _Tiles )
         JobSystem::Get().Execute([this, bottomLeft, dX, dY, &tile]() { this->RenderBackground(bottomLeft, dX, dY, tile); });
+      JobSystem::Get().Wait();
+      _Stats._TileJobs += _Tiles.size();
     }
     else
     {
-      for (int i = 0; i < height; ++i)
-        JobSystem::Get().Execute([this, i, bottomLeft, dX, dY]() { this->RenderBackgroundRows(i, i + 1, bottomLeft, dX, dY); });
+      for ( int y = 0; y < height; ++y )
+        JobSystem::Get().Execute([this, y, bottomLeft, dX, dY]() { this->RenderBackgroundRows(y, y + 1, bottomLeft, dX, dY); });
+      JobSystem::Get().Wait();
     }
-
-    JobSystem::Get().Wait();
   }
   else
   {
@@ -1221,6 +1509,51 @@ int SoftwareRasterizer::RenderBackground(float iTop, float iRight)
     std::fill(policy, _ImageBuffer._ColorBuffer.begin(), _ImageBuffer._ColorBuffer.end(), backgroundColor);
   }
 
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// RenderUncoveredBackground
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::RenderUncoveredBackground(float iTop, float iRight)
+{
+  const int width = _Settings._RenderResolution.x;
+  const int height = _Settings._RenderResolution.y;
+  float zNear, zFar;
+  _Scene.GetCamera().GetZNearFar(zNear, zFar);
+  const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
+  const Vec3 bottomLeft = _Scene.GetCamera().GetForward() * zNear - iRight * _Scene.GetCamera().GetRight() - iTop * _Scene.GetCamera().GetUp();
+  const Vec3 dX = _Scene.GetCamera().GetRight() * (2 * iRight / width);
+  const Vec3 dY = _Scene.GetCamera().GetUp() * (2 * iTop / height);
+
+  const auto renderTiles = [this, bottomLeft, dX, dY, backgroundColor](unsigned int iBegin, unsigned int iEnd) {
+    for ( unsigned int tileIndex = iBegin; tileIndex < iEnd; ++tileIndex )
+    {
+      const rd::Tile & tile = _Tiles[tileIndex];
+      for ( int y = 0; y < tile._Height; ++y )
+      {
+        const int globalY = tile._Y + y;
+        for ( int x = 0; x < tile._Width; ++x )
+        {
+          const unsigned int localPixelIndex = y * tile._Width + x;
+          if ( tile._CompactHitGenerations[localPixelIndex] == tile._CompactGeneration )
+            continue;
+          const int globalX = tile._X + x;
+          if ( _Settings._EnableBackGround )
+          {
+            const Vec3 worldP = glm::normalize(bottomLeft + dX * static_cast<float>(globalX) + dY * static_cast<float>(globalY));
+            _ImageBuffer._ColorBuffer[globalX + RenderWidth() * globalY] = SampleEnvMap(worldP);
+          }
+          else
+            _ImageBuffer._ColorBuffer[globalX + RenderWidth() * globalY] = backgroundColor;
+        }
+      }
+    }
+  };
+  for ( unsigned int i = 0; i < _Tiles.size(); ++i )
+    JobSystem::Get().Execute([&renderTiles, i]() { renderTiles(i, i + 1); });
+  JobSystem::Get().Wait();
+  _Stats._TileJobs += _Tiles.size();
   return 0;
 }
 
@@ -1333,31 +1666,107 @@ int SoftwareRasterizer::ProcessVertices()
   int nbVertices = static_cast<int>(_VertexBuffer.size());
   _ProjVerticesBuf.resize(nbVertices);
   _ProjVerticesBuf.reserve(nbVertices * 2);
-
-  const int chunkSize = 512;
-  int curInd = 0;
-  do
+  _VisibleInstanceRanges.clear();
+  _TriangleVisible.assign(_Triangles.size(), 0);
+  _Stats._VisibleInstances = 0;
+  _Stats._RejectedInstances = 0;
+  _Stats._AvoidedVertices = 0;
+  _Stats._AvoidedTriangles = 0;
+  _Stats._TransformedVertices = 0;
+  const Mat4x4 viewProjection = P * V;
+  for ( int instanceID = 0; instanceID < static_cast<int>(_InstanceRanges.size()); ++instanceID )
   {
-    int nextInd = std::min(curInd + chunkSize, nbVertices);
-
-    if (_EnableSIMD)
+    const CompiledInstanceRange & range = _InstanceRanges[instanceID];
+    if ( !range._Visible )
+      continue;
+    if ( IsInstanceVisible(range, viewProjection) )
     {
-#if defined(SIMD_AVX2)
-      JobSystem::Get().Execute([this, M, V, P, curInd, nextInd]() { this->ProcessVerticesAVX2(M, V, P, curInd, nextInd); });
-#elif defined(SIMD_ARM_NEON)
-      JobSystem::Get().Execute([this, M, V, P, curInd, nextInd]() { this->ProcessVerticesARM(M, V, P, curInd, nextInd); });
-#else
-      JobSystem::Get().Execute([this, M, V, P, curInd, nextInd]() { this->ProcessVertices(M, V, P, curInd, nextInd); });
-#endif
+      _VisibleInstanceRanges.push_back(instanceID);
+      _Stats._VisibleInstances++;
+      _Stats._TransformedVertices += range._VertexCount;
+      for ( int triangle = range._TriangleStart; triangle < range._TriangleStart + range._TriangleCount; ++triangle )
+        _TriangleVisible[triangle] = 1;
     }
     else
-      JobSystem::Get().Execute([this, M, V, P, curInd, nextInd]() { this->ProcessVertices(M, V, P, curInd, nextInd); });
+    {
+      _Stats._RejectedInstances++;
+      _Stats._AvoidedVertices += range._VertexCount;
+      _Stats._AvoidedTriangles += range._TriangleCount;
+    }
+  }
 
-    curInd = nextInd;
+  const auto processRanges = [this, M, V, P](unsigned int iBegin, unsigned int iEnd) {
+    for ( unsigned int rangeIndex = iBegin; rangeIndex < iEnd; ++rangeIndex )
+    {
+      const CompiledInstanceRange & range = _InstanceRanges[_VisibleInstanceRanges[rangeIndex]];
+      const int vertexBegin = range._VertexStart;
+      const int vertexEnd = range._VertexStart + range._VertexCount;
+      if (_EnableSIMD)
+      {
+#if defined(SIMD_AVX2)
+        this->ProcessVerticesAVX2(M, V, P, vertexBegin, vertexEnd);
+#elif defined(SIMD_ARM_NEON)
+        this->ProcessVerticesARM(M, V, P, vertexBegin, vertexEnd);
+#else
+        this->ProcessVertices(M, V, P, vertexBegin, vertexEnd);
+#endif
+      }
+      else
+        this->ProcessVertices(M, V, P, vertexBegin, vertexEnd);
+    }
+  };
 
-  } while (curInd < nbVertices);
-
-  JobSystem::Get().Wait();
+  if ( _EnableFrustumCulling )
+  {
+    const unsigned int rangeCount = static_cast<unsigned int>(_VisibleInstanceRanges.size());
+    const unsigned int workerCount = std::max(1u, std::min(JobSystem::Get().GetThreadCount(), rangeCount));
+    const unsigned int verticesPerJob = std::max(1u,
+      static_cast<unsigned int>((_Stats._TransformedVertices + workerCount - 1) / workerCount));
+    unsigned int rangeBegin = 0;
+    unsigned int verticesInJob = 0;
+    unsigned int jobsRemaining = workerCount;
+    for ( unsigned int rangeIndex = 0; rangeIndex < rangeCount; ++rangeIndex )
+    {
+      verticesInJob += _InstanceRanges[_VisibleInstanceRanges[rangeIndex]]._VertexCount;
+      if ( jobsRemaining > 1 && verticesInJob >= verticesPerJob )
+      {
+        const unsigned int rangeEnd = rangeIndex + 1;
+        JobSystem::Get().Execute([&processRanges, rangeBegin, rangeEnd]() {
+          processRanges(rangeBegin, rangeEnd);
+        });
+        rangeBegin = rangeEnd;
+        verticesInJob = 0;
+        jobsRemaining--;
+      }
+    }
+    if ( rangeBegin < rangeCount )
+      JobSystem::Get().Execute([&processRanges, rangeBegin, rangeCount]() {
+        processRanges(rangeBegin, rangeCount);
+      });
+    JobSystem::Get().Wait();
+  }
+  else
+  {
+    for ( int vertexBegin = 0; vertexBegin < nbVertices; vertexBegin += 512 )
+    {
+      const int vertexEnd = std::min(nbVertices, vertexBegin + 512);
+      JobSystem::Get().Execute([this, M, V, P, vertexBegin, vertexEnd]() {
+        if ( _EnableSIMD )
+        {
+#if defined(SIMD_AVX2)
+          this->ProcessVerticesAVX2(M, V, P, vertexBegin, vertexEnd);
+#elif defined(SIMD_ARM_NEON)
+          this->ProcessVerticesARM(M, V, P, vertexBegin, vertexEnd);
+#else
+          this->ProcessVertices(M, V, P, vertexBegin, vertexEnd);
+#endif
+        }
+        else
+          this->ProcessVertices(M, V, P, vertexBegin, vertexEnd);
+      });
+    }
+    JobSystem::Get().Wait();
+  }
 
   return 0;
 }
@@ -1427,6 +1836,10 @@ int SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM)
 
   JobSystem::Get().Wait();
 
+  _Stats._ClippedTriangles = 0;
+  for ( const auto & rasterTriangles : _RasterTrianglesBuf )
+    _Stats._ClippedTriangles += rasterTriangles.size();
+
   return 0;
 }
 
@@ -1441,6 +1854,8 @@ void SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, i
 
   for (int i = iStartInd; i < iEndInd; ++i)
   {
+    if ( i < static_cast<int>(_TriangleVisible.size()) && !_TriangleVisible[i] )
+      continue;
     rd::Triangle& tri = _Triangles[i];
 
     uint32_t clipCode0 = SutherlandHodgman::ComputeClipCode(_ProjVerticesBuf[tri._Indices[0]]._ProjPos);
@@ -1624,35 +2039,52 @@ int SoftwareRasterizer::Rasterize()
 {
   if (TiledRendering())
   {
-    for (unsigned int i = 0; i < _NbJobs; ++i)
-    {
-      JobSystem::Get().Execute([this, i]() { this->BinTrianglesToTiles(i); });
-    }
+    const auto binRanges = [this](unsigned int iBegin, unsigned int iEnd) {
+      for ( unsigned int i = iBegin; i < iEnd; ++i )
+        this->BinTrianglesToTiles(i);
+    };
+    for ( unsigned int i = 0; i < _NbJobs; ++i )
+      JobSystem::Get().Execute([&binRanges, i]() { binRanges(i, i + 1); });
     JobSystem::Get().Wait();
 
-    for (auto& tile : _Tiles)
+    for ( const auto & tile : _Tiles )
     {
-      unsigned int totalTris = 0;
-      for (auto& bin : tile._RasterTrisBins)
-        totalTris += static_cast<int>(bin.size());
+      for ( const auto & bin : tile._RasterTrisBins )
+        _Stats._BinnedTriangles += bin.size();
+    }
 
-      if (totalTris)
+    const auto rasterizeTiles = [this](unsigned int iBegin, unsigned int iEnd) {
+      for ( unsigned int tileIndex = iBegin; tileIndex < iEnd; ++tileIndex )
       {
+        rd::Tile & tile = _Tiles[tileIndex];
+        unsigned int totalTris = 0;
+        for ( const auto & bin : tile._RasterTrisBins )
+          totalTris += static_cast<unsigned int>(bin.size());
+        if ( !totalTris )
+          continue;
         if (_EnableSIMD)
         {
 #if defined(SIMD_AVX2)
-          JobSystem::Get().Execute([this, &tile]() { this->RasterizeAVX2(tile); });
+          this->RasterizeAVX2(tile);
 #elif defined (SIMD_ARM_NEON)
-          JobSystem::Get().Execute([this, &tile]() { this->RasterizeARM(tile); });
+          this->RasterizeARM(tile);
 #else
-          JobSystem::Get().Execute([this, &tile]() { this->Rasterize(tile); });
+          this->Rasterize(tile);
 #endif
         }
         else
-          JobSystem::Get().Execute([this, &tile]() { this->Rasterize(tile); });
+          this->Rasterize(tile);
       }
-    }
+    };
+    for ( unsigned int i = 0; i < _Tiles.size(); ++i )
+      JobSystem::Get().Execute([&rasterizeTiles, i]() { rasterizeTiles(i, i + 1); });
     JobSystem::Get().Wait();
+    _Stats._TileJobs += _Tiles.size();
+    for ( const auto & tile : _Tiles )
+    {
+      _Stats._DepthWinningPixels += tile._DepthWins;
+      _Stats._CoveredPixels += tile._CoveredCount;
+    }
   }
   else
   {
@@ -1826,16 +2258,35 @@ int SoftwareRasterizer::Rasterize(rd::Tile& ioTile)
             ioTile._LocalFB._DepthBuffer[localPixelIndex] = coord.z;
           }        
 
-          ioTile._CoveredPixels[localPixelIndex] = true;
-
-          // Setup fragment
-          rd::Fragment & frag = ioTile._Fragments[localPixelIndex];
-          frag._FragCoords = coord;
-          frag._RasterTriIdx.x = i;
-          frag._RasterTriIdx.y = j,
-          frag._Weights[0] = W[0];
-          frag._Weights[1] = W[1];
-          frag._Weights[2] = W[2];
+          ioTile._DepthWins++;
+          if ( _EnableCompactHits )
+          {
+            rd::CompactHit & hit = ioTile._CompactHits[localPixelIndex];
+            if ( ioTile._CompactHitGenerations[localPixelIndex] != ioTile._CompactGeneration )
+            {
+              ioTile._CompactHitGenerations[localPixelIndex] = ioTile._CompactGeneration;
+              ioTile._CoveredIndices.push_back(localPixelIndex);
+              ioTile._CoveredCount++;
+            }
+            hit._Triangle = tri;
+            hit._Depth = coord.z;
+            hit._Weights[0] = W[0];
+            hit._Weights[1] = W[1];
+            hit._Weights[2] = W[2];
+          }
+          else
+          {
+            if ( !ioTile._CoveredPixels[localPixelIndex] )
+              ioTile._CoveredCount++;
+            ioTile._CoveredPixels[localPixelIndex] = true;
+            rd::Fragment & frag = ioTile._Fragments[localPixelIndex];
+            frag._FragCoords = coord;
+            frag._RasterTriIdx.x = i;
+            frag._RasterTriIdx.y = j;
+            frag._Weights[0] = W[0];
+            frag._Weights[1] = W[1];
+            frag._Weights[2] = W[2];
+          }
         }
       }
     }
@@ -1939,17 +2390,35 @@ int SoftwareRasterizer::RasterizeAVX2(rd::Tile& ioTile)
             float z = z_coord.m256_f32[k];
 
             ioTile._LocalFB._DepthBuffer[localPixelIndex + k] = ( _Settings._WBuffer ) ? ( depth ) : ( z );
-            ioTile._CoveredPixels[localPixelIndex + k] = true;
-
-            rd::Fragment & frag = ioTile._Fragments[localPixelIndex + k];
-            frag._FragCoords.x = x + k + .5f;
-            frag._FragCoords.y = y + .5f;
-            frag._FragCoords.z = z;
-            frag._RasterTriIdx.x = i;
-            frag._RasterTriIdx.y = j,
-            frag._Weights[0] = Weights[0].m256_f32[k];
-            frag._Weights[1] = Weights[1].m256_f32[k];
-            frag._Weights[2] = Weights[2].m256_f32[k];
+            ioTile._DepthWins++;
+            const unsigned int hitIndex = localPixelIndex + k;
+            if ( _EnableCompactHits )
+            {
+              rd::CompactHit & hit = ioTile._CompactHits[hitIndex];
+              if ( ioTile._CompactHitGenerations[hitIndex] != ioTile._CompactGeneration )
+              {
+                ioTile._CompactHitGenerations[hitIndex] = ioTile._CompactGeneration;
+                ioTile._CoveredIndices.push_back(hitIndex);
+                ioTile._CoveredCount++;
+              }
+              hit._Triangle = tri;
+              hit._Depth = z;
+              hit._Weights[0] = Weights[0].m256_f32[k];
+              hit._Weights[1] = Weights[1].m256_f32[k];
+              hit._Weights[2] = Weights[2].m256_f32[k];
+            }
+            else
+            {
+              if ( !ioTile._CoveredPixels[hitIndex] )
+                ioTile._CoveredCount++;
+              ioTile._CoveredPixels[hitIndex] = true;
+              rd::Fragment & frag = ioTile._Fragments[hitIndex];
+              frag._FragCoords = Vec3(x + k + .5f, y + .5f, z);
+              frag._RasterTriIdx = Vec2i(i, j);
+              frag._Weights[0] = Weights[0].m256_f32[k];
+              frag._Weights[1] = Weights[1].m256_f32[k];
+              frag._Weights[2] = Weights[2].m256_f32[k];
+            }
           }
         }
       }
@@ -2056,17 +2525,35 @@ int SoftwareRasterizer::RasterizeARM(rd::Tile& ioTile)
             float z = SIMDUtils::GetVectorElement(z_coord, k);
 
             ioTile._LocalFB._DepthBuffer[localPixelIndex + k] = ( _Settings._WBuffer ) ? ( depth ) : ( z );
-            ioTile._CoveredPixels[localPixelIndex + k] = true;
-
-            rd::Fragment & frag = ioTile._Fragments[localPixelIndex + k];
-            frag._FragCoords.x = x + k + .5f;
-            frag._FragCoords.y = y + .5f;
-            frag._FragCoords.z = z;
-            frag._RasterTriIdx.x = i;
-            frag._RasterTriIdx.y = j,
-            frag._Weights[0] = SIMDUtils::GetVectorElement(Weights[0], k);
-            frag._Weights[1] = SIMDUtils::GetVectorElement(Weights[1], k);
-            frag._Weights[2] = SIMDUtils::GetVectorElement(Weights[2], k);
+            ioTile._DepthWins++;
+            const unsigned int hitIndex = localPixelIndex + k;
+            if ( _EnableCompactHits )
+            {
+              rd::CompactHit & hit = ioTile._CompactHits[hitIndex];
+              if ( ioTile._CompactHitGenerations[hitIndex] != ioTile._CompactGeneration )
+              {
+                ioTile._CompactHitGenerations[hitIndex] = ioTile._CompactGeneration;
+                ioTile._CoveredIndices.push_back(hitIndex);
+                ioTile._CoveredCount++;
+              }
+              hit._Triangle = tri;
+              hit._Depth = z;
+              hit._Weights[0] = SIMDUtils::GetVectorElement(Weights[0], k);
+              hit._Weights[1] = SIMDUtils::GetVectorElement(Weights[1], k);
+              hit._Weights[2] = SIMDUtils::GetVectorElement(Weights[2], k);
+            }
+            else
+            {
+              if ( !ioTile._CoveredPixels[hitIndex] )
+                ioTile._CoveredCount++;
+              ioTile._CoveredPixels[hitIndex] = true;
+              rd::Fragment & frag = ioTile._Fragments[hitIndex];
+              frag._FragCoords = Vec3(x + k + .5f, y + .5f, z);
+              frag._RasterTriIdx = Vec2i(i, j);
+              frag._Weights[0] = SIMDUtils::GetVectorElement(Weights[0], k);
+              frag._Weights[1] = SIMDUtils::GetVectorElement(Weights[1], k);
+              frag._Weights[2] = SIMDUtils::GetVectorElement(Weights[2], k);
+            }
           }
         }
       }
@@ -2092,21 +2579,32 @@ int SoftwareRasterizer::ProcessFragments()
 
   if (TiledRendering())
   {
-    for (auto& tile : _Tiles)
-    {
-      if ( tile._Fragments.size() )
-        JobSystem::Get().Execute([this, &tile, uniforms]() { this->ProcessFragments(tile, uniforms); });
-      else
-        JobSystem::Get().Execute([this, &tile, uniforms]() { this->CopyTileToMainBuffer(tile); });
-    }
+    const auto processTiles = [this, &uniforms](unsigned int iBegin, unsigned int iEnd) {
+      for ( unsigned int i = iBegin; i < iEnd; ++i )
+      {
+        if ( _Tiles[i]._Fragments.size() )
+          this->ProcessFragments(_Tiles[i], uniforms);
+        else
+          this->CopyTileToMainBuffer(_Tiles[i]);
+      }
+    };
+    for ( unsigned int i = 0; i < _Tiles.size(); ++i )
+      JobSystem::Get().Execute([&processTiles, i]() { processTiles(i, i + 1); });
     JobSystem::Get().Wait();
+    _Stats._TileJobs += _Tiles.size();
+    for ( const auto & tile : _Tiles )
+    {
+      _Stats._ShadedPixels += tile._ShadedCount;
+    }
   }
   else
   {
     for (unsigned int i = 0; i < _NbJobs; ++i)
     {
       if ( _Fragments[i].size() )
-        JobSystem::Get().Execute([this, i, uniforms]() { this->ProcessFragments(i, uniforms); });
+        JobSystem::Get().Execute([this, i, uniforms]() {
+          this->ProcessFragments(i, uniforms);
+        });
     }
     JobSystem::Get().Wait();
   }
@@ -2117,23 +2615,28 @@ int SoftwareRasterizer::ProcessFragments()
 // ----------------------------------------------------------------------------
 // ProcessFragments
 // ----------------------------------------------------------------------------
-void SoftwareRasterizer::ProcessFragments(int iThreadBin, const RasterData::DefaultUniform& iUniforms)
+void SoftwareRasterizer::ProcessFragments(int iThreadBin,
+                                          const RasterData::DefaultUniform& iUniforms)
 {
-  std::unique_ptr<SoftwareFragmentShader> fragmentShader = nullptr;
+  std::unique_ptr<SoftwareFragmentShader> ownedFragmentShader;
   if (_DebugMode & (int)RasterDebugModes::DepthBuffer)
-    fragmentShader = std::make_unique<DepthFragmentShader>(iUniforms);
+    ownedFragmentShader = std::make_unique<DepthFragmentShader>(iUniforms);
   else if (_DebugMode & (int)RasterDebugModes::Normals)
-    fragmentShader = std::make_unique<NormalFragmentShader>(iUniforms);
+    ownedFragmentShader = std::make_unique<NormalFragmentShader>(iUniforms);
   else if (ShadingType::PBR == _Settings._ShadingType)
-    fragmentShader = std::make_unique<PBRFragmentShader>(iUniforms);
+    ownedFragmentShader = std::make_unique<PBRFragmentShader>(iUniforms);
   else
-    fragmentShader = std::make_unique<BlinnPhongFragmentShader>(iUniforms);
-  if (!fragmentShader)
-    return;
+    ownedFragmentShader = std::make_unique<BlinnPhongFragmentShader>(iUniforms);
+  SoftwareFragmentShader * fragmentShader = ownedFragmentShader.get();
 
-  std::unique_ptr<SoftwareFragmentShader> wireShader = nullptr;
-  if (_DebugMode & (int)RasterDebugModes::Wires)
-    wireShader = std::make_unique<WireFrameFragmentShader>(iUniforms);
+  const bool renderWires = _DebugMode & (int)RasterDebugModes::Wires;
+  std::unique_ptr<SoftwareFragmentShader> ownedWireShader;
+  SoftwareFragmentShader * wireShaderPtr = nullptr;
+  if ( renderWires )
+  {
+    ownedWireShader = std::make_unique<WireFrameFragmentShader>(iUniforms);
+    wireShaderPtr = ownedWireShader.get();
+  }
 
   for ( auto & frag : _Fragments[iThreadBin] ) // From back to front
   {
@@ -2149,9 +2652,9 @@ void SoftwareRasterizer::ProcessFragments(int iThreadBin, const RasterData::Defa
     // Shade fragment
     Vec4 fragColor = fragmentShader->Process(frag, tri);
 
-    if (wireShader)
+    if (renderWires)
     {
-      Vec4 wireColor = wireShader->Process(frag, tri);
+      Vec4 wireColor = wireShaderPtr->Process(frag, tri);
       fragColor.x = glm::mix(fragColor.x, wireColor.x, wireColor.w);
       fragColor.y = glm::mix(fragColor.y, wireColor.y, wireColor.w);
       fragColor.z = glm::mix(fragColor.z, wireColor.z, wireColor.w);
@@ -2203,73 +2706,101 @@ void SoftwareRasterizer::BinTrianglesToTiles(unsigned int iBufferIndex)
 // ----------------------------------------------------------------------------
 // ProcessFragments
 // ----------------------------------------------------------------------------
-void SoftwareRasterizer::ProcessFragments(RasterData::Tile& ioTile, const RasterData::DefaultUniform& iUniforms)
+void SoftwareRasterizer::ProcessFragments(RasterData::Tile& ioTile,
+                                          const RasterData::DefaultUniform& iUniforms)
 {
-  std::unique_ptr<SoftwareFragmentShader> fragmentShader = nullptr;
+  std::unique_ptr<SoftwareFragmentShader> ownedFragmentShader;
   if (_DebugMode & (int)RasterDebugModes::DepthBuffer)
-    fragmentShader = std::make_unique<DepthFragmentShader>(iUniforms);
+    ownedFragmentShader = std::make_unique<DepthFragmentShader>(iUniforms);
   else if (_DebugMode & (int)RasterDebugModes::Normals)
-    fragmentShader = std::make_unique<NormalFragmentShader>(iUniforms);
+    ownedFragmentShader = std::make_unique<NormalFragmentShader>(iUniforms);
   else if (ShadingType::PBR == _Settings._ShadingType)
-    fragmentShader = std::make_unique<PBRFragmentShader>(iUniforms);
+    ownedFragmentShader = std::make_unique<PBRFragmentShader>(iUniforms);
   else
-    fragmentShader = std::make_unique<BlinnPhongFragmentShader>(iUniforms);
-  if (!fragmentShader)
-    return;
+    ownedFragmentShader = std::make_unique<BlinnPhongFragmentShader>(iUniforms);
+  SoftwareFragmentShader * fragmentShader = ownedFragmentShader.get();
 
-  std::unique_ptr<SoftwareFragmentShader> wireShader = nullptr;
-  if (_DebugMode & (int)RasterDebugModes::Wires)
-    wireShader = std::make_unique<WireFrameFragmentShader>(iUniforms);
-
-  for (auto it = ioTile._Fragments.rbegin(); it != ioTile._Fragments.rend(); ++it)
+  const bool renderWires = _DebugMode & (int)RasterDebugModes::Wires;
+  std::unique_ptr<SoftwareFragmentShader> ownedWireShader;
+  SoftwareFragmentShader * wireShaderPtr = nullptr;
+  if ( renderWires )
   {
-    rd::Fragment & frag = *it;
+    ownedWireShader = std::make_unique<WireFrameFragmentShader>(iUniforms);
+    wireShaderPtr = ownedWireShader.get();
+  }
 
-    unsigned int pixelIndex = (frag._PixelCoords.x - ioTile._X) + (frag._PixelCoords.y - ioTile._Y) * ioTile._Width;
-    if ( !ioTile._CoveredPixels[pixelIndex] )
-      continue;
-
-    // Finalize fragment
-    const rd::RasterTriangle * tri = ioTile._RasterTrisBins[frag._RasterTriIdx.x][frag._RasterTriIdx.y];
-    if ( !tri )
-      continue;
-
+  const auto shadeFragment = [&](rd::Fragment & ioFragment, const rd::RasterTriangle & iTriangle, unsigned int iPixelIndex) {
     if ( _EnableSIMD )
     {
 #if defined(SIMD_AVX2)
-      rd::Varying::InterpolateAVX2(_ProjVerticesBuf[tri -> _Indices[0]]._Attrib, _ProjVerticesBuf[tri -> _Indices[1]]._Attrib, _ProjVerticesBuf[tri -> _Indices[2]]._Attrib, frag._Weights, frag._Attrib);
+      rd::Varying::InterpolateAVX2(_ProjVerticesBuf[iTriangle._Indices[0]]._Attrib, _ProjVerticesBuf[iTriangle._Indices[1]]._Attrib, _ProjVerticesBuf[iTriangle._Indices[2]]._Attrib, ioFragment._Weights, ioFragment._Attrib);
 #elif defined (SIMD_ARM_NEON)
-      rd::Varying::InterpolateARM(_ProjVerticesBuf[tri -> _Indices[0]]._Attrib, _ProjVerticesBuf[tri -> _Indices[1]]._Attrib, _ProjVerticesBuf[tri -> _Indices[2]]._Attrib, frag._Weights, frag._Attrib);
+      rd::Varying::InterpolateARM(_ProjVerticesBuf[iTriangle._Indices[0]]._Attrib, _ProjVerticesBuf[iTriangle._Indices[1]]._Attrib, _ProjVerticesBuf[iTriangle._Indices[2]]._Attrib, ioFragment._Weights, ioFragment._Attrib);
 #else
-      rd::Varying::Interpolate(_ProjVerticesBuf[tri -> _Indices[0]]._Attrib, _ProjVerticesBuf[tri -> _Indices[1]]._Attrib, _ProjVerticesBuf[tri -> _Indices[2]]._Attrib, frag._Weights, frag._Attrib);
+      rd::Varying::Interpolate(_ProjVerticesBuf[iTriangle._Indices[0]]._Attrib, _ProjVerticesBuf[iTriangle._Indices[1]]._Attrib, _ProjVerticesBuf[iTriangle._Indices[2]]._Attrib, ioFragment._Weights, ioFragment._Attrib);
 #endif
     }
     else
-      rd::Varying::Interpolate(_ProjVerticesBuf[tri -> _Indices[0]]._Attrib, _ProjVerticesBuf[tri -> _Indices[1]]._Attrib, _ProjVerticesBuf[tri -> _Indices[2]]._Attrib, frag._Weights, frag._Attrib);
+      rd::Varying::Interpolate(_ProjVerticesBuf[iTriangle._Indices[0]]._Attrib, _ProjVerticesBuf[iTriangle._Indices[1]]._Attrib, _ProjVerticesBuf[iTriangle._Indices[2]]._Attrib, ioFragment._Weights, ioFragment._Attrib);
 
     if (ShadingType::Flat == _Settings._ShadingType)
-      frag._Attrib._Normal = tri -> _Normal;
+      ioFragment._Attrib._Normal = iTriangle._Normal;
 
-    frag._Attrib._LOD = tri -> _LOD;
+    ioFragment._Attrib._LOD = iTriangle._LOD;
 
-    // Shade fragment
-    Vec4 fragColor = fragmentShader->Process(frag, *tri);
+    Vec4 fragColor = fragmentShader->Process(ioFragment, iTriangle);
 
-    if (wireShader)
+    if (renderWires)
     {
-      Vec4 wireColor = wireShader->Process(frag, *tri);
+      Vec4 wireColor = wireShaderPtr->Process(ioFragment, iTriangle);
       fragColor.x = glm::mix(fragColor.x, wireColor.x, wireColor.w);
       fragColor.y = glm::mix(fragColor.y, wireColor.y, wireColor.w);
       fragColor.z = glm::mix(fragColor.z, wireColor.z, wireColor.w);
     }
+    if ( _EnableDirectColorWrites && _EnableCompactHits )
+    {
+      const unsigned int localX = iPixelIndex % ioTile._Width;
+      const unsigned int localY = iPixelIndex / ioTile._Width;
+      _ImageBuffer._ColorBuffer[ioTile._X + localX + RenderWidth() * (ioTile._Y + localY)] = fragColor;
+    }
+    else
+      ioTile._LocalFB._ColorBuffer[iPixelIndex] = fragColor;
+    ioTile._ShadedCount++;
+  };
 
-    unsigned int localX = frag._PixelCoords.x - ioTile._X;
-    unsigned int localY = frag._PixelCoords.y - ioTile._Y;
-    unsigned int localPixelIndex = localY * ioTile._Width + localX;
-    ioTile._LocalFB._ColorBuffer[localPixelIndex] = fragColor;
+  if ( _EnableCompactHits )
+  {
+    for ( unsigned int pixelIndex : ioTile._CoveredIndices )
+    {
+      const rd::CompactHit & hit = ioTile._CompactHits[pixelIndex];
+      if ( !hit._Triangle )
+        continue;
+      const unsigned int localX = pixelIndex % ioTile._Width;
+      const unsigned int localY = pixelIndex / ioTile._Width;
+      rd::Fragment fragment;
+      fragment._PixelCoords = Vec2i(ioTile._X + localX, ioTile._Y + localY);
+      fragment._FragCoords = Vec3(fragment._PixelCoords.x + .5f, fragment._PixelCoords.y + .5f, hit._Depth);
+      fragment._Weights[0] = hit._Weights[0];
+      fragment._Weights[1] = hit._Weights[1];
+      fragment._Weights[2] = hit._Weights[2];
+      shadeFragment(fragment, *hit._Triangle, pixelIndex);
+    }
+  }
+  else
+  {
+    for ( rd::Fragment & fragment : ioTile._Fragments )
+    {
+      const unsigned int pixelIndex = (fragment._PixelCoords.x - ioTile._X) + (fragment._PixelCoords.y - ioTile._Y) * ioTile._Width;
+      if ( !ioTile._CoveredPixels[pixelIndex] )
+        continue;
+      const rd::RasterTriangle * triangle = ioTile._RasterTrisBins[fragment._RasterTriIdx.x][fragment._RasterTriIdx.y];
+      if ( triangle )
+        shadeFragment(fragment, *triangle, pixelIndex);
+    }
   }
 
-  this->CopyTileToMainBuffer(ioTile);
+  if ( !_EnableDirectColorWrites || !_EnableCompactHits )
+    this->CopyTileToMainBuffer(ioTile);
 }
 
 }

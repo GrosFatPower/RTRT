@@ -32,6 +32,11 @@ public:
   virtual ~Test6();
 
   int Run();
+  void EnableAutomaticSoftwareBenchmark( const std::string & iLabel,
+                                         bool iSIMD,
+                                         unsigned int iTileSize,
+                                         const std::string & iOptimization = "none",
+                                         const std::string & iPose = "fixed" );
 
   static const char * GetTestHeader();
 
@@ -146,6 +151,10 @@ protected:
   double                    _CpuTimingStart[CpuTimingCount] = {};
 
   FpsGameBenchmark _Benchmark;
+  bool             _AutomaticBenchmark = false;
+  bool             _AutomaticBenchmarkSIMD = false;
+  unsigned int     _AutomaticBenchmarkTileSize = 64;
+  std::string      _AutomaticBenchmarkOptimization = "none";
 };
 
 }

@@ -248,6 +248,30 @@ Test6::~Test6()
 }
 
 // ----------------------------------------------------------------------------
+// EnableAutomaticSoftwareBenchmark
+// ----------------------------------------------------------------------------
+void Test6::EnableAutomaticSoftwareBenchmark( const std::string & iLabel,
+                                              bool iSIMD,
+                                              unsigned int iTileSize,
+                                              const std::string & iOptimization,
+                                              const std::string & iPose )
+{
+  _AutomaticBenchmark = true;
+  _AutomaticBenchmarkSIMD = iSIMD;
+  _AutomaticBenchmarkTileSize = std::max(8u, iTileSize);
+  _AutomaticBenchmarkOptimization = iOptimization;
+  _GameSettings._RendererMode = FpsRendererMode::Software;
+  _Benchmark.GetLabel() = iLabel;
+  _Benchmark.GetWarmupFrames() = 10;
+  _Benchmark.GetSampleFrames() = 120;
+  _Benchmark.GetRepetitions() = 3;
+  if ( iPose == "ground" )
+    FpsGameBenchmark::SetPose(Vec3(17.065f, -0.229f, -45.187f), -147.34f, -35.f);
+  else if ( iPose == "sky" )
+    FpsGameBenchmark::SetPose(Vec3(17.065f, -0.229f, -45.187f), -147.34f, 45.f);
+}
+
+// ----------------------------------------------------------------------------
 // SyncFramebufferResolution
 // ----------------------------------------------------------------------------
 void Test6::SyncFramebufferResolution( bool iNotifyRenderer )
@@ -516,6 +540,7 @@ void Test6::FinishBenchmark()
   saveContext._Player = _GameWorld.GetPlayer();
   saveContext._Scene = _Scene.get();
   saveContext._Settings = &_Settings;
+  saveContext._Renderer = _Renderer.get();
 
   if ( _Benchmark.SaveResult(saveContext) )
     std::cout << "Test6 benchmark saved: " << _Benchmark.GetResultPath() << std::endl;
@@ -798,6 +823,16 @@ int Test6::InitializeRenderer()
   ApplyRendererDefaults();
   ApplyMapRenderSettings(_Map, _GameSettings, _Settings);
 
+  if ( _AutomaticBenchmark )
+  {
+    _GameSettings._RendererMode = FpsRendererMode::Software;
+    _Settings._NbThreads = 10;
+    _Settings._ShadingType = ShadingType::PBR;
+    _Settings._Sampling = SamplingMode::Bilinear;
+    _Settings._WBuffer = true;
+    _Settings._TiledRendering = true;
+  }
+
   Renderer * newRenderer = nullptr;
   if ( FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode )
     newRenderer = new PathTracer(*_Scene, _Settings);
@@ -811,6 +846,26 @@ int Test6::InitializeRenderer()
 
   _Renderer.reset(newRenderer);
   _Renderer -> Initialize();
+
+  if ( _AutomaticBenchmark )
+  {
+    SoftwareRasterizer * software = _Renderer -> AsSoftwareRasterizer();
+    if ( !software )
+      return 1;
+    software -> SetEnableSIMD(_AutomaticBenchmarkSIMD);
+    software -> SetTileSize(_AutomaticBenchmarkTileSize);
+    software -> SetEnableIncrementalRefresh(_AutomaticBenchmarkOptimization != "none");
+    software -> SetEnableCompactHits((_AutomaticBenchmarkOptimization == "compact-hits") ||
+                                     (_AutomaticBenchmarkOptimization == "direct-color") ||
+                                     (_AutomaticBenchmarkOptimization == "frustum-culling") ||
+                                     (_AutomaticBenchmarkOptimization == "pbo-upload"));
+    software -> SetEnableDirectColorWrites((_AutomaticBenchmarkOptimization == "direct-color") ||
+                                           (_AutomaticBenchmarkOptimization == "frustum-culling") ||
+                                           (_AutomaticBenchmarkOptimization == "pbo-upload"));
+    software -> SetEnableFrustumCulling((_AutomaticBenchmarkOptimization == "frustum-culling") ||
+                                        (_AutomaticBenchmarkOptimization == "pbo-upload"));
+    software -> SetEnablePBOUpload(_AutomaticBenchmarkOptimization == "pbo-upload");
+  }
 
   _DebugMode = 0;
   _Renderer -> SetDebugMode(_DebugMode);
@@ -1302,10 +1357,46 @@ int Test6::DrawBenchmarkUI()
               FpsGameBenchmark::GetYaw(),
               FpsGameBenchmark::GetPitch());
 
+  char benchmarkLabel[128] = {};
+  std::snprintf(benchmarkLabel, sizeof(benchmarkLabel), "%s", _Benchmark.GetLabel().c_str());
+  if ( ImGui::InputText("Label", benchmarkLabel, sizeof(benchmarkLabel)) )
+    _Benchmark.GetLabel() = benchmarkLabel;
+
   ImGui::InputInt("Warmup frames", &_Benchmark.GetWarmupFrames());
   ImGui::InputInt("Sample frames", &_Benchmark.GetSampleFrames());
+  ImGui::InputInt("Repetitions", &_Benchmark.GetRepetitions());
   _Benchmark.GetWarmupFrames() = std::max(0, _Benchmark.GetWarmupFrames());
   _Benchmark.GetSampleFrames() = std::max(1, _Benchmark.GetSampleFrames());
+  _Benchmark.GetRepetitions() = std::max(1, _Benchmark.GetRepetitions());
+
+  if ( _Renderer )
+  {
+    if ( SoftwareRasterizer * software = _Renderer -> AsSoftwareRasterizer() )
+    {
+      bool simd = software -> GetEnableSIMD();
+      if ( ImGui::Checkbox("SIMD", &simd) )
+        software -> SetEnableSIMD(simd);
+      int tileSize = static_cast<int>(software -> GetTileSize());
+      if ( ImGui::InputInt("Effective tile size", &tileSize, 32, 64) )
+        software -> SetTileSize(static_cast<unsigned int>(std::max(8, tileSize)));
+      ImGui::Text("SIMD mode: %s", software -> GetSIMDMode());
+      bool incrementalRefresh = software -> GetEnableIncrementalRefresh();
+      if ( ImGui::Checkbox("Incremental instance refresh", &incrementalRefresh) )
+        software -> SetEnableIncrementalRefresh(incrementalRefresh);
+      bool compactHits = software -> GetEnableCompactHits();
+      if ( ImGui::Checkbox("Compact hit buffer", &compactHits) )
+        software -> SetEnableCompactHits(compactHits);
+      bool directColorWrites = software -> GetEnableDirectColorWrites();
+      if ( ImGui::Checkbox("Direct color writes", &directColorWrites) )
+        software -> SetEnableDirectColorWrites(directColorWrites);
+      bool frustumCulling = software -> GetEnableFrustumCulling();
+      if ( ImGui::Checkbox("Instance frustum culling", &frustumCulling) )
+        software -> SetEnableFrustumCulling(frustumCulling);
+      bool pboUpload = software -> GetEnablePBOUpload();
+      if ( ImGui::Checkbox("PBO color upload", &pboUpload) )
+        software -> SetEnablePBOUpload(pboUpload);
+    }
+  }
 
   if ( !_Benchmark.IsRunning() )
   {
@@ -1314,7 +1405,9 @@ int Test6::DrawBenchmarkUI()
   }
   else
   {
-    ImGui::Text("Running: warmup %d / %d, samples %d / %d",
+    ImGui::Text("Running repetition %d / %d: warmup %d / %d, samples %d / %d",
+                _Benchmark.GetCurrentRepetition() + 1,
+                _Benchmark.GetRepetitions(),
                 _Benchmark.GetWarmupDone(),
                 _Benchmark.GetWarmupFrames(),
                 _Benchmark.GetSamplesDone(),
@@ -1323,15 +1416,16 @@ int Test6::DrawBenchmarkUI()
       _Benchmark.Cancel();
   }
 
-  if ( _Benchmark.IsCompleted() && _Benchmark.GetSamplesDone() > 0 )
+  if ( _Benchmark.IsCompleted() && _Benchmark.GetTotalSamples() > 0 )
   {
-    const int samples = std::max(1, _Benchmark.GetSamplesDone());
+    const int samples = _Benchmark.GetTotalSamples();
     ImGui::Separator();
     ImGui::Text("Last %s result over %d frames", FpsGameBenchmark::GetRendererName(_Benchmark.GetRendererMode()), samples);
     if ( !_Benchmark.GetResultPath().empty() )
       ImGui::TextWrapped("Saved: %s", _Benchmark.GetResultPath().c_str());
-    ImGui::Text("CPU frame average: %.3f ms", _Benchmark.GetCpuFrameSeconds() * 1000. / samples);
-    ImGui::Text("Renderer pass average: %.3f ms", _Benchmark.GetRendererFrameSeconds() * 1000. / samples);
+    const FpsGameBenchmarkDistribution & distribution = _Benchmark.GetCpuFrameDistribution();
+    ImGui::Text("CPU frame median / mean: %.3f / %.3f ms", distribution._Median * 1000., distribution._Mean * 1000.);
+    ImGui::Text("Minimum / p95 / stddev: %.3f / %.3f / %.3f ms", distribution._Minimum * 1000., distribution._P95 * 1000., distribution._StandardDeviation * 1000.);
 
     if ( ImGui::TreeNode("CPU timings") )
     {
@@ -1348,7 +1442,7 @@ int Test6::DrawBenchmarkUI()
       for ( const FpsGameBenchmarkPassTiming & timing : _Benchmark.GetRendererTotals() )
       {
         if ( timing._Enabled )
-          ImGui::Text("%-24s : %.3f ms %s", timing._Name.c_str(), timing._Seconds * 1000. / samples, timing._GPU ? "[GPU]" : "[CPU]");
+          ImGui::Text("%-24s : %.3f ms %s%s", timing._Name.c_str(), timing._Distribution._Median * 1000., timing._GPU ? "[GPU]" : "[CPU]", timing._Inclusive ? " [inclusive]" : "");
       }
       ImGui::TreePop();
     }
@@ -1587,6 +1681,9 @@ int Test6::Run()
 
     glDisable(GL_DEPTH_TEST);
 
+    if ( _AutomaticBenchmark )
+      StartBenchmark();
+
     while ( !glfwWindowShouldClose(_MainWindow.get()) )
     {
       UpdateCPUTime();
@@ -1636,6 +1733,8 @@ int Test6::Run()
       EndCpuTiming(CpuSwapBuffers);
       _DisplayedCpuTimings = _CpuTimings;
       UpdateBenchmark();
+      if ( _AutomaticBenchmark && _Benchmark.IsCompleted() )
+        glfwSetWindowShouldClose(_MainWindow.get(), GLFW_TRUE);
       _NbRenderedFrames++;
     }
   } while ( 0 );

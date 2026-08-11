@@ -74,11 +74,14 @@ void DrawRenderPassTimings( Renderer * ioRenderer )
   {
     if ( timing._Enabled )
     {
-      ImGui::Text("%-24s : %.3f ms [%s]", timing._Name, timing._Seconds * 1000., timing._GPU ? "GPU" : "CPU");
-      if ( timing._GPU )
-        gpuTotal += timing._Seconds;
-      else
-        cpuTotal += timing._Seconds;
+      ImGui::Text("%-24s : %.3f ms [%s%s]", timing._Name, timing._Seconds * 1000., timing._GPU ? "GPU" : "CPU", timing._Inclusive ? ", inclusive" : "");
+      if ( !timing._Inclusive )
+      {
+        if ( timing._GPU )
+          gpuTotal += timing._Seconds;
+        else
+          cpuTotal += timing._Seconds;
+      }
     }
     else
       ImGui::Text("%-24s : -- [%s]", timing._Name, timing._GPU ? "GPU" : "CPU");

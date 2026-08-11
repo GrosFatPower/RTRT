@@ -28,6 +28,7 @@ public:
   void Initialize( unsigned int iNbThreads );
 
   void Execute( const std::function<void()> & iJob );
+  unsigned int GetThreadCount() const { return _NbThreads; }
 
 	bool IsBusy();
 

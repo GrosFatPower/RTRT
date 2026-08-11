@@ -40,6 +40,29 @@ class Scene;
 struct Material;
 class Texture;
 struct Light;
+class SoftwareFragmentShader;
+
+struct SoftwareRasterizerStats
+{
+  unsigned long long _InputInstances = 0;
+  unsigned long long _VisibleInstances = 0;
+  unsigned long long _RejectedInstances = 0;
+  unsigned long long _AvoidedVertices = 0;
+  unsigned long long _AvoidedTriangles = 0;
+  unsigned long long _ChangedInstances = 0;
+  unsigned long long _TransformedVertices = 0;
+  unsigned long long _RefreshedVertices = 0;
+  unsigned long long _RefreshedTriangles = 0;
+  unsigned long long _InputTriangles = 0;
+  unsigned long long _ClippedTriangles = 0;
+  unsigned long long _BinnedTriangles = 0;
+  unsigned long long _DepthWinningPixels = 0;
+  unsigned long long _ShadedPixels = 0;
+  unsigned long long _CoveredPixels = 0;
+  unsigned long long _TileJobs = 0;
+  unsigned long long _CopiedBytes = 0;
+  unsigned long long _HitBufferBytes = 0;
+};
 
 class SoftwareRasterizer : public Renderer
 {
@@ -61,14 +84,28 @@ public:
 
   bool GetEnableSIMD() const { return _EnableSIMD; }
   void SetEnableSIMD(bool enabled) { _EnableSIMD = enabled; }
+  const char * GetSIMDMode() const;
 
   unsigned int GetTileSize() const { return _TileSize; }
   int SetTileSize( unsigned int iTileSize );
+  const SoftwareRasterizerStats & GetStats() const { return _Stats; }
+  bool GetEnableIncrementalRefresh() const { return _EnableIncrementalRefresh; }
+  void SetEnableIncrementalRefresh( bool iEnabled ) { _EnableIncrementalRefresh = iEnabled; }
+  bool GetEnableCompactHits() const { return _EnableCompactHits; }
+  void SetEnableCompactHits( bool iEnabled ) { _EnableCompactHits = iEnabled; }
+  bool GetEnableDirectColorWrites() const { return _EnableDirectColorWrites; }
+  void SetEnableDirectColorWrites( bool iEnabled ) { _EnableDirectColorWrites = iEnabled; }
+  bool GetEnableFrustumCulling() const { return _EnableFrustumCulling; }
+  void SetEnableFrustumCulling( bool iEnabled ) { _EnableFrustumCulling = iEnabled; }
+  bool GetEnablePBOUpload() const { return _EnablePBOUpload; }
+  void SetEnablePBOUpload( bool iEnabled ) { _EnablePBOUpload = iEnabled; }
 
   void SetGenerateMipMaps(bool iGenerate);
   bool GetGenerateMipMaps() const { return _GenerateMipMaps; }
 
 protected:
+
+  struct CompiledInstanceRange;
 
   int UpdateRenderResolution();
   int ResizeRenderTarget();
@@ -83,6 +120,7 @@ protected:
   int UnloadScene();
   int ReloadScene();
   int RefreshSceneInstanceTransforms();
+  int RefreshAllSceneInstanceTransforms();
   bool CanRefreshSceneInstanceTransforms() const;
   int ReloadEnvMap();
 
@@ -110,6 +148,7 @@ protected:
   int RenderBackground(float iTop, float iRight);
   void RenderBackgroundRows(int iStartY, int iEndY, Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY);
   void RenderBackground(Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY, RasterData::Tile& ioTile);
+  int RenderUncoveredBackground(float iTop, float iRight);
 
   int RenderScene();
 
@@ -144,6 +183,8 @@ protected:
 #endif
 
   void ComputeLOD( RasterData::RasterTriangle & ioRasterTri );
+  void UpdateInstanceBounds( CompiledInstanceRange & ioRange );
+  bool IsInstanceVisible( const CompiledInstanceRange & iRange, const Mat4x4 & iViewProjection ) const;
   void BeginTimer( int iTimerID );
   void EndTimer( int iTimerID );
   double ReadTimer( int iTimerID );
@@ -156,6 +197,19 @@ protected:
     int _MeshID         = -1;
     int _VertexID       = -1;
     int _NormalID       = -1;
+  };
+
+  struct CompiledInstanceRange
+  {
+    int    _MeshID = -1;
+    int    _MaterialID = -1;
+    int    _VertexStart = 0;
+    int    _VertexCount = 0;
+    int    _TriangleStart = 0;
+    int    _TriangleCount = 0;
+    bool   _Visible = false;
+    Mat4x4 _Transform = Mat4x4(1.f);
+    AABB<Vec3> _WorldBounds;
   };
 
   QuadMesh _Quad;
@@ -182,6 +236,11 @@ protected:
   int _TileCountX, _TileCountY;
   std::vector<RasterData::Tile> _Tiles;
   unsigned int _TileSize = 64;
+  bool _EnableIncrementalRefresh = false;
+  bool _EnableCompactHits = false;
+  bool _EnableDirectColorWrites = false;
+  bool _EnableFrustumCulling = false;
+  bool _EnablePBOUpload = false;
 
   // Textures filtering
   bool _GenerateMipMaps = false;
@@ -190,14 +249,23 @@ protected:
   unsigned int _FrameNum = 1;
   unsigned int _NbCompleteFrames = 0;
   RasterData::FrameBuffer _ImageBuffer;
+  std::array<GLuint, 2> _UploadPBOs = { 0, 0 };
+  std::array<GLsync, 2> _UploadFences = { nullptr, nullptr };
+  size_t _UploadPBOSize = 0;
+  unsigned int _UploadPBOIndex = 0;
 
   enum TimingID
   {
-    TimingProcessVertices = 0,
+    TimingInstanceRefresh = 0,
+    TimingFrameClear,
+    TimingBackground,
+    TimingUniformUpdate,
+    TimingProcessVertices,
     TimingClipTriangles,
     TimingRasterize,
     TimingProcessFragments,
     TimingRenderScene,
+    TimingColorUpload,
     TimingCopyToRenderTarget,
     TimingCompositeScreen,
     TimingCount
@@ -207,6 +275,7 @@ protected:
   std::array<bool, TimingCount>   _PassEnabled = {};
   std::array<bool, TimingCount>   _TimerWritten = {};
   std::array<std::array<GLuint, 2>, TimingCount> _TimerIDs = {};
+  SoftwareRasterizerStats _Stats;
 
   // Scene data
   int                                                  _CachedMeshInstanceCount = 0;
@@ -214,6 +283,9 @@ protected:
   std::vector<RasterData::Vertex>                      _VertexBuffer;
   std::vector<RasterSourceVertex>                      _VertexSources;
   std::vector<RasterData::Triangle>                    _Triangles;
+  std::vector<CompiledInstanceRange>                   _InstanceRanges;
+  std::vector<int>                                     _VisibleInstanceRanges;
+  std::vector<unsigned char>                           _TriangleVisible;
   std::vector<RasterData::ProjectedVertex>             _ProjVerticesBuf;
   std::mutex                                           _ProjVerticesMutex;
   std::vector<std::vector<RasterData::RasterTriangle>> _RasterTrianglesBuf;

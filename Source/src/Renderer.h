@@ -31,6 +31,7 @@ struct RenderPassTiming
   double       _Seconds = 0.;
   bool         _GPU = false;
   bool         _Enabled = false;
+  bool         _Inclusive = false;
 };
 
 struct RenderImage
@@ -61,6 +62,7 @@ public:
   void Notify( DirtyState iState ) { _DirtyStates |= (unsigned long)iState; };
 
   void SetDebugMode( const int iDebugMode );
+  int GetDebugMode() const { return _DebugMode; }
 
   virtual PathTracer * AsPathTracer() { return nullptr; }
   virtual SoftwareRasterizer * AsSoftwareRasterizer() { return nullptr; }

@@ -209,6 +209,13 @@ namespace RasterData
     Varying _Attrib;
   };
 
+  struct CompactHit
+  {
+    const RasterTriangle * _Triangle = nullptr;
+    float _Weights[3] = { 0.f, 0.f, 0.f };
+    float _Depth = 0.f;
+  };
+
   struct SIMD_ALIGN64 Tile
   {
     int         _X;
@@ -219,6 +226,14 @@ namespace RasterData
     SIMD_ALIGN64 std::vector<std::vector<RasterTriangle*>> _RasterTrisBins;
     SIMD_ALIGN64 std::vector<Fragment> _Fragments;
     SIMD_ALIGN64 std::vector<bool> _CoveredPixels;
+    SIMD_ALIGN64 std::vector<CompactHit> _CompactHits;
+    SIMD_ALIGN64 std::vector<unsigned int> _CompactHitGenerations;
+    SIMD_ALIGN64 std::vector<unsigned int> _CoveredIndices;
+    unsigned int _CompactGeneration = 1;
+    unsigned long long _BinnedTriangles = 0;
+    unsigned long long _DepthWins = 0;
+    unsigned long long _CoveredCount = 0;
+    unsigned long long _ShadedCount = 0;
   };
 
 }
