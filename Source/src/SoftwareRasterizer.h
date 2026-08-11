@@ -236,10 +236,10 @@ protected:
   int _TileCountX, _TileCountY;
   std::vector<RasterData::Tile> _Tiles;
   unsigned int _TileSize = 64;
-  bool _EnableIncrementalRefresh = false;
+  bool _EnableIncrementalRefresh = true;
   bool _EnableCompactHits = false;
   bool _EnableDirectColorWrites = false;
-  bool _EnableFrustumCulling = false;
+  bool _EnableFrustumCulling = true;
   bool _EnablePBOUpload = false;
 
   // Textures filtering
