@@ -240,7 +240,11 @@ protected:
   bool _EnableCompactHits = true;
   bool _EnableDirectColorWrites = true;
   bool _EnableFrustumCulling = true;
+#if defined(__APPLE__)
+  bool _EnablePBOUpload = true;
+#else
   bool _EnablePBOUpload = false;
+#endif
 
   // Textures filtering
   bool _GenerateMipMaps = false;
