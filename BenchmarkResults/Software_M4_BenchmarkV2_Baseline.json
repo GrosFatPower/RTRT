@@ -1,0 +1,295 @@
+{
+  "schema_version": 2,
+  "benchmark": "Test6 Software Renderer",
+  "label": "v2-control",
+  "timestamp": "20260809_165439",
+  "machine": {
+    "os": "Darwin 25.6.0 arm64",
+    "cpu": "Apple M4",
+    "hardware_threads": 10,
+    "compiler": "Clang 21.0.0",
+    "build_mode": "Release",
+    "gl_vendor": "Apple",
+    "gl_renderer": "Apple M4",
+    "gl_version": "4.1 Metal - 90.5"
+  },
+  "scene": {
+    "map_path": "/Users/griffon/Documents/Dev/RTRT/Assets/FPSMaps/ccity.fpsmap",
+    "scene_setup_snapshot": "BenchmarkResults/Software_M4_BenchmarkScene.fpsmap",
+    "scene_setup_snapshot_saved": true,
+    "map_name": "Default FPS Arena",
+    "environment": "HDR/syferfontein_18d_clear_1k.hdr",
+    "objects": 4,
+    "props": 1,
+    "boids": 1,
+    "materials": 5,
+    "lights": 1,
+    "scene_meshes": 1363,
+    "scene_mesh_instances": 1496,
+    "scene_materials": 32
+  },
+  "camera": {
+    "position": [17.065, -0.229, -45.187],
+    "yaw": -147.34,
+    "pitch": 0.99,
+    "benchmark_position": [17.065, -0.229, -45.187],
+    "benchmark_yaw": -147.34,
+    "benchmark_pitch": 0.99
+  },
+  "render_settings": {
+    "renderer": "Software",
+    "window_resolution": [2560, 1440],
+    "render_resolution": [2560, 1440],
+    "render_scale": 100,
+    "tile_resolution": [-1, -1],
+    "tiled_rendering": true,
+    "nb_threads": 10,
+    "sampling": 1,
+    "shading_type": 2,
+    "w_buffer": true,
+    "tone_mapping": true,
+    "gamma": 2,
+    "exposure": 1.5
+  },
+  "samples": {
+    "repetitions": 3,
+    "warmup_frames": 10,
+    "sample_frames_per_repetition": 120,
+    "total_sample_frames": 360,
+    "cpu_frame": {
+      "mean_ms": 56.4501,
+      "median_ms": 55.2148,
+      "minimum_ms": 51.6388,
+      "p95_ms": 62.1375,
+      "standard_deviation_ms": 3.38622
+    },
+    "cpu_frame_samples_ms": [63.6585, 59.8001, 52.95, 56.588, 60.9931, 63.2342, 54.0126, 55.8926, 57.342, 52.7288, 52.2078, 52.5638, 58.7321, 52.2767, 53.1534, 52.7543, 58.7699, 52.6231, 52.7968, 53.1498, 58.2927, 52.1822, 51.7947, 52.7805, 52.8336, 57.7427, 51.8877, 52.3265, 53.5577, 58.5004, 52.1817, 52.0289, 52.8561, 59.631, 52.1542, 52.8583, 52.6442, 58.8698, 52.274, 52.8759, 52.8742, 58.8259, 52.2548, 51.9641, 52.8695, 59.097, 53.1348, 52.5834, 52.3729, 58.8719, 52.4383, 51.6388, 51.9519, 52.72, 58.2842, 52.2907, 52.5202, 53.1162, 58.8635, 52.1526, 52.1039, 52.3233, 59.8298, 53.3245, 53.8029, 59.2324, 52.9292, 53.241, 53.2476, 57.596, 55.5065, 53.5088, 58.4734, 53.9378, 53.7905, 58.9943, 52.5432, 54.125, 60.4471, 54.4569, 61.4541, 53.3922, 53.8596, 61.4865, 53.255, 53.9876, 58.419, 54.0679, 59.3542, 67.9723, 66.6628, 59.3255, 58.4602, 53.3966, 53.8132, 61.7803, 53.6655, 61.5994, 53.5599, 54.4128, 58.5233, 56.8346, 57.9297, 60.1161, 57.4244, 56.9257, 60.7868, 53.857, 54.2974, 58.6154, 54.4268, 53.6963, 58.7097, 53.5225, 54.2774, 59.2809, 53.8781, 53.569, 59.1072, 54.6538, 53.3013, 54.362, 59.3497, 53.7888, 53.6623, 58.6743, 55.0222, 53.5733, 58.092, 53.7198, 53.816, 59.6365, 53.3365, 53.7353, 58.4338, 55.2001, 53.6803, 58.8285, 53.0547, 54.0772, 59.3499, 53.1485, 53.4612, 59.4809, 53.0788, 53.7685, 60.2695, 53.0309, 54.0265, 59.127, 53.8302, 54.7724, 58.9854, 53.1284, 54.2225, 59.3496, 53.8012, 54.2845, 57.9539, 54.5613, 54.327, 58.4732, 53.706, 54.1402, 58.4092, 52.8009, 54.1734, 59.3144, 54.0867, 55.178, 57.9932, 54.6009, 54.6258, 58.0593, 52.8284, 54.6426, 58.7487, 53.394, 54.2273, 59.2305, 52.9927, 54.906, 60.4472, 53.0574, 54.2789, 57.3345, 54.6329, 55.3718, 56.3714, 54.7063, 55.2299, 56.8204, 53.6412, 55.2848, 58.0263, 53.8411, 54.8208, 58.685, 55.2294, 60.7224, 53.465, 55.658, 57.3369, 53.854, 55.0923, 58.832, 54.4322, 61.5167, 53.9025, 55.0465, 58.4923, 54.7693, 54.4282, 56.1489, 53.7585, 54.7447, 59.6724, 54.5786, 54.7973, 57.3059, 54.4569, 61.7158, 55.4275, 61.2284, 53.7792, 55.3501, 58.166, 54.4484, 54.9427, 57.1239, 54.1922, 55.346, 57.4446, 55.0937, 61.026, 53.1207, 55.611, 58.2237, 54.4927, 63.5418, 55.7257, 57.702, 54.5079, 55.1271, 57.0714, 54.4923, 55.5963, 57.1061, 55.3035, 61.1958, 53.6998, 55.5528, 56.8837, 54.2874, 54.7089, 58.3744, 54.9395, 61.8687, 53.5051, 56.0094, 56.3935, 55.0152, 61.9126, 54.0351, 62.8875, 54.7267, 61.355, 54.05, 55.7967, 57.1529, 54.5159, 62.7938, 53.8436, 55.5527, 57.1065, 54.185, 55.7637, 56.308, 54.3415, 55.9441, 56.7017, 55.538, 61.047, 54.0377, 55.4142, 58.8847, 55.5169, 60.3166, 53.9852, 62.0141, 53.9337, 56.0929, 57.0368, 54.8072, 61.7746, 54.5683, 62.5488, 53.839, 61.9953, 54.3905, 62.9152, 54.884, 61.1393, 54.9616, 61.7503, 65.6551, 66.8869, 66.8467, 65.8223, 61.831, 60.8636, 61.0457, 56.4164, 62.1375, 54.7221, 61.6931, 55.5122, 61.6415, 55.5195, 61.293, 54.8725, 61.8392, 54.2926, 61.9485, 54.9652, 62.3545, 54.7134, 61.9309, 59.1535, 56.8437, 55.8678, 61.3015, 54.299, 62.1503, 55.454, 61.2507, 54.703, 61.7627, 55.1002, 61.6553, 66.7088, 57.0714, 60.4879, 55.7359, 60.0044, 56.0079, 60.9191, 54.074, 62.1888, 55.3227, 61.5625, 54.7192, 62.3758, 54.69, 61.2226, 55.1682, 61.9574, 55.5191, 61.6216, 54.9206]
+  },
+  "cpu_timings": {
+    "Process input": {
+      "mean_ms": 0.192694,
+      "median_ms": 0.197021,
+      "minimum_ms": 0.0265,
+      "p95_ms": 0.29975,
+      "standard_deviation_ms": 0.101802
+    },
+    "Update game": {
+      "mean_ms": 0.0104497,
+      "median_ms": 0.010375,
+      "minimum_ms": 0.00875,
+      "p95_ms": 0.012375,
+      "standard_deviation_ms": 0.00120233
+    },
+    "Update boids": {
+      "mean_ms": 0.0103573,
+      "median_ms": 0.01025,
+      "minimum_ms": 0.00870833,
+      "p95_ms": 0.0121667,
+      "standard_deviation_ms": 0.00120385
+    },
+    "Boids simulation": {
+      "mean_ms": 0.00893472,
+      "median_ms": 0.00889583,
+      "minimum_ms": 0.00729167,
+      "p95_ms": 0.010375,
+      "standard_deviation_ms": 0.000997534
+    },
+    "Boids scene sync": {
+      "mean_ms": 0.00112234,
+      "median_ms": 0.00104167,
+      "minimum_ms": 0.000791667,
+      "p95_ms": 0.00145833,
+      "standard_deviation_ms": 0.000389283
+    },
+    "Boids renderer notify": {
+      "mean_ms": 1.23843e-05,
+      "median_ms": 0,
+      "minimum_ms": 0,
+      "p95_ms": 4.16667e-05,
+      "standard_deviation_ms": 1.92947e-05
+    },
+    "Renderer update": {
+      "mean_ms": 51.7466,
+      "median_ms": 51.5074,
+      "minimum_ms": 48.859,
+      "p95_ms": 55.0762,
+      "standard_deviation_ms": 2.05265
+    },
+    "Render to texture call": {
+      "mean_ms": 0.158882,
+      "median_ms": 0.160167,
+      "minimum_ms": 0.0903333,
+      "p95_ms": 0.188292,
+      "standard_deviation_ms": 0.0204856
+    },
+    "Render to screen call": {
+      "mean_ms": 0.0648661,
+      "median_ms": 0.0636458,
+      "minimum_ms": 0.0532917,
+      "p95_ms": 0.07525,
+      "standard_deviation_ms": 0.00579812
+    },
+    "Draw UI": {
+      "mean_ms": 1.30882,
+      "median_ms": 0.515979,
+      "minimum_ms": 0.261958,
+      "p95_ms": 6.40587,
+      "standard_deviation_ms": 1.95412
+    },
+    "Swap buffers": {
+      "mean_ms": 2.94742,
+      "median_ms": 2.09746,
+      "minimum_ms": 0.155292,
+      "p95_ms": 8.3,
+      "standard_deviation_ms": 2.60199
+    }
+  },
+  "renderer_timings": {
+    "Instance transform refresh": {
+      "device": "CPU",
+      "inclusive": false,
+      "mean_ms": 0.976198,
+      "median_ms": 0.948188,
+      "minimum_ms": 0.901292,
+      "p95_ms": 1.16004,
+      "standard_deviation_ms": 0.0808511
+    },
+    "Frame / tile clear": {
+      "device": "CPU",
+      "inclusive": false,
+      "mean_ms": 1.0038,
+      "median_ms": 0.992812,
+      "minimum_ms": 0.946542,
+      "p95_ms": 1.07654,
+      "standard_deviation_ms": 0.0434717
+    },
+    "Environment background": {
+      "device": "CPU",
+      "inclusive": false,
+      "mean_ms": 10.4916,
+      "median_ms": 10.3519,
+      "minimum_ms": 9.94908,
+      "p95_ms": 11.1277,
+      "standard_deviation_ms": 0.587589
+    },
+    "Uniform / update overhead": {
+      "device": "CPU",
+      "inclusive": false,
+      "mean_ms": 0.00906933,
+      "median_ms": 0.009,
+      "minimum_ms": 0.00654167,
+      "p95_ms": 0.0109583,
+      "standard_deviation_ms": 0.00105093
+    },
+    "Process vertices": {
+      "device": "CPU",
+      "inclusive": false,
+      "mean_ms": 0.369478,
+      "median_ms": 0.379271,
+      "minimum_ms": 0.188292,
+      "p95_ms": 0.436583,
+      "standard_deviation_ms": 0.0549141
+    },
+    "Clip triangles": {
+      "device": "CPU",
+      "inclusive": false,
+      "mean_ms": 0.616185,
+      "median_ms": 0.615687,
+      "minimum_ms": 0.482875,
+      "p95_ms": 0.698542,
+      "standard_deviation_ms": 0.0450271
+    },
+    "Rasterize": {
+      "device": "CPU",
+      "inclusive": false,
+      "mean_ms": 6.919,
+      "median_ms": 6.86254,
+      "minimum_ms": 6.49858,
+      "p95_ms": 7.54425,
+      "standard_deviation_ms": 0.275799
+    },
+    "Process fragments": {
+      "device": "CPU",
+      "inclusive": false,
+      "mean_ms": 29.3126,
+      "median_ms": 29.1528,
+      "minimum_ms": 27.3357,
+      "p95_ms": 30.9258,
+      "standard_deviation_ms": 1.34391
+    },
+    "Render scene": {
+      "device": "CPU",
+      "inclusive": true,
+      "mean_ms": 37.2175,
+      "median_ms": 37.0839,
+      "minimum_ms": 35.0476,
+      "p95_ms": 39.1233,
+      "standard_deviation_ms": 1.50651
+    },
+    "CPU color-buffer upload": {
+      "device": "CPU",
+      "inclusive": false,
+      "mean_ms": 1.70622,
+      "median_ms": 1.71494,
+      "minimum_ms": 1.50721,
+      "p95_ms": 1.84992,
+      "standard_deviation_ms": 0.171952
+    },
+    "Copy to render target": {
+      "device": "GPU",
+      "inclusive": false,
+      "mean_ms": 1.28723,
+      "median_ms": 1.20583,
+      "minimum_ms": 0.879083,
+      "p95_ms": 1.95229,
+      "standard_deviation_ms": 0.296617
+    },
+    "Composite / screen": {
+      "device": "GPU",
+      "inclusive": false,
+      "mean_ms": 0.756424,
+      "median_ms": 0.73973,
+      "minimum_ms": 0.598417,
+      "p95_ms": 0.850875,
+      "standard_deviation_ms": 0.139849
+    }
+  },
+  "software_configuration": {
+    "simd_enabled": false,
+    "simd_mode": "Scalar",
+    "tile_size": 64,
+    "thread_count": 10,
+    "debug_mode": 0,
+    "optimization_flags": {
+      "incremental_instance_refresh": false,
+      "parallel_for": false,
+      "stack_shader_dispatch": false,
+      "cached_material_bindings": false,
+      "compact_hits": false,
+      "direct_color_writes": false,
+      "frustum_culling": false,
+      "pbo_upload": false
+    }
+  },
+  "software_counters_average": {
+    "copied_bytes": 1.47456e+07,
+    "covered_pixels": 2.78651e+06,
+    "binned_triangles": 35656.4,
+    "avoided_vertices": 0,
+    "refreshed_vertices": 56500,
+    "input_triangles": 45145,
+    "changed_instances": 1464,
+    "depth_winning_pixels": 4.21527e+06,
+    "refreshed_triangles": 45145,
+    "avoided_triangles": 0,
+    "tile_jobs": 2760,
+    "transformed_vertices": 56500,
+    "shader_heap_allocations": 920,
+    "rejected_instances": 0,
+    "hit_buffer_bytes": 2.80627e+08,
+    "shaded_pixels": 2.78651e+06,
+    "input_instances": 1496,
+    "visible_instances": 1464,
+    "clipped_triangles": 19328.1
+  }
+}

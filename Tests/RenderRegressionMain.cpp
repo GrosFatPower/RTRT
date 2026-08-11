@@ -5,6 +5,7 @@
 #include "PathUtils.h"
 #include "RenderSettings.h"
 #include "Scene.h"
+#include "SoftwareRasterizer.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -227,6 +228,20 @@ RenderCaseOutcome RunRenderCase( const RTRT::Tests::RenderTestCase & iTestCase, 
     std::cerr << "Failed to create renderer for " << iTestCase._Name << std::endl;
     outcome._Reason = "renderer creation failed";
     return outcome;
+  }
+  if ( iTestCase._SoftwareOptimized )
+  {
+    settings._TiledRendering = true;
+    settings._TileResolution = Vec2i(64, 64);
+    if ( RTRT::SoftwareRasterizer * software = renderer -> AsSoftwareRasterizer() )
+    {
+      software -> SetEnableSIMD(false);
+      software -> SetEnableIncrementalRefresh(true);
+      software -> SetEnableCompactHits(true);
+      software -> SetEnableDirectColorWrites(true);
+      software -> SetEnableFrustumCulling(true);
+      software -> SetEnablePBOUpload(true);
+    }
   }
   int debugMode = iTestCase._DebugMode;
   if ( iTestCase._DiagnosticOnly && ( RTRT::RendererBackend::DeferredRenderer == iTestCase._Backend ) )

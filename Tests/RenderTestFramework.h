@@ -55,6 +55,7 @@ struct RenderTestCase
   bool            _DiagnosticOnly = false;
   int             _SamplesPerPixel = 1;
   int             _Bounces = 4;
+  bool            _SoftwareOptimized = false;
 
   void ApplySettings( RenderSettings & ioSettings ) const;
   bool ApplyScene( Scene & ioScene ) const;

@@ -72,6 +72,13 @@
       "scene": "TexturedBox.scene"
     },
     {
+      "name": "software_textured_box_optimized",
+      "profile": "software",
+      "scene": "TexturedBox.scene",
+      "software_optimized": true,
+      "baseline": "Tests/Baselines/software_textured_box.pfm"
+    },
+    {
       "name": "software_cornell",
       "profile": "software",
       "scene": "cornell_box.scene",

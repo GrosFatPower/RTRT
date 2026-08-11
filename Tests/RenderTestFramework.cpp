@@ -402,7 +402,8 @@ bool ParseRenderTestCases( const std::string & iContents, std::vector<RenderTest
 
       if ( !ReadResolution(test, testCase._Width, testCase._Height, oError, false) || !ReadPositiveInt(test, "frames", testCase._FrameCount, oError, false)
         || !ReadThresholds(test, testCase, oError, false) || !ReadString(test, "environment_map", testCase._EnvironmentMapPath, oError, false)
-        || !ReadNonNegativeInt(test, "debug_mode", testCase._DebugMode, oError) || !ReadBool(test, "diagnostic_only", testCase._DiagnosticOnly, oError) )
+        || !ReadNonNegativeInt(test, "debug_mode", testCase._DebugMode, oError) || !ReadBool(test, "diagnostic_only", testCase._DiagnosticOnly, oError)
+        || !ReadBool(test, "software_optimized", testCase._SoftwareOptimized, oError) )
         return false;
 
       std::string baseline;
