@@ -2467,6 +2467,8 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
         ioContext._Settings._NbThreads = std::max(1, numThreads);
         ioContext._Renderer -> Notify(DirtyState::RenderSettings);
       }
+      if ( ImGui::Checkbox("Transparency", &ioContext._Settings._Transparency) )
+        notifyPersistedRenderSettingsChanged();
     }
 
     if ( ImGui::CollapsingHeader("Software Debug") )

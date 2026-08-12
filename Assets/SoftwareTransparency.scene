@@ -1,0 +1,90 @@
+renderer
+{
+  resolution 640 480
+  envMap HDR/Background_05.hdr
+}
+
+camera
+{
+  position 0.0 0.0 -6.0
+  lookat 0.0 0.0 0.0
+  fov 55
+}
+
+light
+{
+  type sphere
+  position -2 3 -4
+  emission 5 5 5
+  radius 0.2
+}
+
+material opaque_blue
+{
+  color 0.08 0.20 0.90
+  roughness 0.7
+}
+
+material blend_red
+{
+  color 1.0 0.05 0.05
+  opacity 0.45
+  alphamode blend
+  roughness 0.7
+}
+
+material blend_green
+{
+  color 0.05 1.0 0.15
+  opacity 0.55
+  alphamode blend
+  roughness 0.7
+}
+
+material alpha_mask
+{
+  color 1.0 1.0 1.0
+  albedotexture tropical_island/textures/palm.png
+  alphamode mask
+  alphaCutoff 0.5
+  roughness 0.8
+}
+
+# Opaque center panel hides every transparent layer behind it.
+mesh
+{
+  name opaque_center
+  file misc/TransparencyQuad.obj
+  material opaque_blue
+  position 0.0 0.0 1.0
+  scale 0.65 0.65 1.0
+}
+
+# Submission order is deliberately near then far; per-pixel sorting must correct it.
+mesh
+{
+  name blend_near
+  file misc/TransparencyQuad.obj
+  material blend_red
+  position -0.55 0.0 0.0
+  scale 1.15 1.15 1.0
+}
+
+mesh
+{
+  name blend_far
+  file misc/TransparencyQuad.obj
+  material blend_green
+  position 0.55 0.0 2.0
+  scale 1.15 1.15 1.0
+}
+
+# Texture alpha must reject holes before writing opaque depth.
+mesh
+{
+  name masked_foreground
+  file misc/TransparencyQuad.obj
+  material alpha_mask
+  position 0.0 0.0 -0.8
+  scale 1.8 1.35 1.0
+}

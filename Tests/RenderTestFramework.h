@@ -56,6 +56,10 @@ struct RenderTestCase
   int             _SamplesPerPixel = 1;
   int             _Bounces = 4;
   bool            _SoftwareOptimized = false;
+  bool            _WBuffer = true;
+  bool            _SoftwareSIMD = false;
+  bool            _SoftwareFallback = false;
+  bool            _Transparency = true;
 
   void ApplySettings( RenderSettings & ioSettings ) const;
   bool ApplyScene( Scene & ioScene ) const;

@@ -62,6 +62,14 @@ struct SoftwareRasterizerStats
   unsigned long long _TileJobs = 0;
   unsigned long long _CopiedBytes = 0;
   unsigned long long _HitBufferBytes = 0;
+  unsigned long long _MaskedFragmentsTested = 0;
+  unsigned long long _MaskedFragmentsRejected = 0;
+  unsigned long long _TransparentHitsGenerated = 0;
+  unsigned long long _TransparentHitsShaded = 0;
+  unsigned long long _TransparentPixels = 0;
+  unsigned long long _MaxTransparentLayers = 0;
+  unsigned long long _TransparentHitBufferBytes = 0;
+  double _AverageTransparentLayers = 0.;
 };
 
 class SoftwareRasterizer : public Renderer
@@ -161,12 +169,21 @@ protected:
   int Rasterize();
   int Rasterize(int iThreadBin, int iStartY, int iEndY);
   int Rasterize(RasterData::Tile& ioTile);
+  int RasterizeTransparent();
+  int RasterizeTransparent(int iThreadBin, int iStartY, int iEndY);
+  int RasterizeTransparent(RasterData::Tile& ioTile);
 
   int ProcessFragments();
   void ProcessFragments(int iThreadBin, const RasterData::DefaultUniform & iUniforms);
 
   void BinTrianglesToTiles(unsigned int iBufferIndex);
   void ProcessFragments(RasterData::Tile& ioTile, const RasterData::DefaultUniform& iUniforms);
+  int ProcessTransparentFragments();
+  void ProcessTransparentFragments(std::vector<RasterData::TransparentHit> & ioHits,
+                                   const RasterData::DefaultUniform & iUniforms,
+                                   RasterData::Tile * ioTile);
+  float ResolveFragmentOpacity( const RasterData::RasterTriangle & iTriangle, const float iWeights[3] ) const;
+  AlphaMode TriangleAlphaMode( const RasterData::RasterTriangle & iTriangle ) const;
 
 #ifdef SIMD_AVX2
   void CopyTileToMainBuffer8x(const RasterData::Tile& iTile);
@@ -268,6 +285,8 @@ protected:
     TimingClipTriangles,
     TimingRasterize,
     TimingProcessFragments,
+    TimingTransparentRasterize,
+    TimingTransparentFragments,
     TimingRenderScene,
     TimingColorUpload,
     TimingCopyToRenderTarget,
@@ -294,6 +313,9 @@ protected:
   std::mutex                                           _ProjVerticesMutex;
   std::vector<std::vector<RasterData::RasterTriangle>> _RasterTrianglesBuf;
   std::vector< std::vector<RasterData::Fragment>>      _Fragments;
+  std::vector< std::vector<RasterData::TransparentHit>> _TransparentFragments;
+  std::vector<unsigned long long>                      _MaskedTestedBuf;
+  std::vector<unsigned long long>                      _MaskedRejectedBuf;
 };
 
 }

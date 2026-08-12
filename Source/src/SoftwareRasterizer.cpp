@@ -20,6 +20,7 @@
 //#include <omp.h>
 #include <thread>
 #include <cstring>
+#include <limits>
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
@@ -200,6 +201,9 @@ int SoftwareRasterizer::UpdateNumberOfWorkers(bool iForce)
       _RasterTrianglesBuf[i].reserve(std::max(_Triangles.size() / _NbJobs, (size_t)1));
 
     _Fragments.resize(_NbJobs);
+    _TransparentFragments.resize(_NbJobs);
+    _MaskedTestedBuf.resize(_NbJobs, 0);
+    _MaskedRejectedBuf.resize(_NbJobs, 0);
 
     for (auto& tile : _Tiles)
     {
@@ -236,6 +240,15 @@ int SoftwareRasterizer::Update()
   _Stats._ShadedPixels = 0;
   _Stats._TileJobs = 0;
   _Stats._CopiedBytes = 0;
+  _Stats._HitBufferBytes = 0;
+  _Stats._MaskedFragmentsTested = 0;
+  _Stats._MaskedFragmentsRejected = 0;
+  _Stats._TransparentHitsGenerated = 0;
+  _Stats._TransparentHitsShaded = 0;
+  _Stats._TransparentPixels = 0;
+  _Stats._MaxTransparentLayers = 0;
+  _Stats._TransparentHitBufferBytes = 0;
+  _Stats._AverageTransparentLayers = 0.;
 
   const double updateStartTime = glfwGetTime();
   if (_DirtyStates & (unsigned long)DirtyState::RenderSettings)
@@ -278,6 +291,8 @@ int SoftwareRasterizer::Update()
     - _PassTimes[TimingFrameClear]
     - _PassTimes[TimingBackground]
     - _PassTimes[TimingRenderScene]
+    - _PassTimes[TimingTransparentRasterize]
+    - _PassTimes[TimingTransparentFragments]
     - _PassTimes[TimingColorUpload];
   _PassTimes[TimingUniformUpdate] = std::max(0., _PassTimes[TimingUniformUpdate]);
 
@@ -415,6 +430,8 @@ int SoftwareRasterizer::GetRenderPassTimings( std::vector<RenderPassTiming> & oT
   oTimings.push_back({ "Clip triangles", _PassTimes[TimingClipTriangles], false, _PassEnabled[TimingClipTriangles] });
   oTimings.push_back({ "Rasterize", _PassTimes[TimingRasterize], false, _PassEnabled[TimingRasterize] });
   oTimings.push_back({ "Process fragments", _PassTimes[TimingProcessFragments], false, _PassEnabled[TimingProcessFragments] });
+  oTimings.push_back({ "Transparent rasterize", _PassTimes[TimingTransparentRasterize], false, _PassEnabled[TimingTransparentRasterize] });
+  oTimings.push_back({ "Transparent shade / composite", _PassTimes[TimingTransparentFragments], false, _PassEnabled[TimingTransparentFragments] });
   oTimings.push_back({ "Render scene", _PassTimes[TimingRenderScene], false, _PassEnabled[TimingRenderScene], true });
   oTimings.push_back({ "CPU color-buffer upload", _PassTimes[TimingColorUpload], false, _PassEnabled[TimingColorUpload] });
   oTimings.push_back({ "Copy to render target", _PassTimes[TimingCopyToRenderTarget], true, _PassEnabled[TimingCopyToRenderTarget] });
@@ -522,6 +539,26 @@ int SoftwareRasterizer::UpdateImageBuffer()
     _PassEnabled[TimingBackground] = true;
     RenderUncoveredBackground(top, right);
     _PassTimes[TimingBackground] = glfwGetTime() - backgroundStartTime;
+  }
+
+  if ( _Settings._Transparency )
+  {
+    _PassEnabled[TimingTransparentRasterize] = true;
+    const double transparentRasterStart = glfwGetTime();
+    RasterizeTransparent();
+    _PassTimes[TimingTransparentRasterize] = glfwGetTime() - transparentRasterStart;
+
+    _PassEnabled[TimingTransparentFragments] = true;
+    const double transparentShadeStart = glfwGetTime();
+    ProcessTransparentFragments();
+    _PassTimes[TimingTransparentFragments] = glfwGetTime() - transparentShadeStart;
+  }
+  else
+  {
+    _PassEnabled[TimingTransparentRasterize] = false;
+    _PassEnabled[TimingTransparentFragments] = false;
+    _PassTimes[TimingTransparentRasterize] = 0.;
+    _PassTimes[TimingTransparentFragments] = 0.;
   }
 
   return 0;
@@ -833,6 +870,8 @@ int SoftwareRasterizer::UnloadScene()
   for ( auto & rasterTriangles : _RasterTrianglesBuf )
     rasterTriangles.clear();
   for ( auto & fragments : _Fragments )
+    fragments.clear();
+  for ( auto & fragments : _TransparentFragments )
     fragments.clear();
   for ( auto & tile : _Tiles )
   {
@@ -1245,6 +1284,8 @@ void SoftwareRasterizer::ResizeTileMap()
       curTile._CompactHitGenerations.assign(curTile._Width * curTile._Height, 0);
       curTile._CoveredIndices.clear();
       curTile._CoveredIndices.reserve(curTile._Width * curTile._Height);
+      curTile._TransparentHits.clear();
+      curTile._TransparentHits.reserve(curTile._Width * curTile._Height / 4);
       curTile._CompactGeneration = 1;
 
       if (_NbJobs)
@@ -1282,6 +1323,10 @@ void SoftwareRasterizer::ResetTiles()
     tile._DepthWins = 0;
     tile._CoveredCount = 0;
     tile._ShadedCount = 0;
+    tile._MaskedTested = 0;
+    tile._MaskedRejected = 0;
+    tile._TransparentShaded = 0;
+    tile._TransparentHits.clear();
     for (auto& bin : tile._RasterTrisBins)
     {
       bin.clear();
@@ -2084,6 +2129,8 @@ int SoftwareRasterizer::Rasterize()
     {
       _Stats._DepthWinningPixels += tile._DepthWins;
       _Stats._CoveredPixels += tile._CoveredCount;
+      _Stats._MaskedFragmentsTested += tile._MaskedTested;
+      _Stats._MaskedFragmentsRejected += tile._MaskedRejected;
     }
   }
   else
@@ -2101,6 +2148,13 @@ int SoftwareRasterizer::Rasterize()
       JobSystem::Get().Execute([this, i, startY, endY]() { this->Rasterize(i, startY, endY); });
     }
     JobSystem::Get().Wait();
+    for ( unsigned int i = 0; i < _NbJobs; ++i )
+    {
+      _Stats._MaskedFragmentsTested += _MaskedTestedBuf[i];
+      _Stats._MaskedFragmentsRejected += _MaskedRejectedBuf[i];
+      _MaskedTestedBuf[i] = 0;
+      _MaskedRejectedBuf[i] = 0;
+    }
   }
 
   return 0;
@@ -2113,12 +2167,17 @@ int SoftwareRasterizer::Rasterize(int iThreadBin, int iStartY, int iEndY)
 {
   float zNear, zFar;
   _Scene.GetCamera().GetZNearFar(zNear, zFar);
+  unsigned long long maskedTested = 0;
+  unsigned long long maskedRejected = 0;
 
   for (unsigned int i = 0; i < _NbJobs; ++i)
   {
     for (int j = 0; j < _RasterTrianglesBuf[i].size(); ++j)
     {
       rd::RasterTriangle& tri = _RasterTrianglesBuf[i][j];
+      const AlphaMode alphaMode = TriangleAlphaMode(tri);
+      if ( AlphaMode::Blend == alphaMode )
+        continue;
 
       // Backface culling
       if (0)
@@ -2160,6 +2219,17 @@ int SoftwareRasterizer::Rasterize(int iThreadBin, int iStartY, int iEndY)
           W[2] *= Z;
           coord.z = W[0] * tri._V[0].z + W[1] * tri._V[1].z + W[2] * tri._V[2].z;
 
+          if ( AlphaMode::Mask == alphaMode )
+          {
+            maskedTested++;
+            const Material & material = _Scene.GetMaterials()[tri._MatID];
+            if ( ResolveFragmentOpacity(tri, W) < material._AlphaCutoff )
+            {
+              maskedRejected++;
+              continue;
+            }
+          }
+
           // Depth test
           unsigned int pixelIndex = x + RenderWidth() * y;
           if (_Settings._WBuffer)
@@ -2192,6 +2262,8 @@ int SoftwareRasterizer::Rasterize(int iThreadBin, int iStartY, int iEndY)
     }
   }
 
+  _MaskedTestedBuf[iThreadBin] = maskedTested;
+  _MaskedRejectedBuf[iThreadBin] = maskedRejected;
   return 0;
 }
 
@@ -2209,6 +2281,9 @@ int SoftwareRasterizer::Rasterize(rd::Tile& ioTile)
     {
       const rd::RasterTriangle * tri = ioTile._RasterTrisBins[i][j];
       if (!tri)
+        continue;
+      const AlphaMode alphaMode = TriangleAlphaMode(*tri);
+      if ( AlphaMode::Blend == alphaMode )
         continue;
 
       int startX = std::max(ioTile._X, static_cast<int>(std::floor(tri->_BBox._Low.x)));
@@ -2240,6 +2315,17 @@ int SoftwareRasterizer::Rasterize(rd::Tile& ioTile)
           W[1] *= Z;
           W[2] *= Z;
           coord.z = W[0] * tri->_V[0].z + W[1] * tri->_V[1].z + W[2] * tri->_V[2].z;
+
+          if ( AlphaMode::Mask == alphaMode )
+          {
+            ioTile._MaskedTested++;
+            const Material & material = _Scene.GetMaterials()[tri->_MatID];
+            if ( ResolveFragmentOpacity(*tri, W) < material._AlphaCutoff )
+            {
+              ioTile._MaskedRejected++;
+              continue;
+            }
+          }
 
           // Depth test
           unsigned int localX = x - ioTile._X;
@@ -2295,6 +2381,199 @@ int SoftwareRasterizer::Rasterize(rd::Tile& ioTile)
   return 0;
 }
 
+// ----------------------------------------------------------------------------
+// TriangleAlphaMode
+// ----------------------------------------------------------------------------
+AlphaMode SoftwareRasterizer::TriangleAlphaMode( const rd::RasterTriangle & iTriangle ) const
+{
+  const std::vector<Material> & materials = _Scene.GetMaterials();
+  if ( ( iTriangle._MatID < 0 ) || ( iTriangle._MatID >= static_cast<int>(materials.size()) ) )
+    return AlphaMode::Opaque;
+  return MaterialAlphaMode(materials[iTriangle._MatID]);
+}
+
+// ----------------------------------------------------------------------------
+// ResolveFragmentOpacity
+// ----------------------------------------------------------------------------
+float SoftwareRasterizer::ResolveFragmentOpacity( const rd::RasterTriangle & iTriangle, const float iWeights[3] ) const
+{
+  const std::vector<Material> & materials = _Scene.GetMaterials();
+  if ( ( iTriangle._MatID < 0 ) || ( iTriangle._MatID >= static_cast<int>(materials.size()) ) )
+    return 1.f;
+
+  rd::Varying varying;
+  rd::Varying::Interpolate(_ProjVerticesBuf[iTriangle._Indices[0]]._Attrib,
+                           _ProjVerticesBuf[iTriangle._Indices[1]]._Attrib,
+                           _ProjVerticesBuf[iTriangle._Indices[2]]._Attrib,
+                           iWeights, varying);
+  varying._LOD = iTriangle._LOD;
+  return ResolveMaterialOpacity(materials[iTriangle._MatID], _Scene.GetTextures(),
+                                _Settings._Sampling, varying._UV, varying._LOD);
+}
+
+// ----------------------------------------------------------------------------
+// RasterizeTransparent
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::RasterizeTransparent()
+{
+  if ( _DebugMode & ( (int)RasterDebugModes::DepthBuffer | (int)RasterDebugModes::Normals ) )
+    return 0;
+
+  if ( TiledRendering() )
+  {
+    for ( unsigned int i = 0; i < _Tiles.size(); ++i )
+      JobSystem::Get().Execute([this, i]() { this->RasterizeTransparent(_Tiles[i]); });
+    JobSystem::Get().Wait();
+    _Stats._TileJobs += _Tiles.size();
+    for ( const rd::Tile & tile : _Tiles )
+    {
+      _Stats._TransparentHitsGenerated += tile._TransparentHits.size();
+      _Stats._TransparentHitBufferBytes += tile._TransparentHits.capacity() * sizeof(rd::TransparentHit);
+    }
+  }
+  else
+  {
+    const int height = RenderHeight();
+    for ( unsigned int i = 0; i < _NbJobs; ++i )
+    {
+      _TransparentFragments[i].clear();
+      const int startY = (height / _NbJobs) * i;
+      const int endY = ( i == _NbJobs - 1 ) ? height : startY + height / _NbJobs;
+      if ( startY < endY )
+        JobSystem::Get().Execute([this, i, startY, endY]() { this->RasterizeTransparent(i, startY, endY); });
+    }
+    JobSystem::Get().Wait();
+    for ( const auto & hits : _TransparentFragments )
+    {
+      _Stats._TransparentHitsGenerated += hits.size();
+      _Stats._TransparentHitBufferBytes += hits.capacity() * sizeof(rd::TransparentHit);
+    }
+  }
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// RasterizeTransparent
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::RasterizeTransparent(int iThreadBin, int iStartY, int iEndY)
+{
+  float zNear, zFar;
+  _Scene.GetCamera().GetZNearFar(zNear, zFar);
+  std::vector<rd::TransparentHit> & hits = _TransparentFragments[iThreadBin];
+
+  for ( unsigned int bin = 0; bin < _NbJobs; ++bin )
+  {
+    for ( rd::RasterTriangle & tri : _RasterTrianglesBuf[bin] )
+    {
+      if ( AlphaMode::Blend != TriangleAlphaMode(tri) )
+        continue;
+      const int xMin = std::max(0, std::min(static_cast<int>(std::floor(tri._BBox._Low.x)), RenderWidth() - 1));
+      const int yMin = std::max(iStartY, std::min(static_cast<int>(std::floor(tri._BBox._Low.y)), iEndY - 1));
+      const int xMax = std::max(0, std::min(static_cast<int>(std::ceil(tri._BBox._High.x)), RenderWidth() - 1));
+      const int yMax = std::max(iStartY, std::min(static_cast<int>(std::ceil(tri._BBox._High.y)), iEndY - 1));
+
+      for ( int y = yMin; y <= yMax; ++y )
+      {
+        for ( int x = xMin; x <= xMax; ++x )
+        {
+          Vec3 coord(x + .5f, y + .5f, 0.f);
+          float weights[3] = { 0.f, 0.f, 0.f };
+          if ( !MathUtil::EvalBarycentricCoordinates(coord, tri._EdgeA, tri._EdgeB, tri._EdgeC, weights) )
+            continue;
+          weights[0] *= tri._InvW[0];
+          weights[1] *= tri._InvW[1];
+          weights[2] *= tri._InvW[2];
+          const float depth = 1.f / ( weights[0] + weights[1] + weights[2] );
+          weights[0] *= depth;
+          weights[1] *= depth;
+          weights[2] *= depth;
+          const float fragmentDepth = weights[0] * tri._V[0].z + weights[1] * tri._V[1].z + weights[2] * tri._V[2].z;
+          const unsigned int pixelIndex = x + RenderWidth() * y;
+          if ( _Settings._WBuffer )
+          {
+            if ( ( depth > _ImageBuffer._DepthBuffer[pixelIndex] ) || ( depth < zNear ) )
+              continue;
+          }
+          else if ( ( fragmentDepth > _ImageBuffer._DepthBuffer[pixelIndex] ) || ( fragmentDepth < -1.f ) )
+            continue;
+          if ( ResolveFragmentOpacity(tri, weights) <= 0.f )
+            continue;
+
+          rd::TransparentHit hit;
+          hit._Triangle = &tri;
+          hit._PixelIndex = pixelIndex;
+          hit._Depth = _Settings._WBuffer ? depth : fragmentDepth;
+          hit._FragmentDepth = fragmentDepth;
+          std::copy(weights, weights + 3, hit._Weights);
+          hits.push_back(hit);
+        }
+      }
+    }
+  }
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// RasterizeTransparent
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::RasterizeTransparent(rd::Tile& ioTile)
+{
+  float zNear, zFar;
+  _Scene.GetCamera().GetZNearFar(zNear, zFar);
+  std::vector<rd::TransparentHit> & hits = ioTile._TransparentHits;
+
+  for ( unsigned int bin = 0; bin < _NbJobs; ++bin )
+  {
+    for ( const rd::RasterTriangle * tri : ioTile._RasterTrisBins[bin] )
+    {
+      if ( !tri || ( AlphaMode::Blend != TriangleAlphaMode(*tri) ) )
+        continue;
+      const int xMin = std::max(ioTile._X, static_cast<int>(std::floor(tri->_BBox._Low.x)));
+      const int yMin = std::max(ioTile._Y, static_cast<int>(std::floor(tri->_BBox._Low.y)));
+      const int xMax = std::min(ioTile._X + ioTile._Width - 1, static_cast<int>(std::ceil(tri->_BBox._High.x)));
+      const int yMax = std::min(ioTile._Y + ioTile._Height - 1, static_cast<int>(std::ceil(tri->_BBox._High.y)));
+
+      for ( int y = yMin; y <= yMax; ++y )
+      {
+        for ( int x = xMin; x <= xMax; ++x )
+        {
+          Vec3 coord(x + .5f, y + .5f, 0.f);
+          float weights[3] = { 0.f, 0.f, 0.f };
+          if ( !MathUtil::EvalBarycentricCoordinates(coord, tri->_EdgeA, tri->_EdgeB, tri->_EdgeC, weights) )
+            continue;
+          weights[0] *= tri->_InvW[0];
+          weights[1] *= tri->_InvW[1];
+          weights[2] *= tri->_InvW[2];
+          const float depth = 1.f / ( weights[0] + weights[1] + weights[2] );
+          weights[0] *= depth;
+          weights[1] *= depth;
+          weights[2] *= depth;
+          const float fragmentDepth = weights[0] * tri->_V[0].z + weights[1] * tri->_V[1].z + weights[2] * tri->_V[2].z;
+          const unsigned int localPixelIndex = ( y - ioTile._Y ) * ioTile._Width + x - ioTile._X;
+          if ( _Settings._WBuffer )
+          {
+            if ( ( depth > ioTile._LocalFB._DepthBuffer[localPixelIndex] ) || ( depth < zNear ) )
+              continue;
+          }
+          else if ( ( fragmentDepth > ioTile._LocalFB._DepthBuffer[localPixelIndex] ) || ( fragmentDepth < -1.f ) )
+            continue;
+          if ( ResolveFragmentOpacity(*tri, weights) <= 0.f )
+            continue;
+
+          rd::TransparentHit hit;
+          hit._Triangle = tri;
+          hit._PixelIndex = localPixelIndex;
+          hit._Depth = _Settings._WBuffer ? depth : fragmentDepth;
+          hit._FragmentDepth = fragmentDepth;
+          std::copy(weights, weights + 3, hit._Weights);
+          hits.push_back(hit);
+        }
+      }
+    }
+  }
+  return 0;
+}
+
 #ifdef SIMD_AVX2
 // ----------------------------------------------------------------------------
 // RasterizeAVX2
@@ -2310,6 +2589,9 @@ int SoftwareRasterizer::RasterizeAVX2(rd::Tile& ioTile)
     {
       const rd::RasterTriangle * tri = ioTile._RasterTrisBins[i][j];
       if (!tri)
+        continue;
+      const AlphaMode alphaMode = TriangleAlphaMode(*tri);
+      if ( AlphaMode::Blend == alphaMode )
         continue;
 
       int startX = std::max(ioTile._X, static_cast<int>(std::floor(tri->_BBox._Low.x)));
@@ -2389,6 +2671,18 @@ int SoftwareRasterizer::RasterizeAVX2(rd::Tile& ioTile)
             float depth = depths.m256_f32[k];
             float z = z_coord.m256_f32[k];
 
+            float weights[3] = { Weights[0].m256_f32[k], Weights[1].m256_f32[k], Weights[2].m256_f32[k] };
+            if ( AlphaMode::Mask == alphaMode )
+            {
+              ioTile._MaskedTested++;
+              const Material & material = _Scene.GetMaterials()[tri->_MatID];
+              if ( ResolveFragmentOpacity(*tri, weights) < material._AlphaCutoff )
+              {
+                ioTile._MaskedRejected++;
+                continue;
+              }
+            }
+
             ioTile._LocalFB._DepthBuffer[localPixelIndex + k] = ( _Settings._WBuffer ) ? ( depth ) : ( z );
             ioTile._DepthWins++;
             const unsigned int hitIndex = localPixelIndex + k;
@@ -2446,6 +2740,9 @@ int SoftwareRasterizer::RasterizeARM(rd::Tile& ioTile)
     {
       const rd::RasterTriangle * tri = ioTile._RasterTrisBins[i][j];
       if (!tri)
+        continue;
+      const AlphaMode alphaMode = TriangleAlphaMode(*tri);
+      if ( AlphaMode::Blend == alphaMode )
         continue;
 
       int startX = std::max(ioTile._X, static_cast<int>(std::floor(tri->_BBox._Low.x)));
@@ -2523,6 +2820,22 @@ int SoftwareRasterizer::RasterizeARM(rd::Tile& ioTile)
 
             float depth = SIMDUtils::GetVectorElement(depths, k);
             float z = SIMDUtils::GetVectorElement(z_coord, k);
+
+            float weights[3] = {
+              SIMDUtils::GetVectorElement(Weights[0], k),
+              SIMDUtils::GetVectorElement(Weights[1], k),
+              SIMDUtils::GetVectorElement(Weights[2], k)
+            };
+            if ( AlphaMode::Mask == alphaMode )
+            {
+              ioTile._MaskedTested++;
+              const Material & material = _Scene.GetMaterials()[tri->_MatID];
+              if ( ResolveFragmentOpacity(*tri, weights) < material._AlphaCutoff )
+              {
+                ioTile._MaskedRejected++;
+                continue;
+              }
+            }
 
             ioTile._LocalFB._DepthBuffer[localPixelIndex + k] = ( _Settings._WBuffer ) ? ( depth ) : ( z );
             ioTile._DepthWins++;
@@ -2610,6 +2923,161 @@ int SoftwareRasterizer::ProcessFragments()
   }
 
   return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ProcessTransparentFragments
+// ----------------------------------------------------------------------------
+int SoftwareRasterizer::ProcessTransparentFragments()
+{
+  rd::DefaultUniform uniforms;
+  uniforms._CameraPos = _Scene.GetCamera().GetPos();
+  uniforms._Sampling = _Settings._Sampling;
+  uniforms._Materials = &_Scene.GetMaterials();
+  uniforms._Textures = &_Scene.GetTextures();
+  for ( int i = 0; i < _Scene.GetNbLights(); ++i )
+    uniforms._Lights.push_back(*_Scene.GetLight(i));
+
+  if ( TiledRendering() )
+  {
+    for ( unsigned int i = 0; i < _Tiles.size(); ++i )
+    {
+      if ( !_Tiles[i]._TransparentHits.empty() )
+        JobSystem::Get().Execute([this, &uniforms, i]() {
+          this->ProcessTransparentFragments(_Tiles[i]._TransparentHits, uniforms, &_Tiles[i]);
+        });
+    }
+  }
+  else
+  {
+    for ( unsigned int i = 0; i < _TransparentFragments.size(); ++i )
+    {
+      if ( !_TransparentFragments[i].empty() )
+        JobSystem::Get().Execute([this, &uniforms, i]() {
+          this->ProcessTransparentFragments(_TransparentFragments[i], uniforms, nullptr);
+        });
+    }
+  }
+  JobSystem::Get().Wait();
+
+  unsigned long long transparentPixels = 0;
+  unsigned long long maxLayers = 0;
+  if ( TiledRendering() )
+  {
+    for ( const rd::Tile & tile : _Tiles )
+    {
+      _Stats._TransparentHitsShaded += tile._TransparentShaded;
+      if ( !tile._TransparentHits.empty() )
+      {
+        unsigned int previousPixel = std::numeric_limits<unsigned int>::max();
+        unsigned long long layers = 0;
+        for ( const rd::TransparentHit & hit : tile._TransparentHits )
+        {
+          if ( hit._PixelIndex != previousPixel )
+          {
+            if ( layers )
+              maxLayers = std::max(maxLayers, layers);
+            transparentPixels++;
+            previousPixel = hit._PixelIndex;
+            layers = 1;
+          }
+          else
+            layers++;
+        }
+        maxLayers = std::max(maxLayers, layers);
+      }
+    }
+  }
+  else
+  {
+    for ( const auto & hits : _TransparentFragments )
+    {
+      _Stats._TransparentHitsShaded += hits.size();
+      unsigned int previousPixel = std::numeric_limits<unsigned int>::max();
+      unsigned long long layers = 0;
+      for ( const rd::TransparentHit & hit : hits )
+      {
+        if ( hit._PixelIndex != previousPixel )
+        {
+          if ( layers )
+            maxLayers = std::max(maxLayers, layers);
+          transparentPixels++;
+          previousPixel = hit._PixelIndex;
+          layers = 1;
+        }
+        else
+          layers++;
+      }
+      maxLayers = std::max(maxLayers, layers);
+    }
+  }
+  _Stats._TransparentPixels = transparentPixels;
+  _Stats._MaxTransparentLayers = maxLayers;
+  _Stats._AverageTransparentLayers = transparentPixels
+    ? static_cast<double>(_Stats._TransparentHitsShaded) / transparentPixels : 0.;
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ProcessTransparentFragments
+// ----------------------------------------------------------------------------
+void SoftwareRasterizer::ProcessTransparentFragments(std::vector<rd::TransparentHit> & ioHits,
+                                                      const rd::DefaultUniform & iUniforms,
+                                                      rd::Tile * ioTile)
+{
+  std::sort(ioHits.begin(), ioHits.end(), [](const rd::TransparentHit & iLhs, const rd::TransparentHit & iRhs) {
+    if ( iLhs._PixelIndex != iRhs._PixelIndex )
+      return iLhs._PixelIndex < iRhs._PixelIndex;
+    if ( iLhs._Depth != iRhs._Depth )
+      return iLhs._Depth > iRhs._Depth;
+    return std::less<const rd::RasterTriangle *>()(iLhs._Triangle, iRhs._Triangle);
+  });
+
+  std::unique_ptr<SoftwareFragmentShader> fragmentShader;
+  if ( ShadingType::PBR == _Settings._ShadingType )
+    fragmentShader = std::make_unique<PBRFragmentShader>(iUniforms);
+  else
+    fragmentShader = std::make_unique<BlinnPhongFragmentShader>(iUniforms);
+
+  const bool renderWires = _DebugMode & (int)RasterDebugModes::Wires;
+  std::unique_ptr<WireFrameFragmentShader> wireShader;
+  if ( renderWires )
+    wireShader = std::make_unique<WireFrameFragmentShader>(iUniforms);
+
+  for ( const rd::TransparentHit & hit : ioHits )
+  {
+    if ( !hit._Triangle )
+      continue;
+    const unsigned int globalPixelIndex = ioTile
+      ? ioTile->_X + hit._PixelIndex % ioTile->_Width + RenderWidth() * ( ioTile->_Y + hit._PixelIndex / ioTile->_Width )
+      : hit._PixelIndex;
+    rd::Fragment fragment;
+    fragment._PixelCoords = Vec2i(globalPixelIndex % RenderWidth(), globalPixelIndex / RenderWidth());
+    fragment._FragCoords = Vec3(fragment._PixelCoords.x + .5f, fragment._PixelCoords.y + .5f, hit._FragmentDepth);
+    std::copy(hit._Weights, hit._Weights + 3, fragment._Weights);
+    rd::Varying::Interpolate(_ProjVerticesBuf[hit._Triangle->_Indices[0]]._Attrib,
+                             _ProjVerticesBuf[hit._Triangle->_Indices[1]]._Attrib,
+                             _ProjVerticesBuf[hit._Triangle->_Indices[2]]._Attrib,
+                             fragment._Weights, fragment._Attrib);
+    if ( ShadingType::Flat == _Settings._ShadingType )
+      fragment._Attrib._Normal = hit._Triangle->_Normal;
+    fragment._Attrib._LOD = hit._Triangle->_LOD;
+
+    Vec4 source = fragmentShader -> Process(fragment, *hit._Triangle);
+    if ( renderWires )
+    {
+      const Vec4 wire = wireShader -> Process(fragment, *hit._Triangle);
+      source.x = glm::mix(source.x, wire.x, wire.w);
+      source.y = glm::mix(source.y, wire.y, wire.w);
+      source.z = glm::mix(source.z, wire.z, wire.w);
+    }
+    const float alpha = MathUtil::Clamp(source.a, 0.f, 1.f);
+    RGBA8 & destination8 = _ImageBuffer._ColorBuffer[globalPixelIndex];
+    const Vec3 destination(destination8._R / 255.f, destination8._G / 255.f, destination8._B / 255.f);
+    destination8 = RGBA8(Vec3(source) * alpha + destination * ( 1.f - alpha ), 1.f);
+    if ( ioTile )
+      ioTile -> _TransparentShaded++;
+  }
 }
 
 // ----------------------------------------------------------------------------

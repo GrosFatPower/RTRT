@@ -243,6 +243,17 @@ RenderCaseOutcome RunRenderCase( const RTRT::Tests::RenderTestCase & iTestCase, 
       software -> SetEnablePBOUpload(true);
     }
   }
+  if ( RTRT::SoftwareRasterizer * software = renderer -> AsSoftwareRasterizer() )
+  {
+    software -> SetEnableSIMD(iTestCase._SoftwareSIMD);
+    if ( iTestCase._SoftwareFallback )
+    {
+      settings._TiledRendering = true;
+      settings._TileResolution = Vec2i(64, 64);
+      software -> SetEnableCompactHits(false);
+      software -> SetEnableDirectColorWrites(false);
+    }
+  }
   int debugMode = iTestCase._DebugMode;
   if ( iTestCase._DiagnosticOnly && ( RTRT::RendererBackend::DeferredRenderer == iTestCase._Backend ) )
     debugMode |= (int)RTRT::DeferredDebugModes::Diagnostic;

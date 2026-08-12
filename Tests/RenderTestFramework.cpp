@@ -49,6 +49,12 @@ void RenderTestCase::ApplySettings( RenderSettings & ioSettings ) const
     ioSettings._NbSamplesPerPixel = _SamplesPerPixel;
     ioSettings._Bounces = _Bounces;
   }
+  else if ( RendererBackend::SoftwareRasterizer == _Backend )
+  {
+    ioSettings._TiledRendering = _TiledRendering;
+    ioSettings._WBuffer = _WBuffer;
+    ioSettings._Transparency = _Transparency;
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -337,6 +343,8 @@ bool ReadSettings( const Json & iObject, RenderTestCase & ioTestCase, std::strin
       && ReadBool(settings, "accumulate", ioTestCase._Accumulate, oError)
       && ReadBool(settings, "auto_scale", ioTestCase._AutoScale, oError)
       && ReadBool(settings, "tiled_rendering", ioTestCase._TiledRendering, oError)
+      && ReadBool(settings, "w_buffer", ioTestCase._WBuffer, oError)
+      && ReadBool(settings, "transparency", ioTestCase._Transparency, oError)
       && ReadBool(settings, "denoise", ioTestCase._Denoise, oError)
       && ReadPositiveInt(settings, "samples_per_pixel", ioTestCase._SamplesPerPixel, oError, false)
       && ReadPositiveInt(settings, "bounces", ioTestCase._Bounces, oError, false);
@@ -401,9 +409,12 @@ bool ParseRenderTestCases( const std::string & iContents, std::vector<RenderTest
         return false;
 
       if ( !ReadResolution(test, testCase._Width, testCase._Height, oError, false) || !ReadPositiveInt(test, "frames", testCase._FrameCount, oError, false)
-        || !ReadThresholds(test, testCase, oError, false) || !ReadString(test, "environment_map", testCase._EnvironmentMapPath, oError, false)
+        || !ReadThresholds(test, testCase, oError, false) || !ReadSettings(test, testCase, oError)
+        || !ReadString(test, "environment_map", testCase._EnvironmentMapPath, oError, false)
         || !ReadNonNegativeInt(test, "debug_mode", testCase._DebugMode, oError) || !ReadBool(test, "diagnostic_only", testCase._DiagnosticOnly, oError)
-        || !ReadBool(test, "software_optimized", testCase._SoftwareOptimized, oError) )
+        || !ReadBool(test, "software_optimized", testCase._SoftwareOptimized, oError)
+        || !ReadBool(test, "software_simd", testCase._SoftwareSIMD, oError)
+        || !ReadBool(test, "software_fallback", testCase._SoftwareFallback, oError) )
         return false;
 
       std::string baseline;

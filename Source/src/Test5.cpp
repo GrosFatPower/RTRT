@@ -657,6 +657,9 @@ int Test5::DrawSettingsUI()
         if ( ImGui::Checkbox( "Generate mip maps", &generateMips ) )
           softwareRasterizer -> SetGenerateMipMaps(generateMips);
       }
+
+      if ( ImGui::Checkbox( "Transparency", &_Settings._Transparency ) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
     }
     else if ( RendererType::OpenGLRasterizer == _RendererType )
     {

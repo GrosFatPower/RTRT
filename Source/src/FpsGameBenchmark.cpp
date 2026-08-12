@@ -297,6 +297,14 @@ void FpsGameBenchmark::Update( const std::vector<FpsCpuTiming> & iCpuTimings,
     _SoftwareCounterTotals["tile_jobs"] += stats._TileJobs;
     _SoftwareCounterTotals["copied_bytes"] += stats._CopiedBytes;
     _SoftwareCounterTotals["hit_buffer_bytes"] += stats._HitBufferBytes;
+    _SoftwareCounterTotals["masked_fragments_tested"] += stats._MaskedFragmentsTested;
+    _SoftwareCounterTotals["masked_fragments_rejected"] += stats._MaskedFragmentsRejected;
+    _SoftwareCounterTotals["transparent_hits_generated"] += stats._TransparentHitsGenerated;
+    _SoftwareCounterTotals["transparent_hits_shaded"] += stats._TransparentHitsShaded;
+    _SoftwareCounterTotals["transparent_pixels"] += stats._TransparentPixels;
+    _SoftwareCounterTotals["max_transparent_layers"] += stats._MaxTransparentLayers;
+    _SoftwareCounterTotals["transparent_hit_buffer_bytes"] += stats._TransparentHitBufferBytes;
+    _SoftwareCounterTotals["average_transparent_layers"] += stats._AverageTransparentLayers;
   }
 
   ++_SamplesDone;
@@ -491,6 +499,7 @@ bool FpsGameBenchmark::SaveResult( const FpsGameBenchmarkSaveContext & iContext 
     file << "    \"tile_size\": " << software -> GetTileSize() << ",\n";
     file << "    \"thread_count\": " << settings._NbThreads << ",\n";
     file << "    \"debug_mode\": " << software -> GetDebugMode() << ",\n";
+    file << "    \"transparency\": " << ( settings._Transparency ? "true" : "false" ) << ",\n";
     file << "    \"optimization_flags\": {\n";
     file << "      \"incremental_instance_refresh\": " << ( software -> GetEnableIncrementalRefresh() ? "true" : "false" ) << ",\n";
     file << "      \"compact_hits\": " << ( software -> GetEnableCompactHits() ? "true" : "false" ) << ",\n";

@@ -216,6 +216,15 @@ namespace RasterData
     float _Depth = 0.f;
   };
 
+  struct TransparentHit
+  {
+    const RasterTriangle * _Triangle = nullptr;
+    unsigned int _PixelIndex = 0;
+    float _Weights[3] = { 0.f, 0.f, 0.f };
+    float _Depth = 0.f;
+    float _FragmentDepth = 0.f;
+  };
+
   struct SIMD_ALIGN64 Tile
   {
     int         _X;
@@ -229,11 +238,15 @@ namespace RasterData
     SIMD_ALIGN64 std::vector<CompactHit> _CompactHits;
     SIMD_ALIGN64 std::vector<unsigned int> _CompactHitGenerations;
     SIMD_ALIGN64 std::vector<unsigned int> _CoveredIndices;
+    SIMD_ALIGN64 std::vector<TransparentHit> _TransparentHits;
     unsigned int _CompactGeneration = 1;
     unsigned long long _BinnedTriangles = 0;
     unsigned long long _DepthWins = 0;
     unsigned long long _CoveredCount = 0;
     unsigned long long _ShadedCount = 0;
+    unsigned long long _MaskedTested = 0;
+    unsigned long long _MaskedRejected = 0;
+    unsigned long long _TransparentShaded = 0;
   };
 
 }

@@ -8,6 +8,12 @@
 namespace RTRT
 {
 
+float ResolveMaterialOpacity( const Material & iMaterial,
+                              const std::vector<Texture*> & iTextures,
+                              SamplingMode iSampling,
+                              const Vec2 & iUV,
+                              float iLOD );
+
 class SoftwareFragmentShader
 {
 public:

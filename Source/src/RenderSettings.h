@@ -46,7 +46,7 @@ struct RenderSettings
   bool         _SSR                   = true;                   // Deferred renderer
   bool         _SpecularIBL           = true;                   // Deferred renderer
   bool         _PBRDirectLighting     = true;                   // Deferred renderer
-  bool         _Transparency          = true;                   // Deferred renderer
+  bool         _Transparency          = true;                   // Deferred and software renderers
   SamplingMode _Sampling              = SamplingMode::Bilinear; // Raster
   bool         _WBuffer               = true;                   // Raster
   ShadingType  _ShadingType           = ShadingType::Phong;     // Raster

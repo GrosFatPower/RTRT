@@ -374,6 +374,7 @@ void Test6::ApplyRendererDefaults()
     _Settings._ShadingType = ShadingType::PBR;
     _Settings._Sampling = SamplingMode::Bilinear;
     _Settings._TiledRendering = true;
+    _Settings._Transparency = true;
   }
   else
   {

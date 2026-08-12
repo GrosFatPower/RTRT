@@ -8,6 +8,32 @@ namespace RTRT
 {
 
 // ----------------------------------------------------------------------------
+// ResolveMaterialOpacity
+// ----------------------------------------------------------------------------
+float ResolveMaterialOpacity( const Material & iMaterial,
+                              const std::vector<Texture*> & iTextures,
+                              SamplingMode iSampling,
+                              const Vec2 & iUV,
+                              float iLOD )
+{
+  float opacity = MathUtil::Clamp(iMaterial._Opacity, 0.f, 1.f);
+  const int textureID = static_cast<int>(iMaterial._BaseColorTexId);
+  if ( ( textureID < 0 ) || ( textureID >= static_cast<int>(iTextures.size()) ) )
+    return opacity;
+
+  const Texture * texture = iTextures[textureID];
+  if ( !texture )
+    return opacity;
+
+  Vec4 texel;
+  if ( iSampling >= SamplingMode::Bilinear )
+    texel = texture -> BiLinearSample(iUV, iLOD, iSampling == SamplingMode::Trilinear);
+  else
+    texel = texture -> Sample(iUV);
+  return opacity * MathUtil::Clamp(texel.a, 0.f, 1.f);
+}
+
+// ----------------------------------------------------------------------------
 // UTILS
 // ----------------------------------------------------------------------------
 
@@ -122,10 +148,13 @@ void SetupMaterial(const RasterData::Fragment& iFrag, const RasterData::RasterTr
     const Texture* tex = (*iUniforms._Textures)[static_cast<int>(oMat._BaseColorTexId)];
     if ( tex )
     {
+      Vec4 texel;
       if (iUniforms._Sampling >= SamplingMode::Bilinear)
-        oMat._Albedo = Vec3(tex->BiLinearSample(iFrag._Attrib._UV, iFrag._Attrib._LOD, (iUniforms._Sampling == SamplingMode::Trilinear)));
+        texel = tex->BiLinearSample(iFrag._Attrib._UV, iFrag._Attrib._LOD, (iUniforms._Sampling == SamplingMode::Trilinear));
       else
-        oMat._Albedo = Vec3(tex->Sample(iFrag._Attrib._UV));
+        texel = tex->Sample(iFrag._Attrib._UV);
+      oMat._Albedo = Vec3(texel);
+      oMat._Opacity *= texel.a;
     }
   }
 
@@ -191,10 +220,12 @@ void SetupMaterial(const RasterData::Fragment& iFrag, const RasterData::RasterTr
 // ----------------------------------------------------------------------------
 Vec4 BlinnPhongFragmentShader::Process(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri)
 {
-  Vec4 albedo;
+  Vec4 albedo(1.f);
+  float opacity = 1.f;
   if (iTri._MatID >= 0)
   {
     const Material& mat = (*_Uniforms._Materials)[iTri._MatID];
+    opacity = ResolveMaterialOpacity(mat, *_Uniforms._Textures, _Uniforms._Sampling, iFrag._Attrib._UV, iFrag._Attrib._LOD);
     if (mat._BaseColorTexId >= 0)
     {
       const Texture* tex = (*_Uniforms._Textures)[static_cast<int>(mat._BaseColorTexId)];
@@ -204,7 +235,7 @@ Vec4 BlinnPhongFragmentShader::Process(const RasterData::Fragment& iFrag, const 
         albedo = tex->Sample(iFrag._Attrib._UV);
     }
     else
-      albedo = Vec4(mat._Albedo, 1.f);
+      albedo = Vec4(mat._Albedo, opacity);
   }
 
   // Shading
@@ -229,7 +260,9 @@ Vec4 BlinnPhongFragmentShader::Process(const RasterData::Fragment& iFrag, const 
     alpha += std::min(diffuse + ambientStrength + specular, 1.f) * Vec4(glm::normalize(light._Emission), 1.f);
   }
 
-  return MathUtil::Min(albedo * alpha, Vec4(1.f));
+  Vec4 color = MathUtil::Min(albedo * alpha, Vec4(1.f));
+  color.a = ( iTri._MatID >= 0 ) && ( AlphaMode::Blend == MaterialAlphaMode((*_Uniforms._Materials)[iTri._MatID]) ) ? opacity : 1.f;
+  return color;
 }
 
 // ----------------------------------------------------------------------------
@@ -281,7 +314,8 @@ Vec4 PBRFragmentShader::Process(const RasterData::Fragment& iFrag, const RasterD
 
   outColor = glm::clamp(outColor, 0.f, 1.f);
 
-  return Vec4(outColor, 1.f);
+  const float opacity = ( AlphaMode::Blend == MaterialAlphaMode(mat) ) ? MathUtil::Clamp(mat._Opacity, 0.f, 1.f) : 1.f;
+  return Vec4(outColor, opacity);
 }
 
 // ----------------------------------------------------------------------------
