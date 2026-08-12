@@ -146,6 +146,87 @@
       }
     },
     {
+      "name": "software_transmission",
+      "profile": "software",
+      "scene": "SoftwareTransmission.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_optimized": true
+    },
+    {
+      "name": "software_transmission_non_tiled",
+      "profile": "software",
+      "scene": "SoftwareTransmission.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "baseline": "Tests/Baselines/software_transmission.pfm"
+    },
+    {
+      "name": "software_transmission_zbuffer",
+      "profile": "software",
+      "scene": "SoftwareTransmission.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_optimized": true,
+      "baseline": "Tests/Baselines/software_transmission.pfm",
+      "settings": {
+        "w_buffer": false
+      }
+    },
+    {
+      "name": "software_transmission_reversed",
+      "profile": "software",
+      "scene": "SoftwareTransmissionReversed.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_optimized": true,
+      "baseline": "Tests/Baselines/software_transmission.pfm"
+    },
+    {
+      "name": "software_transmission_simd",
+      "profile": "software",
+      "scene": "SoftwareTransmission.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_optimized": true,
+      "software_simd": true,
+      "baseline": "Tests/Baselines/software_transmission.pfm"
+    },
+    {
+      "name": "software_transmission_tiled_fallback",
+      "profile": "software",
+      "scene": "SoftwareTransmission.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_fallback": true,
+      "baseline": "Tests/Baselines/software_transmission.pfm"
+    },
+    {
+      "name": "software_transmission_disabled",
+      "profile": "software",
+      "scene": "SoftwareTransmission.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_optimized": true,
+      "settings": {
+        "transparency": false
+      }
+    },
+    {
+      "name": "software_coffee_maker_transmission",
+      "profile": "software",
+      "scene": "coffee_maker.scene",
+      "resolution": [600, 800],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_optimized": true,
+      "camera": {
+        "position": [0.0, 0.26, -0.7],
+        "pivot": [0.0, 0.16, 0.0],
+        "fov": 30.0,
+        "near": 0.01
+      }
+    },
+    {
       "name": "software_cornell",
       "profile": "software",
       "scene": "cornell_box.scene",

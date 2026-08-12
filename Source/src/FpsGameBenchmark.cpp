@@ -301,6 +301,8 @@ void FpsGameBenchmark::Update( const std::vector<FpsCpuTiming> & iCpuTimings,
     _SoftwareCounterTotals["masked_fragments_rejected"] += stats._MaskedFragmentsRejected;
     _SoftwareCounterTotals["transparent_hits_generated"] += stats._TransparentHitsGenerated;
     _SoftwareCounterTotals["transparent_hits_shaded"] += stats._TransparentHitsShaded;
+    _SoftwareCounterTotals["blend_hits_generated"] += stats._BlendHitsGenerated;
+    _SoftwareCounterTotals["transmission_hits_generated"] += stats._TransmissionHitsGenerated;
     _SoftwareCounterTotals["transparent_pixels"] += stats._TransparentPixels;
     _SoftwareCounterTotals["max_transparent_layers"] += stats._MaxTransparentLayers;
     _SoftwareCounterTotals["transparent_hit_buffer_bytes"] += stats._TransparentHitBufferBytes;

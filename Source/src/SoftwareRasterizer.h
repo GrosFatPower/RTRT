@@ -67,6 +67,8 @@ struct SoftwareRasterizerStats
   std::uint64_t _MaskedFragmentsRejected = 0;
   std::uint64_t _TransparentHitsGenerated = 0;
   std::uint64_t _TransparentHitsShaded = 0;
+  std::uint64_t _BlendHitsGenerated = 0;
+  std::uint64_t _TransmissionHitsGenerated = 0;
   std::uint64_t _TransparentPixels = 0;
   std::uint64_t _MaxTransparentLayers = 0;
   std::uint64_t _TransparentHitBufferBytes = 0;
@@ -184,7 +186,7 @@ protected:
                                    const RasterData::DefaultUniform & iUniforms,
                                    RasterData::Tile * ioTile);
   float ResolveFragmentOpacity( const RasterData::RasterTriangle & iTriangle, const float iWeights[3] ) const;
-  AlphaMode TriangleAlphaMode( const RasterData::RasterTriangle & iTriangle ) const;
+  MaterialPass TriangleMaterialPass( const RasterData::RasterTriangle & iTriangle ) const;
 
 #ifdef SIMD_AVX2
   void CopyTileToMainBuffer8x(const RasterData::Tile& iTile);

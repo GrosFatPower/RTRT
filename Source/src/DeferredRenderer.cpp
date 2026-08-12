@@ -29,8 +29,6 @@ namespace RTRT
 
 static Vec3 S_WireColor = Vec3(1.f, 0.f, 0.f);
 static float S_WireWidth = 3.0f;
-static const float S_TransparentSpecTransThreshold = 0.001f;
-
 // ----------------------------------------------------------------------------
 // HELPER TYPES
 // ----------------------------------------------------------------------------
@@ -483,15 +481,8 @@ bool DeferredRenderer::IsTransparentMaterial( int iMaterialID )
     return false;
 
   const Material & mat = materials[iMaterialID];
-  AlphaMode alphaMode = MaterialAlphaMode(mat);
-
-  if ( AlphaMode::Blend == alphaMode )
-    return true;
-
-  if ( mat._SpecTrans > S_TransparentSpecTransThreshold )
-    return true;
-
-  return false;
+  const MaterialPass pass = ClassifyMaterialPass(mat);
+  return ( MaterialPass::Blend == pass ) || ( MaterialPass::Transmission == pass );
 }
 
 // ----------------------------------------------------------------------------

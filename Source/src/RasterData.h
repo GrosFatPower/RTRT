@@ -14,6 +14,8 @@
 namespace RTRT
 {
 
+class EnvMap;
+
 namespace RasterData
 {
   struct SIMD_ALIGN64 FrameBuffer
@@ -152,9 +154,14 @@ namespace RasterData
   {
     const std::vector<Material>* _Materials = nullptr;
     const std::vector<Texture*>* _Textures = nullptr;
+    const EnvMap*                _EnvMap = nullptr;
     std::vector<Light>           _Lights;
     Vec3                         _CameraPos = { 0.f, 0.f, 0.f };
     SamplingMode                 _Sampling = SamplingMode::Bilinear;
+    float                        _EnvMapRotation = 0.f;
+    float                        _SpecularIBLIntensity = 1.f;
+    float                        _SpecularIBLMaxRoughness = 0.5f;
+    bool                         _EnableEnvMap = false;
   };
 
   struct Vertex
@@ -224,6 +231,7 @@ namespace RasterData
     float _Weights[3] = { 0.f, 0.f, 0.f };
     float _Depth = 0.f;
     float _FragmentDepth = 0.f;
+    MaterialPass _MaterialPass = MaterialPass::Blend;
   };
 
   struct SIMD_ALIGN64 Tile

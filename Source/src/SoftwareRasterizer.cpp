@@ -245,6 +245,8 @@ int SoftwareRasterizer::Update()
   _Stats._MaskedFragmentsRejected = 0;
   _Stats._TransparentHitsGenerated = 0;
   _Stats._TransparentHitsShaded = 0;
+  _Stats._BlendHitsGenerated = 0;
+  _Stats._TransmissionHitsGenerated = 0;
   _Stats._TransparentPixels = 0;
   _Stats._MaxTransparentLayers = 0;
   _Stats._TransparentHitBufferBytes = 0;
@@ -2175,8 +2177,8 @@ int SoftwareRasterizer::Rasterize(int iThreadBin, int iStartY, int iEndY)
     for (int j = 0; j < _RasterTrianglesBuf[i].size(); ++j)
     {
       rd::RasterTriangle& tri = _RasterTrianglesBuf[i][j];
-      const AlphaMode alphaMode = TriangleAlphaMode(tri);
-      if ( AlphaMode::Blend == alphaMode )
+      const MaterialPass materialPass = TriangleMaterialPass(tri);
+      if ( ( MaterialPass::Blend == materialPass ) || ( MaterialPass::Transmission == materialPass ) )
         continue;
 
       // Backface culling
@@ -2219,7 +2221,7 @@ int SoftwareRasterizer::Rasterize(int iThreadBin, int iStartY, int iEndY)
           W[2] *= Z;
           coord.z = W[0] * tri._V[0].z + W[1] * tri._V[1].z + W[2] * tri._V[2].z;
 
-          if ( AlphaMode::Mask == alphaMode )
+          if ( MaterialPass::Mask == materialPass )
           {
             maskedTested++;
             const Material & material = _Scene.GetMaterials()[tri._MatID];
@@ -2282,8 +2284,8 @@ int SoftwareRasterizer::Rasterize(rd::Tile& ioTile)
       const rd::RasterTriangle * tri = ioTile._RasterTrisBins[i][j];
       if (!tri)
         continue;
-      const AlphaMode alphaMode = TriangleAlphaMode(*tri);
-      if ( AlphaMode::Blend == alphaMode )
+      const MaterialPass materialPass = TriangleMaterialPass(*tri);
+      if ( ( MaterialPass::Blend == materialPass ) || ( MaterialPass::Transmission == materialPass ) )
         continue;
 
       int startX = std::max(ioTile._X, static_cast<int>(std::floor(tri->_BBox._Low.x)));
@@ -2316,7 +2318,7 @@ int SoftwareRasterizer::Rasterize(rd::Tile& ioTile)
           W[2] *= Z;
           coord.z = W[0] * tri->_V[0].z + W[1] * tri->_V[1].z + W[2] * tri->_V[2].z;
 
-          if ( AlphaMode::Mask == alphaMode )
+          if ( MaterialPass::Mask == materialPass )
           {
             ioTile._MaskedTested++;
             const Material & material = _Scene.GetMaterials()[tri->_MatID];
@@ -2382,14 +2384,14 @@ int SoftwareRasterizer::Rasterize(rd::Tile& ioTile)
 }
 
 // ----------------------------------------------------------------------------
-// TriangleAlphaMode
+// TriangleMaterialPass
 // ----------------------------------------------------------------------------
-AlphaMode SoftwareRasterizer::TriangleAlphaMode( const rd::RasterTriangle & iTriangle ) const
+MaterialPass SoftwareRasterizer::TriangleMaterialPass( const rd::RasterTriangle & iTriangle ) const
 {
   const std::vector<Material> & materials = _Scene.GetMaterials();
   if ( ( iTriangle._MatID < 0 ) || ( iTriangle._MatID >= static_cast<int>(materials.size()) ) )
-    return AlphaMode::Opaque;
-  return MaterialAlphaMode(materials[iTriangle._MatID]);
+    return MaterialPass::Opaque;
+  return ClassifyMaterialPass(materials[iTriangle._MatID]);
 }
 
 // ----------------------------------------------------------------------------
@@ -2429,6 +2431,13 @@ int SoftwareRasterizer::RasterizeTransparent()
     {
       _Stats._TransparentHitsGenerated += tile._TransparentHits.size();
       _Stats._TransparentHitBufferBytes += tile._TransparentHits.capacity() * sizeof(rd::TransparentHit);
+      for ( const rd::TransparentHit & hit : tile._TransparentHits )
+      {
+        if ( MaterialPass::Transmission == hit._MaterialPass )
+          _Stats._TransmissionHitsGenerated++;
+        else
+          _Stats._BlendHitsGenerated++;
+      }
     }
   }
   else
@@ -2447,6 +2456,13 @@ int SoftwareRasterizer::RasterizeTransparent()
     {
       _Stats._TransparentHitsGenerated += hits.size();
       _Stats._TransparentHitBufferBytes += hits.capacity() * sizeof(rd::TransparentHit);
+      for ( const rd::TransparentHit & hit : hits )
+      {
+        if ( MaterialPass::Transmission == hit._MaterialPass )
+          _Stats._TransmissionHitsGenerated++;
+        else
+          _Stats._BlendHitsGenerated++;
+      }
     }
   }
   return 0;
@@ -2465,7 +2481,8 @@ int SoftwareRasterizer::RasterizeTransparent(int iThreadBin, int iStartY, int iE
   {
     for ( rd::RasterTriangle & tri : _RasterTrianglesBuf[bin] )
     {
-      if ( AlphaMode::Blend != TriangleAlphaMode(tri) )
+      const MaterialPass materialPass = TriangleMaterialPass(tri);
+      if ( ( MaterialPass::Blend != materialPass ) && ( MaterialPass::Transmission != materialPass ) )
         continue;
       const int xMin = std::max(0, std::min(static_cast<int>(std::floor(tri._BBox._Low.x)), RenderWidth() - 1));
       const int yMin = std::max(iStartY, std::min(static_cast<int>(std::floor(tri._BBox._Low.y)), iEndY - 1));
@@ -2496,7 +2513,7 @@ int SoftwareRasterizer::RasterizeTransparent(int iThreadBin, int iStartY, int iE
           }
           else if ( ( fragmentDepth > _ImageBuffer._DepthBuffer[pixelIndex] ) || ( fragmentDepth < -1.f ) )
             continue;
-          if ( ResolveFragmentOpacity(tri, weights) <= 0.f )
+          if ( ( MaterialPass::Blend == materialPass ) && ( ResolveFragmentOpacity(tri, weights) <= 0.f ) )
             continue;
 
           rd::TransparentHit hit;
@@ -2504,6 +2521,7 @@ int SoftwareRasterizer::RasterizeTransparent(int iThreadBin, int iStartY, int iE
           hit._PixelIndex = pixelIndex;
           hit._Depth = _Settings._WBuffer ? depth : fragmentDepth;
           hit._FragmentDepth = fragmentDepth;
+          hit._MaterialPass = materialPass;
           std::copy(weights, weights + 3, hit._Weights);
           hits.push_back(hit);
         }
@@ -2526,7 +2544,10 @@ int SoftwareRasterizer::RasterizeTransparent(rd::Tile& ioTile)
   {
     for ( const rd::RasterTriangle * tri : ioTile._RasterTrisBins[bin] )
     {
-      if ( !tri || ( AlphaMode::Blend != TriangleAlphaMode(*tri) ) )
+      if ( !tri )
+        continue;
+      const MaterialPass materialPass = TriangleMaterialPass(*tri);
+      if ( ( MaterialPass::Blend != materialPass ) && ( MaterialPass::Transmission != materialPass ) )
         continue;
       const int xMin = std::max(ioTile._X, static_cast<int>(std::floor(tri->_BBox._Low.x)));
       const int yMin = std::max(ioTile._Y, static_cast<int>(std::floor(tri->_BBox._Low.y)));
@@ -2557,7 +2578,7 @@ int SoftwareRasterizer::RasterizeTransparent(rd::Tile& ioTile)
           }
           else if ( ( fragmentDepth > ioTile._LocalFB._DepthBuffer[localPixelIndex] ) || ( fragmentDepth < -1.f ) )
             continue;
-          if ( ResolveFragmentOpacity(*tri, weights) <= 0.f )
+          if ( ( MaterialPass::Blend == materialPass ) && ( ResolveFragmentOpacity(*tri, weights) <= 0.f ) )
             continue;
 
           rd::TransparentHit hit;
@@ -2565,6 +2586,7 @@ int SoftwareRasterizer::RasterizeTransparent(rd::Tile& ioTile)
           hit._PixelIndex = localPixelIndex;
           hit._Depth = _Settings._WBuffer ? depth : fragmentDepth;
           hit._FragmentDepth = fragmentDepth;
+          hit._MaterialPass = materialPass;
           std::copy(weights, weights + 3, hit._Weights);
           hits.push_back(hit);
         }
@@ -2590,8 +2612,8 @@ int SoftwareRasterizer::RasterizeAVX2(rd::Tile& ioTile)
       const rd::RasterTriangle * tri = ioTile._RasterTrisBins[i][j];
       if (!tri)
         continue;
-      const AlphaMode alphaMode = TriangleAlphaMode(*tri);
-      if ( AlphaMode::Blend == alphaMode )
+      const MaterialPass materialPass = TriangleMaterialPass(*tri);
+      if ( ( MaterialPass::Blend == materialPass ) || ( MaterialPass::Transmission == materialPass ) )
         continue;
 
       int startX = std::max(ioTile._X, static_cast<int>(std::floor(tri->_BBox._Low.x)));
@@ -2672,7 +2694,7 @@ int SoftwareRasterizer::RasterizeAVX2(rd::Tile& ioTile)
             float z = z_coord.m256_f32[k];
 
             float weights[3] = { Weights[0].m256_f32[k], Weights[1].m256_f32[k], Weights[2].m256_f32[k] };
-            if ( AlphaMode::Mask == alphaMode )
+            if ( MaterialPass::Mask == materialPass )
             {
               ioTile._MaskedTested++;
               const Material & material = _Scene.GetMaterials()[tri->_MatID];
@@ -2741,8 +2763,8 @@ int SoftwareRasterizer::RasterizeARM(rd::Tile& ioTile)
       const rd::RasterTriangle * tri = ioTile._RasterTrisBins[i][j];
       if (!tri)
         continue;
-      const AlphaMode alphaMode = TriangleAlphaMode(*tri);
-      if ( AlphaMode::Blend == alphaMode )
+      const MaterialPass materialPass = TriangleMaterialPass(*tri);
+      if ( ( MaterialPass::Blend == materialPass ) || ( MaterialPass::Transmission == materialPass ) )
         continue;
 
       int startX = std::max(ioTile._X, static_cast<int>(std::floor(tri->_BBox._Low.x)));
@@ -2826,7 +2848,7 @@ int SoftwareRasterizer::RasterizeARM(rd::Tile& ioTile)
               SIMDUtils::GetVectorElement(Weights[1], k),
               SIMDUtils::GetVectorElement(Weights[2], k)
             };
-            if ( AlphaMode::Mask == alphaMode )
+            if ( MaterialPass::Mask == materialPass )
             {
               ioTile._MaskedTested++;
               const Material & material = _Scene.GetMaterials()[tri->_MatID];
@@ -2935,6 +2957,11 @@ int SoftwareRasterizer::ProcessTransparentFragments()
   uniforms._Sampling = _Settings._Sampling;
   uniforms._Materials = &_Scene.GetMaterials();
   uniforms._Textures = &_Scene.GetTextures();
+  uniforms._EnvMap = &_Scene.GetEnvMap();
+  uniforms._EnvMapRotation = _Settings._SkyBoxRotation;
+  uniforms._SpecularIBLIntensity = _Settings._SpecularIBLIntensity;
+  uniforms._SpecularIBLMaxRoughness = _Settings._SpecularIBLMaxRoughness;
+  uniforms._EnableEnvMap = _Settings._EnableSkybox && _Scene.GetEnvMap().IsInitialized();
   for ( int i = 0; i < _Scene.GetNbLights(); ++i )
     uniforms._Lights.push_back(*_Scene.GetLight(i));
 
@@ -3063,18 +3090,20 @@ void SoftwareRasterizer::ProcessTransparentFragments(std::vector<rd::Transparent
       fragment._Attrib._Normal = hit._Triangle->_Normal;
     fragment._Attrib._LOD = hit._Triangle->_LOD;
 
-    Vec4 source = fragmentShader -> Process(fragment, *hit._Triangle);
+    TransparentShadingResult source = fragmentShader -> ProcessTransparent(fragment, *hit._Triangle, hit._MaterialPass);
     if ( renderWires )
     {
       const Vec4 wire = wireShader -> Process(fragment, *hit._Triangle);
-      source.x = glm::mix(source.x, wire.x, wire.w);
-      source.y = glm::mix(source.y, wire.y, wire.w);
-      source.z = glm::mix(source.z, wire.z, wire.w);
+      source._PremultipliedColor = glm::mix(source._PremultipliedColor, Vec3(wire) * source._Alpha, wire.w);
     }
-    const float alpha = MathUtil::Clamp(source.a, 0.f, 1.f);
+    const float alpha = MathUtil::Clamp(source._Alpha, 0.f, 1.f);
+    const float maxSource = std::max(source._PremultipliedColor.x,
+                                     std::max(source._PremultipliedColor.y, source._PremultipliedColor.z));
+    if ( ( alpha <= EPSILON ) && ( maxSource <= EPSILON ) )
+      continue;
     RGBA8 & destination8 = _ImageBuffer._ColorBuffer[globalPixelIndex];
     const Vec3 destination(destination8._R / 255.f, destination8._G / 255.f, destination8._B / 255.f);
-    destination8 = RGBA8(Vec3(source) * alpha + destination * ( 1.f - alpha ), 1.f);
+    destination8 = RGBA8(source._PremultipliedColor + destination * ( 1.f - alpha ), 1.f);
     if ( ioTile )
       ioTile -> _TransparentShaded++;
   }
