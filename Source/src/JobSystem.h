@@ -7,6 +7,7 @@
  */
 
 #include <functional>
+#include <cstdint>
 #include <queue>
 #include <mutex>
 #include <atomic>
@@ -55,8 +56,8 @@ protected:
   std::mutex                        _WakeMutex;
   bool                              _Stop = false;
 
-  unsigned long long                _NbJobs = 0;
-  std::atomic<unsigned long long>   _NbFinishedJobs{ 0 };
+  std::uint64_t                _NbJobs = 0;
+  std::atomic<std::uint64_t>   _NbFinishedJobs{ 0 };
 };
 
 inline bool JobSystem::IsBusy() {

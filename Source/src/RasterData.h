@@ -2,6 +2,7 @@
 #define _RasterData_
 
 #include "MathUtil.h"
+#include <cstdint>
 #include "RGBA8.h"
 #include "Light.h"
 #include "Material.h"
@@ -240,13 +241,13 @@ namespace RasterData
     SIMD_ALIGN64 std::vector<unsigned int> _CoveredIndices;
     SIMD_ALIGN64 std::vector<TransparentHit> _TransparentHits;
     unsigned int _CompactGeneration = 1;
-    unsigned long long _BinnedTriangles = 0;
-    unsigned long long _DepthWins = 0;
-    unsigned long long _CoveredCount = 0;
-    unsigned long long _ShadedCount = 0;
-    unsigned long long _MaskedTested = 0;
-    unsigned long long _MaskedRejected = 0;
-    unsigned long long _TransparentShaded = 0;
+    std::uint64_t _BinnedTriangles = 0;
+    std::uint64_t _DepthWins = 0;
+    std::uint64_t _CoveredCount = 0;
+    std::uint64_t _ShadedCount = 0;
+    std::uint64_t _MaskedTested = 0;
+    std::uint64_t _MaskedRejected = 0;
+    std::uint64_t _TransparentShaded = 0;
   };
 
 }

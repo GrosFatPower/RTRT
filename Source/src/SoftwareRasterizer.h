@@ -2,6 +2,7 @@
 #define _SoftwareRasterizer_
 
 #include "Renderer.h"
+#include <cstdint>
 #include "RenderSettings.h"
 #include "QuadMesh.h"
 #include "GLUtil.h"
@@ -44,31 +45,31 @@ class SoftwareFragmentShader;
 
 struct SoftwareRasterizerStats
 {
-  unsigned long long _InputInstances = 0;
-  unsigned long long _VisibleInstances = 0;
-  unsigned long long _RejectedInstances = 0;
-  unsigned long long _AvoidedVertices = 0;
-  unsigned long long _AvoidedTriangles = 0;
-  unsigned long long _ChangedInstances = 0;
-  unsigned long long _TransformedVertices = 0;
-  unsigned long long _RefreshedVertices = 0;
-  unsigned long long _RefreshedTriangles = 0;
-  unsigned long long _InputTriangles = 0;
-  unsigned long long _ClippedTriangles = 0;
-  unsigned long long _BinnedTriangles = 0;
-  unsigned long long _DepthWinningPixels = 0;
-  unsigned long long _ShadedPixels = 0;
-  unsigned long long _CoveredPixels = 0;
-  unsigned long long _TileJobs = 0;
-  unsigned long long _CopiedBytes = 0;
-  unsigned long long _HitBufferBytes = 0;
-  unsigned long long _MaskedFragmentsTested = 0;
-  unsigned long long _MaskedFragmentsRejected = 0;
-  unsigned long long _TransparentHitsGenerated = 0;
-  unsigned long long _TransparentHitsShaded = 0;
-  unsigned long long _TransparentPixels = 0;
-  unsigned long long _MaxTransparentLayers = 0;
-  unsigned long long _TransparentHitBufferBytes = 0;
+  std::uint64_t _InputInstances = 0;
+  std::uint64_t _VisibleInstances = 0;
+  std::uint64_t _RejectedInstances = 0;
+  std::uint64_t _AvoidedVertices = 0;
+  std::uint64_t _AvoidedTriangles = 0;
+  std::uint64_t _ChangedInstances = 0;
+  std::uint64_t _TransformedVertices = 0;
+  std::uint64_t _RefreshedVertices = 0;
+  std::uint64_t _RefreshedTriangles = 0;
+  std::uint64_t _InputTriangles = 0;
+  std::uint64_t _ClippedTriangles = 0;
+  std::uint64_t _BinnedTriangles = 0;
+  std::uint64_t _DepthWinningPixels = 0;
+  std::uint64_t _ShadedPixels = 0;
+  std::uint64_t _CoveredPixels = 0;
+  std::uint64_t _TileJobs = 0;
+  std::uint64_t _CopiedBytes = 0;
+  std::uint64_t _HitBufferBytes = 0;
+  std::uint64_t _MaskedFragmentsTested = 0;
+  std::uint64_t _MaskedFragmentsRejected = 0;
+  std::uint64_t _TransparentHitsGenerated = 0;
+  std::uint64_t _TransparentHitsShaded = 0;
+  std::uint64_t _TransparentPixels = 0;
+  std::uint64_t _MaxTransparentLayers = 0;
+  std::uint64_t _TransparentHitBufferBytes = 0;
   double _AverageTransparentLayers = 0.;
 };
 
@@ -314,8 +315,8 @@ protected:
   std::vector<std::vector<RasterData::RasterTriangle>> _RasterTrianglesBuf;
   std::vector< std::vector<RasterData::Fragment>>      _Fragments;
   std::vector< std::vector<RasterData::TransparentHit>> _TransparentFragments;
-  std::vector<unsigned long long>                      _MaskedTestedBuf;
-  std::vector<unsigned long long>                      _MaskedRejectedBuf;
+  std::vector<std::uint64_t>                      _MaskedTestedBuf;
+  std::vector<std::uint64_t>                      _MaskedRejectedBuf;
 };
 
 }

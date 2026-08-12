@@ -281,7 +281,7 @@ int SoftwareRasterizer::Update()
   _PassEnabled[TimingColorUpload] = true;
   this->UpdateTextures();
   _PassTimes[TimingColorUpload] = glfwGetTime() - uploadStartTime;
-  _Stats._CopiedBytes += static_cast<unsigned long long>(_ImageBuffer._ColorBuffer.size()) * sizeof(RGBA8);
+  _Stats._CopiedBytes += static_cast<std::uint64_t>(_ImageBuffer._ColorBuffer.size()) * sizeof(RGBA8);
 
   this->UpdateRenderToTextureUniforms();
   this->UpdateRenderToScreenUniforms();
@@ -2167,8 +2167,8 @@ int SoftwareRasterizer::Rasterize(int iThreadBin, int iStartY, int iEndY)
 {
   float zNear, zFar;
   _Scene.GetCamera().GetZNearFar(zNear, zFar);
-  unsigned long long maskedTested = 0;
-  unsigned long long maskedRejected = 0;
+  std::uint64_t maskedTested = 0;
+  std::uint64_t maskedRejected = 0;
 
   for (unsigned int i = 0; i < _NbJobs; ++i)
   {
@@ -2960,8 +2960,8 @@ int SoftwareRasterizer::ProcessTransparentFragments()
   }
   JobSystem::Get().Wait();
 
-  unsigned long long transparentPixels = 0;
-  unsigned long long maxLayers = 0;
+  std::uint64_t transparentPixels = 0;
+  std::uint64_t maxLayers = 0;
   if ( TiledRendering() )
   {
     for ( const rd::Tile & tile : _Tiles )
@@ -2970,7 +2970,7 @@ int SoftwareRasterizer::ProcessTransparentFragments()
       if ( !tile._TransparentHits.empty() )
       {
         unsigned int previousPixel = std::numeric_limits<unsigned int>::max();
-        unsigned long long layers = 0;
+        std::uint64_t layers = 0;
         for ( const rd::TransparentHit & hit : tile._TransparentHits )
         {
           if ( hit._PixelIndex != previousPixel )
@@ -2994,7 +2994,7 @@ int SoftwareRasterizer::ProcessTransparentFragments()
     {
       _Stats._TransparentHitsShaded += hits.size();
       unsigned int previousPixel = std::numeric_limits<unsigned int>::max();
-      unsigned long long layers = 0;
+      std::uint64_t layers = 0;
       for ( const rd::TransparentHit & hit : hits )
       {
         if ( hit._PixelIndex != previousPixel )
