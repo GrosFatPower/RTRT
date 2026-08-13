@@ -445,7 +445,7 @@ int main( int iArgc, char ** iArgv )
 
   if ( runUnitTests || runAll )
   {
-    const int result = RTRT::Tests::RunUnitTests(artifactsDir / "unit", useColor);
+    const int result = RTRT::Tests::RunUnitTests(artifactsDir / "unit", useColor, runAll);
     if ( 0 != result )
       return result;
   }
