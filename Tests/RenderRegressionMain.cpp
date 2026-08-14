@@ -1,5 +1,5 @@
 #include "RenderTestFramework.h"
-#include "ScopedOutputSilencer.h"
+#include "RenderTestOutputUtil.h"
 
 #include "DeferredRenderer.h"
 #include "Loader.h"
@@ -65,45 +65,21 @@ public:
     if ( !_File )
       return;
 
-    std::cout.flush();
-    std::cerr.flush();
-    fflush(stdout);
-    fflush(stderr);
-    _StdOut = RTRT::DuplicateFileDescriptor(RTRT::GetFileDescriptor(stdout));
-    _StdErr = RTRT::DuplicateFileDescriptor(RTRT::GetFileDescriptor(stderr));
-    if ( ( _StdOut < 0 ) || ( _StdErr < 0 ) )
-      return;
-    RTRT::RedirectFileDescriptor(RTRT::GetFileDescriptor(_File), RTRT::GetFileDescriptor(stdout));
-    RTRT::RedirectFileDescriptor(RTRT::GetFileDescriptor(_File), RTRT::GetFileDescriptor(stderr));
-    _Active = true;
+    _Redirect = std::make_unique<RTRT::ScopedOutputRedirect>(RTRT::GetFileDescriptor(_File));
   }
 
   ~TraceCapture()
   {
-    if ( _Active )
-    {
-      std::cout.flush();
-      std::cerr.flush();
-      fflush(stdout);
-      fflush(stderr);
-      RTRT::RedirectFileDescriptor(_StdOut, RTRT::GetFileDescriptor(stdout));
-      RTRT::RedirectFileDescriptor(_StdErr, RTRT::GetFileDescriptor(stderr));
-    }
-    if ( _StdOut >= 0 )
-      RTRT::CloseFileDescriptor(_StdOut);
-    if ( _StdErr >= 0 )
-      RTRT::CloseFileDescriptor(_StdErr);
+    _Redirect.reset();
     if ( _File )
       fclose(_File);
   }
 
-  bool IsActive() const { return _Active; }
+  bool IsActive() const { return _Redirect && _Redirect->IsActive(); }
 
 private:
   FILE * _File = nullptr;
-  int _StdOut = -1;
-  int _StdErr = -1;
-  bool _Active = false;
+  std::unique_ptr<RTRT::ScopedOutputRedirect> _Redirect;
 };
 
 class GLTestContext

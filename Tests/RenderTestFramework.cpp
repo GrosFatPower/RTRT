@@ -10,7 +10,7 @@
 #include "RasterData.h"
 #include "SIMDUtils.h"
 #include "SoftwareVertexShader.h"
-#include "ScopedOutputSilencer.h"
+#include "RenderTestOutputUtil.h"
 
 #include <nlohmann/json.hpp>
 

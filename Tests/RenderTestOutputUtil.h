@@ -1,9 +1,10 @@
-#ifndef _ScopedOutputSilencer_
-#define _ScopedOutputSilencer_
+#ifndef _RenderTestOutputUtil_
+#define _RenderTestOutputUtil_
 
 #include <cstdio>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <sstream>
 
 #if defined(_WIN32)
@@ -64,6 +65,54 @@ inline int GetFileDescriptor( FILE * iFile )
 #endif
 }
 
+class ScopedOutputRedirect
+{
+public:
+  explicit ScopedOutputRedirect( int iDestinationDescriptor )
+  {
+    std::cout.flush();
+    std::cerr.flush();
+    std::fflush(stdout);
+    std::fflush(stderr);
+    _StdoutDescriptor = GetFileDescriptor(stdout);
+    _StderrDescriptor = GetFileDescriptor(stderr);
+    _OldStdout = DuplicateFileDescriptor(_StdoutDescriptor);
+    _OldStderr = DuplicateFileDescriptor(_StderrDescriptor);
+    if ( ( _OldStdout < 0 ) || ( _OldStderr < 0 ) )
+      return;
+
+    RedirectFileDescriptor(iDestinationDescriptor, _StdoutDescriptor);
+    RedirectFileDescriptor(iDestinationDescriptor, _StderrDescriptor);
+    _Active = true;
+  }
+
+  ~ScopedOutputRedirect()
+  {
+    if ( _Active )
+    {
+      std::cout.flush();
+      std::cerr.flush();
+      std::fflush(stdout);
+      std::fflush(stderr);
+      RedirectFileDescriptor(_OldStdout, _StdoutDescriptor);
+      RedirectFileDescriptor(_OldStderr, _StderrDescriptor);
+    }
+    if ( _OldStdout >= 0 )
+      CloseFileDescriptor(_OldStdout);
+    if ( _OldStderr >= 0 )
+      CloseFileDescriptor(_OldStderr);
+  }
+
+  bool IsActive() const { return _Active; }
+
+private:
+  int _StdoutDescriptor = -1;
+  int _StderrDescriptor = -1;
+  int _OldStdout = -1;
+  int _OldStderr = -1;
+  bool _Active = false;
+};
+
 class ScopedOutputSilencer
 {
 public:
@@ -74,18 +123,9 @@ public:
     {
       _OldCout = std::cout.rdbuf(_Output.rdbuf());
       _OldCerr = std::cerr.rdbuf(_Output.rdbuf());
-      std::fflush(stdout);
-      std::fflush(stderr);
-      _StdoutDescriptor = GetFileDescriptor(stdout);
-      _StderrDescriptor = GetFileDescriptor(stderr);
-      _OldStdout = DuplicateFileDescriptor(_StdoutDescriptor);
-      _OldStderr = DuplicateFileDescriptor(_StderrDescriptor);
       _NullOutput = OpenNullOutput();
-      if ( ( _OldStdout >= 0 ) && ( _OldStderr >= 0 ) && ( _NullOutput >= 0 ) )
-      {
-        RedirectFileDescriptor(_NullOutput, _StdoutDescriptor);
-        RedirectFileDescriptor(_NullOutput, _StderrDescriptor);
-      }
+      if ( _NullOutput >= 0 )
+        _Redirect = std::make_unique<ScopedOutputRedirect>(_NullOutput);
     }
   }
 
@@ -93,18 +133,7 @@ public:
   {
     if ( _Enabled )
     {
-      std::fflush(stdout);
-      std::fflush(stderr);
-      if ( _OldStdout >= 0 )
-      {
-        RedirectFileDescriptor(_OldStdout, _StdoutDescriptor);
-        CloseFileDescriptor(_OldStdout);
-      }
-      if ( _OldStderr >= 0 )
-      {
-        RedirectFileDescriptor(_OldStderr, _StderrDescriptor);
-        CloseFileDescriptor(_OldStderr);
-      }
+      _Redirect.reset();
       if ( _NullOutput >= 0 )
         CloseFileDescriptor(_NullOutput);
       std::cout.rdbuf(_OldCout);
@@ -117,13 +146,10 @@ private:
   std::ostringstream _Output;
   std::streambuf * _OldCout = nullptr;
   std::streambuf * _OldCerr = nullptr;
-  int _StdoutDescriptor = -1;
-  int _StderrDescriptor = -1;
-  int _OldStdout = -1;
-  int _OldStderr = -1;
   int _NullOutput = -1;
+  std::unique_ptr<ScopedOutputRedirect> _Redirect;
 };
 
 }
 
-#endif /* _ScopedOutputSilencer_ */
+#endif /* _RenderTestOutputUtil_ */

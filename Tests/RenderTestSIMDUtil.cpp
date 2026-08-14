@@ -8,7 +8,7 @@
 #include "Scene.h"
 #include "SIMDUtils.h"
 #include "SoftwareVertexShader.h"
-#include "ScopedOutputSilencer.h"
+#include "RenderTestOutputUtil.h"
 
 #include <algorithm>
 #include <cmath>
@@ -328,4 +328,3 @@ bool CheckSIMDLoadedSceneData( bool iQuiet )
 }
 
 }
-
