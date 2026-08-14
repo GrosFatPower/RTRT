@@ -8,6 +8,18 @@
 namespace RTRT
 {
 
+struct TransparentShadingResult
+{
+  Vec3 _PremultipliedColor = Vec3(0.f);
+  float _Alpha = 0.f;
+};
+
+float ResolveMaterialOpacity( const Material & iMaterial,
+                              const std::vector<Texture*> & iTextures,
+                              SamplingMode iSampling,
+                              const Vec2 & iUV,
+                              float iLOD );
+
 class SoftwareFragmentShader
 {
 public:
@@ -16,6 +28,9 @@ public:
   virtual ~SoftwareFragmentShader() {}
 
   virtual Vec4 Process(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri) = 0;
+  virtual TransparentShadingResult ProcessTransparent(const RasterData::Fragment& iFrag,
+                                                      const RasterData::RasterTriangle & iTri,
+                                                      MaterialPass iMaterialPass);
 
 protected:
 
@@ -29,7 +44,10 @@ public:
 
   virtual ~BlinnPhongFragmentShader(){}
 
-  virtual Vec4 Process(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri);
+  virtual Vec4 Process(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri) override;
+  virtual TransparentShadingResult ProcessTransparent(const RasterData::Fragment& iFrag,
+                                                      const RasterData::RasterTriangle & iTri,
+                                                      MaterialPass iMaterialPass) override;
 
 protected:
 
@@ -44,7 +62,10 @@ public:
 
   virtual ~PBRFragmentShader(){}
 
-  virtual Vec4 Process(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri);
+  virtual Vec4 Process(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri) override;
+  virtual TransparentShadingResult ProcessTransparent(const RasterData::Fragment& iFrag,
+                                                      const RasterData::RasterTriangle & iTri,
+                                                      MaterialPass iMaterialPass) override;
 
 protected:
 

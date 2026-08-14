@@ -385,6 +385,11 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
   int uvIndexOffset   = 0;
   for ( auto meshInst : _MeshInstances )
   {
+    if ( !meshInst._Visible )
+      continue;
+    if ( ( meshInst._MeshID < 0 ) || ( meshInst._MeshID >= static_cast<int>(_Meshes.size()) ) )
+      continue;
+
     Mesh * curMesh = _Meshes[meshInst._MeshID];
     if ( !curMesh || !curMesh -> GetNbFaces() )
       continue;

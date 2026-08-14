@@ -2,6 +2,7 @@
 #define _RasterData_
 
 #include "MathUtil.h"
+#include <cstdint>
 #include "RGBA8.h"
 #include "Light.h"
 #include "Material.h"
@@ -12,6 +13,8 @@
 
 namespace RTRT
 {
+
+class EnvMap;
 
 namespace RasterData
 {
@@ -151,9 +154,14 @@ namespace RasterData
   {
     const std::vector<Material>* _Materials = nullptr;
     const std::vector<Texture*>* _Textures = nullptr;
+    const EnvMap*                _EnvMap = nullptr;
     std::vector<Light>           _Lights;
     Vec3                         _CameraPos = { 0.f, 0.f, 0.f };
     SamplingMode                 _Sampling = SamplingMode::Bilinear;
+    float                        _EnvMapRotation = 0.f;
+    float                        _SpecularIBLIntensity = 1.f;
+    float                        _SpecularIBLMaxRoughness = 0.5f;
+    bool                         _EnableEnvMap = false;
   };
 
   struct Vertex
@@ -194,6 +202,8 @@ namespace RasterData
     float      _InvArea;
     AABB<Vec2> _BBox;
     Vec3       _Normal;
+    Vec3       _Tangent;
+    Vec3       _Bitangent;
     int        _MatID;
     float      _LOD = 0.f;
   };
@@ -207,6 +217,23 @@ namespace RasterData
     Varying _Attrib;
   };
 
+  struct CompactHit
+  {
+    const RasterTriangle * _Triangle = nullptr;
+    float _Weights[3] = { 0.f, 0.f, 0.f };
+    float _Depth = 0.f;
+  };
+
+  struct TransparentHit
+  {
+    const RasterTriangle * _Triangle = nullptr;
+    unsigned int _PixelIndex = 0;
+    float _Weights[3] = { 0.f, 0.f, 0.f };
+    float _Depth = 0.f;
+    float _FragmentDepth = 0.f;
+    MaterialPass _MaterialPass = MaterialPass::Blend;
+  };
+
   struct SIMD_ALIGN64 Tile
   {
     int         _X;
@@ -217,6 +244,18 @@ namespace RasterData
     SIMD_ALIGN64 std::vector<std::vector<RasterTriangle*>> _RasterTrisBins;
     SIMD_ALIGN64 std::vector<Fragment> _Fragments;
     SIMD_ALIGN64 std::vector<bool> _CoveredPixels;
+    SIMD_ALIGN64 std::vector<CompactHit> _CompactHits;
+    SIMD_ALIGN64 std::vector<unsigned int> _CompactHitGenerations;
+    SIMD_ALIGN64 std::vector<unsigned int> _CoveredIndices;
+    SIMD_ALIGN64 std::vector<TransparentHit> _TransparentHits;
+    unsigned int _CompactGeneration = 1;
+    std::uint64_t _BinnedTriangles = 0;
+    std::uint64_t _DepthWins = 0;
+    std::uint64_t _CoveredCount = 0;
+    std::uint64_t _ShadedCount = 0;
+    std::uint64_t _MaskedTested = 0;
+    std::uint64_t _MaskedRejected = 0;
+    std::uint64_t _TransparentShaded = 0;
   };
 
 }

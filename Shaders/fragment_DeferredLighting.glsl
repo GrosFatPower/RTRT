@@ -129,7 +129,7 @@ void main()
 
   if ( depth >= 1.0 )
   {
-    if ( ( u_DebugMode & (0x80 | 0x100 | 0x200) ) != 0 )
+    if ( ( u_DebugMode & (0x80 | 0x100 | 0x200 | 0x400) ) != 0 )
     {
       fragColor = vec4(0.0, 0.0, 0.0, 1.0);
       return;
@@ -163,6 +163,11 @@ void main()
   else if ( ( u_DebugMode & 0x02 ) != 0 )
   {
     fragColor = vec4(abs(N), 1.);
+    return;
+  }
+  else if ( ( u_DebugMode & 0x800 ) != 0 )
+  {
+    fragColor = vec4(pos, 1.);
     return;
   }
 

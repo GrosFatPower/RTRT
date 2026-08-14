@@ -2,6 +2,7 @@
 #define _SoftwareRasterizer_
 
 #include "Renderer.h"
+#include <cstdint>
 #include "RenderSettings.h"
 #include "QuadMesh.h"
 #include "GLUtil.h"
@@ -11,6 +12,7 @@
 
 #include "GL/glew.h"
 
+#include <array>
 #include <memory>
 #include <mutex>
 
@@ -39,6 +41,39 @@ class Scene;
 struct Material;
 class Texture;
 struct Light;
+class SoftwareFragmentShader;
+
+struct SoftwareRasterizerStats
+{
+  std::uint64_t _InputInstances = 0;
+  std::uint64_t _VisibleInstances = 0;
+  std::uint64_t _RejectedInstances = 0;
+  std::uint64_t _AvoidedVertices = 0;
+  std::uint64_t _AvoidedTriangles = 0;
+  std::uint64_t _ChangedInstances = 0;
+  std::uint64_t _TransformedVertices = 0;
+  std::uint64_t _RefreshedVertices = 0;
+  std::uint64_t _RefreshedTriangles = 0;
+  std::uint64_t _InputTriangles = 0;
+  std::uint64_t _ClippedTriangles = 0;
+  std::uint64_t _BinnedTriangles = 0;
+  std::uint64_t _DepthWinningPixels = 0;
+  std::uint64_t _ShadedPixels = 0;
+  std::uint64_t _CoveredPixels = 0;
+  std::uint64_t _TileJobs = 0;
+  std::uint64_t _CopiedBytes = 0;
+  std::uint64_t _HitBufferBytes = 0;
+  std::uint64_t _MaskedFragmentsTested = 0;
+  std::uint64_t _MaskedFragmentsRejected = 0;
+  std::uint64_t _TransparentHitsGenerated = 0;
+  std::uint64_t _TransparentHitsShaded = 0;
+  std::uint64_t _BlendHitsGenerated = 0;
+  std::uint64_t _TransmissionHitsGenerated = 0;
+  std::uint64_t _TransparentPixels = 0;
+  std::uint64_t _MaxTransparentLayers = 0;
+  std::uint64_t _TransparentHitBufferBytes = 0;
+  double _AverageTransparentLayers = 0.;
+};
 
 class SoftwareRasterizer : public Renderer
 {
@@ -53,24 +88,42 @@ public:
   virtual int RenderToTexture() override;
   virtual int RenderToScreen() override;
   virtual int RenderToFile(const std::filesystem::path& iFilePath) override;
+  virtual int ReadbackFinalColor( RenderImage & oImage ) override;
+  virtual int GetRenderPassTimings( std::vector<RenderPassTiming> & oTimings ) const override;
 
   virtual SoftwareRasterizer* AsSoftwareRasterizer() override { return this; }
 
   bool GetEnableSIMD() const { return _EnableSIMD; }
   void SetEnableSIMD(bool enabled) { _EnableSIMD = enabled; }
+  const char * GetSIMDMode() const;
 
   unsigned int GetTileSize() const { return _TileSize; }
   int SetTileSize( unsigned int iTileSize );
+  const SoftwareRasterizerStats & GetStats() const { return _Stats; }
+  bool GetEnableIncrementalRefresh() const { return _EnableIncrementalRefresh; }
+  void SetEnableIncrementalRefresh( bool iEnabled ) { _EnableIncrementalRefresh = iEnabled; }
+  bool GetEnableCompactHits() const { return _EnableCompactHits; }
+  void SetEnableCompactHits( bool iEnabled ) { _EnableCompactHits = iEnabled; }
+  bool GetEnableDirectColorWrites() const { return _EnableDirectColorWrites; }
+  void SetEnableDirectColorWrites( bool iEnabled ) { _EnableDirectColorWrites = iEnabled; }
+  bool GetEnableFrustumCulling() const { return _EnableFrustumCulling; }
+  void SetEnableFrustumCulling( bool iEnabled ) { _EnableFrustumCulling = iEnabled; }
+  bool GetEnablePBOUpload() const { return _EnablePBOUpload; }
+  void SetEnablePBOUpload( bool iEnabled ) { _EnablePBOUpload = iEnabled; }
 
   void SetGenerateMipMaps(bool iGenerate);
   bool GetGenerateMipMaps() const { return _GenerateMipMaps; }
 
 protected:
 
+  struct CompiledInstanceRange;
+
   int UpdateRenderResolution();
   int ResizeRenderTarget();
 
   int InitializeFrameBuffers();
+  int InitializeStats();
+  int UpdateStats();
   int RecompileShaders();
 
   int UpdateNumberOfWorkers(bool iForce = false);
@@ -78,6 +131,7 @@ protected:
   int UnloadScene();
   int ReloadScene();
   int RefreshSceneInstanceTransforms();
+  int RefreshAllSceneInstanceTransforms();
   bool CanRefreshSceneInstanceTransforms() const;
   int ReloadEnvMap();
 
@@ -105,6 +159,7 @@ protected:
   int RenderBackground(float iTop, float iRight);
   void RenderBackgroundRows(int iStartY, int iEndY, Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY);
   void RenderBackground(Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY, RasterData::Tile& ioTile);
+  int RenderUncoveredBackground(float iTop, float iRight);
 
   int RenderScene();
 
@@ -117,12 +172,21 @@ protected:
   int Rasterize();
   int Rasterize(int iThreadBin, int iStartY, int iEndY);
   int Rasterize(RasterData::Tile& ioTile);
+  int RasterizeTransparent();
+  int RasterizeTransparent(int iThreadBin, int iStartY, int iEndY);
+  int RasterizeTransparent(RasterData::Tile& ioTile);
 
   int ProcessFragments();
   void ProcessFragments(int iThreadBin, const RasterData::DefaultUniform & iUniforms);
 
   void BinTrianglesToTiles(unsigned int iBufferIndex);
   void ProcessFragments(RasterData::Tile& ioTile, const RasterData::DefaultUniform& iUniforms);
+  int ProcessTransparentFragments();
+  void ProcessTransparentFragments(std::vector<RasterData::TransparentHit> & ioHits,
+                                   const RasterData::DefaultUniform & iUniforms,
+                                   RasterData::Tile * ioTile);
+  float ResolveFragmentOpacity( const RasterData::RasterTriangle & iTriangle, const float iWeights[3] ) const;
+  MaterialPass TriangleMaterialPass( const RasterData::RasterTriangle & iTriangle ) const;
 
 #ifdef SIMD_AVX2
   void CopyTileToMainBuffer8x(const RasterData::Tile& iTile);
@@ -139,6 +203,11 @@ protected:
 #endif
 
   void ComputeLOD( RasterData::RasterTriangle & ioRasterTri );
+  void UpdateInstanceBounds( CompiledInstanceRange & ioRange );
+  bool IsInstanceVisible( const CompiledInstanceRange & iRange, const Mat4x4 & iViewProjection ) const;
+  void BeginTimer( int iTimerID );
+  void EndTimer( int iTimerID );
+  double ReadTimer( int iTimerID );
 
 protected:
 
@@ -148,6 +217,19 @@ protected:
     int _MeshID         = -1;
     int _VertexID       = -1;
     int _NormalID       = -1;
+  };
+
+  struct CompiledInstanceRange
+  {
+    int    _MeshID = -1;
+    int    _MaterialID = -1;
+    int    _VertexStart = 0;
+    int    _VertexCount = 0;
+    int    _TriangleStart = 0;
+    int    _TriangleCount = 0;
+    bool   _Visible = false;
+    Mat4x4 _Transform = Mat4x4(1.f);
+    AABB<Vec3> _WorldBounds;
   };
 
   QuadMesh _Quad;
@@ -174,6 +256,15 @@ protected:
   int _TileCountX, _TileCountY;
   std::vector<RasterData::Tile> _Tiles;
   unsigned int _TileSize = 64;
+  bool _EnableIncrementalRefresh = true;
+  bool _EnableCompactHits = true;
+  bool _EnableDirectColorWrites = true;
+  bool _EnableFrustumCulling = true;
+#if defined(__APPLE__)
+  bool _EnablePBOUpload = true;
+#else
+  bool _EnablePBOUpload = false;
+#endif
 
   // Textures filtering
   bool _GenerateMipMaps = false;
@@ -182,16 +273,52 @@ protected:
   unsigned int _FrameNum = 1;
   unsigned int _NbCompleteFrames = 0;
   RasterData::FrameBuffer _ImageBuffer;
+  std::array<GLuint, 2> _UploadPBOs = { 0, 0 };
+  std::array<GLsync, 2> _UploadFences = { nullptr, nullptr };
+  size_t _UploadPBOSize = 0;
+  unsigned int _UploadPBOIndex = 0;
+
+  enum TimingID
+  {
+    TimingInstanceRefresh = 0,
+    TimingFrameClear,
+    TimingBackground,
+    TimingUniformUpdate,
+    TimingProcessVertices,
+    TimingClipTriangles,
+    TimingRasterize,
+    TimingProcessFragments,
+    TimingTransparentRasterize,
+    TimingTransparentFragments,
+    TimingRenderScene,
+    TimingColorUpload,
+    TimingCopyToRenderTarget,
+    TimingCompositeScreen,
+    TimingCount
+  };
+
+  std::array<double, TimingCount> _PassTimes = {};
+  std::array<bool, TimingCount>   _PassEnabled = {};
+  std::array<bool, TimingCount>   _TimerWritten = {};
+  std::array<std::array<GLuint, 2>, TimingCount> _TimerIDs = {};
+  SoftwareRasterizerStats _Stats;
 
   // Scene data
   int                                                  _CachedMeshInstanceCount = 0;
+  int                                                  _CachedVisibleMeshInstanceCount = 0;
   std::vector<RasterData::Vertex>                      _VertexBuffer;
   std::vector<RasterSourceVertex>                      _VertexSources;
   std::vector<RasterData::Triangle>                    _Triangles;
+  std::vector<CompiledInstanceRange>                   _InstanceRanges;
+  std::vector<int>                                     _VisibleInstanceRanges;
+  std::vector<unsigned char>                           _TriangleVisible;
   std::vector<RasterData::ProjectedVertex>             _ProjVerticesBuf;
   std::mutex                                           _ProjVerticesMutex;
   std::vector<std::vector<RasterData::RasterTriangle>> _RasterTrianglesBuf;
   std::vector< std::vector<RasterData::Fragment>>      _Fragments;
+  std::vector< std::vector<RasterData::TransparentHit>> _TransparentFragments;
+  std::vector<std::uint64_t>                      _MaskedTestedBuf;
+  std::vector<std::uint64_t>                      _MaskedRejectedBuf;
 };
 
 }

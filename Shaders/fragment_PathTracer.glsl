@@ -165,7 +165,7 @@ vec3 DirectLight( in Ray iRay, in HitPoint iClosestHit, in Material iMat, float 
     vec3 lightDir = GetLightDirSample(scatterPos, u_Lights[lightInd]);
 
     float distToLight = length(lightDir);
-    normalize(lightDir);
+    lightDir = normalize(lightDir);
 
     float cosTheta = dot(iClosestHit._Normal, lightDir);
     if ( cosTheta > 0. )

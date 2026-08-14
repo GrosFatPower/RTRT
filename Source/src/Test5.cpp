@@ -1,7 +1,9 @@
 #pragma warning(disable : 4100) // unreferenced formal parameter
 
 #include "Test5.h"
+#include "RendererFactory.h"
 
+#include "DroppedFileUtils.h"
 #include "Loader.h"
 #include "PathTracer.h"
 #include "SoftwareRasterizer.h"
@@ -9,6 +11,7 @@
 #include "Util.h"
 #include "PathUtils.h"
 #include "Mesh.h"
+#include "RenderStatsUI.h"
 
 #include <string>
 #include <iostream>
@@ -102,6 +105,18 @@ void Test5::FramebufferSizeCallback(GLFWwindow* iWindow, const int iWidth, const
 }
 
 // ----------------------------------------------------------------------------
+// DropCallback
+// ----------------------------------------------------------------------------
+void Test5::DropCallback( GLFWwindow * iWindow, int iCount, const char ** iPaths )
+{
+  auto * const this_ = static_cast<Test5*>(glfwGetWindowUserPointer(iWindow));
+  if ( !this_ )
+    return;
+
+  this_ -> HandleDroppedFiles(iCount, iPaths);
+}
+
+// ----------------------------------------------------------------------------
 // CTOR
 // ----------------------------------------------------------------------------
 Test5::Test5( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iScreenHeight )
@@ -153,6 +168,41 @@ void Test5::SyncFramebufferResolution( bool iNotifyRenderer )
 
   if ( iNotifyRenderer && _Renderer )
     _Renderer -> Notify(DirtyState::RenderSettings);
+}
+
+// ----------------------------------------------------------------------------
+// HandleDroppedFiles
+// ----------------------------------------------------------------------------
+void Test5::HandleDroppedFiles( int iCount, const char ** iPaths )
+{
+  if ( !iPaths || ( iCount <= 0 ) )
+    return;
+
+  for ( int i = 0; i < iCount; ++i )
+  {
+    if ( !iPaths[i] || !iPaths[i][0] )
+      continue;
+
+    const std::filesystem::path filepath(DroppedFileUtils::NormalizeDroppedPath(iPaths[i]));
+    if ( !DroppedFileUtils::IsDroppedScenePath(filepath) )
+    {
+      std::cout << "Test5 : unsupported dropped file " << DroppedFileUtils::DisplayName(filepath) << std::endl;
+      continue;
+    }
+
+    std::error_code ec;
+    if ( !std::filesystem::exists(filepath, ec) || ec )
+    {
+      std::cout << "Test5 : dropped scene does not exist " << filepath.generic_string() << std::endl;
+      continue;
+    }
+
+    _DroppedScenePath = filepath;
+    _DroppedSceneName = DroppedFileUtils::DisplayName(filepath);
+    _ReloadScene = true;
+    std::cout << "Test5 : dropped scene " << filepath.generic_string() << std::endl;
+    return;
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -245,39 +295,6 @@ int Test5::DrawUI()
   {
     ImGui::Begin("Test 5 : Viewer");
 
-    // FPS graph
-    {
-      static std::vector<float> s_FrameRateHistory;
-      static int                s_LastFrameIndex = -1;
-      static double             s_AccumTime = 0.f;
-      static float              s_Max = 300.;
-
-      if ( -1 == s_LastFrameIndex )
-      {
-        s_FrameRateHistory.assign( 120, 0.f );
-        s_LastFrameIndex = 0;
-        s_FrameRateHistory[s_LastFrameIndex] = (float)_FrameRate;
-      }
-
-      s_AccumTime += _DeltaTime;
-      while ( s_AccumTime > ( 1.f / 60 ) )
-      {
-        s_AccumTime -= 0.1;
-        s_Max = *std::max_element( s_FrameRateHistory.begin(), s_FrameRateHistory.end() );
-
-        s_LastFrameIndex++;
-        if ( s_LastFrameIndex >= 120 )
-          s_LastFrameIndex = 0;
-        s_FrameRateHistory[s_LastFrameIndex] = (float)_FrameRate;
-      }
-
-      int offset = ( s_LastFrameIndex >= 119 ) ? ( 0 ) : ( s_LastFrameIndex + 1 );
-
-      char overlay[32];
-      snprintf( overlay, 32, "%.1f FPS", _FrameRate );
-      ImGui::PlotLines( "Frame rate", &s_FrameRateHistory[0], static_cast<int>(s_FrameRateHistory.size()), offset, overlay, -0.1f, s_Max, ImVec2( 0, 80.0f ) );
-    }
-
     // Renderer selection
     {
       static const char * Renderers[] = {"PathTracer", "SoftwareRasterizer", "OpenGLRasterizer"};
@@ -298,18 +315,25 @@ int Test5::DrawUI()
         if ( selectedSceneId != _CurSceneId )
         {
           _CurSceneId = selectedSceneId;
+          _DroppedScenePath.clear();
+          _DroppedSceneName.clear();
           _ReloadScene = true;
         }
       }
+
+      if ( !_DroppedSceneName.empty() )
+        ImGui::Text("Dropped scene: %s", _DroppedSceneName.c_str());
     }
+
+    ImGui::Checkbox("Show rendering stats", &_ShowRenderStatsPanel);
 
     if ( ImGui::Button( "Capture image" ) )
     {
-      _CaptureOutputPath = "./" + std::string( _SceneNames[_CurSceneId] ) + "_" + std::to_string( _NbRenderedFrames ) + "frames.png";
+      const std::string sceneName = _DroppedSceneName.empty() ? std::string(_SceneNames[_CurSceneId]) : _DroppedSceneName;
+      _CaptureOutputPath = "./" + sceneName + "_" + std::to_string( _NbRenderedFrames ) + "frames.png";
       _RenderToFile = true;
     }
 
-    DrawRenderStatsUI();
     DrawSettingsUI();
     DrawCameraUI();
     DrawMeshInstanceUI();
@@ -320,6 +344,8 @@ int Test5::DrawUI()
 
     ImGui::End();
   }
+
+  DrawRenderStatsUI();
 
   if ( _SelectedLightID >= 0 )
     DrawLightGizmo();
@@ -390,6 +416,9 @@ void Test5::ComputeBoidsBoundsFromScene()
       continue;
 
     const MeshInstance & inst = meshInstances[i];
+    if ( !inst._Visible )
+      continue;
+
     if ( ( inst._MeshID < 0 ) || ( inst._MeshID >= static_cast<int>(meshes.size()) ) )
       continue;
 
@@ -430,31 +459,22 @@ void Test5::ComputeBoidsBoundsFromScene()
 // ----------------------------------------------------------------------------
 int Test5::DrawRenderStatsUI()
 {
-  if (ImGui::CollapsingHeader("Rendering stats"))
+  if ( !_ShowRenderStatsPanel )
+    return 0;
+
+  if ( !ImGui::Begin("Test5 Rendering Stats", &_ShowRenderStatsPanel) )
   {
-    ImGui::Text("Window width : %d height : %d", _Settings._WindowResolution.x, _Settings._WindowResolution.y);
-    ImGui::Text("Render width : %d height : %d", _Settings._RenderResolution.x, _Settings._RenderResolution.y);
-
-    ImGui::Text( "Render time           : %.3f ms/frame", _FrameTime * 1000. );
-
-    if ( RendererType::PathTracer == _RendererType )
-    {
-      ImGui::Text("Path trace time       : %.3f ms", _Renderer -> AsPathTracer() -> GetPathTraceTime() * 1000.);
-      ImGui::Text("Accumulate time       : %.3f ms", _Renderer -> AsPathTracer() -> GetAccumulateTime() * 1000.);
-      ImGui::Text("Denoise time          : %.3f ms", _Renderer -> AsPathTracer() -> GetDenoiseTime() * 1000.);
-      ImGui::Text("Render to screen time : %.3f ms", _Renderer -> AsPathTracer() -> GetRenderToScreenTime() * 1000.);
-
-      ImGui::Text("Frame number          : %d", _Renderer -> AsPathTracer() -> GetFrameNum());
-      ImGui::Text("Nb complete frames    : %d", _Renderer -> AsPathTracer() -> GetNbCompleteFrames());
-    }
-
-    if ( _Scene )
-    {
-      ImGui::Text("Nb vertices           : %d", (int)_Scene -> GetVertices().size());
-      ImGui::Text("Nb triangles          : %d", (int)_Scene -> GetIndices().size()/3);
-      ImGui::Text("Nb meshes instances   : %d", _Scene -> GetNbMeshInstances());
-    }
+    ImGui::End();
+    return 0;
   }
+
+  RenderStatsUI::DrawFrameRateGraph(_RenderStatsState, _FrameRate, _DeltaTime, _NbRenderedFrames);
+  RenderStatsUI::DrawRenderOverview(_Settings, _FrameTime, _NbRenderedFrames);
+  RenderStatsUI::DrawRenderPassTimings(_Renderer.get());
+  RenderStatsUI::DrawPathTracerStats(_Renderer.get());
+  RenderStatsUI::DrawSceneStats(_Scene.get());
+
+  ImGui::End();
 
   return 0;
 }
@@ -637,6 +657,9 @@ int Test5::DrawSettingsUI()
         if ( ImGui::Checkbox( "Generate mip maps", &generateMips ) )
           softwareRasterizer -> SetGenerateMipMaps(generateMips);
       }
+
+      if ( ImGui::Checkbox( "Transparency", &_Settings._Transparency ) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
     }
     else if ( RendererType::OpenGLRasterizer == _RendererType )
     {
@@ -975,6 +998,8 @@ int Test5::DrawMeshInstanceUI()
 
       ImGui::Text("Mesh ID     : %d", inst._MeshID);
       ImGui::Text("Material ID : %d", inst._MaterialID);
+      if ( ImGui::Checkbox("Visible", &inst._Visible) )
+        NotifyMeshInstanceEdited();
 
       float translation[3] = { 0.f, 0.f, 0.f };
       float rotation[3]    = { 0.f, 0.f, 0.f };
@@ -1547,6 +1572,9 @@ int Test5::DrawSelectedMeshInstanceBBox()
     return 0;
 
   const MeshInstance & inst = meshInstances[_SelectedMeshInstanceID];
+  if ( !inst._Visible )
+    return 0;
+
   if ( ( inst._MeshID < 0 ) || ( inst._MeshID >= static_cast<int>(meshes.size()) ) )
     return 0;
 
@@ -1766,6 +1794,9 @@ bool Test5::PickMeshInstance( double iMouseX, double iMouseY, int & oMeshInstanc
       continue;
 
     const MeshInstance & inst = meshInstances[instID];
+    if ( !inst._Visible )
+      continue;
+
     if ( ( inst._MeshID < 0 ) || ( inst._MeshID >= static_cast<int>(meshes.size()) ) )
       continue;
 
@@ -1977,9 +2008,12 @@ int Test5::ProcessInput()
 int Test5::InitializeScene()
 {
   Scene * newScene = new Scene;
-  if ( !newScene || ( _CurSceneId < 0 ) || !Loader::LoadScene(_SceneFiles[_CurSceneId], *newScene, _Settings) )
+  const bool useDroppedScene = !_DroppedScenePath.empty();
+  const std::string scenePath = useDroppedScene ? _DroppedScenePath.generic_string()
+                                                : ( ( _CurSceneId >= 0 ) ? _SceneFiles[_CurSceneId] : "" );
+  if ( !newScene || scenePath.empty() || !Loader::LoadScene(scenePath, *newScene, _Settings) )
   {
-    std::cout << "Failed to load scene : " << _SceneFiles[_CurSceneId] << std::endl;
+    std::cout << "Failed to load scene : " << scenePath << std::endl;
     return 1;
   }
   _Scene.reset(newScene);
@@ -2060,21 +2094,21 @@ int Test5::InitializeBoidsForScene( bool iResetSimulation )
 // ----------------------------------------------------------------------------
 int Test5::InitializeRenderer()
 {
-  Renderer * newRenderer = nullptr;
-  
-  if ( RendererType::PathTracer == _RendererType )
-    newRenderer = new PathTracer(*_Scene, _Settings);
-  else if ( RendererType::SoftwareRasterizer == _RendererType )
-    newRenderer = new SoftwareRasterizer(*_Scene, _Settings);
-  else if ( RendererType::OpenGLRasterizer == _RendererType )
-    newRenderer = new DeferredRenderer(*_Scene, _Settings);
+  RendererBackend backend = RendererBackend::PathTracer;
 
-  if ( !newRenderer )
+  if ( RendererType::PathTracer == _RendererType )
+    backend = RendererBackend::PathTracer;
+  else if ( RendererType::SoftwareRasterizer == _RendererType )
+    backend = RendererBackend::SoftwareRasterizer;
+  else if ( RendererType::OpenGLRasterizer == _RendererType )
+    backend = RendererBackend::DeferredRenderer;
+
+  _Renderer = CreateRenderer(backend, *_Scene, _Settings);
+  if ( !_Renderer )
   {
     std::cout << "Failed to initialize the renderer" << std::endl;
     return 1;
   }
-  _Renderer.reset(newRenderer);
 
   _Renderer -> Initialize();
 
@@ -2212,6 +2246,7 @@ int Test5::Run()
     glfwSetMouseButtonCallback( _MainWindow.get(), Test5::MouseButtonCallback );
     glfwSetScrollCallback( _MainWindow.get(), Test5::MouseScrollCallback );
     glfwSetKeyCallback( _MainWindow.get(), Test5::KeyCallback );
+    glfwSetDropCallback( _MainWindow.get(), Test5::DropCallback );
 
     glfwMakeContextCurrent( _MainWindow.get() );
     glfwSwapInterval( 0 ); // Disable vsync
@@ -2294,7 +2329,9 @@ int Test5::Run()
 
   glfwSetFramebufferSizeCallback( _MainWindow.get(), nullptr );
   glfwSetMouseButtonCallback( _MainWindow.get(), nullptr );
+  glfwSetScrollCallback( _MainWindow.get(), nullptr );
   glfwSetKeyCallback( _MainWindow.get(), nullptr );
+  glfwSetDropCallback( _MainWindow.get(), nullptr );
 
   return ret;
 }

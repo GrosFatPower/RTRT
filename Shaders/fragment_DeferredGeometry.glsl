@@ -1,6 +1,8 @@
 #version 410 core
 
 #include Material.glsl
+#include Lights.glsl
+#include Sampling.glsl
 
 // Inputs from vertex shader (expected to provide world-space position, normal and uv)
 in vec3 fragWorldPos;
@@ -31,6 +33,7 @@ void main()
     hitPoint._Normal *= -1.0;
   hitPoint._UV         = fragUV;
   hitPoint._MaterialID = v_MaterialID;
+  ComputeTangentFrame(hitPoint._Normal, hitPoint._Pos, hitPoint._UV, hitPoint._Tangent, hitPoint._Bitangent);
 
   vec3 albedo = u_DefaultAlbedo;
   float roughness = 1.0;

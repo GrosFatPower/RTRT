@@ -111,6 +111,8 @@ void GetMeshName( const tinygltf::Mesh & iGltfMesh, int iIndMesh, int iIndPrim, 
 
   if ( oMeshName.empty() )
     oMeshName = "Mesh_" + std::to_string( iIndMesh );
+  else
+    oMeshName += "_Mesh" + std::to_string(iIndMesh);
 
   if ( iGltfMesh.primitives.size() > 1 )
   {
@@ -1171,6 +1173,13 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
         newLight._Intensity = std::max(std::max(std::max( emission.r, emission.g), emission.b ), 1.f );
         newLight._Emission = glm::min( emission, Vec3(1.f) );
       }
+      else
+        parsingError++;
+    }
+    else if ( IsEqual("intensity", tokens[0]) )
+    {
+      if ( 2 == nbTokens )
+        newLight._Intensity = std::max(0.f, std::stof(tokens[1]));
       else
         parsingError++;
     }

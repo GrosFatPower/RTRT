@@ -4,11 +4,12 @@ This document records the current navigation map of the repository so it can be 
 
 ## Top-Level Mental Model
 
-The project is a C++ rendering sandbox that evolved from isolated rendering experiments into a shared viewer able to drive multiple renderer backends over the same scene representation.
+The project is a C++ rendering sandbox that evolved from isolated rendering experiments into a shared viewer and gameplay workbench able to drive multiple renderer backends over the same scene representation.
 
 Main pattern:
 - `main.cpp` opens the app and selects a test.
 - `Test5` is the current interactive viewer/controller.
+- `Test6` is the current FPS-game sandbox built on the same scene and renderer abstraction.
 - `Scene` stores loaded assets plus compiled render data.
 - `Renderer` defines the common rendering lifecycle.
 - `PathTracer`, `SoftwareRasterizer`, and `DeferredRenderer` are the main renderer implementations.
@@ -20,9 +21,11 @@ Main pattern:
    Creates the GLFW/OpenGL window, initializes the test-selection UI, and launches one of the test harnesses.
 2. `Source/src/Test5.h` / `Source/src/Test5.cpp`
    Current architectural center. Handles input, UI, scene selection, background selection, live renderer switching, capture requests, and dirty-state notifications.
-3. `Source/src/Renderer.h`
+3. `Source/src/Test6.h` / `Source/src/Test6.cpp`
+   FPS-game sandbox. Handles first-person input, HUD/debug UI, renderer mode switching, capture requests, and game-scene synchronization.
+4. `Source/src/Renderer.h`
    Declares the renderer interface used by `Test5`.
-4. `Source/src/Scene.h` and `Source/src/Loader.h`
+5. `Source/src/Scene.h` and `Source/src/Loader.h`
    Provide the shared scene representation and loading path used by all renderers.
 
 ## Current Important Subsystems
@@ -30,6 +33,7 @@ Main pattern:
 ### Viewer And Orchestration
 
 - `Source/src/Test5.cpp`
+- `Source/src/Test6.cpp`
 - `Source/src/KeyInput.h`, `Source/src/KeyInput.cpp`
 - `Source/src/MouseInput.h`, `Source/src/MouseInput.cpp`
 
@@ -38,6 +42,22 @@ Purpose:
 - Route UI events and camera/light/material editing.
 - Switch between renderer implementations without changing the surrounding app model.
 - Optionally run the CPU boids simulation and expose it as ordinary dynamic mesh instances.
+- Run the Test6 FPS sandbox using the same renderer interface.
+
+### FPS Game Sandbox
+
+- `Source/src/Test6.h`
+- `Source/src/Test6.cpp`
+- `Source/src/FpsGame.h`
+- `Source/src/FpsGame.cpp`
+- `Source/src/ProceduralMesh.h`
+- `Source/src/ProceduralMesh.cpp`
+
+Purpose:
+- Build a procedural arena scene with reusable scene meshes, materials, and lights.
+- Drive first-person movement, jumping, collision, mouse capture, HUD/debug UI, and renderer mode switching.
+- Simulate pooled bouncing projectiles with ammo/cooldown state and expose projectile transforms as ordinary mesh instances.
+- Bind a simple view weapon and procedural gameplay objects into the shared `Scene` path used by Deferred, Software, and PathTracer photo mode.
 
 ### Shared Scene Representation
 
@@ -130,17 +150,23 @@ Core files:
 
 Main responsibilities:
 - Build a G-buffer from scene geometry.
-- Run shadow-map, SSAO, deferred-lighting, transparent-forward, and fullscreen composite passes.
+- Run shadow-map, SSAO, SSR, deferred-lighting, transparent-forward, wireframe, and fullscreen composite passes.
 - Support deferred debug-buffer views, visible light drawing, and wireframe overlay.
 - Manage GPU-side texture filtering, env-map mip usage, BRDF LUT generation, and anisotropy.
+- Use PBR direct lighting plus specular IBL, with screen-space reflections for low-roughness opaque surfaces.
+- Support multiple selected shadow-casting lights. Distant lights use a 2D depth texture array, while sphere and rect lights use cubemap-array layers.
 - Split opaque and transparent mesh-instance rendering, including per-triangle sorting for transparent meshes.
 
 Key shader files:
 - `Shaders/vertex_DeferredGeometry.glsl`
 - `Shaders/fragment_DeferredGeometry.glsl`
 - `Shaders/fragment_DeferredLighting.glsl`
+- `Shaders/DeferredPBRLighting.glsl`
+- `Shaders/PBR.glsl`
+- `Shaders/Shadows.glsl`
 - `Shaders/fragment_SSAO.glsl`
 - `Shaders/fragment_SSAOBlur.glsl`
+- `Shaders/fragment_SSR.glsl`
 - `Shaders/fragment_BRDFLUT.glsl`
 - `Shaders/fragment_DeferredTransparent.glsl`
 - `Shaders/vertex_ShadowCubeDepth.glsl`
@@ -162,6 +188,13 @@ These remain useful for understanding how the project evolved, but they are no l
 - `Source/src/Test4.cpp`
   Older direct CPU rasterizer harness.
 
+## Active Test Harnesses
+
+- `Source/src/Test5.cpp`
+  Main scene viewer/editor for loaded assets, renderer comparison, material/light/mesh editing, boids, and capture workflows.
+- `Source/src/Test6.cpp`
+  FPS-game sandbox for real-time renderer/gameplay integration, procedural arena content, projectiles, HUD/debug UI, and PathTracer photo mode.
+
 ## Shared Utility Layer
 
 Important utility files include:
@@ -175,8 +208,14 @@ Important utility files include:
 - `Source/src/QuadMesh.cpp`
 - `Source/src/Boids.h`
 - `Source/src/Boids.cpp`
+- `Source/src/FpsGame.h`
+- `Source/src/FpsGame.cpp`
+- `Source/src/ProceduralMesh.h`
+- `Source/src/ProceduralMesh.cpp`
+- `Source/src/JobSystem.h`
+- `Source/src/JobSystem.cpp`
 
-These provide the math aliases, GL helper wrappers, shader compilation/linking, common fullscreen geometry, and optional CPU-side dynamic boid scene binding used throughout the project.
+These provide the math aliases, GL helper wrappers, shader compilation/linking, common fullscreen geometry, optional CPU-side dynamic boid scene binding, procedural gameplay mesh creation, and lightweight job support used throughout the project.
 
 ## Asset And Data Areas
 
@@ -195,6 +234,7 @@ These provide the math aliases, GL helper wrappers, shader compilation/linking, 
 
 If the task is about:
 - App behavior or UI: start with `Source/src/Test5.cpp`
+- FPS gameplay, projectiles, HUD, view weapon, or game-scene binding: start with `Source/src/Test6.cpp` and `Source/src/FpsGame.cpp`
 - Renderer lifecycle or adding a backend: start with `Source/src/Renderer.h`
 - Scene loading bugs or import behavior: start with `Source/src/Loader.cpp`
 - Shared scene data or packed render data: start with `Source/src/Scene.cpp`
@@ -202,6 +242,9 @@ If the task is about:
 - Path tracer denoising/timing: start with `Source/src/PathTracer.cpp`, `Shaders/compute_Denoiser.glsl`, and `Shaders/fragment_DenoiserPathTracer.glsl`
 - CPU rasterization: start with `Source/src/SoftwareRasterizer.cpp`
 - Deferred rasterization: start with `Source/src/DeferredRenderer.cpp`
+- Deferred SSR: start with `Source/src/DeferredRenderer.cpp` and `Shaders/fragment_SSR.glsl`
+- Deferred shadows: start with `Source/src/DeferredRenderer.cpp`, `Shaders/Shadows.glsl`, and the shadow depth shaders
+- Deferred transparency: start with `Source/src/DeferredRenderer.cpp` and `Shaders/fragment_DeferredTransparent.glsl`
 - Dynamic boids overlay: start with `Source/src/Boids.cpp` and `Source/src/Test5.cpp`
 - Build configuration: start with root `CMakeLists.txt`, which is the source of truth for the `RenderLab` target
 
@@ -210,9 +253,10 @@ If the task is about:
 When there is any doubt about where to begin, prioritize this path:
 - `Source/src/main.cpp`
 - `Source/src/Test5.cpp`
+- `Source/src/Test6.cpp` when the task is gameplay-facing
 - `Source/src/Renderer.h`
 - `Source/src/Scene.h`
 - `Source/src/Loader.cpp`
 - selected renderer implementation
 
-That route reflects the current shape of the codebase more accurately than the earlier test harnesses.
+That route reflects the current shape of the codebase more accurately than the earlier test harnesses. For renderer-only work, start from `Test5`; for playable real-time integration, start from `Test6` and `FpsGame`.

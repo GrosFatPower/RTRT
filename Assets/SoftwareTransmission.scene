@@ -1,0 +1,117 @@
+renderer
+{
+  resolution 640 480
+  envMap HDR/Background_05.hdr
+}
+
+camera
+{
+  position 0.0 0.0 -6.0
+  lookat 0.0 0.0 0.0
+  fov 55
+}
+
+light
+{
+  type sphere
+  position -2 3 -4
+  emission 5 5 5
+  radius 0.2
+}
+
+material opaque_blue
+{
+  color 0.08 0.20 0.90
+  roughness 0.7
+}
+
+material glass_clear
+{
+  color 1.0 1.0 1.0
+  transmission 1.0
+  roughness 0.0
+  ior 1.45
+}
+
+material glass_partial
+{
+  color 0.35 0.85 1.0
+  transmission 0.55
+  roughness 0.08
+  ior 1.33
+}
+
+material glass_rough
+{
+  color 1.0 0.75 0.25
+  transmission 0.8
+  roughness 0.45
+  ior 1.5
+}
+
+material blend_red
+{
+  color 1.0 0.05 0.05
+  opacity 0.35
+  alphamode blend
+  roughness 0.7
+}
+
+# Opaque geometry exercises depth rejection for transmission behind it.
+mesh
+{
+  name opaque_center
+  file misc/TransparencyQuad.obj
+  material opaque_blue
+  position 0.0 0.0 0.7
+  scale 0.55 0.55 1.0
+}
+
+# Smooth full and partial transmission overlap on the left side.
+mesh
+{
+  name clear_near
+  file misc/TransparencyQuad.obj
+  material glass_clear
+  position -0.65 0.1 -0.4
+  scale 1.0 1.15 1.0
+}
+
+mesh
+{
+  name partial_far
+  file misc/TransparencyQuad.obj
+  material glass_partial
+  position -0.2 0.0 1.5
+  scale 1.0 1.05 1.0
+}
+
+# Rough transmission covers both environment and the opaque center.
+mesh
+{
+  name rough_glass
+  file misc/TransparencyQuad.obj
+  material glass_rough
+  position 0.7 0.0 -0.1
+  scale 1.0 1.15 1.0
+}
+
+# Mixed alpha blend and transmission ordering on the right side.
+mesh
+{
+  name blend_overlay
+  file misc/TransparencyQuad.obj
+  material blend_red
+  position 0.45 -0.15 -0.7
+  scale 0.75 0.8 1.0
+}
+
+# This full-transmission layer is behind opaque geometry and must be rejected there.
+mesh
+{
+  name clear_behind_opaque
+  file misc/TransparencyQuad.obj
+  material glass_clear
+  position 0.0 0.0 2.2
+  scale 0.8 0.8 1.0
+}

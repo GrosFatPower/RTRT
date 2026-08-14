@@ -52,7 +52,11 @@ Shader::Shader(const ShaderSource & iShaderSource, GLuint iShaderType)
     filename += filepath.filename().stem().string();
     filename += ".glsl";
 
-    std::ofstream out(filename);
+    const fs::path debugDirectory("shader.tmp");
+    std::error_code error;
+    fs::create_directories(debugDirectory, error);
+
+    std::ofstream out(debugDirectory / filename);
     out << iShaderSource._Src;
     out.close();
   }

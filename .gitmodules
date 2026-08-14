@@ -10,3 +10,6 @@
 [submodule "Dependencies/imguizmo"]
 	path = Dependencies/imguizmo
 	url = https://github.com/CedricGuillemet/ImGuizmo.git
+[submodule "Dependencies/nlohmann-json"]
+	path = Dependencies/nlohmann-json
+	url = https://github.com/nlohmann/json.git

@@ -13,6 +13,7 @@ struct MeshInstance
   int         _MeshID;
   int         _MaterialID;
   Mat4x4      _Transform;
+  bool        _Visible = true;
 
   MeshInstance( const std::string & iFilename, int iMeshID, int iMaterialID, const Mat4x4 & iTransform )
   : _Filename(iFilename), _MeshID(iMeshID), _MaterialID(iMaterialID), _Transform(iTransform)

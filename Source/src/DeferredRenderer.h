@@ -54,7 +54,9 @@ enum class DeferredDebugModes
   MaterialParams = 0x040,
   SSR            = 0x080,
   DirectDiffuse  = 0x100,
-  DirectSpecular = 0x200
+  DirectSpecular = 0x200,
+  Diagnostic     = 0x400,
+  Position       = 0x800
 };
 
 class DeferredRenderer : public Renderer
@@ -70,12 +72,14 @@ public:
   virtual int RenderToTexture() override;
   virtual int RenderToScreen() override;
   virtual int RenderToFile(const std::filesystem::path& iFilePath) override;
+  virtual int ReadbackFinalColor( RenderImage & oImage ) override;
 
   void SetGenerateMipMaps(bool iGenerate);
   bool GetGenerateMipMaps() const { return _GenerateMipMaps; }
   void SetAnisotropicLevel(int iLevel);
   int GetAnisotropicLevel() const { return _AnisotropicLevel; }
   float GetEffectiveShadowFar() const { return _ShadowFar; }
+  virtual int GetRenderPassTimings( std::vector<RenderPassTiming> & oTimings ) const override;
 
   virtual DeferredRenderer * AsDeferredRenderer() override { return this; }
 
@@ -91,6 +95,8 @@ protected:
   int InitializeSSAO();
   int InitializeSSR();
   int InitializeBRDFLUT();
+  int InitializeStats();
+  int UpdateStats();
 
   int RecompileShaders();
 
@@ -114,7 +120,12 @@ protected:
   void BuildTransparentMeshTriangleData( size_t iMeshID, const std::vector<Vec3> & iPositions, const std::vector<uint32_t> & iIndices );
   bool UpdateSortedTransparentMeshIndices( int iMeshID, const Mat4x4 & iModel, const Mat4x4 & iView );
 
-  void ComputeSceneBounds();
+  void BeginTimer( int iTimerID );
+  void EndTimer( int iTimerID );
+  double ReadTimer( int iTimerID );
+  void SetTimingEnabled( int iTimerID, bool iEnabled );
+
+  void ComputeSceneBounds( bool iResetShadowBounds = false );
   float ComputeAutoShadowFar(const Vec3 & iLightPos) const;
 
   struct ShadowCaster
@@ -204,6 +215,9 @@ protected:
   // Scene bounds
   AABB<Vec3> _SceneBounds;
   float      _SceneBoundsRadius = 1.f;
+  AABB<Vec3> _ShadowSceneBounds;
+  float      _ShadowSceneBoundsRadius = 1.f;
+  bool       _ShadowSceneBoundsInitialized = false;
 
   // Shadow state
   float _ShadowNear                 = 0.1f;
@@ -222,6 +236,25 @@ protected:
   // Textures filtering
   bool _GenerateMipMaps = true;
   int  _AnisotropicLevel = 16;
+
+  enum TimingID
+  {
+    TimingShadowMap = 0,
+    TimingGBuffer,
+    TimingSSAO,
+    TimingSSR,
+    TimingLighting,
+    TimingTransparency,
+    TimingWireframe,
+    TimingSSRSourceCopy,
+    TimingCompositeScreen,
+    TimingCount
+  };
+
+  std::array<double, TimingCount> _PassTimes = {};
+  std::array<bool, TimingCount>   _PassEnabled = {};
+  std::array<bool, TimingCount>   _TimerWritten = {};
+  std::array<std::array<GLuint, 2>, TimingCount> _TimerIDs = {};
 };
 
 } // namespace RTRT

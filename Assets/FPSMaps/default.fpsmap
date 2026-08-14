@@ -1,0 +1,247 @@
+# Test6 FPS map.
+# Coordinates are Y-up. Rotations are Euler XYZ degrees.
+
+map "Default FPS Arena" {
+  environment "HDR/syferfontein_18d_clear_1k.hdr"
+}
+
+player {
+  position 17.065000 -0.229000 -45.187000
+  yaw -147.340000
+  pitch 0.990000
+  health 100
+  armor 50
+}
+
+settings {
+  maxprojectiles 32
+  projectileammo 32
+  projectileammorefill 0.500000
+}
+
+material "floor" {
+  albedo 0.420000 0.430000 0.440000
+  roughness 0.180000
+  metallic 0.000000
+  reflectance 0.900000
+  emission 0.000000 0.000000 0.000000
+  opacity 1.000000
+  alphamode opaque
+}
+
+material "wall" {
+  albedo 0.340000 0.370000 0.420000
+  roughness 0.650000
+  metallic 0.000000
+  reflectance 0.500000
+  emission 0.000000 0.000000 0.000000
+  opacity 1.000000
+  alphamode opaque
+}
+
+material "pillar" {
+  albedo 0.580000 0.550000 0.490000
+  roughness 0.550000
+  metallic 0.000000
+  reflectance 0.500000
+  emission 0.000000 0.000000 0.000000
+  opacity 1.000000
+  alphamode opaque
+}
+
+material "crate" {
+  albedo 0.800000 0.240000 0.130000
+  roughness 0.450000
+  metallic 0.000000
+  reflectance 0.500000
+  emission 0.000000 0.000000 0.000000
+  opacity 1.000000
+  alphamode opaque
+}
+
+material "accent" {
+  albedo 0.120000 0.420000 0.680000
+  roughness 0.160000
+  metallic 0.000000
+  reflectance 0.850000
+  emission 0.000000 0.000000 0.000000
+  opacity 1.000000
+  alphamode opaque
+}
+
+box "Floor" {
+  center 0.000000 -0.250000 0.000000
+  rotation 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  half 14.000000 0.250000 14.000000
+  material "floor"
+  collidable true
+  visible true
+}
+
+box "North Wall" {
+  center 0.000000 2.000000 14.000000
+  rotation 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  half 14.000000 2.000000 0.350000
+  material "wall"
+  collidable true
+  visible true
+}
+
+box "South Wall" {
+  center 0.000000 2.000000 -14.000000
+  rotation 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  half 14.000000 2.000000 0.350000
+  material "wall"
+  collidable true
+  visible true
+}
+
+box "East Wall" {
+  center 14.000000 2.000000 0.000000
+  rotation 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  half 0.350000 2.000000 14.000000
+  material "wall"
+  collidable true
+  visible true
+}
+
+box "West Wall" {
+  center -14.000000 2.000000 0.000000
+  rotation 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  half 0.350000 2.000000 14.000000
+  material "wall"
+  collidable true
+  visible true
+}
+
+box "Pillar A" {
+  center -5.000000 1.500000 -2.000000
+  rotation 0.000000 19.021601 0.000000
+  orientation 0.000000 0.165234 0.000000 0.986255
+  half 0.800000 1.500000 0.800000
+  material "pillar"
+  collidable true
+  visible true
+}
+
+box "Pillar B" {
+  center 5.000000 1.500000 3.000000
+  rotation 0.000000 19.913614 0.000000
+  orientation 0.000000 0.172906 0.000000 0.984938
+  half 0.800000 1.500000 0.800000
+  material "pillar"
+  collidable true
+  visible true
+}
+
+box "Low Block A" {
+  center -2.275755 0.095718 4.000000
+  rotation 67.605682 56.591194 14.520925
+  orientation 0.436155 0.452641 -0.169132 0.759131
+  half 2.000000 0.500000 1.000000
+  material "accent"
+  collidable true
+  visible true
+}
+
+box "Low Block B" {
+  center 3.000000 0.604753 -5.000000
+  rotation -65.488480 22.118347 -87.737373
+  orientation -0.270892 0.484196 -0.497260 0.667012
+  half 1.200000 0.750000 1.200000
+  material "accent"
+  collidable true
+  visible true
+}
+
+box "Target Crate A" {
+  center -0.324173 1.374951 8.509948
+  rotation 11.550445 -24.147816 -26.545244
+  orientation 0.047992 -0.225144 -0.202880 0.951760
+  half 0.600000 0.600000 0.600000
+  material "crate"
+  collidable true
+  visible true
+}
+
+box "Target Crate B" {
+  center 7.000000 0.600000 -7.000000
+  rotation 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  half 0.600000 0.600000 0.600000
+  material "crate"
+  collidable true
+  visible true
+}
+
+box "Target Crate C" {
+  center 0.000000 0.600000 8.000000
+  rotation 0.000000 0.000000 0.000000
+  orientation 0.000000 0.000000 0.000000 1.000000
+  half 0.600000 0.600000 0.600000
+  material "crate"
+  collidable true
+  visible true
+}
+
+boids "Boids 0" {
+  visible true
+  count 128
+  seed 1337
+  center 0.000000 7.000000 0.000000
+  radius 14.560866
+  height 3.000000
+  minspeed 0.500000
+  maxspeed 2.500000
+  maxforce 4.000000
+  neighborradius 1.200000
+  separationradius 0.350000
+  separation 1.600000
+  alignment 1.000000
+  cohesion 1.000000
+  boundsweight 2.000000
+  scale 0.120000
+  color 0.950000 0.350000 0.120000
+}
+
+light {
+  type distant
+  direction -0.400000 0.800000 -0.300000
+  emission 1.000000 0.940000 0.860000
+  intensity 2.000000
+  castshadow true
+  shadowradius 0.000000
+}
+
+light {
+  type sphere
+  position -6.000000 3.500000 -6.000000
+  radius 2.000000
+  emission 1.000000 0.550000 0.250000
+  intensity 35.000000
+  castshadow true
+  shadowradius 14.000000
+}
+
+light {
+  type sphere
+  position 6.000000 3.000000 5.000000
+  radius 2.050000
+  emission 0.250000 0.550000 1.000000
+  intensity 25.000000
+  castshadow true
+  shadowradius 0.000000
+}
+
+weapon {
+  path "overwatch_junkrats_grenade_launcher/scene.gltf"
+  offset 0.440000 -0.330000 0.830000
+  rotation -6.500000 -10.500000 3.000000
+  scale 1.240000
+  visible true
+}

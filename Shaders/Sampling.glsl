@@ -35,6 +35,29 @@ mat3 ComputeTangentSpaceMatrix( in vec3 iN )
 }
 
 // ----------------------------------------------------------------------------
+// ComputeTangentFrame
+// Tangent frame matching the local UV parameterization, for normal maps.
+// ----------------------------------------------------------------------------
+void ComputeTangentFrame( in vec3 iNormal, in vec3 iPosition, in vec2 iUV, out vec3 oTangent, out vec3 oBitangent )
+{
+  vec3 dpdx = dFdx(iPosition);
+  vec3 dpdy = dFdy(iPosition);
+  vec2 duvdx = dFdx(iUV);
+  vec2 duvdy = dFdy(iUV);
+  float determinant = duvdx.x * duvdy.y - duvdx.y * duvdy.x;
+
+  if ( abs(determinant) < 0.000001 )
+  {
+    ComputeOnB(iNormal, oTangent, oBitangent);
+    return;
+  }
+
+  oTangent = normalize((dpdx * duvdy.y - dpdy * duvdx.y) / determinant);
+  oTangent = normalize(oTangent - iNormal * dot(iNormal, oTangent));
+  oBitangent = normalize(cross(iNormal, oTangent)) * sign(determinant);
+}
+
+// ----------------------------------------------------------------------------
 // ToWorld
 // ----------------------------------------------------------------------------
 vec3 ToWorld(vec3 iT, vec3 iBT, vec3 iN, vec3 iV )

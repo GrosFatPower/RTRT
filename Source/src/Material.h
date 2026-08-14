@@ -13,6 +13,16 @@ enum class AlphaMode
   Mask
 };
 
+enum class MaterialPass
+{
+  Opaque = 0,
+  Mask,
+  Blend,
+  Transmission
+};
+
+static constexpr float MATERIAL_TRANSMISSION_THRESHOLD = 0.001f;
+
 enum class MediumType
 {
   None,
@@ -69,6 +79,18 @@ struct Material
 inline AlphaMode MaterialAlphaMode( const Material & iMaterial )
 {
   return static_cast<AlphaMode>( static_cast<int>( iMaterial._AlphaMode + 0.5f ) );
+}
+
+inline MaterialPass ClassifyMaterialPass( const Material & iMaterial )
+{
+  const AlphaMode alphaMode = MaterialAlphaMode(iMaterial);
+  if ( AlphaMode::Blend == alphaMode )
+    return MaterialPass::Blend;
+  if ( AlphaMode::Mask == alphaMode )
+    return MaterialPass::Mask;
+  if ( iMaterial._SpecTrans > MATERIAL_TRANSMISSION_THRESHOLD )
+    return MaterialPass::Transmission;
+  return MaterialPass::Opaque;
 }
 
 }

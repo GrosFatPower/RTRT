@@ -55,7 +55,10 @@ mesh
 light
 {
 	type sphere
-	position  2 2 2
-	emission 1 1 1
-	radius .5
+	position 2.935 4.874 5.913
+	emission 1.0 0.941176 0.0
+	intensity 18.230
+	radius 0.500
+	castshadow true
+	shadowradius 0.000
 }

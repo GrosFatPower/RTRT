@@ -1,6 +1,12 @@
 add_subdirectory(glfw)
 add_subdirectory(glm)
 
+add_library(nlohmann_json INTERFACE)
+add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
+target_include_directories(nlohmann_json
+  INTERFACE nlohmann-json/single_include
+)
+
 if (RTRT_BUILD_IMGUI)
   set(imgui_dir imgui)
   set(imgui_sources

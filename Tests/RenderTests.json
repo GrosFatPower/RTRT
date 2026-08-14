@@ -1,0 +1,351 @@
+{
+  "version": 1,
+  "profiles": {
+    "software": {
+      "backend": "software",
+      "resolution": [1280, 720],
+      "frames": 1,
+      "thresholds": {
+        "mean_absolute_error": 0.001,
+        "max_absolute_error": 1.0,
+        "pixel_error": 0.02,
+        "mismatch_ratio": 0.01
+      },
+      "settings": {
+        "specular_ibl": true,
+        "ssr": true,
+        "accumulate": true,
+        "auto_scale": true,
+        "tiled_rendering": false,
+        "denoise": false,
+        "samples_per_pixel": 1,
+        "bounces": 4
+      }
+    },
+    "deferred": {
+      "backend": "deferred",
+      "resolution": [1280, 720],
+      "frames": 3,
+      "thresholds": {
+        "mean_absolute_error": 0.003,
+        "max_absolute_error": 0.08,
+        "pixel_error": 0.02,
+        "mismatch_ratio": 0.005
+      },
+      "settings": {
+        "specular_ibl": true,
+        "ssr": true,
+        "accumulate": true,
+        "auto_scale": true,
+        "tiled_rendering": false,
+        "denoise": false,
+        "samples_per_pixel": 1,
+        "bounces": 4
+      }
+    },
+    "pathtracer": {
+      "backend": "pathtracer",
+      "resolution": [1280, 720],
+      "frames": 6,
+      "thresholds": {
+        "mean_absolute_error": 0.02,
+        "max_absolute_error": 0.25,
+        "pixel_error": 0.08,
+        "mismatch_ratio": 0.02
+      },
+      "settings": {
+        "specular_ibl": true,
+        "ssr": true,
+        "accumulate": true,
+        "auto_scale": true,
+        "tiled_rendering": false,
+        "denoise": false,
+        "samples_per_pixel": 1,
+        "bounces": 4
+      }
+    }
+  },
+  "tests": [
+    {
+      "name": "software_textured_box",
+      "profile": "software",
+      "scene": "TexturedBox.scene"
+    },
+    {
+      "name": "software_textured_box_optimized",
+      "profile": "software",
+      "scene": "TexturedBox.scene",
+      "software_optimized": true,
+      "baseline": "Tests/Baselines/software_textured_box.pfm"
+    },
+    {
+      "name": "software_transparency",
+      "profile": "software",
+      "scene": "SoftwareTransparency.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_optimized": true
+    },
+    {
+      "name": "software_transparency_non_tiled",
+      "profile": "software",
+      "scene": "SoftwareTransparency.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "baseline": "Tests/Baselines/software_transparency.pfm"
+    },
+    {
+      "name": "software_transparency_zbuffer",
+      "profile": "software",
+      "scene": "SoftwareTransparency.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_optimized": true,
+      "baseline": "Tests/Baselines/software_transparency.pfm",
+      "settings": {
+        "w_buffer": false
+      }
+    },
+    {
+      "name": "software_transparency_reversed",
+      "profile": "software",
+      "scene": "SoftwareTransparencyReversed.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_optimized": true,
+      "baseline": "Tests/Baselines/software_transparency.pfm"
+    },
+    {
+      "name": "software_transparency_simd",
+      "profile": "software",
+      "scene": "SoftwareTransparency.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_optimized": true,
+      "software_simd": true,
+      "baseline": "Tests/Baselines/software_transparency.pfm"
+    },
+    {
+      "name": "software_transparency_tiled_fallback",
+      "profile": "software",
+      "scene": "SoftwareTransparency.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_fallback": true,
+      "baseline": "Tests/Baselines/software_transparency.pfm"
+    },
+    {
+      "name": "software_transparency_disabled",
+      "profile": "software",
+      "scene": "SoftwareTransparency.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_optimized": true,
+      "settings": {
+        "transparency": false
+      }
+    },
+    {
+      "name": "software_transmission",
+      "profile": "software",
+      "scene": "SoftwareTransmission.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_optimized": true
+    },
+    {
+      "name": "software_transmission_non_tiled",
+      "profile": "software",
+      "scene": "SoftwareTransmission.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "baseline": "Tests/Baselines/software_transmission.pfm"
+    },
+    {
+      "name": "software_transmission_zbuffer",
+      "profile": "software",
+      "scene": "SoftwareTransmission.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_optimized": true,
+      "baseline": "Tests/Baselines/software_transmission.pfm",
+      "settings": {
+        "w_buffer": false
+      }
+    },
+    {
+      "name": "software_transmission_reversed",
+      "profile": "software",
+      "scene": "SoftwareTransmissionReversed.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_optimized": true,
+      "baseline": "Tests/Baselines/software_transmission.pfm"
+    },
+    {
+      "name": "software_transmission_simd",
+      "profile": "software",
+      "scene": "SoftwareTransmission.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_optimized": true,
+      "software_simd": true,
+      "baseline": "Tests/Baselines/software_transmission.pfm"
+    },
+    {
+      "name": "software_transmission_tiled_fallback",
+      "profile": "software",
+      "scene": "SoftwareTransmission.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_fallback": true,
+      "baseline": "Tests/Baselines/software_transmission.pfm"
+    },
+    {
+      "name": "software_transmission_disabled",
+      "profile": "software",
+      "scene": "SoftwareTransmission.scene",
+      "resolution": [640, 480],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_optimized": true,
+      "settings": {
+        "transparency": false
+      }
+    },
+    {
+      "name": "software_coffee_maker_transmission",
+      "profile": "software",
+      "scene": "coffee_maker.scene",
+      "resolution": [600, 800],
+      "environment_map": "HDR/Background_05.hdr",
+      "software_optimized": true,
+      "camera": {
+        "position": [0.0, 0.26, -0.7],
+        "pivot": [0.0, 0.16, 0.0],
+        "fov": 30.0,
+        "near": 0.01
+      }
+    },
+    {
+      "name": "software_cornell",
+      "profile": "software",
+      "scene": "cornell_box.scene",
+      "resolution": [720, 720],
+      "camera": {
+        "position": [0.276, 0.265, -0.75],
+        "pivot": [0.276, 0.265, 0.1],
+        "fov": 40.0,
+        "near": 0.5
+      }
+    },
+    {
+      "name": "software_diningroom",
+      "profile": "software",
+      "scene": "diningroom.scene"
+    },
+    {
+      "name": "software_teapot_env",
+      "profile": "software",
+      "scene": "teapot.scene",
+      "environment_map": "HDR/Background_05.hdr"
+    },
+    {
+      "name": "deferred_ibl_ssr",
+      "profile": "deferred",
+      "scene": "tungsten-material-testball.scene"
+    },
+    {
+      "name": "deferred_cornell",
+      "profile": "deferred",
+      "scene": "cornell_box.scene",
+      "resolution": [720, 720],
+      "camera": {
+        "position": [0.276, 0.265, -0.75],
+        "pivot": [0.276, 0.265, 0.1],
+        "fov": 40.0,
+        "near": 0.5
+      }
+    },
+    {
+      "name": "deferred_diningroom",
+      "profile": "deferred",
+      "scene": "diningroom.scene",
+      "thresholds": {
+        "mean_absolute_error": 0.003,
+        "max_absolute_error": 12.5,
+        "pixel_error": 0.02,
+        "mismatch_ratio": 0.012
+      }
+    },
+    {
+      "name": "deferred_teapot_env",
+      "profile": "deferred",
+      "scene": "teapot.scene",
+      "environment_map": "HDR/Background_05.hdr",
+      "thresholds": {
+        "mean_absolute_error": 0.003,
+        "max_absolute_error": 12.5,
+        "pixel_error": 0.02,
+        "mismatch_ratio": 0.012
+      }
+    },
+    {
+      "name": "deferred_barbershopchair_01",
+      "profile": "deferred",
+      "scene": "BarberShopChair_01.scene",
+      "environment_map": "HDR/konzerthaus_4k.hdr",
+      "camera": {
+        "position": [-1.877181, 2.144519, 3.151197],
+        "pivot": [0.098960, 0.548734, -0.269350],
+        "fov": 45.0,
+        "near": 0.5
+      },
+      "thresholds": {
+        "mean_absolute_error": 0.003,
+        "max_absolute_error": 12.5,
+        "pixel_error": 0.02,
+        "mismatch_ratio": 0.012
+      }
+    },
+    {
+      "name": "pathtracer_cornell",
+      "profile": "pathtracer",
+      "scene": "cornell_box.scene",
+      "resolution": [720, 720],
+      "camera": {
+        "position": [0.276, 0.265, -0.75],
+        "pivot": [0.276, 0.265, 0.1],
+        "fov": 40.0,
+        "near": 0.5
+      }
+    },
+    {
+      "name": "pathtracer_diningroom",
+      "profile": "pathtracer",
+      "scene": "diningroom.scene",
+      "thresholds": {
+        "max_absolute_error": 0.5
+      }
+    },
+    {
+      "name": "pathtracer_teapot_env",
+      "profile": "pathtracer",
+      "scene": "teapot.scene",
+      "frames": 60,
+      "environment_map": "HDR/Background_05.hdr"
+    },
+    {
+      "name": "pathtracer_barbershopchair_01",
+      "profile": "pathtracer",
+      "scene": "BarberShopChair_01.scene",
+      "environment_map": "HDR/konzerthaus_4k.hdr",
+      "camera": {
+        "position": [-1.877181, 2.144519, 3.151197],
+        "pivot": [0.098960, 0.548734, -0.269350],
+        "fov": 45.0,
+        "near": 0.5
+      },
+      "frames": 60
+    }
+  ]
+}

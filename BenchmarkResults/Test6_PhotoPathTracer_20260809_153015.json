@@ -1,0 +1,72 @@
+{
+  "benchmark": "Test6 PhotoPathTracer Renderer",
+  "timestamp": "20260809_153015",
+  "machine": {
+    "os": "Darwin 25.6.0 arm64",
+    "cpu": "Apple M4",
+    "hardware_threads": 10,
+    "compiler": "Clang 21.0.0",
+    "build_mode": "Release",
+    "gl_vendor": "Apple",
+    "gl_renderer": "Apple M4",
+    "gl_version": "4.1 Metal - 90.5"
+  },
+  "scene": {
+    "map_path": "/Users/griffon/Documents/Dev/RTRT/Assets/FPSMaps/ccity.fpsmap",
+    "scene_setup_snapshot": "/Users/griffon/Documents/Dev/RTRT/BenchmarkResults/Test6_PhotoPathTracer_20260809_153015.fpsmap",
+    "scene_setup_snapshot_saved": true,
+    "map_name": "Default FPS Arena",
+    "environment": "HDR/syferfontein_18d_clear_1k.hdr",
+    "objects": 4,
+    "props": 1,
+    "boids": 1,
+    "materials": 5,
+    "lights": 1,
+    "scene_meshes": 1363,
+    "scene_mesh_instances": 1496,
+    "scene_materials": 32
+  },
+  "camera": {
+    "position": [17.065, -0.229, -45.187],
+    "yaw": -147.34,
+    "pitch": 0.99,
+    "benchmark_position": [17.065, -0.229, -45.187],
+    "benchmark_yaw": -147.34,
+    "benchmark_pitch": 0.99
+  },
+  "render_settings": {
+    "renderer": "PhotoPathTracer",
+    "window_resolution": [2560, 1440],
+    "render_resolution": [2560, 1440],
+    "render_scale": 100,
+    "tile_resolution": [-1, -1],
+    "tiled_rendering": false,
+    "nb_threads": 1,
+    "sampling": 1,
+    "shading_type": 1,
+    "w_buffer": true,
+    "tone_mapping": true,
+    "gamma": 2,
+    "exposure": 1.5
+  },
+  "samples": {
+    "warmup_frames": 10,
+    "sample_frames": 120,
+    "cpu_frame_average_ms": 1.222,
+    "renderer_pass_average_ms": 499.736
+  },
+  "cpu_timings_ms": {
+    "Process input": 0.208629,
+    "Update game": 6.84028e-05,
+    "Renderer update": 0.00779965,
+    "Render to texture call": 0.13976,
+    "Render to screen call": 0.372766,
+    "Draw UI": 0.30321,
+    "Swap buffers": 0.200267
+  },
+  "renderer_timings_ms": {
+    "Path trace": 495.348,
+    "Accumulate": 3.79429,
+    "Composite / screen": 0.593046
+  }
+}

@@ -29,8 +29,6 @@ namespace RTRT
 
 static Vec3 S_WireColor = Vec3(1.f, 0.f, 0.f);
 static float S_WireWidth = 3.0f;
-static const float S_TransparentSpecTransThreshold = 0.001f;
-
 // ----------------------------------------------------------------------------
 // HELPER TYPES
 // ----------------------------------------------------------------------------
@@ -78,6 +76,14 @@ DeferredRenderer::DeferredRenderer(Scene& iScene, RenderSettings& iSettings)
 // ----------------------------------------------------------------------------
 DeferredRenderer::~DeferredRenderer()
 {
+  for ( auto & timerIDs : _TimerIDs )
+  {
+    if ( timerIDs[0] )
+      glDeleteQueries(1, &timerIDs[0]);
+    if ( timerIDs[1] )
+      glDeleteQueries(1, &timerIDs[1]);
+  }
+
   GLUtil::DeleteFBO(_GBufferFBO);
   GLUtil::DeleteFBO(_LightingFBO);
   GLUtil::DeleteFBO(_BRDFFBO);
@@ -158,6 +164,12 @@ int DeferredRenderer::Initialize()
     return 1;
   }
 
+  if ( 0 != InitializeStats() )
+  {
+    std::cout << "DeferredRenderer : Failed to initialize frame statistics !" << std::endl;
+    return 1;
+  }
+
   return 0;
 }
 
@@ -166,6 +178,8 @@ int DeferredRenderer::Initialize()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::Update()
 {
+  UpdateStats();
+
   if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
   {
     this -> ResizeRenderTarget();
@@ -173,13 +187,8 @@ int DeferredRenderer::Update()
 
   if ( _DirtyStates & (unsigned long)DirtyState::Textures )
   {
-    if ( _GenerateMipMaps )
-      GLUtil::SetMinFilter(_TexArrayTEX, GL_LINEAR_MIPMAP_LINEAR);
-    else
-      GLUtil::SetMinFilter(_TexArrayTEX, GL_LINEAR);
-
-    if ( _GenerateMipMaps && _AnisotropicLevel )
-      GLUtil::EnableAnisotropyIfAvailable(_TexArrayTEX, (float)_AnisotropicLevel);
+    if ( 0 != ReloadScene() )
+      return 1;
   }
 
   if ( _DirtyStates & (unsigned long)DirtyState::SceneEnvMap )
@@ -189,7 +198,7 @@ int DeferredRenderer::Update()
     BuildDeferredDrawLists();
 
   if ( _DirtyStates & (unsigned long)DirtyState::SceneInstances )
-    ComputeSceneBounds();
+    ComputeSceneBounds(false);
 
   UpdateShadowState();
   int shadowMapSize = std::clamp(_Settings._ShadowMapResolution, 256, 4096);
@@ -215,6 +224,138 @@ int DeferredRenderer::Done()
 
   CleanStates();
 
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// InitializeStats
+// ----------------------------------------------------------------------------
+int DeferredRenderer::InitializeStats()
+{
+  _PassTimes.fill(0.);
+  _PassEnabled.fill(false);
+  _TimerWritten.fill(false);
+
+  for ( auto & timerIDs : _TimerIDs )
+  {
+    if ( !timerIDs[0] )
+      glGenQueries(1, &timerIDs[0]);
+    if ( !timerIDs[1] )
+      glGenQueries(1, &timerIDs[1]);
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateStats
+// ----------------------------------------------------------------------------
+int DeferredRenderer::UpdateStats()
+{
+  for ( int i = 0; i < TimingCount; ++i )
+  {
+    if ( _TimerWritten[i] )
+      _PassTimes[i] = ReadTimer(i);
+    else
+      _PassTimes[i] = 0.;
+  }
+
+  _PassEnabled.fill(false);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// BeginTimer
+// ----------------------------------------------------------------------------
+void DeferredRenderer::BeginTimer( int iTimerID )
+{
+  if ( ( iTimerID < 0 ) || ( iTimerID >= TimingCount ) )
+    return;
+
+  _PassEnabled[iTimerID] = true;
+  _TimerWritten[iTimerID] = true;
+#if defined(__APPLE__)
+  glBeginQuery(GL_TIME_ELAPSED, _TimerIDs[iTimerID][0]);
+#else
+  glQueryCounter(_TimerIDs[iTimerID][0], GL_TIMESTAMP);
+#endif
+}
+
+// ----------------------------------------------------------------------------
+// EndTimer
+// ----------------------------------------------------------------------------
+void DeferredRenderer::EndTimer( int iTimerID )
+{
+  if ( ( iTimerID < 0 ) || ( iTimerID >= TimingCount ) )
+    return;
+
+#if defined(__APPLE__)
+  glEndQuery(GL_TIME_ELAPSED);
+#else
+  glQueryCounter(_TimerIDs[iTimerID][1], GL_TIMESTAMP);
+#endif
+}
+
+// ----------------------------------------------------------------------------
+// ReadTimer
+// ----------------------------------------------------------------------------
+double DeferredRenderer::ReadTimer( int iTimerID )
+{
+  if ( ( iTimerID < 0 ) || ( iTimerID >= TimingCount ) )
+    return 0.;
+
+  GLuint64 startTime = 0, endTime = 0, executionTime = 0;
+  GLint resultAvailable = 0;
+
+#if defined(__APPLE__)
+  while ( !resultAvailable )
+    glGetQueryObjectiv(_TimerIDs[iTimerID][0], GL_QUERY_RESULT_AVAILABLE, &resultAvailable);
+  glGetQueryObjectui64v(_TimerIDs[iTimerID][0], GL_QUERY_RESULT, &executionTime);
+#else
+  while ( !resultAvailable )
+    glGetQueryObjectiv(_TimerIDs[iTimerID][0], GL_QUERY_RESULT_AVAILABLE, &resultAvailable);
+  glGetQueryObjectui64v(_TimerIDs[iTimerID][0], GL_QUERY_RESULT, &startTime);
+
+  resultAvailable = 0;
+  while ( !resultAvailable )
+    glGetQueryObjectiv(_TimerIDs[iTimerID][1], GL_QUERY_RESULT_AVAILABLE, &resultAvailable);
+  glGetQueryObjectui64v(_TimerIDs[iTimerID][1], GL_QUERY_RESULT, &endTime);
+
+  executionTime = endTime - startTime;
+#endif
+
+  return (double)executionTime / 1000000000.;
+}
+
+// ----------------------------------------------------------------------------
+// SetTimingEnabled
+// ----------------------------------------------------------------------------
+void DeferredRenderer::SetTimingEnabled( int iTimerID, bool iEnabled )
+{
+  if ( ( iTimerID < 0 ) || ( iTimerID >= TimingCount ) )
+    return;
+
+  _PassEnabled[iTimerID] = iEnabled;
+  if ( !iEnabled )
+    _PassTimes[iTimerID] = 0.;
+}
+
+// ----------------------------------------------------------------------------
+// GetRenderPassTimings
+// ----------------------------------------------------------------------------
+int DeferredRenderer::GetRenderPassTimings( std::vector<RenderPassTiming> & oTimings ) const
+{
+  oTimings.clear();
+  oTimings.push_back({ "Shadow map", _PassTimes[TimingShadowMap], true, _PassEnabled[TimingShadowMap] });
+  oTimings.push_back({ "G-buffer", _PassTimes[TimingGBuffer], true, _PassEnabled[TimingGBuffer] });
+  oTimings.push_back({ "SSAO", _PassTimes[TimingSSAO], true, _PassEnabled[TimingSSAO] });
+  oTimings.push_back({ "SSR", _PassTimes[TimingSSR], true, _PassEnabled[TimingSSR] });
+  oTimings.push_back({ "Lighting", _PassTimes[TimingLighting], true, _PassEnabled[TimingLighting] });
+  oTimings.push_back({ "Transparency", _PassTimes[TimingTransparency], true, _PassEnabled[TimingTransparency] });
+  oTimings.push_back({ "Wireframe", _PassTimes[TimingWireframe], true, _PassEnabled[TimingWireframe] });
+  oTimings.push_back({ "SSR source copy", _PassTimes[TimingSSRSourceCopy], true, _PassEnabled[TimingSSRSourceCopy] });
+  oTimings.push_back({ "Composite / screen", _PassTimes[TimingCompositeScreen], true, _PassEnabled[TimingCompositeScreen] });
   return 0;
 }
 
@@ -250,6 +391,7 @@ int DeferredRenderer::UnloadScene()
   _ShadowCasters.clear();
   _LocalShadowCasterCount = 0;
   _DirectionalShadowCasterCount = 0;
+  _ShadowSceneBoundsInitialized = false;
 
   return 0;
 }
@@ -257,7 +399,7 @@ int DeferredRenderer::UnloadScene()
 // ----------------------------------------------------------------------------
 // ComputeSceneBounds
 // ----------------------------------------------------------------------------
-void DeferredRenderer::ComputeSceneBounds()
+void DeferredRenderer::ComputeSceneBounds( bool iResetShadowBounds )
 {
   bool initialized = false;
   Vec3 low(-10.f), high(10.f);
@@ -266,6 +408,9 @@ void DeferredRenderer::ComputeSceneBounds()
   const auto & meshes = _Scene.GetMeshes();
   for ( const MeshInstance & inst : instances )
   {
+    if ( !inst._Visible )
+      continue;
+
     if ( ( inst._MeshID < 0 ) || ( inst._MeshID >= (int)meshes.size() ) )
       continue;
 
@@ -296,6 +441,19 @@ void DeferredRenderer::ComputeSceneBounds()
   _SceneBounds._Low = low;
   _SceneBounds._High = high;
   _SceneBoundsRadius = std::max( glm::length( high - low ) * 0.5f, 1.f );
+
+  if ( iResetShadowBounds || !_ShadowSceneBoundsInitialized )
+  {
+    _ShadowSceneBounds = _SceneBounds;
+    _ShadowSceneBoundsRadius = _SceneBoundsRadius;
+    _ShadowSceneBoundsInitialized = true;
+  }
+  else
+  {
+    MathUtil::Minimize(_ShadowSceneBounds._Low, _SceneBounds._Low);
+    MathUtil::Maximize(_ShadowSceneBounds._High, _SceneBounds._High);
+    _ShadowSceneBoundsRadius = std::max( glm::length( _ShadowSceneBounds._High - _ShadowSceneBounds._Low ) * 0.5f, 1.f );
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -304,7 +462,7 @@ void DeferredRenderer::ComputeSceneBounds()
 float DeferredRenderer::ComputeAutoShadowFar( const Vec3 & iLightPos ) const
 {
   Vec3 corners[8];
-  _SceneBounds.Corners(corners);
+  _ShadowSceneBounds.Corners(corners);
 
   float maxDistance = 1.f;
   for ( const Vec3 & corner : corners )
@@ -323,15 +481,8 @@ bool DeferredRenderer::IsTransparentMaterial( int iMaterialID )
     return false;
 
   const Material & mat = materials[iMaterialID];
-  AlphaMode alphaMode = MaterialAlphaMode(mat);
-
-  if ( AlphaMode::Blend == alphaMode )
-    return true;
-
-  if ( mat._SpecTrans > S_TransparentSpecTransThreshold )
-    return true;
-
-  return false;
+  const MaterialPass pass = ClassifyMaterialPass(mat);
+  return ( MaterialPass::Blend == pass ) || ( MaterialPass::Transmission == pass );
 }
 
 // ----------------------------------------------------------------------------
@@ -349,6 +500,9 @@ void DeferredRenderer::BuildDeferredDrawLists()
   for ( int i = 0; i < static_cast<int>(instances.size()); ++i )
   {
     const MeshInstance & inst = instances[i];
+    if ( !inst._Visible )
+      continue;
+
     if ( IsTransparentMaterial( inst._MaterialID ) )
       _TransparentMeshInstanceIDs.push_back(i);
     else
@@ -525,7 +679,7 @@ int DeferredRenderer::UpdateShadowState()
   _LocalShadowCasterCount = 0;
   _DirectionalShadowCasterCount = 0;
   _HasShadowLight = false;
-  _ShadowFar = ( _Settings._ShadowFar > 0.f ) ? ( _Settings._ShadowFar ) : ( std::max( _SceneBoundsRadius * 2.f, 25.f ) );
+  _ShadowFar = ( _Settings._ShadowFar > 0.f ) ? ( _Settings._ShadowFar ) : ( std::max( _ShadowSceneBoundsRadius * 2.f, 25.f ) );
 
   if ( !_Settings._ShadowMapping )
     return 0;
@@ -630,13 +784,13 @@ int DeferredRenderer::UpdateShadowState()
     {
       caster._Layer = _DirectionalShadowCasterCount++;
 
-      float lightDistance = std::max( _SceneBoundsRadius * 2.f, 10.f );
-      Vec3 lightPos = _SceneBounds.Center() + caster._Dir * lightDistance;
+      float lightDistance = std::max( _ShadowSceneBoundsRadius * 2.f, 10.f );
+      Vec3 lightPos = _ShadowSceneBounds.Center() + caster._Dir * lightDistance;
       Vec3 up = ( std::abs(glm::dot(caster._Dir, Vec3(0.f, 1.f, 0.f))) > 0.99f ) ? ( Vec3(0.f, 0.f, 1.f) ) : ( Vec3(0.f, 1.f, 0.f) );
-      Mat4x4 lightView = glm::lookAt(lightPos, _SceneBounds.Center(), up);
+      Mat4x4 lightView = glm::lookAt(lightPos, _ShadowSceneBounds.Center(), up);
 
       Vec3 corners[8];
-      _SceneBounds.Corners(corners);
+      _ShadowSceneBounds.Corners(corners);
 
       Vec3 lightSpaceLow( MAX_FLOAT );
       Vec3 lightSpaceHigh( -MAX_FLOAT );
@@ -647,9 +801,9 @@ int DeferredRenderer::UpdateShadowState()
         MathUtil::Maximize(lightSpaceHigh, Vec3(lightSpaceCorner));
       }
 
-      float padXY = std::max( _SceneBoundsRadius * 0.1f, 1.f );
+      float padXY = std::max( _ShadowSceneBoundsRadius * 0.1f, 1.f );
       float nearPlane = 0.1f;
-      float farPlane = lightDistance + _SceneBoundsRadius * 4.f;
+      float farPlane = lightDistance + _ShadowSceneBoundsRadius * 4.f;
       Mat4x4 shadowProj = glm::ortho(lightSpaceLow.x - padXY, lightSpaceHigh.x + padXY,
                                      lightSpaceLow.y - padXY, lightSpaceHigh.y + padXY,
                                      nearPlane, farPlane);
@@ -688,15 +842,12 @@ int DeferredRenderer::InitializeShadowMap()
   _ShadowLocalCapacity = _LocalShadowCasterCount;
   _ShadowDirectionalCapacity = _DirectionalShadowCasterCount;
 
-  if ( !_HasShadowLight )
-    return 0;
-
   GLTextureDesc shadowCubeDesc;
   shadowCubeDesc._Target         = _ShadowCubeMapTEX._Target;
   shadowCubeDesc._Slot           = _ShadowCubeMapTEX._Slot;
-  shadowCubeDesc._Width          = shadowMapSize;
-  shadowCubeDesc._Height         = shadowMapSize;
-  shadowCubeDesc._Depth          = std::max(1, _ShadowLocalCapacity * 6);
+  shadowCubeDesc._Width          = ( _ShadowLocalCapacity > 0 ) ? shadowMapSize : 1;
+  shadowCubeDesc._Height         = ( _ShadowLocalCapacity > 0 ) ? shadowMapSize : 1;
+  shadowCubeDesc._Depth          = std::max(6, _ShadowLocalCapacity * 6);
   shadowCubeDesc._InternalFormat = _ShadowCubeMapTEX._InternalFormat;
   shadowCubeDesc._DataFormat     = _ShadowCubeMapTEX._DataFormat;
   shadowCubeDesc._DataType       = _ShadowCubeMapTEX._DataType;
@@ -705,15 +856,18 @@ int DeferredRenderer::InitializeShadowMap()
   shadowCubeDesc._WrapS          = GL_CLAMP_TO_EDGE;
   shadowCubeDesc._WrapT          = GL_CLAMP_TO_EDGE;
   shadowCubeDesc._WrapR          = GL_CLAMP_TO_EDGE;
-  if ( _ShadowLocalCapacity > 0 )
-    GLUtil::CreateTexture(shadowCubeDesc, _ShadowCubeMapTEX);
+  GLUtil::CreateTexture(shadowCubeDesc, _ShadowCubeMapTEX);
 
   GLTextureDesc shadow2DDesc = shadowCubeDesc;
   shadow2DDesc._Target = _Shadow2DMapTEX._Target;
   shadow2DDesc._Slot   = _Shadow2DMapTEX._Slot;
+  shadow2DDesc._Width  = ( _ShadowDirectionalCapacity > 0 ) ? shadowMapSize : 1;
+  shadow2DDesc._Height = ( _ShadowDirectionalCapacity > 0 ) ? shadowMapSize : 1;
   shadow2DDesc._Depth  = std::max(1, _ShadowDirectionalCapacity);
-  if ( _ShadowDirectionalCapacity > 0 )
-    GLUtil::CreateTexture(shadow2DDesc, _Shadow2DMapTEX);
+  GLUtil::CreateTexture(shadow2DDesc, _Shadow2DMapTEX);
+
+  if ( !_HasShadowLight )
+    return 0;
 
   glGenFramebuffers(1, &_ShadowFBO._Handle);
   glBindFramebuffer(GL_FRAMEBUFFER, _ShadowFBO._Handle);
@@ -1036,7 +1190,7 @@ int DeferredRenderer::ReloadScene()
     BuildTransparentMeshTriangleData(mi, gpuPositions, outIndices);
   }
 
-  ComputeSceneBounds();
+  ComputeSceneBounds(true);
 
   // Materials
   if ( _Scene.GetTextureArrayIDs().size() )
@@ -1969,11 +2123,19 @@ int DeferredRenderer::RenderTransparent()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::RenderToTexture()
 {
+  _PassEnabled.fill(false);
+
   if ( _Settings._ShadowMapping && _HasShadowLight )
+  {
+    BeginTimer(TimingShadowMap);
     RenderShadowMap();
+    EndTimer(TimingShadowMap);
+  }
 
   if (_GeometryShader)
   {
+    BeginTimer(TimingGBuffer);
+
     // Geometry pass: render scene into G-buffer
     glBindFramebuffer(GL_FRAMEBUFFER, _GBufferFBO._Handle);
     glViewport(0, 0, RenderWidth(), RenderHeight());
@@ -2026,13 +2188,33 @@ int DeferredRenderer::RenderToTexture()
     glDisable(GL_CULL_FACE);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    EndTimer(TimingGBuffer);
+  }
+  else
+    SetTimingEnabled(TimingGBuffer, false);
+
+  const bool ssaoPassEnabled = _Settings._SSAO || ( 0 != ( _DebugMode & (int)DeferredDebugModes::SSAO ) );
+  const bool ssrPassEnabled = _Settings._SSR || ( 0 != ( _DebugMode & (int)DeferredDebugModes::SSR ) );
+
+  if ( ssaoPassEnabled )
+  {
+    BeginTimer(TimingSSAO);
+    RenderSSAO();
+    EndTimer(TimingSSAO);
   }
 
-  RenderSSAO();
-  RenderSSR();
+  if ( ssrPassEnabled )
+  {
+    BeginTimer(TimingSSR);
+    RenderSSR();
+    EndTimer(TimingSSR);
+  }
 
   if (_LightingShader)
   {
+    BeginTimer(TimingLighting);
+
     // Lighting pass: sample G-buffer and compute shading into lighting FBO
     glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
     glViewport(0, 0, RenderWidth(), RenderHeight());
@@ -2051,13 +2233,21 @@ int DeferredRenderer::RenderToTexture()
 
     // At this point _LightingTEX contains the shaded image
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    EndTimer(TimingLighting);
   }
 
+  BeginTimer(TimingTransparency);
   RenderTransparent();
+  EndTimer(TimingTransparency);
+  if ( !_Settings._Transparency || _TransparentMeshInstanceIDs.empty() )
+    SetTimingEnabled(TimingTransparency, false);
 
   // DEBUG : Wireframe overlay. Render lines into lighting target on top of shaded image
   if ( ( _DebugMode & (int)DeferredDebugModes::Wires ) && _WireframeShader )
   { 
+    BeginTimer(TimingWireframe);
+
     glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
     glViewport(0, 0, RenderWidth(), RenderHeight());
 
@@ -2110,10 +2300,16 @@ int DeferredRenderer::RenderToTexture()
 
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    EndTimer(TimingWireframe);
   }
 
   if ( 0 == ( _DebugMode & ~(int)DeferredDebugModes::Wires ) )
+  {
+    BeginTimer(TimingSSRSourceCopy);
     UpdateSSRSource();
+    EndTimer(TimingSSRSourceCopy);
+  }
 
   return 0;
 }
@@ -2131,6 +2327,8 @@ int DeferredRenderer::RenderToScreen()
 
   if ( _CompositeShader )
   {
+    BeginTimer(TimingCompositeScreen);
+
     _CompositeShader -> Use();
 
     this -> BindRenderToScreenTextures();
@@ -2138,9 +2336,34 @@ int DeferredRenderer::RenderToScreen()
     _Quad.Render(*_CompositeShader);
 
     _CompositeShader -> StopUsing();
+
+    EndTimer(TimingCompositeScreen);
   }
+  else
+    SetTimingEnabled(TimingCompositeScreen, false);
 
   return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ReadbackFinalColor
+// ----------------------------------------------------------------------------
+int DeferredRenderer::ReadbackFinalColor( RenderImage & oImage )
+{
+  if ( !_LightingTEX._Handle || ( RenderWidth() <= 0 ) || ( RenderHeight() <= 0 ) )
+    return 1;
+
+  oImage._Width = RenderWidth();
+  oImage._Height = RenderHeight();
+  oImage._Pixels.resize((size_t)oImage._Width * (size_t)oImage._Height * 4u);
+
+  while ( GL_NO_ERROR != glGetError() ) {}
+  glBindTexture(GL_TEXTURE_2D, _LightingTEX._Handle);
+  glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, oImage._Pixels.data());
+  glBindTexture(GL_TEXTURE_2D, 0);
+  FlipImageVertically(oImage);
+
+  return ( GL_NO_ERROR == glGetError() ) ? 0 : 1;
 }
 
 // ----------------------------------------------------------------------------

@@ -267,6 +267,19 @@ static void ResizeTexture( GLTexture & ioTex, GLsizei iWidth, GLsizei iHeight )
   glBindTexture(ioTex._Target, 0);
 }
 
+// UpdateTexture2D
+static bool UpdateTexture2D( GLTexture & ioTex, GLsizei iWidth, GLsizei iHeight, const void * iData )
+{
+  if ( !ioTex._Handle || ( GL_TEXTURE_2D != ioTex._Target ) || ( iWidth <= 0 ) || ( iHeight <= 0 ) || !iData )
+    return false;
+
+  glBindTexture(GL_TEXTURE_2D, ioTex._Handle);
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, iWidth, iHeight, ioTex._DataFormat, ioTex._DataType, iData);
+  glBindTexture(GL_TEXTURE_2D, 0);
+
+  return true;
+}
+
 // CreateFrameBuffer
 static bool CreateFrameBuffer( const GLFrameBufferDesc & iDesc, GLFrameBuffer & ioFBO )
 {

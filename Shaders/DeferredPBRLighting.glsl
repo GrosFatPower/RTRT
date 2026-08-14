@@ -15,9 +15,13 @@ struct DeferredLightSample
   float _NdotL;
 };
 
-float DistanceAttenuation( in float iDistance2, in float iClampDistance2 )
+float SphereLightSolidAngle( in float iDistance2, in float iRadius )
 {
-  return iClampDistance2 / max(iDistance2, iClampDistance2);
+  float radius2 = iRadius * iRadius;
+  float safeDist2 = max(iDistance2, radius2);
+  float cosThetaMax = sqrt(max(1.0 - radius2 / safeDist2, 0.0));
+
+  return 2.0 * PI * (1.0 - cosThetaMax);
 }
 
 bool BuildDeferredLightSample( in Light iLight, in vec3 iPos, in vec3 iN, in float iDirectIntensity, out DeferredLightSample oSample )
@@ -60,7 +64,8 @@ bool BuildDeferredLightSample( in Light iLight, in vec3 iPos, in vec3 iN, in flo
   if ( iLight._Type == SPHERE_LIGHT )
   {
     float radius = max(iLight._Radius, 0.001);
-    attenuation = DistanceAttenuation(dist2, radius * radius);
+    // Approximate the emitter's irradiance from the solid angle it subtends.
+    attenuation = SphereLightSolidAngle(dist2, radius);
   }
   else if ( iLight._Type == QUAD_LIGHT )
   {

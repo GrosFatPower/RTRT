@@ -56,18 +56,20 @@ echo ""
 echo "✅ Compilation succeeded!"
 echo ""
 
-if [ -f "Release/RenderLab" ]; then
-    echo "✅ Executable found: Release/RenderLab"
+EXECUTABLE_PATH="Release/RenderLab"
+
+if [ -f "${EXECUTABLE_PATH}" ]; then
+    echo "✅ Executable found: ${EXECUTABLE_PATH}"
     
     echo ""
     echo "=== Informations sur l'exécutable ==="
-    file Release/RenderLab
+    file "${EXECUTABLE_PATH}"
     
     echo ""
     echo "=== Dynamic dependencies ==="
-    otool -L Release/RenderLab   
+    otool -L "${EXECUTABLE_PATH}"
 else
-    echo "❌ Executable non found in Release"
+    echo "❌ Executable not found in Release"
     exit 1
 fi
 

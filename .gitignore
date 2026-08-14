@@ -21,11 +21,19 @@
 
 # Mac OS files
 .DS_Store
+.DS_Store?
+Assets/.DS_Store
+Assets/.DS_Store?
 
 # Directories
 .vs/
 Bin/
 Build/
+Tests/Artifacts/
+shader.tmp/
+VertexShader_*.glsl
+FragmentShader_*.glsl
+ComputeShader_*.glsl
 Assets/ajax/
 Assets/Figurine/
 Assets/bedroom/
@@ -51,8 +59,6 @@ Assets/*.glb
 Assets/*.bin
 Assets/ball*
 Assets/helmet*
-Assets/.DS_Store
-
 
 # Files
 *.vcxproj
@@ -60,3 +66,4 @@ Assets/.DS_Store
 *.vcxproj.filters
 *.sln
 *.ods\#
+

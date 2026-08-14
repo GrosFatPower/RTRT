@@ -150,12 +150,12 @@ void Test3::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
   this_ -> ResizeTextures();
 }
 
-// https://github.com/ocornut/imgui/issues/911
-bool VectorOfStringGetter(void* data, int n, const char** out_text)
+const char * VectorOfStringGetter(void* data, int n)
 {
   const std::vector<std::string> * v = (std::vector<std::string>*)data;
-  *out_text = (*v)[n].c_str();
-  return true;
+  if ( ( n < 0 ) || ( n >= static_cast<int>(v -> size()) ) )
+    return "";
+  return (*v)[n].c_str();
 }
 
 void LoadTexture( unsigned int iTexUnit, const Texture * iTexture, GLuint & ioTexID )
