@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(RTRT
-  LANGUAGES CXX
+  LANGUAGES C CXX
   VERSION 1.0
 )
 
@@ -96,6 +96,32 @@ add_library(RTRTCore STATIC ${CORE_SOURCE} ${CORE_HEADER} ${EXT_SOURCE} ${EXT_HE
 add_executable(${EXE_NAME} ${RTRT_MAIN_SOURCE} ${SHADERS})
 target_link_libraries(${EXE_NAME} RTRTCore)
 
+# Native File Dialog
+set(NFD_SOURCE_DIR ${CMAKE_SOURCE_DIR}/Dependencies/nativefiledialog/src)
+if(WIN32)
+  set(NFD_PLATFORM_SOURCE ${NFD_SOURCE_DIR}/nfd_win.cpp)
+elseif(APPLE)
+  enable_language(OBJC)
+  set(NFD_PLATFORM_SOURCE ${NFD_SOURCE_DIR}/nfd_cocoa.m)
+else()
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
+  set(NFD_PLATFORM_SOURCE ${NFD_SOURCE_DIR}/nfd_gtk.c)
+endif()
+add_library(nativefiledialog STATIC ${NFD_SOURCE_DIR}/nfd_common.c ${NFD_PLATFORM_SOURCE})
+target_include_directories(nativefiledialog PUBLIC ${NFD_SOURCE_DIR}/include PRIVATE ${NFD_SOURCE_DIR})
+if(WIN32)
+  target_link_libraries(nativefiledialog PUBLIC comctl32)
+elseif(APPLE)
+  find_library(APPKIT_LIBRARY AppKit REQUIRED)
+  target_link_libraries(nativefiledialog PUBLIC ${APPKIT_LIBRARY})
+else()
+  target_include_directories(nativefiledialog PRIVATE ${GTK3_INCLUDE_DIRS})
+  target_link_libraries(nativefiledialog PUBLIC ${GTK3_LIBRARIES})
+  target_compile_options(nativefiledialog PRIVATE ${GTK3_CFLAGS_OTHER})
+endif()
+target_link_libraries(${EXE_NAME} nativefiledialog)
+
 # OpenGL
 find_package(OpenGL REQUIRED)
 
@@ -152,6 +178,7 @@ target_include_directories(${iTarget}
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinyobjloader
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinydir
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinygltf
+  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/nativefiledialog/src/include
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinybvh
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/RadeonRays
   PUBLIC ${GLEW_INCLUDE_DIRS}

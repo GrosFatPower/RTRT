@@ -11,6 +11,7 @@
 #include "Util.h"
 #include "PathUtils.h"
 #include "Mesh.h"
+#include "NativeFileDialog.h"
 #include "RenderStatsUI.h"
 
 #include <string>
@@ -199,10 +200,43 @@ void Test5::HandleDroppedFiles( int iCount, const char ** iPaths )
 
     _DroppedScenePath = filepath;
     _DroppedSceneName = DroppedFileUtils::DisplayName(filepath);
+    _SceneLoadError.clear();
     _ReloadScene = true;
     std::cout << "Test5 : dropped scene " << filepath.generic_string() << std::endl;
     return;
   }
+}
+
+// ----------------------------------------------------------------------------
+// LoadSceneFromDialog
+// ----------------------------------------------------------------------------
+void Test5::LoadSceneFromDialog()
+{
+  std::filesystem::path initialDirectory = _DroppedScenePath.empty() ? std::filesystem::path(PathUtils::GetAssetPath("")) : _DroppedScenePath.parent_path();
+  std::filesystem::path selectedPath;
+  std::string error;
+  const NativeFileDialogResult result = OpenSceneFileDialog(initialDirectory, selectedPath, error);
+  if ( NativeFileDialogResult::Cancelled == result )
+    return;
+  if ( NativeFileDialogResult::Error == result )
+  {
+    _SceneLoadError = "File dialog error: " + error;
+    return;
+  }
+
+  std::error_code ec;
+  selectedPath = std::filesystem::absolute(selectedPath, ec).lexically_normal();
+  if ( ec || !std::filesystem::is_regular_file(selectedPath, ec) || ec )
+  {
+    _SceneLoadError = "Selected scene file does not exist.";
+    return;
+  }
+
+  _DroppedScenePath = selectedPath;
+  _DroppedSceneName = DroppedFileUtils::DisplayName(selectedPath);
+  _CurSceneId = -1;
+  _SceneLoadError.clear();
+  _ReloadScene = true;
 }
 
 // ----------------------------------------------------------------------------
@@ -312,17 +346,24 @@ int Test5::DrawUI()
       int selectedSceneId = _CurSceneId;
       if ( ImGui::Combo("Scene selection", &selectedSceneId, &_SceneNames[0], static_cast<int>(_SceneNames.size())) )
       {
-        if ( selectedSceneId != _CurSceneId )
-        {
-          _CurSceneId = selectedSceneId;
-          _DroppedScenePath.clear();
-          _DroppedSceneName.clear();
-          _ReloadScene = true;
+      if ( selectedSceneId != _CurSceneId )
+      {
+        _CurSceneId = selectedSceneId;
+        _DroppedScenePath.clear();
+        _DroppedSceneName.clear();
+        _SceneLoadError.clear();
+        _ReloadScene = true;
         }
       }
 
       if ( !_DroppedSceneName.empty() )
-        ImGui::Text("Dropped scene: %s", _DroppedSceneName.c_str());
+        ImGui::Text("External scene: %s", _DroppedSceneName.c_str());
+
+      if ( ImGui::Button("Load scene...") )
+        LoadSceneFromDialog();
+
+      if ( !_SceneLoadError.empty() )
+        ImGui::TextColored(ImVec4(1.f, .35f, .35f, 1.f), "%s", _SceneLoadError.c_str());
     }
 
     ImGui::Checkbox("Show rendering stats", &_ShowRenderStatsPanel);
@@ -2008,15 +2049,18 @@ int Test5::ProcessInput()
 int Test5::InitializeScene()
 {
   Scene * newScene = new Scene;
+  RenderSettings newSettings = _Settings;
   const bool useDroppedScene = !_DroppedScenePath.empty();
   const std::string scenePath = useDroppedScene ? _DroppedScenePath.generic_string()
                                                 : ( ( _CurSceneId >= 0 ) ? _SceneFiles[_CurSceneId] : "" );
-  if ( !newScene || scenePath.empty() || !Loader::LoadScene(scenePath, *newScene, _Settings) )
+  if ( !newScene || scenePath.empty() || !Loader::LoadScene(scenePath, *newScene, newSettings) )
   {
     std::cout << "Failed to load scene : " << scenePath << std::endl;
+    delete newScene;
     return 1;
   }
   _Scene.reset(newScene);
+  _Settings = newSettings;
   _SelectedMeshInstanceID = -1;
   _SelectedLightID = -1;
 
@@ -2130,7 +2174,8 @@ int Test5::UpdateScene()
     if ( 0 != InitializeScene() )
     {
       std::cout << "ERROR: Scene initialization failed!" << std::endl;
-      return 1;
+      _SceneLoadError = "Unable to load scene: " + ( _DroppedSceneName.empty() ? std::string("selected scene") : _DroppedSceneName );
+      return 0;
     }
 
     _ReloadRenderer = true;

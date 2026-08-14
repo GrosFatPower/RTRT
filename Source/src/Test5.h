@@ -79,6 +79,7 @@ protected:
   int UpdateCPUTime();
   void SyncFramebufferResolution( bool iNotifyRenderer = false );
   void HandleDroppedFiles( int iCount, const char ** iPaths );
+  void LoadSceneFromDialog();
 
   int DrawMeshInstanceGizmo();
   int DrawLightGizmo();
@@ -118,6 +119,7 @@ protected:
   std::vector<std::string>   _MaterialNames;
   std::filesystem::path      _DroppedScenePath;
   std::string                _DroppedSceneName;
+  std::string                _SceneLoadError;
   int                        _CurSceneId       = -1;
   int                        _CurBackgroundId  = -1;
   bool                       _ReloadScene      = false;
