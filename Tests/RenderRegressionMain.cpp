@@ -1,4 +1,5 @@
 #include "RenderTestFramework.h"
+#include "ScopedOutputSilencer.h"
 
 #include "DeferredRenderer.h"
 #include "Loader.h"
@@ -9,9 +10,6 @@
 
 #if defined(_WIN32)
 #include <windows.h>
-#include <io.h>
-#else
-#include <unistd.h>
 #endif
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -38,42 +36,6 @@ FILE * OpenTraceFile( const fs::path & iPath )
   return file;
 #else
   return fopen(iPath.string().c_str(), "w");
-#endif
-}
-
-int DuplicateFileDescriptor( int iDescriptor )
-{
-#if defined(_WIN32)
-  return _dup(iDescriptor);
-#else
-  return dup(iDescriptor);
-#endif
-}
-
-int GetFileDescriptor( FILE * iFile )
-{
-#if defined(_WIN32)
-  return _fileno(iFile);
-#else
-  return fileno(iFile);
-#endif
-}
-
-int RedirectFileDescriptor( int iSource, int iDestination )
-{
-#if defined(_WIN32)
-  return _dup2(iSource, iDestination);
-#else
-  return dup2(iSource, iDestination);
-#endif
-}
-
-void CloseFileDescriptor( int iDescriptor )
-{
-#if defined(_WIN32)
-  _close(iDescriptor);
-#else
-  close(iDescriptor);
 #endif
 }
 
@@ -107,12 +69,12 @@ public:
     std::cerr.flush();
     fflush(stdout);
     fflush(stderr);
-    _StdOut = DuplicateFileDescriptor(GetFileDescriptor(stdout));
-    _StdErr = DuplicateFileDescriptor(GetFileDescriptor(stderr));
+    _StdOut = RTRT::DuplicateFileDescriptor(RTRT::GetFileDescriptor(stdout));
+    _StdErr = RTRT::DuplicateFileDescriptor(RTRT::GetFileDescriptor(stderr));
     if ( ( _StdOut < 0 ) || ( _StdErr < 0 ) )
       return;
-    RedirectFileDescriptor(GetFileDescriptor(_File), GetFileDescriptor(stdout));
-    RedirectFileDescriptor(GetFileDescriptor(_File), GetFileDescriptor(stderr));
+    RTRT::RedirectFileDescriptor(RTRT::GetFileDescriptor(_File), RTRT::GetFileDescriptor(stdout));
+    RTRT::RedirectFileDescriptor(RTRT::GetFileDescriptor(_File), RTRT::GetFileDescriptor(stderr));
     _Active = true;
   }
 
@@ -124,13 +86,13 @@ public:
       std::cerr.flush();
       fflush(stdout);
       fflush(stderr);
-      RedirectFileDescriptor(_StdOut, GetFileDescriptor(stdout));
-      RedirectFileDescriptor(_StdErr, GetFileDescriptor(stderr));
+      RTRT::RedirectFileDescriptor(_StdOut, RTRT::GetFileDescriptor(stdout));
+      RTRT::RedirectFileDescriptor(_StdErr, RTRT::GetFileDescriptor(stderr));
     }
     if ( _StdOut >= 0 )
-      CloseFileDescriptor(_StdOut);
+      RTRT::CloseFileDescriptor(_StdOut);
     if ( _StdErr >= 0 )
-      CloseFileDescriptor(_StdErr);
+      RTRT::CloseFileDescriptor(_StdErr);
     if ( _File )
       fclose(_File);
   }
@@ -369,7 +331,7 @@ bool EnableConsoleColors()
     return false;
   return SetConsoleMode(output, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0;
 #else
-  return isatty(GetFileDescriptor(stdout)) != 0;
+  return isatty(RTRT::GetFileDescriptor(stdout)) != 0;
 #endif
 }
 
