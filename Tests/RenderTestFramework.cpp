@@ -1,6 +1,7 @@
 #include "RenderTestFramework.h"
 #include "RenderTestImageUtil.h"
 #include "RenderTestSIMDUtil.h"
+#include "RenderTestGLTFUtil.h"
 
 #include "RenderSettings.h"
 #include "Scene.h"
@@ -369,6 +370,9 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
       PrintFailed(iName, seconds);
     return result;
   };
+
+  if ( !RunUnitTest("gltf_static_import", []() { return GLTFTestUtil::CheckStaticImport(); }) )
+    return 1;
 
 #if defined(SIMD_AVX2) || defined(SIMD_ARM_NEON)
   if ( !RunUnitTest("simd_transform", []() { return SIMDTestUtil::CheckSIMDTransforms(); }) )

@@ -16,9 +16,12 @@
 #include <vector>
 #include <iostream>
 #include <algorithm>
+#include <cmath>
+#include <cstring>
 #include <filesystem> // C++17
 #include <sstream>
 #include <fstream>
+#include <set>
 
 #include <glm/gtc/type_ptr.hpp>
 
@@ -72,6 +75,248 @@ bool IsEqual( const std::string & iStr1, const std::string & iStr2 )
 {
   return ( ( iStr1.size() == iStr2.size() )
         && std::equal(iStr1.begin(), iStr1.end(), iStr2.begin(), &CompareChar) );
+}
+// ----------------------------------------------------------------------------
+// GLTF loader : GltfDiagnostics
+// ----------------------------------------------------------------------------
+class GltfDiagnostics
+{
+public:
+  void Warn( const std::string & iMessage )
+  {
+    if ( _Warnings.insert(iMessage).second )
+      std::cout << "GLTF warning: " << iMessage << std::endl;
+  }
+
+private:
+  std::set<std::string> _Warnings;
+};
+
+// ----------------------------------------------------------------------------
+// GLTF loader : IsValidIndex
+// ----------------------------------------------------------------------------
+bool IsValidIndex( int iIndex, size_t iCount )
+{
+  return ( iIndex >= 0 ) && ( iIndex < static_cast<int>(iCount) );
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : GetBufferData
+// ----------------------------------------------------------------------------
+bool GetBufferData( const tinygltf::Model & iModel, int iBufferViewIndex, size_t iOffset, size_t iSize, const uint8_t * & oData )
+{
+  if ( !IsValidIndex(iBufferViewIndex, iModel.bufferViews.size()) )
+    return false;
+
+  const tinygltf::BufferView & bufferView = iModel.bufferViews[iBufferViewIndex];
+  if ( !IsValidIndex(bufferView.buffer, iModel.buffers.size()) )
+    return false;
+
+  const std::vector<unsigned char> & buffer = iModel.buffers[bufferView.buffer].data;
+  if ( ( iOffset > bufferView.byteLength ) || ( iSize > ( bufferView.byteLength - iOffset ) ) )
+    return false;
+  const size_t begin = bufferView.byteOffset + iOffset;
+  if ( ( begin > buffer.size() ) || ( iSize > ( buffer.size() - begin ) ) )
+    return false;
+
+  oData = buffer.data() + begin;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : ReadComponent
+// ----------------------------------------------------------------------------
+bool ReadComponent( const uint8_t * iData, int iComponentType, bool iNormalized, double & oValue )
+{
+  switch ( iComponentType )
+  {
+  case TINYGLTF_COMPONENT_TYPE_BYTE:
+    { int8_t value; memcpy(&value, iData, sizeof(value)); oValue = iNormalized ? std::max(-1.0, value / 127.0) : value; return true; }
+  case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
+    { uint8_t value; memcpy(&value, iData, sizeof(value)); oValue = iNormalized ? value / 255.0 : value; return true; }
+  case TINYGLTF_COMPONENT_TYPE_SHORT:
+    { int16_t value; memcpy(&value, iData, sizeof(value)); oValue = iNormalized ? std::max(-1.0, value / 32767.0) : value; return true; }
+  case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
+    { uint16_t value; memcpy(&value, iData, sizeof(value)); oValue = iNormalized ? value / 65535.0 : value; return true; }
+  case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
+    { uint32_t value; memcpy(&value, iData, sizeof(value)); oValue = iNormalized ? value / 4294967295.0 : value; return true; }
+  case TINYGLTF_COMPONENT_TYPE_FLOAT:
+    { float value; memcpy(&value, iData, sizeof(value)); oValue = value; return true; }
+  default:
+    return false;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : ReadAccessor
+// ----------------------------------------------------------------------------
+bool ReadAccessor( const tinygltf::Model & iModel, const tinygltf::Accessor & iAccessor, std::vector<double> & oValues )
+{
+  const int componentSize = tinygltf::GetComponentSizeInBytes(iAccessor.componentType);
+  const int componentCount = tinygltf::GetNumComponentsInType(iAccessor.type);
+  if ( ( componentSize <= 0 ) || ( componentCount <= 0 ) )
+    return false;
+
+  oValues.assign( iAccessor.count * componentCount, 0.0 );
+  const size_t elementSize = static_cast<size_t>(componentSize * componentCount);
+  if ( iAccessor.bufferView >= 0 )
+  {
+    if ( !IsValidIndex(iAccessor.bufferView, iModel.bufferViews.size()) )
+      return false;
+    const tinygltf::BufferView & bufferView = iModel.bufferViews[iAccessor.bufferView];
+    const int stride = iAccessor.ByteStride(bufferView);
+    if ( ( stride < static_cast<int>(elementSize) ) || ( 0 == iAccessor.count ) )
+      return ( 0 == iAccessor.count );
+
+    const uint8_t * data = nullptr;
+    const size_t dataSize = iAccessor.byteOffset + static_cast<size_t>(stride) * ( iAccessor.count - 1 ) + elementSize;
+    if ( !GetBufferData(iModel, iAccessor.bufferView, 0, dataSize, data) )
+      return false;
+
+    for ( size_t element = 0; element < iAccessor.count; ++element )
+    {
+      const uint8_t * source = data + iAccessor.byteOffset + static_cast<size_t>(stride) * element;
+      for ( int component = 0; component < componentCount; ++component )
+      {
+        if ( !ReadComponent(source + component * componentSize, iAccessor.componentType, iAccessor.normalized, oValues[element * componentCount + component]) )
+          return false;
+      }
+    }
+  }
+  else if ( !iAccessor.sparse.isSparse )
+    return false;
+
+  if ( !iAccessor.sparse.isSparse )
+    return true;
+
+  const tinygltf::Accessor::Sparse & sparse = iAccessor.sparse;
+  if ( ( sparse.count < 0 ) || ( static_cast<size_t>(sparse.count) > iAccessor.count ) )
+    return false;
+  const int sparseIndexSize = tinygltf::GetComponentSizeInBytes(sparse.indices.componentType);
+  if ( ( sparseIndexSize <= 0 )
+    || ( ( sparse.indices.componentType != TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE )
+      && ( sparse.indices.componentType != TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT )
+      && ( sparse.indices.componentType != TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT ) ) )
+    return false;
+
+  const uint8_t * sparseIndices = nullptr;
+  const uint8_t * sparseValues = nullptr;
+  if ( !GetBufferData(iModel, sparse.indices.bufferView, sparse.indices.byteOffset, static_cast<size_t>(sparse.count) * sparseIndexSize, sparseIndices)
+    || !GetBufferData(iModel, sparse.values.bufferView, sparse.values.byteOffset, static_cast<size_t>(sparse.count) * elementSize, sparseValues) )
+    return false;
+
+  for ( int sparseElement = 0; sparseElement < sparse.count; ++sparseElement )
+  {
+    double sparseIndexValue = 0.0;
+    if ( !ReadComponent(sparseIndices + sparseElement * sparseIndexSize, sparse.indices.componentType, false, sparseIndexValue) )
+      return false;
+    const size_t element = static_cast<size_t>(sparseIndexValue);
+    if ( element >= iAccessor.count )
+      return false;
+
+    const uint8_t * source = sparseValues + static_cast<size_t>(sparseElement) * elementSize;
+    for ( int component = 0; component < componentCount; ++component )
+    {
+      if ( !ReadComponent(source + component * componentSize, iAccessor.componentType, iAccessor.normalized, oValues[element * componentCount + component]) )
+        return false;
+    }
+  }
+
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : ReadVec3Accessor
+// ----------------------------------------------------------------------------
+bool ReadVec3Accessor( const tinygltf::Model & iModel, int iAccessorIndex, std::vector<Vec3> & oValues )
+{
+  if ( !IsValidIndex(iAccessorIndex, iModel.accessors.size()) )
+    return false;
+  const tinygltf::Accessor & accessor = iModel.accessors[iAccessorIndex];
+  if ( TINYGLTF_TYPE_VEC3 != accessor.type )
+    return false;
+
+  std::vector<double> values;
+  if ( !ReadAccessor(iModel, accessor, values) )
+    return false;
+  oValues.resize(accessor.count);
+  for ( size_t i = 0; i < accessor.count; ++i )
+    oValues[i] = Vec3( static_cast<float>(values[3 * i]), static_cast<float>(values[3 * i + 1]), static_cast<float>(values[3 * i + 2]) );
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : ReadVec2Accessor
+// ----------------------------------------------------------------------------
+bool ReadVec2Accessor( const tinygltf::Model & iModel, int iAccessorIndex, std::vector<Vec2> & oValues )
+{
+  if ( !IsValidIndex(iAccessorIndex, iModel.accessors.size()) )
+    return false;
+  const tinygltf::Accessor & accessor = iModel.accessors[iAccessorIndex];
+  if ( TINYGLTF_TYPE_VEC2 != accessor.type )
+    return false;
+
+  std::vector<double> values;
+  if ( !ReadAccessor(iModel, accessor, values) )
+    return false;
+  oValues.resize(accessor.count);
+  for ( size_t i = 0; i < accessor.count; ++i )
+    oValues[i] = Vec2( static_cast<float>(values[2 * i]), static_cast<float>(values[2 * i + 1]) );
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : ReadIndices
+// ----------------------------------------------------------------------------
+bool ReadIndices( const tinygltf::Model & iModel, int iAccessorIndex, size_t iVertexCount, std::vector<int> & oIndices )
+{
+  if ( !IsValidIndex(iAccessorIndex, iModel.accessors.size()) )
+    return false;
+  const tinygltf::Accessor & accessor = iModel.accessors[iAccessorIndex];
+  if ( ( TINYGLTF_TYPE_SCALAR != accessor.type )
+    || ( ( accessor.componentType != TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE )
+      && ( accessor.componentType != TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT )
+      && ( accessor.componentType != TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT ) ) )
+    return false;
+
+  std::vector<double> values;
+  if ( !ReadAccessor(iModel, accessor, values) )
+    return false;
+  oIndices.resize(accessor.count);
+  for ( size_t i = 0; i < accessor.count; ++i )
+  {
+    if ( ( values[i] < 0.0 ) || ( values[i] >= static_cast<double>(iVertexCount) ) )
+      return false;
+    oIndices[i] = static_cast<int>(values[i]);
+  }
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : WarnTextureInfoLimitations
+// ----------------------------------------------------------------------------
+void WarnTextureInfoLimitations( const tinygltf::TextureInfo & iTextureInfo, GltfDiagnostics & ioDiagnostics )
+{
+  if ( iTextureInfo.texCoord > 0 )
+    ioDiagnostics.Warn("non-zero texture coordinate sets are ignored");
+  if ( iTextureInfo.extensions.find("KHR_texture_transform") != iTextureInfo.extensions.end() )
+    ioDiagnostics.Warn("KHR_texture_transform is ignored");
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : GenerateNormals
+// ----------------------------------------------------------------------------
+void GenerateNormals( const std::vector<Vec3> & iVertices, const std::vector<int> & iIndices, std::vector<Vec3> & oNormals )
+{
+  oNormals.assign(iVertices.size(), Vec3(0.f));
+  for ( size_t i = 0; i + 2 < iIndices.size(); i += 3 )
+  {
+    const int i0 = iIndices[i], i1 = iIndices[i + 1], i2 = iIndices[i + 2];
+    const Vec3 normal = glm::cross(iVertices[i1] - iVertices[i0], iVertices[i2] - iVertices[i0]);
+    oNormals[i0] += normal; oNormals[i1] += normal; oNormals[i2] += normal;
+  }
+  for ( Vec3 & normal : oNormals )
+    normal = ( glm::dot(normal, normal) > 0.f ) ? glm::normalize(normal) : Vec3(0.f, 1.f, 0.f);
 }
 
 // ----------------------------------------------------------------------------
@@ -156,10 +401,12 @@ void GetLocalTransfo( const tinygltf::Node & iGltfNode, Mat4x4 & oLocalTransfoMa
 // ----------------------------------------------------------------------------
 // GLTF loader : LoadTextures
 // ----------------------------------------------------------------------------
-bool LoadTextures( Scene & ioScene, tinygltf::Model & iGltfModel )
+bool LoadTextures( Scene & ioScene, tinygltf::Model & iGltfModel, GltfDiagnostics & ioDiagnostics )
 {
   for ( const tinygltf::Texture & gltfTex : iGltfModel.textures )
   {
+    if ( !IsValidIndex(gltfTex.source, iGltfModel.images.size()) )
+      return false;
     tinygltf::Image & image = iGltfModel.images[gltfTex.source];
 
     std::string texName;
@@ -169,6 +416,9 @@ bool LoadTextures( Scene & ioScene, tinygltf::Model & iGltfModel )
       ioScene.AddTexture(texName, image.image.data(), image.width, image.height, image.component);
     else
       return false;
+
+    if ( gltfTex.sampler >= 0 )
+      ioDiagnostics.Warn("texture sampler settings are ignored");
   }
 
   return true;
@@ -177,7 +427,7 @@ bool LoadTextures( Scene & ioScene, tinygltf::Model & iGltfModel )
 // ----------------------------------------------------------------------------
 // GLTF loader : LoadMaterials
 // ----------------------------------------------------------------------------
-bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
+bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel, GltfDiagnostics & ioDiagnostics )
 {
   bool ret = true;
 
@@ -194,6 +444,8 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
     material._Albedo = Vec3((float)pbr.baseColorFactor[0], (float)pbr.baseColorFactor[1], (float)pbr.baseColorFactor[2]);
     if ( pbr.baseColorTexture.index > -1 )
     {
+      if ( !IsValidIndex(pbr.baseColorTexture.index, iGltfModel.textures.size()) )
+        return false;
       const tinygltf::Texture & gltfTex = iGltfModel.textures[pbr.baseColorTexture.index];
 
       std::string texName;
@@ -210,6 +462,8 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
     // Opacity
     material._Opacity = (float)pbr.baseColorFactor[3];
 
+    WarnTextureInfoLimitations(pbr.baseColorTexture, ioDiagnostics);
+
     // Alpha
     material._AlphaCutoff = (float)gltfMaterial.alphaCutoff;
     if ( !strcmp(gltfMaterial.alphaMode.c_str(), "OPAQUE") )
@@ -224,6 +478,8 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
     material._Metallic = (float)pbr.metallicFactor;
     if ( pbr.metallicRoughnessTexture.index > -1 )
     {
+      if ( !IsValidIndex(pbr.metallicRoughnessTexture.index, iGltfModel.textures.size()) )
+        return false;
       const tinygltf::Texture & gltfTex = iGltfModel.textures[pbr.metallicRoughnessTexture.index];
 
       std::string texName;
@@ -236,10 +492,13 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
         break;
       }
     }
+    WarnTextureInfoLimitations(pbr.metallicRoughnessTexture, ioDiagnostics);
 
     // Normal Map
     if ( gltfMaterial.normalTexture.index > -1 )
     {
+      if ( !IsValidIndex(gltfMaterial.normalTexture.index, iGltfModel.textures.size()) )
+        return false;
       const tinygltf::Texture & gltfTex = iGltfModel.textures[gltfMaterial.normalTexture.index];
 
       std::string texName;
@@ -252,11 +511,19 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
         break;
       }
     }
+    if ( gltfMaterial.normalTexture.texCoord > 0 )
+      ioDiagnostics.Warn("non-zero texture coordinate sets are ignored");
+    if ( gltfMaterial.normalTexture.extensions.find("KHR_texture_transform") != gltfMaterial.normalTexture.extensions.end() )
+      ioDiagnostics.Warn("KHR_texture_transform is ignored");
+    if ( ( gltfMaterial.normalTexture.index >= 0 ) && ( std::abs(gltfMaterial.normalTexture.scale - 1.0) > 0.0001 ) )
+      ioDiagnostics.Warn("normal texture scale is ignored");
 
     // Emission
     material._Emission = Vec3((float)gltfMaterial.emissiveFactor[0], (float)gltfMaterial.emissiveFactor[1], (float)gltfMaterial.emissiveFactor[2]);
     if ( gltfMaterial.emissiveTexture.index > -1 )
     {
+      if ( !IsValidIndex(gltfMaterial.emissiveTexture.index, iGltfModel.textures.size()) )
+        return false;
       const tinygltf::Texture & gltfTex = iGltfModel.textures[gltfMaterial.emissiveTexture.index];
 
       std::string texName;
@@ -269,6 +536,7 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
         break;
       }
     }
+    WarnTextureInfoLimitations(gltfMaterial.emissiveTexture, ioDiagnostics);
 
     // KHR_materials_transmission
     if ( gltfMaterial.extensions.find("KHR_materials_transmission") != gltfMaterial.extensions.end() )
@@ -278,14 +546,49 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
         material._SpecTrans = (float)(ext.Get("transmissionFactor").Get<double>());
     }
 
+    const auto emissiveStrength = gltfMaterial.extensions.find("KHR_materials_emissive_strength");
+    if ( emissiveStrength != gltfMaterial.extensions.end() && emissiveStrength -> second.Has("emissiveStrength") )
+      material._Emission *= static_cast<float>(emissiveStrength -> second.Get("emissiveStrength").Get<double>());
+
+    const auto ior = gltfMaterial.extensions.find("KHR_materials_ior");
+    if ( ior != gltfMaterial.extensions.end() && ior -> second.Has("ior") )
+      material._IOR = static_cast<float>(ior -> second.Get("ior").Get<double>());
+
+    const auto clearcoat = gltfMaterial.extensions.find("KHR_materials_clearcoat");
+    if ( clearcoat != gltfMaterial.extensions.end() )
+    {
+      if ( clearcoat -> second.Has("clearcoatFactor") )
+        material._Clearcoat = static_cast<float>(clearcoat -> second.Get("clearcoatFactor").Get<double>());
+      if ( clearcoat -> second.Has("clearcoatRoughnessFactor") )
+        material._ClearcoatGloss = 1.f - static_cast<float>(clearcoat -> second.Get("clearcoatRoughnessFactor").Get<double>());
+    }
+
+    if ( gltfMaterial.occlusionTexture.index >= 0 )
+      ioDiagnostics.Warn("occlusion textures are ignored");
+    if ( gltfMaterial.doubleSided )
+      ioDiagnostics.Warn("double-sided material semantics are ignored");
+    for ( const auto & extension : gltfMaterial.extensions )
+    {
+      if ( ( "KHR_materials_transmission" != extension.first )
+        && ( "KHR_materials_emissive_strength" != extension.first )
+        && ( "KHR_materials_ior" != extension.first )
+        && ( "KHR_materials_clearcoat" != extension.first ) )
+        ioDiagnostics.Warn("material extension '" + extension.first + "' is ignored");
+    }
+    if ( ( gltfMaterial.extensions.find("KHR_materials_transmission") != gltfMaterial.extensions.end() )
+      && gltfMaterial.extensions.find("KHR_materials_transmission") -> second.Has("transmissionTexture") )
+      ioDiagnostics.Warn("transmission textures are ignored");
+    if ( ( clearcoat != gltfMaterial.extensions.end() )
+      && ( clearcoat -> second.Has("clearcoatTexture") || clearcoat -> second.Has("clearcoatRoughnessTexture") || clearcoat -> second.Has("clearcoatNormalTexture") ) )
+      ioDiagnostics.Warn("clearcoat textures are ignored");
+
     std::string matName;
     GetMaterialName(iGltfModel, gltfMaterial, static_cast<int>(indMat), matName);
 
     ioScene.AddMaterial(material, matName);
   }
 
-  // Default material
-  if ( ret && ( 0 == ioScene.GetMaterials().size() ) )
+  if ( ret && ( ioScene.FindMaterialID("Default Material") < 0 ) )
   {
     Material defaultMat;
     ioScene.AddMaterial(defaultMat, "Default Material");
@@ -297,181 +600,115 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
 // ----------------------------------------------------------------------------
 // GLTF loader : LoadMeshes
 // ----------------------------------------------------------------------------
-bool LoadMeshes( Scene & ioScene, tinygltf::Model & iGltfModel )
+bool LoadMeshes( Scene & ioScene, tinygltf::Model & iGltfModel, GltfDiagnostics & ioDiagnostics )
 {
-  bool ret = true;
-
   for ( size_t indMesh = 0; indMesh < iGltfModel.meshes.size(); ++indMesh )
   {
     tinygltf::Mesh & gltfMesh = iGltfModel.meshes[indMesh];
+    if ( !gltfMesh.primitives.empty() && !gltfMesh.weights.empty() )
+      ioDiagnostics.Warn("morph target weights are ignored");
 
     for ( size_t indPrim = 0; indPrim < gltfMesh.primitives.size(); ++indPrim )
     {
       tinygltf::Primitive & prim = gltfMesh.primitives[indPrim];
-      // Skip points and lines
-      if ( TINYGLTF_MODE_TRIANGLES != prim.mode )
+      const int mode = ( prim.mode >= 0 ) ? prim.mode : TINYGLTF_MODE_TRIANGLES;
+      if ( ( TINYGLTF_MODE_POINTS == mode ) || ( TINYGLTF_MODE_LINE == mode ) || ( TINYGLTF_MODE_LINE_LOOP == mode ) || ( TINYGLTF_MODE_LINE_STRIP == mode ) )
+      {
+        ioDiagnostics.Warn("point and line primitives are ignored");
         continue;
-
-      // Accessors
-      tinygltf::Accessor indexAccessor, positionAccessor, normalAccessor, uv0Accessor;
-
-      if ( prim.indices >= 0 )
-        indexAccessor = iGltfModel.accessors[prim.indices];
-
-      if ( prim.attributes.count("POSITION") > 0 )
-      {
-        int positionIndex = prim.attributes["POSITION"];
-        if ( positionIndex >= 0 )
-          positionAccessor = iGltfModel.accessors[positionIndex];
       }
+      if ( ( TINYGLTF_MODE_TRIANGLES != mode ) && ( TINYGLTF_MODE_TRIANGLE_STRIP != mode ) && ( TINYGLTF_MODE_TRIANGLE_FAN != mode ) )
+        return false;
 
-      if ( prim.attributes.count("NORMAL") > 0 )
+      const auto positionIt = prim.attributes.find("POSITION");
+      if ( positionIt == prim.attributes.end() ) return false;
+      std::vector<Vec3> vertices;
+      if ( !ReadVec3Accessor(iGltfModel, positionIt -> second, vertices) || vertices.empty() )
+        return false;
+      std::vector<int> sourceIndices;
+      if ( prim.indices >= 0 )
       {
-        int normalIndex = prim.attributes["NORMAL"];
-        if ( normalIndex >= 0 )
-          normalAccessor = iGltfModel.accessors[normalIndex];
+        if ( !ReadIndices(iGltfModel, prim.indices, vertices.size(), sourceIndices) )
+          return false;
       }
       else
-        return false; // Temporary limitation : no normal pre-computation
-
-      if ( prim.attributes.count("TEXCOORD_0") > 0 )
       {
-        int uv0Index = prim.attributes["TEXCOORD_0"];
-        if ( uv0Index >= 0 )
-          uv0Accessor = iGltfModel.accessors[uv0Index];
+        sourceIndices.resize(vertices.size());
+        for ( size_t i = 0; i < vertices.size(); ++i ) sourceIndices[i] = static_cast<int>(i);
       }
 
-      if ( ( indexAccessor.type < 0 )
-        || ( positionAccessor.type < 0 ) )
+      std::vector<int> triangleIndices;
+      if ( TINYGLTF_MODE_TRIANGLES == mode )
       {
-        ret = false;
-        break;
+        if ( 0 != ( sourceIndices.size() % 3 ) ) return false;
+        triangleIndices = sourceIndices;
       }
-
-      // Buffer views
-      tinygltf::BufferView indexBufferView, positionBufferView, normalBufferView, uv0BufferView;
-      const uint8_t* pIndexBuffer = nullptr, * pPositionBuffer = nullptr, * pNormalBuffer = nullptr, * pUV0Buffer = nullptr;
-      size_t indexBufferStride = 0, positionBufferStride = 0, normalBufferStride = 0, uv0BufferStride = 0;
-
-      indexBufferView = iGltfModel.bufferViews[indexAccessor.bufferView];
-      pIndexBuffer = iGltfModel.buffers[indexBufferView.buffer].data.data() + indexBufferView.byteOffset + indexAccessor.byteOffset;
-      indexBufferStride = tinygltf::GetComponentSizeInBytes(indexAccessor.componentType) * tinygltf::GetNumComponentsInType(indexAccessor.type);
-      if ( indexBufferView.byteStride > 0 )
-        indexBufferStride = indexBufferView.byteStride; // ? different
-
-      positionBufferView = iGltfModel.bufferViews[positionAccessor.bufferView];
-      pPositionBuffer = iGltfModel.buffers[positionBufferView.buffer].data.data() + positionBufferView.byteOffset + positionAccessor.byteOffset;
-      positionBufferStride = tinygltf::GetComponentSizeInBytes(positionAccessor.componentType) * tinygltf::GetNumComponentsInType(positionAccessor.type);
-      if ( positionBufferView.byteStride > 0 )
-        positionBufferStride = positionBufferView.byteStride; // ? different
-
-      if ( normalAccessor.type >= 0 )
+      else if ( sourceIndices.size() >= 3 )
       {
-        normalBufferView = iGltfModel.bufferViews[normalAccessor.bufferView];
-        pNormalBuffer = iGltfModel.buffers[normalBufferView.buffer].data.data() + normalBufferView.byteOffset + normalAccessor.byteOffset;
-        normalBufferStride = tinygltf::GetComponentSizeInBytes(normalAccessor.componentType) * tinygltf::GetNumComponentsInType(normalAccessor.type);
-        if ( normalBufferView.byteStride > 0 )
-          normalBufferStride = normalBufferView.byteStride; // ? different
-      }
-
-      if ( uv0Accessor.type >= 0 )
-      {
-        uv0BufferView = iGltfModel.bufferViews[uv0Accessor.bufferView];
-        pUV0Buffer = iGltfModel.buffers[uv0BufferView.buffer].data.data() + uv0BufferView.byteOffset + uv0Accessor.byteOffset;
-        uv0BufferStride = tinygltf::GetComponentSizeInBytes(uv0Accessor.componentType) * tinygltf::GetNumComponentsInType(uv0Accessor.type);
-        if ( uv0BufferView.byteStride > 0 )
-          uv0BufferStride = uv0BufferView.byteStride; // ? different
-      }
-
-      // Get per-vertex data
-      std::vector<Vec3> vertices(positionAccessor.count);
-      std::vector<Vec3> normals;
-      std::vector<Vec2> uvs;
-
-      if ( pNormalBuffer )
-        normals.resize( positionAccessor.count );
-      if ( pUV0Buffer )
-        uvs.resize( positionAccessor.count );
-
-      for ( size_t vtxInd = 0; vtxInd < positionAccessor.count; ++vtxInd )
-      {
+        for ( size_t i = 2; i < sourceIndices.size(); ++i )
         {
-          const uint8_t* address = pPositionBuffer + ( vtxInd * positionBufferStride );
-          memcpy(&vertices[vtxInd], address, sizeof(Vec3));
-        }
-
-        if ( pNormalBuffer )
-        {
-          const uint8_t* address = pNormalBuffer + ( vtxInd * normalBufferStride );
-          memcpy(&normals[vtxInd], address, sizeof(Vec3));
-        }
-
-        if ( pUV0Buffer )
-        {
-          const uint8_t* address = pUV0Buffer + ( vtxInd * uv0BufferStride );
-          memcpy(&uvs[vtxInd], address, sizeof(Vec2));
-        }
-      }
-
-      // Get index data
-      std::vector<int> triIndices(indexAccessor.count);
-      if ( ( 1 == indexBufferStride ) || ( 2 == indexBufferStride ) )
-      {
-        for ( size_t triInd = 0; triInd < indexAccessor.count; ++triInd )
-        {
-          const uint8_t * quarter = pIndexBuffer + ( triInd * indexBufferStride );
-
-          if ( 2 == indexBufferStride )
+          if ( TINYGLTF_MODE_TRIANGLE_FAN == mode )
           {
-            uint16_t * half = (uint16_t*)quarter;
-            triIndices[triInd] = *half;
+            triangleIndices.push_back(sourceIndices[0]); triangleIndices.push_back(sourceIndices[i - 1]); triangleIndices.push_back(sourceIndices[i]);
+          }
+          else if ( 0 == ( i % 2 ) )
+          {
+            triangleIndices.push_back(sourceIndices[i - 2]); triangleIndices.push_back(sourceIndices[i - 1]); triangleIndices.push_back(sourceIndices[i]);
           }
           else
-            triIndices[triInd] = *quarter;
+          {
+            triangleIndices.push_back(sourceIndices[i - 1]); triangleIndices.push_back(sourceIndices[i - 2]); triangleIndices.push_back(sourceIndices[i]);
+          }
         }
       }
+      if ( triangleIndices.empty() ) return false;
+
+      std::vector<Vec3> normals;
+      const auto normalIt = prim.attributes.find("NORMAL");
+      if ( normalIt != prim.attributes.end() )
+      {
+        if ( !ReadVec3Accessor(iGltfModel, normalIt -> second, normals) || ( normals.size() != vertices.size() ) ) return false;
+      }
       else
-        memcpy( triIndices.data(), pIndexBuffer, ( indexAccessor.count * indexBufferStride ));
+      {
+        ioDiagnostics.Warn("missing normals are generated");
+        GenerateNormals(vertices, triangleIndices, normals);
+      }
+
+      std::vector<Vec2> uvs;
+      const auto uvIt = prim.attributes.find("TEXCOORD_0");
+      if ( ( uvIt != prim.attributes.end() ) && ( !ReadVec2Accessor(iGltfModel, uvIt -> second, uvs) || ( uvs.size() != vertices.size() ) ) ) return false;
+      if ( prim.attributes.find("TANGENT") != prim.attributes.end() ) ioDiagnostics.Warn("tangent attributes are ignored");
+      if ( ( prim.attributes.find("JOINTS_0") != prim.attributes.end() ) || ( prim.attributes.find("WEIGHTS_0") != prim.attributes.end() ) ) ioDiagnostics.Warn("skinning attributes are ignored");
+      if ( !prim.targets.empty() ) ioDiagnostics.Warn("morph targets are ignored");
 
       std::vector<Vec3i> indices;
-      indices.reserve(triIndices.size());
+      indices.reserve(triangleIndices.size());
+      for ( int index : triangleIndices ) indices.push_back(Vec3i(index));
 
-      for ( int index : triIndices )
-      {
-        Vec3i inds(index);
-        if ( !pNormalBuffer )
-          inds.y = -1;
-        if ( !pUV0Buffer )
-          inds.z = -1;
-        indices.push_back(inds);
-      }
-
-      // Intanciate mesh object
       std::string meshName;
       GetMeshName( gltfMesh, static_cast<int>(indMesh), static_cast<int>(indPrim), meshName );
-
-      Mesh* newMesh = new Mesh( meshName, vertices, normals, uvs, indices );
-      int meshID = ioScene.AddMesh( newMesh );
-      if ( -1 == meshID )
-      {
-        ret = false;
-        break;
-      }
+      Mesh * newMesh = new Mesh( meshName, vertices, normals, uvs, indices );
+      if ( -1 == ioScene.AddMesh(newMesh) ) return false;
     }
-
-    if ( !ret )
-      break;
   }
-
-  return ret;
+  return true;
 }
 
 // ----------------------------------------------------------------------------
 // GLTF loader : TraverseNodes
 // ----------------------------------------------------------------------------
-void TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx, const Mat4x4 & iParentTransfoMat )
+bool TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx, const Mat4x4 & iParentTransfoMat, const RenderSettings & iRenderSettings, GltfDiagnostics & ioDiagnostics, std::set<int> & ioAncestors )
 {
+  if ( !IsValidIndex(iNodeIdx, iGltfModel.nodes.size()) || !ioAncestors.insert(iNodeIdx).second )
+    return false;
   tinygltf::Node gltfNode = iGltfModel.nodes[iNodeIdx];
+
+  if ( ( !gltfNode.matrix.empty() && ( 16 != gltfNode.matrix.size() ) )
+    || ( !gltfNode.translation.empty() && ( 3 != gltfNode.translation.size() ) )
+    || ( !gltfNode.rotation.empty() && ( 4 != gltfNode.rotation.size() ) )
+    || ( !gltfNode.scale.empty() && ( 3 != gltfNode.scale.size() ) ) )
+    return false;
 
   Mat4x4 localTransfoMat;
   GetLocalTransfo( gltfNode , localTransfoMat );
@@ -480,12 +717,14 @@ void TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx,
 
   if ( gltfNode.mesh >= 0 )
   {
+    if ( !IsValidIndex(gltfNode.mesh, iGltfModel.meshes.size()) ) return false;
     tinygltf::Mesh & gltfMesh = iGltfModel.meshes[gltfNode.mesh];
 
     for ( size_t indPrim = 0; indPrim < gltfMesh.primitives.size(); ++indPrim )
     {
       tinygltf::Primitive & prim = gltfMesh.primitives[indPrim];
-      if ( TINYGLTF_MODE_TRIANGLES != prim.mode )
+      const int mode = ( prim.mode >= 0 ) ? prim.mode : TINYGLTF_MODE_TRIANGLES;
+      if ( ( TINYGLTF_MODE_TRIANGLES != mode ) && ( TINYGLTF_MODE_TRIANGLE_STRIP != mode ) && ( TINYGLTF_MODE_TRIANGLE_FAN != mode ) )
         continue;
 
       std::string meshName;
@@ -498,6 +737,7 @@ void TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx,
       int matID = 0;
       if ( prim.material >= 0 )
       {
+        if ( !IsValidIndex(prim.material, iGltfModel.materials.size()) ) return false;
         const tinygltf::Material & gltfMaterial = iGltfModel.materials[prim.material];
 
         std::string matName;
@@ -507,7 +747,7 @@ void TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx,
       else
         matID = ioScene.FindMaterialID( "Default Material" );
       if ( matID < 0 )
-        continue;
+        return false;
 
       std::string instanceName( gltfNode.name );
       instanceName += "_inst";
@@ -518,8 +758,9 @@ void TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx,
     }
   }
 
-  if ( ( gltfNode.light >= 0 ) && ( gltfNode.light < static_cast<int>(iGltfModel.lights.size()) ) )
+  if ( gltfNode.light >= 0 )
   {
+    if ( !IsValidIndex(gltfNode.light, iGltfModel.lights.size()) ) return false;
     const tinygltf::Light & gltfLight = iGltfModel.lights[gltfNode.light];
 
     Light newLight;
@@ -540,7 +781,7 @@ void TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx,
       newLight._Radius = 0.f;
       newLight._Intensity = static_cast<float>(gltfLight.intensity);
     }
-    else
+    else if ( ( "point" == gltfLight.type ) || ( "spot" == gltfLight.type ) )
     {
       // Point and spot lights are represented as small spherical emitters.
       // Spot cone and range are not supported by the renderer's Light type.
@@ -550,23 +791,39 @@ void TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx,
       newLight._Area = 4.f * static_cast<float>(M_PI) * radius * radius;
       newLight._Type = (float)LightType::SphereLight;
       newLight._Intensity = static_cast<float>(gltfLight.intensity) / ( static_cast<float>(M_PI) * radius * radius );
+      if ( "spot" == gltfLight.type )
+        ioDiagnostics.Warn("spot light cone and range are approximated as point lights");
     }
+    else
+      return false;
 
     ioScene.AddLight( newLight );
   }
 
   if ( gltfNode.camera >= 0 )
   {
+    if ( !IsValidIndex(gltfNode.camera, iGltfModel.cameras.size()) ) return false;
     const tinygltf::Camera & curCam = iGltfModel.cameras[gltfNode.camera];
     if ( "perspective" == curCam.type )
     {
-      float fov = 80.f;
+      float aspectRatio = static_cast<float>(curCam.perspective.aspectRatio);
+      if ( aspectRatio <= 0.f )
+      {
+        if ( ( iRenderSettings._RenderResolution.x > 0 ) && ( iRenderSettings._RenderResolution.y > 0 ) )
+          aspectRatio = static_cast<float>(iRenderSettings._RenderResolution.x) / iRenderSettings._RenderResolution.y;
+        else
+        {
+          aspectRatio = 1.f;
+          ioDiagnostics.Warn("camera aspect ratio is unavailable; using 1:1 to convert vertical FOV");
+        }
+      }
+      const float fov = MathUtil::ToDegrees(2.f * atan(tan(static_cast<float>(curCam.perspective.yfov) * .5f) * aspectRatio));
       float focalDist = -1.f;
       float aperture = -1.f;
       float nearPlane = (float)curCam.perspective.znear;
       float farPlane = (float)curCam.perspective.zfar;
 
-      Vec3 forward = { transfoMat[2][0], transfoMat[2][1], transfoMat[2][2] };
+      Vec3 forward = { -transfoMat[2][0], -transfoMat[2][1], -transfoMat[2][2] };
       Vec3 pos = { transfoMat[3][0], transfoMat[3][1], transfoMat[3][2] };
       Vec3 lookAt = pos + forward;
 
@@ -593,36 +850,36 @@ void TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx,
     }
     else if ( "orthographic" == curCam.type )
     {
-      // Not implemented
+      ioDiagnostics.Warn("orthographic cameras are ignored");
     }
   }
 
   for ( size_t i = 0; i < gltfNode.children.size(); ++i )
   {
-    TraverseNodes( ioScene, iGltfModel, gltfNode.children[i], transfoMat );
+    if ( !TraverseNodes(ioScene, iGltfModel, gltfNode.children[i], transfoMat, iRenderSettings, ioDiagnostics, ioAncestors) ) return false;
   }
+
+  ioAncestors.erase(iNodeIdx);
+  return true;
 }
 
 // ----------------------------------------------------------------------------
 // GLTF loader : LoadInstances
 // ----------------------------------------------------------------------------
-bool LoadInstances( Scene & ioScene, tinygltf::Model & iGltfModel, const Mat4x4 & iTransfoMat )
+bool LoadInstances( Scene & ioScene, tinygltf::Model & iGltfModel, const Mat4x4 & iTransfoMat, const RenderSettings & iRenderSettings, GltfDiagnostics & ioDiagnostics )
 {
-  bool ret = false;
+  if ( iGltfModel.scenes.empty() ) return false;
+  const int sceneIndex = ( iGltfModel.defaultScene >= 0 ) ? iGltfModel.defaultScene : 0;
+  if ( !IsValidIndex(sceneIndex, iGltfModel.scenes.size()) ) return false;
 
-  if ( iGltfModel.defaultScene < 0 )
-    return ret;
-
-  const tinygltf::Scene gltfScene = iGltfModel.scenes[iGltfModel.defaultScene];
+  const tinygltf::Scene gltfScene = iGltfModel.scenes[sceneIndex];
 
   for ( int nodeIdx : gltfScene.nodes )
   {
-    TraverseNodes( ioScene, iGltfModel, nodeIdx, iTransfoMat );
+    std::set<int> ancestors;
+    if ( !TraverseNodes(ioScene, iGltfModel, nodeIdx, iTransfoMat, iRenderSettings, ioDiagnostics, ancestors) ) return false;
   }
-
-  ret = true;
-
-  return ret;
+  return true;
 }
 
 // ----------------------------------------------------------------------------
@@ -871,13 +1128,19 @@ bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTra
 
     printf("Loading Scene from gltf...\n");
 
-    ret = LoadTextures(ioScene, gltfModel);
+    GltfDiagnostics diagnostics;
+    if ( !gltfModel.animations.empty() )
+      diagnostics.Warn("animations are ignored");
+    if ( !gltfModel.skins.empty() )
+      diagnostics.Warn("skins are ignored");
+
+    ret = LoadTextures(ioScene, gltfModel, diagnostics);
     if ( ret )
-      ret = LoadMaterials(ioScene, gltfModel);
+      ret = LoadMaterials(ioScene, gltfModel, diagnostics);
     if ( ret )
-      ret = LoadMeshes(ioScene, gltfModel);
+      ret = LoadMeshes(ioScene, gltfModel, diagnostics);
     if ( ret )
-      ret = LoadInstances(ioScene, gltfModel, iTransfoMat);
+      ret = LoadInstances(ioScene, gltfModel, iTransfoMat, ioRenderSettings, diagnostics);
 
     if ( !ret )
     {
