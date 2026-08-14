@@ -371,7 +371,9 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
     return result;
   };
 
-  if ( !RunUnitTest("gltf_static_import", []() { return GLTFTestUtil::CheckStaticImport(); }) )
+  if ( !RunUnitTest("gltf_static_import", [iQuiet]() { return GLTFTestUtil::CheckStaticImport(iQuiet); }) )
+    return 1;
+  if ( !RunUnitTest("obj_static_import", [iQuiet]() { return GLTFTestUtil::CheckObjImport(iQuiet); }) )
     return 1;
 
 #if defined(SIMD_AVX2) || defined(SIMD_ARM_NEON)

@@ -27,6 +27,7 @@
 
 #define TINYGLTF_IMPLEMENTATION
 #include "tiny_gltf.h"
+#include "tiny_obj_loader.h"
 
 namespace fs = std::filesystem;
 
@@ -856,7 +857,8 @@ bool TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx,
 
   for ( size_t i = 0; i < gltfNode.children.size(); ++i )
   {
-    if ( !TraverseNodes(ioScene, iGltfModel, gltfNode.children[i], transfoMat, iRenderSettings, ioDiagnostics, ioAncestors) ) return false;
+    if ( !TraverseNodes(ioScene, iGltfModel, gltfNode.children[i], transfoMat, iRenderSettings, ioDiagnostics, ioAncestors) )
+      return false;
   }
 
   ioAncestors.erase(iNodeIdx);
@@ -870,7 +872,8 @@ bool LoadInstances( Scene & ioScene, tinygltf::Model & iGltfModel, const Mat4x4 
 {
   if ( iGltfModel.scenes.empty() ) return false;
   const int sceneIndex = ( iGltfModel.defaultScene >= 0 ) ? iGltfModel.defaultScene : 0;
-  if ( !IsValidIndex(sceneIndex, iGltfModel.scenes.size()) ) return false;
+  if ( !IsValidIndex(sceneIndex, iGltfModel.scenes.size()) )
+    return false;
 
   const tinygltf::Scene gltfScene = iGltfModel.scenes[sceneIndex];
 
@@ -878,6 +881,259 @@ bool LoadInstances( Scene & ioScene, tinygltf::Model & iGltfModel, const Mat4x4 
   {
     std::set<int> ancestors;
     if ( !TraverseNodes(ioScene, iGltfModel, nodeIdx, iTransfoMat, iRenderSettings, ioDiagnostics, ancestors) ) return false;
+  }
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// OBJ loader : ObjDiagnostics
+// ----------------------------------------------------------------------------
+class ObjDiagnostics
+{
+public:
+  void Warn( const std::string & iMessage )
+  {
+    if ( _Warnings.insert(iMessage).second )
+      std::cout << "OBJ warning: " << iMessage << std::endl;
+  }
+private:
+  std::set<std::string> _Warnings;
+};
+
+// ----------------------------------------------------------------------------
+// OBJ loader : ObjSubmesh
+// ----------------------------------------------------------------------------
+struct ObjSubmesh
+{
+  std::string               _Name;
+  int                       _MaterialIndex = -1;
+  std::vector<Vec3>         _Vertices;
+  std::vector<Vec3>         _Normals;
+  std::vector<Vec2>         _UVs;
+  std::vector<Vec3i>        _Indices;
+  std::vector<int>          _SourceVertexIndices;
+  std::vector<unsigned int> _SmoothingGroups;
+};
+
+// ----------------------------------------------------------------------------
+// OBJ loader : LoadObjTexture
+// ----------------------------------------------------------------------------
+bool LoadObjTexture( Scene & ioScene, const fs::path & iDirectory, const std::string & iFilename, float & oTextureID, ObjDiagnostics & ioDiagnostics )
+{
+  if ( iFilename.empty() ) return true;
+  const fs::path filepath = iDirectory / iFilename;
+  const int textureID = ioScene.AddTexture(filepath.string());
+  if ( textureID < 0 )
+  {
+    ioDiagnostics.Warn("unable to load MTL texture '" + filepath.string() + "'");
+    return true;
+  }
+  oTextureID = static_cast<float>(textureID);
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// OBJ loader : AddObjMaterial
+// ----------------------------------------------------------------------------
+int AddObjMaterial( Scene & ioScene, const tinyobj::material_t & iObjMaterial, const fs::path & iDirectory, const std::string & iPrefix, ObjDiagnostics & ioDiagnostics )
+{
+  const std::string materialName = iPrefix + iObjMaterial.name;
+  const int existingID = ioScene.FindMaterialID(materialName);
+  if ( existingID >= 0 ) return existingID;
+
+  Material material;
+  material._Albedo = Vec3(iObjMaterial.diffuse[0], iObjMaterial.diffuse[1], iObjMaterial.diffuse[2]);
+  material._Emission = Vec3(iObjMaterial.emission[0], iObjMaterial.emission[1], iObjMaterial.emission[2]);
+  material._Opacity = MathUtil::Clamp(iObjMaterial.dissolve, 0.f, 1.f);
+  material._AlphaMode = (float)(( material._Opacity < .999f ) ? AlphaMode::Blend : AlphaMode::Opaque);
+  material._IOR = std::max(1.f, static_cast<float>(iObjMaterial.ior));
+  material._Roughness = ( iObjMaterial.roughness > 0.f ) ? sqrtf(MathUtil::Clamp(iObjMaterial.roughness, 0.f, 1.f)) : sqrtf(2.f / std::max(2.f, static_cast<float>(iObjMaterial.shininess) + 2.f));
+  material._Metallic = MathUtil::Clamp(iObjMaterial.metallic, 0.f, 1.f);
+
+  LoadObjTexture(ioScene, iDirectory, iObjMaterial.diffuse_texname, material._BaseColorTexId, ioDiagnostics);
+  LoadObjTexture(ioScene, iDirectory, iObjMaterial.emissive_texname, material._EmissionMapTexID, ioDiagnostics);
+  const std::string normalMap = !iObjMaterial.normal_texname.empty() ? iObjMaterial.normal_texname : iObjMaterial.bump_texname;
+  LoadObjTexture(ioScene, iDirectory, normalMap, material._NormalMapTexID, ioDiagnostics);
+
+  if ( !iObjMaterial.specular_texname.empty() || !iObjMaterial.specular_highlight_texname.empty() || !iObjMaterial.reflection_texname.empty() )
+    ioDiagnostics.Warn("specular and reflection maps are ignored");
+  if ( !iObjMaterial.displacement_texname.empty() || !iObjMaterial.alpha_texname.empty() )
+    ioDiagnostics.Warn("displacement and alpha maps are ignored");
+  if ( !iObjMaterial.metallic_texname.empty() || !iObjMaterial.roughness_texname.empty() )
+    ioDiagnostics.Warn("separate metallic and roughness maps are ignored");
+  if ( !iObjMaterial.unknown_parameter.empty() )
+    ioDiagnostics.Warn("unsupported MTL parameters are ignored");
+
+  return ioScene.AddMaterial(material, materialName);
+}
+
+// ----------------------------------------------------------------------------
+// OBJ loader : BuildObjSubmeshes
+// ----------------------------------------------------------------------------
+bool BuildObjSubmeshes( const std::string & iFilename, std::vector<tinyobj::material_t> & oMaterials, std::vector<ObjSubmesh> & oSubmeshes, ObjDiagnostics & ioDiagnostics )
+{
+  tinyobj::attrib_t attrib;
+  std::vector<tinyobj::shape_t> shapes;
+  std::string warning, error;
+  const fs::path filepath = iFilename;
+  const std::string baseDir = filepath.parent_path().string();
+  if ( !tinyobj::LoadObj(&attrib, &shapes, &oMaterials, &warning, &error, iFilename.c_str(), baseDir.c_str(), true) )
+  {
+    std::cout << "OBJ error: " << error << std::endl;
+    return false;
+  }
+  if ( !warning.empty() ) ioDiagnostics.Warn(warning);
+
+  for ( size_t shapeIndex = 0; shapeIndex < shapes.size(); ++shapeIndex )
+  {
+    const tinyobj::mesh_t & shape = shapes[shapeIndex].mesh;
+    std::map<int, ObjSubmesh> materialGroups;
+    size_t indexOffset = 0;
+    for ( size_t face = 0; face < shape.num_face_vertices.size(); ++face )
+    {
+      const int vertexCount = shape.num_face_vertices[face];
+      const int materialIndex = ( face < shape.material_ids.size() ) ? shape.material_ids[face] : -1;
+      if ( 3 != vertexCount )
+      {
+        ioDiagnostics.Warn("non-triangle faces are ignored");
+        indexOffset += vertexCount;
+        continue;
+      }
+      if ( ( materialIndex >= static_cast<int>(oMaterials.size()) ) || ( materialIndex < -1 ) ) return false;
+
+      ObjSubmesh & submesh = materialGroups[materialIndex];
+      submesh._MaterialIndex = materialIndex;
+      const unsigned int smoothingGroup = ( face < shape.smoothing_group_ids.size() ) ? shape.smoothing_group_ids[face] : 0;
+      submesh._SmoothingGroups.push_back(smoothingGroup);
+      for ( int corner = 0; corner < 3; ++corner )
+      {
+        if ( ( indexOffset + corner ) >= shape.indices.size() )
+          return false;
+        const tinyobj::index_t & index = shape.indices[indexOffset + corner];
+        if ( ( index.vertex_index < 0 ) || ( 3 * index.vertex_index + 2 >= static_cast<int>(attrib.vertices.size()) ) )
+          return false;
+        submesh._Vertices.emplace_back(attrib.vertices[3 * index.vertex_index], attrib.vertices[3 * index.vertex_index + 1], attrib.vertices[3 * index.vertex_index + 2]);
+        const int vertexIndex = static_cast<int>(submesh._Vertices.size() - 1);
+        submesh._SourceVertexIndices.push_back(index.vertex_index);
+
+        int normalIndex = -1;
+        if ( index.normal_index >= 0 )
+        {
+          if ( 3 * index.normal_index + 2 >= static_cast<int>(attrib.normals.size()) ) return false;
+          submesh._Normals.emplace_back(attrib.normals[3 * index.normal_index], attrib.normals[3 * index.normal_index + 1], attrib.normals[3 * index.normal_index + 2]);
+          normalIndex = static_cast<int>(submesh._Normals.size() - 1);
+        }
+
+        int uvIndex = -1;
+        if ( index.texcoord_index >= 0 )
+        {
+          if ( 2 * index.texcoord_index + 1 >= static_cast<int>(attrib.texcoords.size()) ) return false;
+          submesh._UVs.emplace_back(attrib.texcoords[2 * index.texcoord_index], 1.f - attrib.texcoords[2 * index.texcoord_index + 1]);
+          uvIndex = static_cast<int>(submesh._UVs.size() - 1);
+        }
+        submesh._Indices.emplace_back(vertexIndex, normalIndex, uvIndex);
+      }
+      indexOffset += vertexCount;
+    }
+
+    for ( auto & group : materialGroups )
+    {
+      ObjSubmesh & submesh = group.second;
+      if ( submesh._Indices.empty() )
+        continue;
+
+      bool missingNormals = false;
+      for ( const Vec3i & index : submesh._Indices )
+      {
+        if ( index.y < 0 )
+        {
+          missingNormals = true;
+          break;
+        }
+      }
+      if ( missingNormals )
+      {
+        ioDiagnostics.Warn("missing OBJ normals are generated");
+        std::map<std::pair<int, int>, Vec3> accumulatedNormals;
+        for ( size_t i = 0; i + 2 < submesh._Indices.size(); i += 3 )
+        {
+          const Vec3 normal = glm::cross(submesh._Vertices[submesh._Indices[i + 1].x] - submesh._Vertices[submesh._Indices[i].x], submesh._Vertices[submesh._Indices[i + 2].x] - submesh._Vertices[submesh._Indices[i].x]);
+          const unsigned int smoothingGroup = submesh._SmoothingGroups[i / 3];
+          for ( int corner = 0; corner < 3; ++corner )
+          {
+            const int vertexIndex = submesh._Indices[i + corner].x;
+            const int groupKey = ( smoothingGroup > 0 ) ? static_cast<int>(smoothingGroup) : -static_cast<int>(i / 3 + 1);
+            accumulatedNormals[{ submesh._SourceVertexIndices[vertexIndex], groupKey }] += normal;
+          }
+        }
+        submesh._Normals.clear();
+        std::map<std::pair<int, int>, int> normalIndices;
+        for ( const auto & normal : accumulatedNormals )
+        {
+          const Vec3 normalized = ( glm::dot(normal.second, normal.second) > 0.f ) ? glm::normalize(normal.second) : Vec3(0.f, 1.f, 0.f);
+          normalIndices[normal.first] = static_cast<int>(submesh._Normals.size());
+          submesh._Normals.push_back(normalized);
+        }
+        for ( size_t i = 0; i < submesh._Indices.size(); ++i )
+        {
+          const unsigned int smoothingGroup = submesh._SmoothingGroups[i / 3];
+          const int groupKey = ( smoothingGroup > 0 ) ? static_cast<int>(smoothingGroup) : -static_cast<int>(i / 3 + 1);
+          submesh._Indices[i].y = normalIndices[{ submesh._SourceVertexIndices[submesh._Indices[i].x], groupKey }];
+        }
+      }
+      const std::string shapeName = shapes[shapeIndex].name.empty() ? ( "Shape_" + std::to_string(shapeIndex) ) : shapes[shapeIndex].name;
+      const std::string materialName = ( group.first >= 0 ) ? oMaterials[group.first].name : "Default";
+      submesh._Name = shapeName + "_" + materialName;
+      oSubmeshes.push_back(std::move(submesh));
+    }
+  }
+
+  return !oSubmeshes.empty();
+}
+
+// ----------------------------------------------------------------------------
+// LoadFromOBJ
+// ----------------------------------------------------------------------------
+bool Loader::LoadFromOBJ(const std::string & iObjFilename, const Mat4x4 & iTransfoMat, Scene & ioScene, const std::string & iInstanceName, int iMaterialOverride)
+{
+  ObjDiagnostics diagnostics;
+  std::vector<tinyobj::material_t> objMaterials;
+  std::vector<ObjSubmesh> submeshes;
+  if ( !BuildObjSubmeshes(iObjFilename, objMaterials, submeshes, diagnostics) )
+    return false;
+
+  if ( ioScene.FindMaterialID("Default Material") < 0 )
+  {
+    Material defaultMaterial;
+    ioScene.AddMaterial(defaultMaterial, "Default Material");
+  }
+
+  const fs::path filepath = iObjFilename;
+  const std::string materialPrefix = "OBJ_" + filepath.stem().string() + "_";
+  std::vector<int> materialIDs(objMaterials.size(), -1);
+  for ( size_t i = 0; i < objMaterials.size(); ++i )
+    materialIDs[i] = AddObjMaterial(ioScene, objMaterials[i], filepath.parent_path(), materialPrefix, diagnostics);
+
+  for ( size_t i = 0; i < submeshes.size(); ++i )
+  {
+    ObjSubmesh & submesh = submeshes[i];
+    const std::string meshName = filepath.string() + "#" + submesh._Name;
+    int meshID = ioScene.FindMeshID(meshName);
+    if ( meshID < 0 )
+    {
+      Mesh * mesh = new Mesh(meshName, submesh._Vertices, submesh._Normals, submesh._UVs, submesh._Indices);
+      meshID = ioScene.AddMesh(mesh);
+      if ( meshID < 0 )
+      { delete mesh; return false; }
+    }
+    int materialID = iMaterialOverride;
+    if ( materialID < 0 )
+      materialID = ( submesh._MaterialIndex >= 0 ) ? materialIDs[submesh._MaterialIndex] : ioScene.FindMaterialID("Default Material");
+    if ( materialID < 0 )
+      return false;
+    const std::string instanceName = iInstanceName.empty() ? ( filepath.filename().string() + "_" + submesh._Name ) : ( iInstanceName + "_" + submesh._Name );
+    MeshInstance instance(instanceName, meshID, materialID, iTransfoMat);
+    ioScene.AddMeshInstance(instance);
   }
   return true;
 }
@@ -895,6 +1151,8 @@ bool Loader::LoadScene(const std::string & iFilename, Scene & oScene, RenderSett
     return Loader::LoadFromGLTF(iFilename, Mat4x4{1.f}, oScene, oRenderSettings);
   else if ( ".glb" == filepath.extension() )
     return Loader::LoadFromGLTF(iFilename, Mat4x4{ 1.f }, oScene, oRenderSettings, true);
+  else if ( ".obj" == filepath.extension() )
+    return Loader::LoadFromOBJ(iFilename, Mat4x4{ 1.f }, oScene);
 
   return false;
 }
@@ -2524,29 +2782,28 @@ int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scen
 
   if ( !parsingError && !meshFileName.empty() )
   {
-    int meshID = ioScene.AddMesh(iPath + meshFileName);
-    if ( meshID >= 0 )
+    if ( meshName.empty() )
     {
-      if ( meshName.empty() )
-      {
-        fs::path filepath = meshFileName;
-        meshName = filepath.filename().string();
-      }
-
-      int matID = -1;
-      if ( !materialName.empty() )
-      {
-        matID = ioScene.FindMaterialID(materialName);
-        if ( matID < 0 )
-          std::cout << "Loader : ERROR could not find material " << materialName << std::endl;
-      }
-
-      if ( !hasMatrix )
-        xform = transMat * rotMat * scaleMat;
-
-      MeshInstance instance(meshName, meshID, matID, xform);
-      ioScene.AddMeshInstance(instance);
+      fs::path filepath = meshFileName;
+      meshName = filepath.filename().string();
     }
+
+    int matID = -1;
+    if ( !materialName.empty() )
+    {
+      matID = ioScene.FindMaterialID(materialName);
+      if ( matID < 0 )
+      {
+        std::cout << "Loader : ERROR could not find material " << materialName << std::endl;
+        parsingError++;
+      }
+    }
+
+    if ( !hasMatrix )
+      xform = transMat * rotMat * scaleMat;
+
+    if ( !parsingError && !Loader::LoadFromOBJ(iPath + meshFileName, xform, ioScene, meshName, matID) )
+      parsingError++;
   }
 
   return parsingError;

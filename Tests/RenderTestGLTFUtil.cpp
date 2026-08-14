@@ -5,6 +5,7 @@
 #include "PathUtils.h"
 #include "RenderSettings.h"
 #include "Scene.h"
+#include "RenderTestOutputUtil.h"
 
 #include <cmath>
 #include <iostream>
@@ -16,11 +17,16 @@ namespace Tests
 namespace GLTFTestUtil
 {
 
-bool CheckStaticImport()
+bool CheckStaticImport( bool iQuiet )
 {
   Scene scene;
   RenderSettings settings;
-  if ( !Loader::LoadScene(PathUtils::GetAssetPath("GLTFTests/StaticImport.gltf"), scene, settings) )
+  bool loaded = false;
+  {
+    ScopedOutputSilencer outputSilencer(iQuiet);
+    loaded = Loader::LoadScene(PathUtils::GetAssetPath("GLTFTests/StaticImport.gltf"), scene, settings);
+  }
+  if ( !loaded )
   {
     std::cerr << "Unable to load static GLTF test fixture." << std::endl;
     return false;
@@ -46,6 +52,38 @@ bool CheckStaticImport()
       && ( std::abs(camera.GetPos().y - 2.f) < .0001f )
       && ( std::abs(camera.GetPos().z - 3.f) < .0001f )
       && ( std::abs(camera.GetForward().z + 1.f) < .0001f );
+}
+
+bool CheckObjImport( bool iQuiet )
+{
+  Scene directScene;
+  RenderSettings settings;
+  bool directLoaded = false;
+  {
+    ScopedOutputSilencer outputSilencer(iQuiet);
+    directLoaded = Loader::LoadScene(PathUtils::GetAssetPath("OBJTests/Materials.obj"), directScene, settings);
+  }
+  if ( !directLoaded ) return false;
+  if ( ( 2 != directScene.GetNbMeshes() ) || ( 2 != directScene.GetNbMeshInstances() ) || ( directScene.FindMaterialID("OBJ_Materials_Red") < 0 ) || ( directScene.FindMaterialID("OBJ_Materials_Blue") < 0 ) ) return false;
+  for ( Mesh * mesh : directScene.GetMeshes() )
+  {
+    if ( !mesh || ( 3 != mesh -> GetVertices().size() ) || ( 3 != mesh -> GetNormals().size() ) || ( 3 != mesh -> GetIndices().size() ) ) return false;
+  }
+
+  Scene overrideScene;
+  bool overrideLoaded = false;
+  {
+    ScopedOutputSilencer outputSilencer(iQuiet);
+    overrideLoaded = Loader::LoadScene(PathUtils::GetAssetPath("OBJTests/Override.scene"), overrideScene, settings);
+  }
+  if ( !overrideLoaded ) return false;
+  const int overrideID = overrideScene.FindMaterialID("override");
+  if ( ( overrideID < 0 ) || ( 2 != overrideScene.GetNbMeshInstances() ) ) return false;
+  for ( const MeshInstance & instance : overrideScene.GetMeshInstances() )
+  {
+    if ( ( instance._MaterialID != overrideID ) || ( std::abs(instance._Transform[3][0] - 2.f) > .0001f ) ) return false;
+  }
+  return true;
 }
 
 }

@@ -8,7 +8,8 @@ namespace Tests
 namespace GLTFTestUtil
 {
 
-bool CheckStaticImport();
+bool CheckStaticImport( bool iQuiet );
+bool CheckObjImport( bool iQuiet );
 
 }
 }

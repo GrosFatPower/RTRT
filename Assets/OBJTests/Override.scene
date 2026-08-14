@@ -1,0 +1,11 @@
+material override
+{
+ color 0.2 0.8 0.3
+}
+
+mesh
+{
+ file Materials.obj
+ material override
+ position 2 0 0
+}
