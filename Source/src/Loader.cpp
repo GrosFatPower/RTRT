@@ -478,101 +478,128 @@ void TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx,
 
   Mat4x4 transfoMat = iParentTransfoMat * localTransfoMat;
 
-  if ( 0 == gltfNode.children.size() )
+  if ( gltfNode.mesh >= 0 )
   {
-    // Leaf
-    if ( gltfNode.mesh >= 0 )
+    tinygltf::Mesh & gltfMesh = iGltfModel.meshes[gltfNode.mesh];
+
+    for ( size_t indPrim = 0; indPrim < gltfMesh.primitives.size(); ++indPrim )
     {
-      tinygltf::Mesh & gltfMesh = iGltfModel.meshes[gltfNode.mesh];
+      tinygltf::Primitive & prim = gltfMesh.primitives[indPrim];
+      if ( TINYGLTF_MODE_TRIANGLES != prim.mode )
+        continue;
 
-      for ( size_t indPrim = 0; indPrim < gltfMesh.primitives.size(); ++indPrim )
+      std::string meshName;
+      GetMeshName( gltfMesh, gltfNode.mesh, static_cast<int>(indPrim), meshName );
+
+      int meshID = ioScene.FindMeshID( meshName );
+      if ( meshID < 0 )
+        continue;
+
+      int matID = 0;
+      if ( prim.material >= 0 )
       {
-        tinygltf::Primitive & prim = gltfMesh.primitives[indPrim];
-        if ( TINYGLTF_MODE_TRIANGLES != prim.mode )
-          continue;
+        const tinygltf::Material & gltfMaterial = iGltfModel.materials[prim.material];
 
-        std::string meshName;
-        GetMeshName( gltfMesh, gltfNode.mesh, static_cast<int>(indPrim), meshName );
-
-        int meshID = ioScene.FindMeshID( meshName );
-        if ( meshID < 0 )
-          continue;
-
-        int matID = 0;
-        if ( prim.material >= 0 )
-        {
-          const tinygltf::Material & gltfMaterial = iGltfModel.materials[prim.material];
-
-          std::string matName;
-          GetMaterialName(iGltfModel, gltfMaterial, prim.material, matName);
-          matID = ioScene.FindMaterialID( matName );
-        }
-        else
-          matID = ioScene.FindMaterialID( "Default Material" );
-        if ( matID < 0 )
-          continue;
-
-        std::string instanceName( gltfNode.name );
-        instanceName += "_inst";
-        instanceName += std::to_string(indPrim);
-
-        MeshInstance instance( instanceName, meshID, matID, transfoMat );
-        ioScene.AddMeshInstance(instance);
+        std::string matName;
+        GetMaterialName(iGltfModel, gltfMaterial, prim.material, matName);
+        matID = ioScene.FindMaterialID( matName );
       }
-    }
-    else if ( gltfNode.light >= 0 )
-    {
+      else
+        matID = ioScene.FindMaterialID( "Default Material" );
+      if ( matID < 0 )
+        continue;
 
-    }
-    else if ( gltfNode.camera >= 0 )
-    {
-      const tinygltf::Camera & curCam = iGltfModel.cameras[gltfNode.camera];
-      if ( "perspective" == curCam.type )
-      {
-        float fov = 80.f;
-        float focalDist = -1.f;
-        float aperture = -1.f;
-        float nearPlane = (float)curCam.perspective.znear;
-        float farPlane = (float)curCam.perspective.zfar;
+      std::string instanceName( gltfNode.name );
+      instanceName += "_inst";
+      instanceName += std::to_string(indPrim);
 
-        Vec3 forward = { transfoMat[2][0], transfoMat[2][1], transfoMat[2][2] };
-        Vec3 pos = { transfoMat[3][0], transfoMat[3][1], transfoMat[3][2] };
-        Vec3 lookAt = pos + forward;
-
-        Camera newCamera( pos, lookAt, fov );
-        if ( aperture >= 0 )
-          newCamera.SetAperture( aperture );
-        if ( focalDist >= 0 )
-          newCamera.SetFocalDist( focalDist );
-
-        if ( ( nearPlane > 0.f ) || ( farPlane > 0.f ) )
-        {
-          float nNear, nFar;
-          newCamera.GetZNearFar( nNear, nFar );
-
-          if ( nearPlane > 0.f )
-            nNear = nearPlane;
-          if ( farPlane > 0.f )
-            nFar = farPlane;
-
-          newCamera.SetZNearFar( nNear, nFar );
-        }
-
-        ioScene.SetCamera( newCamera );
-      }
-      else if ( "orthographic" == curCam.type )
-      {
-        // Not implemented
-      }
+      MeshInstance instance( instanceName, meshID, matID, transfoMat );
+      ioScene.AddMeshInstance(instance);
     }
   }
-  else
+
+  if ( ( gltfNode.light >= 0 ) && ( gltfNode.light < static_cast<int>(iGltfModel.lights.size()) ) )
   {
-    // Traverse children
-    for ( size_t i = 0; i < gltfNode.children.size(); ++i )
+    const tinygltf::Light & gltfLight = iGltfModel.lights[gltfNode.light];
+
+    Light newLight;
+    if ( gltfLight.color.size() >= 3 )
     {
-      TraverseNodes( ioScene, iGltfModel, gltfNode.children[i], transfoMat );
+      newLight._Emission = Vec3( static_cast<float>(gltfLight.color[0]),
+                                 static_cast<float>(gltfLight.color[1]),
+                                 static_cast<float>(gltfLight.color[2]) );
     }
+
+    if ( "directional" == gltfLight.type )
+    {
+      // glTF lights emit along their local -Z axis. This renderer stores the
+      // opposite, surface-to-light direction in _Pos for distant lights.
+      newLight._Pos = glm::normalize( Vec3( transfoMat[2][0], transfoMat[2][1], transfoMat[2][2] ) );
+      newLight._Type = (float)LightType::DistantLight;
+      newLight._Area = 0.f;
+      newLight._Radius = 0.f;
+      newLight._Intensity = static_cast<float>(gltfLight.intensity);
+    }
+    else
+    {
+      // Point and spot lights are represented as small spherical emitters.
+      // Spot cone and range are not supported by the renderer's Light type.
+      const float radius = 0.1f;
+      newLight._Pos = Vec3( transfoMat[3][0], transfoMat[3][1], transfoMat[3][2] );
+      newLight._Radius = radius;
+      newLight._Area = 4.f * static_cast<float>(M_PI) * radius * radius;
+      newLight._Type = (float)LightType::SphereLight;
+      newLight._Intensity = static_cast<float>(gltfLight.intensity) / ( static_cast<float>(M_PI) * radius * radius );
+    }
+
+    ioScene.AddLight( newLight );
+  }
+
+  if ( gltfNode.camera >= 0 )
+  {
+    const tinygltf::Camera & curCam = iGltfModel.cameras[gltfNode.camera];
+    if ( "perspective" == curCam.type )
+    {
+      float fov = 80.f;
+      float focalDist = -1.f;
+      float aperture = -1.f;
+      float nearPlane = (float)curCam.perspective.znear;
+      float farPlane = (float)curCam.perspective.zfar;
+
+      Vec3 forward = { transfoMat[2][0], transfoMat[2][1], transfoMat[2][2] };
+      Vec3 pos = { transfoMat[3][0], transfoMat[3][1], transfoMat[3][2] };
+      Vec3 lookAt = pos + forward;
+
+      Camera newCamera( pos, lookAt, fov );
+      if ( aperture >= 0 )
+        newCamera.SetAperture( aperture );
+      if ( focalDist >= 0 )
+        newCamera.SetFocalDist( focalDist );
+
+      if ( ( nearPlane > 0.f ) || ( farPlane > 0.f ) )
+      {
+        float nNear, nFar;
+        newCamera.GetZNearFar( nNear, nFar );
+
+        if ( nearPlane > 0.f )
+          nNear = nearPlane;
+        if ( farPlane > 0.f )
+          nFar = farPlane;
+
+        newCamera.SetZNearFar( nNear, nFar );
+      }
+
+      ioScene.SetCamera( newCamera );
+    }
+    else if ( "orthographic" == curCam.type )
+    {
+      // Not implemented
+    }
+  }
+
+  for ( size_t i = 0; i < gltfNode.children.size(); ++i )
+  {
+    TraverseNodes( ioScene, iGltfModel, gltfNode.children[i], transfoMat );
   }
 }
 
