@@ -260,7 +260,7 @@ void Test5::LoadSceneFromDialog()
   std::filesystem::path initialDirectory = _LastExternalSceneDirectory.empty() ? std::filesystem::path(PathUtils::GetAssetPath("")) : _LastExternalSceneDirectory;
   std::filesystem::path selectedPath;
   std::string error;
-  const NativeFileDialogResult result = OpenSceneFileDialog(initialDirectory, selectedPath, error);
+  const NativeFileDialogResult result = OpenFileDialog("scene,obj,gltf,glb", initialDirectory, selectedPath, error);
   if ( NativeFileDialogResult::Cancelled == result )
     return;
   if ( NativeFileDialogResult::Error == result )

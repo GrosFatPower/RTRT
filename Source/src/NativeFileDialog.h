@@ -14,7 +14,8 @@ enum class NativeFileDialogResult
   Error
 };
 
-NativeFileDialogResult OpenSceneFileDialog( const std::filesystem::path & iInitialDirectory, std::filesystem::path & oSelectedPath, std::string & oError );
+NativeFileDialogResult OpenFileDialog( const char * iFilterList, const std::filesystem::path & iInitialDirectory, std::filesystem::path & oSelectedPath, std::string & oError );
+NativeFileDialogResult SaveFileDialog( const char * iFilterList, const std::filesystem::path & iInitialDirectory, std::filesystem::path & oSelectedPath, std::string & oError );
 
 }
 

@@ -3,6 +3,7 @@
 #include "RenderTestSIMDUtil.h"
 #include "RenderTestGLTFUtil.h"
 
+#include "DroppedFileUtils.h"
 #include "RenderSettings.h"
 #include "Scene.h"
 #include "PathUtils.h"
@@ -374,6 +375,13 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
   if ( !RunUnitTest("gltf_static_import", [iQuiet]() { return GLTFTestUtil::CheckStaticImport(iQuiet); }) )
     return 1;
   if ( !RunUnitTest("obj_static_import", [iQuiet]() { return GLTFTestUtil::CheckObjImport(iQuiet); }) )
+    return 1;
+  if ( !RunUnitTest("external_prop_file_filter", []() {
+    return DroppedFileUtils::IsDroppedPropPath("prop.obj")
+        && DroppedFileUtils::IsDroppedPropPath("prop.gltf")
+        && DroppedFileUtils::IsDroppedPropPath("prop.glb")
+        && !DroppedFileUtils::IsDroppedPropPath("prop.scene");
+  }) )
     return 1;
 
 #if defined(SIMD_AVX2) || defined(SIMD_ARM_NEON)

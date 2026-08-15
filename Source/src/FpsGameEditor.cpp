@@ -7,6 +7,7 @@
 #include "FpsGameMap.h"
 #include "Mesh.h"
 #include "MeshInstance.h"
+#include "NativeFileDialog.h"
 #include "PathUtils.h"
 #include "PathTracer.h"
 #include "Renderer.h"
@@ -23,6 +24,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cfloat>
+#include <cmath>
 #include <cstring>
 #include <cstdio>
 #include <filesystem>
@@ -129,7 +131,43 @@ static bool EditorIsPropAssetPath( const std::filesystem::path & iPath )
 {
   std::string ext = iPath.extension().string();
   std::transform(ext.begin(), ext.end(), ext.begin(), []( unsigned char c ) { return static_cast<char>(std::tolower(c)); });
-  return ( ".gltf" == ext ) || ( ".glb" == ext );
+  return ( ".obj" == ext ) || ( ".gltf" == ext ) || ( ".glb" == ext );
+}
+
+static bool EditorIsMapPath( const std::filesystem::path & iPath )
+{
+  std::string ext = iPath.extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(), []( unsigned char c ) { return static_cast<char>(std::tolower(c)); });
+  return ".fpsmap" == ext;
+}
+
+static bool EditorNormalizeDialogFilePath( std::filesystem::path & ioPath )
+{
+  std::error_code ec;
+  ioPath = std::filesystem::absolute(ioPath, ec).lexically_normal();
+  return !ec && std::filesystem::is_regular_file(ioPath, ec) && !ec;
+}
+
+static bool EditorNormalizeDialogSavePath( std::filesystem::path & ioPath )
+{
+  std::error_code ec;
+  ioPath = std::filesystem::absolute(ioPath, ec).lexically_normal();
+  return !ec && !ioPath.filename().empty() && std::filesystem::is_directory(ioPath.parent_path(), ec) && !ec;
+}
+
+static Vec3 EditorNewPropPosition( const FpsGameEditorContext & iContext )
+{
+  const FpsPlayer & player = iContext._GameWorld.GetPlayer();
+  const float yawRad = MathUtil::ToRadians(player._Yaw);
+  const float pitchRad = MathUtil::ToRadians(player._Pitch);
+  Vec3 forward(std::cos(yawRad) * std::cos(pitchRad),
+               std::sin(pitchRad),
+               std::sin(yawRad) * std::cos(pitchRad));
+  if ( glm::length(forward) <= EPSILON )
+    forward = Vec3(0.f, 0.f, 1.f);
+  else
+    forward = glm::normalize(forward);
+  return player.EyePosition(iContext._GameSettings) + forward * 4.f;
 }
 
 static bool EditorPropAssetCombo( const char * iLabel, const std::vector<std::string> & iAssets, std::string & ioPath )
@@ -613,7 +651,6 @@ static void EditorDrawTransformedAABB( const AABB<Vec3> & iBox, const Mat4x4 & i
 void FpsGameEditor::SetPathBuffers( const std::string & iMapPath )
 {
   CopyPathToBuffer(_SavePath, sizeof(_SavePath), iMapPath);
-  CopyPathToBuffer(_LoadPath, sizeof(_LoadPath), iMapPath);
 }
 
 // ----------------------------------------------------------------------------
@@ -622,6 +659,112 @@ void FpsGameEditor::SetPathBuffers( const std::string & iMapPath )
 void FpsGameEditor::SetStatus( const std::string & iMessage )
 {
   _StatusMessage = iMessage;
+}
+
+// ----------------------------------------------------------------------------
+// SaveMapAsDialog
+// ----------------------------------------------------------------------------
+void FpsGameEditor::SaveMapAsDialog( FpsGameEditorContext & ioContext )
+{
+  const std::filesystem::path initialDirectory = _LastMapDialogDirectory.empty() ? std::filesystem::path(PathUtils::GetAssetPath("")) : _LastMapDialogDirectory;
+  std::filesystem::path selectedPath;
+  std::string error;
+  const NativeFileDialogResult result = SaveFileDialog("fpsmap", initialDirectory, selectedPath, error);
+  if ( NativeFileDialogResult::Cancelled == result )
+    return;
+  if ( NativeFileDialogResult::Error == result )
+  {
+    SetStatus("File dialog error: " + error);
+    return;
+  }
+
+  if ( selectedPath.extension().empty() )
+    selectedPath.replace_extension(".fpsmap");
+  if ( !EditorNormalizeDialogSavePath(selectedPath) || !EditorIsMapPath(selectedPath) )
+  {
+    SetStatus("Choose a valid .fpsmap save path.");
+    return;
+  }
+
+  SyncMapFromRuntimeSettings(ioContext);
+  if ( !FpsGameMapLoader::Save(selectedPath.string(), ioContext._Map) )
+  {
+    SetStatus("Save failed: " + selectedPath.string());
+    return;
+  }
+
+  ioContext._MapPath = selectedPath.string();
+  _LastMapDialogDirectory = selectedPath.parent_path();
+  SetPathBuffers(ioContext._MapPath);
+  _Dirty = false;
+  SetStatus("Saved " + ioContext._MapPath);
+}
+
+// ----------------------------------------------------------------------------
+// LoadMapFromDialog
+// ----------------------------------------------------------------------------
+void FpsGameEditor::LoadMapFromDialog( FpsGameEditorContext & ioContext )
+{
+  const std::filesystem::path initialDirectory = _LastMapDialogDirectory.empty() ? std::filesystem::path(PathUtils::GetAssetPath("")) : _LastMapDialogDirectory;
+  std::filesystem::path selectedPath;
+  std::string error;
+  const NativeFileDialogResult result = OpenFileDialog("fpsmap", initialDirectory, selectedPath, error);
+  if ( NativeFileDialogResult::Cancelled == result )
+    return;
+  if ( NativeFileDialogResult::Error == result )
+  {
+    SetStatus("File dialog error: " + error);
+    return;
+  }
+  if ( !EditorNormalizeDialogFilePath(selectedPath) || !EditorIsMapPath(selectedPath) )
+  {
+    SetStatus("Selected map file does not exist or is unsupported.");
+    return;
+  }
+
+  FpsGameMap loadedMap;
+  if ( !FpsGameMapLoader::Load(selectedPath.string(), loadedMap) )
+  {
+    SetStatus("Failed to load map: " + DroppedFileUtils::DisplayName(selectedPath));
+    return;
+  }
+
+  ioContext._Map = loadedMap;
+  ioContext._MapPath = selectedPath.string();
+  ioContext._MapLoaded = true;
+  _LastMapDialogDirectory = selectedPath.parent_path();
+  _ObjectInstanceVisible.clear();
+  _Selection = FpsEditorSelection();
+  _Dirty = false;
+  SetPathBuffers(ioContext._MapPath);
+  ioContext._ReloadScene = true;
+  SetStatus("Loaded " + ioContext._MapPath);
+}
+
+// ----------------------------------------------------------------------------
+// LoadPropFromDialog
+// ----------------------------------------------------------------------------
+void FpsGameEditor::LoadPropFromDialog( FpsGameEditorContext & ioContext )
+{
+  const std::filesystem::path initialDirectory = _LastPropDialogDirectory.empty() ? std::filesystem::path(PathUtils::GetAssetPath("")) : _LastPropDialogDirectory;
+  std::filesystem::path selectedPath;
+  std::string error;
+  const NativeFileDialogResult result = OpenFileDialog("obj,gltf,glb", initialDirectory, selectedPath, error);
+  if ( NativeFileDialogResult::Cancelled == result )
+    return;
+  if ( NativeFileDialogResult::Error == result )
+  {
+    SetStatus("File dialog error: " + error);
+    return;
+  }
+  if ( !EditorNormalizeDialogFilePath(selectedPath) || !EditorIsPropAssetPath(selectedPath) )
+  {
+    SetStatus("Selected prop file does not exist or is unsupported.");
+    return;
+  }
+
+  _LastPropDialogDirectory = selectedPath.parent_path();
+  AddDroppedProp(ioContext, selectedPath, EditorNewPropPosition(ioContext));
 }
 
 // ----------------------------------------------------------------------------
@@ -1401,27 +1544,14 @@ void FpsGameEditor::DrawScenePanel( FpsGameEditorContext & ioContext )
     else
       SetStatus("Save failed");
   }
+  ImGui::SameLine();
+  if ( ImGui::Button("Save as...") )
+    SaveMapAsDialog(ioContext);
 
-  ImGui::InputText("Load path", _LoadPath, sizeof(_LoadPath));
-  if ( ImGui::Button("Load") )
-  {
-    FpsGameMap loadedMap;
-    if ( FpsGameMapLoader::Load(_LoadPath, loadedMap) )
-    {
-      ioContext._Map = loadedMap;
-      ioContext._MapPath = _LoadPath;
-      ioContext._MapLoaded = true;
-      _ObjectInstanceVisible.clear();
-      _Selection = FpsEditorSelection();
-      _Dirty = false;
-      SetPathBuffers(ioContext._MapPath);
-      ioContext._ReloadScene = true;
-      SetStatus("Loaded " + ioContext._MapPath);
-    }
-    else
-      SetStatus("Load failed");
-  }
   ImGui::PopItemWidth();
+
+  if ( ImGui::Button("Load scene...") )
+    LoadMapFromDialog(ioContext);
 
   if ( ImGui::CollapsingHeader("Objects", ImGuiTreeNodeFlags_DefaultOpen) )
   {
@@ -1521,6 +1651,9 @@ void FpsGameEditor::DrawScenePanel( FpsGameEditorContext & ioContext )
     }
     else
       ImGui::TextUnformatted("No loadable props found in Assets");
+
+    if ( ImGui::Button("Load prop...") )
+      LoadPropFromDialog(ioContext);
 
     ImGui::BeginDisabled(!hasSelectedPropAsset);
     if ( ImGui::Button("Add prop") )
