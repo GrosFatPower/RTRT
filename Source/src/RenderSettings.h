@@ -49,7 +49,7 @@ struct RenderSettings
   bool         _Transparency          = true;                   // Deferred and software renderers
   SamplingMode _Sampling              = SamplingMode::Bilinear; // Raster
   bool         _WBuffer               = true;                   // Raster
-  ShadingType  _ShadingType           = ShadingType::Phong;     // Raster
+  ShadingType  _ShadingType           = ShadingType::PBR;       // Raster
   int          _Bounces               = 1;                      // PathTracer
   int          _NbSamplesPerPixel     = 1;                      // PathTracer
   int          _RenderScale           = 100;
