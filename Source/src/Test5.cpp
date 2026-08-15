@@ -198,8 +198,8 @@ void Test5::HandleDroppedFiles( int iCount, const char ** iPaths )
       continue;
     }
 
-    _DroppedScenePath = filepath;
-    _DroppedSceneName = DroppedFileUtils::DisplayName(filepath);
+    _CurSceneId = AddExternalSceneFile(filepath);
+    _LastExternalSceneDirectory = filepath.parent_path();
     _SceneLoadError.clear();
     _ReloadScene = true;
     std::cout << "Test5 : dropped scene " << filepath.generic_string() << std::endl;
@@ -208,11 +208,56 @@ void Test5::HandleDroppedFiles( int iCount, const char ** iPaths )
 }
 
 // ----------------------------------------------------------------------------
+// AddExternalSceneFile
+// ----------------------------------------------------------------------------
+int Test5::AddExternalSceneFile( const std::filesystem::path & iFilepath )
+{
+  std::error_code ec;
+  std::filesystem::path normalizedPath = std::filesystem::weakly_canonical(iFilepath, ec);
+  if ( ec )
+  {
+    ec.clear();
+    normalizedPath = std::filesystem::absolute(iFilepath, ec).lexically_normal();
+  }
+  const std::string scenePath = normalizedPath.string();
+
+  for ( int i = 0; i < static_cast<int>(_SceneFiles.size()); ++i )
+  {
+    if ( _SceneFiles[i] == scenePath )
+      return i;
+  }
+
+  std::string sceneName = DroppedFileUtils::DisplayName(normalizedPath);
+  const std::string baseName = sceneName;
+  int suffix = 2;
+  bool duplicateName = true;
+  while ( duplicateName )
+  {
+    duplicateName = false;
+    for ( const char * existingName : _SceneNames )
+    {
+      if ( sceneName == existingName )
+      {
+        sceneName = baseName + " (" + std::to_string(suffix++) + ")";
+        duplicateName = true;
+        break;
+      }
+    }
+  }
+
+  char * const sceneNameBuffer = new char[sceneName.size() + 1u];
+  snprintf(sceneNameBuffer, sceneName.size() + 1u, "%s", sceneName.c_str());
+  _SceneFiles.push_back(scenePath);
+  _SceneNames.push_back(sceneNameBuffer);
+  return static_cast<int>(_SceneFiles.size()) - 1;
+}
+
+// ----------------------------------------------------------------------------
 // LoadSceneFromDialog
 // ----------------------------------------------------------------------------
 void Test5::LoadSceneFromDialog()
 {
-  std::filesystem::path initialDirectory = _DroppedScenePath.empty() ? std::filesystem::path(PathUtils::GetAssetPath("")) : _DroppedScenePath.parent_path();
+  std::filesystem::path initialDirectory = _LastExternalSceneDirectory.empty() ? std::filesystem::path(PathUtils::GetAssetPath("")) : _LastExternalSceneDirectory;
   std::filesystem::path selectedPath;
   std::string error;
   const NativeFileDialogResult result = OpenSceneFileDialog(initialDirectory, selectedPath, error);
@@ -232,9 +277,8 @@ void Test5::LoadSceneFromDialog()
     return;
   }
 
-  _DroppedScenePath = selectedPath;
-  _DroppedSceneName = DroppedFileUtils::DisplayName(selectedPath);
-  _CurSceneId = -1;
+  _CurSceneId = AddExternalSceneFile(selectedPath);
+  _LastExternalSceneDirectory = selectedPath.parent_path();
   _SceneLoadError.clear();
   _ReloadScene = true;
 }
@@ -346,18 +390,13 @@ int Test5::DrawUI()
       int selectedSceneId = _CurSceneId;
       if ( ImGui::Combo("Scene selection", &selectedSceneId, &_SceneNames[0], static_cast<int>(_SceneNames.size())) )
       {
-      if ( selectedSceneId != _CurSceneId )
-      {
-        _CurSceneId = selectedSceneId;
-        _DroppedScenePath.clear();
-        _DroppedSceneName.clear();
-        _SceneLoadError.clear();
-        _ReloadScene = true;
+        if ( selectedSceneId != _CurSceneId )
+        {
+          _CurSceneId = selectedSceneId;
+          _SceneLoadError.clear();
+          _ReloadScene = true;
         }
       }
-
-      if ( !_DroppedSceneName.empty() )
-        ImGui::Text("External scene: %s", _DroppedSceneName.c_str());
 
       if ( ImGui::Button("Load scene...") )
         LoadSceneFromDialog();
@@ -370,7 +409,7 @@ int Test5::DrawUI()
 
     if ( ImGui::Button( "Capture image" ) )
     {
-      const std::string sceneName = _DroppedSceneName.empty() ? std::string(_SceneNames[_CurSceneId]) : _DroppedSceneName;
+      const std::string sceneName = std::string(_SceneNames[_CurSceneId]);
       _CaptureOutputPath = "./" + sceneName + "_" + std::to_string( _NbRenderedFrames ) + "frames.png";
       _RenderToFile = true;
     }
@@ -2050,9 +2089,7 @@ int Test5::InitializeScene()
 {
   Scene * newScene = new Scene;
   RenderSettings newSettings = _Settings;
-  const bool useDroppedScene = !_DroppedScenePath.empty();
-  const std::string scenePath = useDroppedScene ? _DroppedScenePath.generic_string()
-                                                : ( ( _CurSceneId >= 0 ) ? _SceneFiles[_CurSceneId] : "" );
+  const std::string scenePath = ( _CurSceneId >= 0 ) && ( _CurSceneId < static_cast<int>(_SceneFiles.size()) ) ? _SceneFiles[_CurSceneId] : "";
   if ( !newScene || scenePath.empty() || !Loader::LoadScene(scenePath, *newScene, newSettings) )
   {
     std::cout << "Failed to load scene : " << scenePath << std::endl;
@@ -2174,7 +2211,8 @@ int Test5::UpdateScene()
     if ( 0 != InitializeScene() )
     {
       std::cout << "ERROR: Scene initialization failed!" << std::endl;
-      _SceneLoadError = "Unable to load scene: " + ( _DroppedSceneName.empty() ? std::string("selected scene") : _DroppedSceneName );
+      const std::string sceneName = ( _CurSceneId >= 0 ) && ( _CurSceneId < static_cast<int>(_SceneNames.size()) ) ? _SceneNames[_CurSceneId] : "selected scene";
+      _SceneLoadError = "Unable to load scene: " + sceneName;
       return 0;
     }
 
