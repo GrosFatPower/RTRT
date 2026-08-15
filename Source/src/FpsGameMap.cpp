@@ -322,6 +322,26 @@ static const char * RendererModeName( FpsRendererMode iMode )
   return "deferred";
 }
 
+static bool ParseShadingType( const std::string & iToken, ShadingType & oType )
+{
+  if ( IsEqual(iToken, "phong") )
+  {
+    oType = ShadingType::Phong;
+    return true;
+  }
+  if ( IsEqual(iToken, "pbr") )
+  {
+    oType = ShadingType::PBR;
+    return true;
+  }
+  return false;
+}
+
+static const char * ShadingTypeName( ShadingType iType )
+{
+  return ( ShadingType::PBR == iType ) ? "pbr" : "phong";
+}
+
 class FpsGameMapParser
 {
 public:
@@ -680,6 +700,11 @@ protected:
       {
         if ( !ParseFloat(tokens[1], settings._SpecularIBLMaxRoughness) )
           return Error("invalid render iblMaxRoughness");
+      }
+      else if ( IsEqual(tokens[0], "lighting") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseShadingType(tokens[1], settings._ShadingType) )
+          return Error("invalid render lighting");
       }
       else if ( IsEqual(tokens[0], "bounces") && ( 2 == static_cast<int>(tokens.size()) ) )
       {
@@ -1337,6 +1362,7 @@ bool FpsGameMapLoader::Save( const std::string & iFilename, const FpsGameMap & i
     file << "  pbrDirectLighting " << ( settings._PBRDirectLighting ? "true" : "false" ) << "\n";
     file << "  directLightIntensity " << settings._DirectLightIntensity << "\n";
     file << "  iblMaxRoughness " << settings._SpecularIBLMaxRoughness << "\n";
+    file << "  lighting " << ShadingTypeName(settings._ShadingType) << "\n";
     file << "  bounces " << settings._Bounces << "\n";
     file << "  spp " << settings._NbSamplesPerPixel << "\n";
     file << "  denoise " << ( settings._Denoise ? "true" : "false" ) << "\n";

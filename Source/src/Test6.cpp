@@ -94,6 +94,7 @@ static void ApplyMapRenderSettings( const FpsGameMap & iMap, FpsGameSettings & i
   ioRenderSettings._PBRDirectLighting = settings._PBRDirectLighting;
   ioRenderSettings._DirectLightIntensity = std::max(0.f, settings._DirectLightIntensity);
   ioRenderSettings._SpecularIBLMaxRoughness = MathUtil::Clamp(settings._SpecularIBLMaxRoughness, 0.f, 1.f);
+  ioRenderSettings._ShadingType = settings._ShadingType;
 
   ioRenderSettings._Bounces = std::max(1, settings._Bounces);
   ioRenderSettings._NbSamplesPerPixel = std::max(1, settings._NbSamplesPerPixel);
@@ -137,6 +138,7 @@ static void CaptureMapRenderSettings( FpsGameMap & ioMap, const FpsGameSettings 
   settings._PBRDirectLighting = iRenderSettings._PBRDirectLighting;
   settings._DirectLightIntensity = iRenderSettings._DirectLightIntensity;
   settings._SpecularIBLMaxRoughness = iRenderSettings._SpecularIBLMaxRoughness;
+  settings._ShadingType = iRenderSettings._ShadingType;
   settings._Bounces = iRenderSettings._Bounces;
   settings._NbSamplesPerPixel = iRenderSettings._NbSamplesPerPixel;
   settings._Denoise = iRenderSettings._Denoise;

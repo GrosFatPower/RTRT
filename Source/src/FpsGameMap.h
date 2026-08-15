@@ -6,6 +6,7 @@
 #include "Light.h"
 #include "Material.h"
 #include "MathUtil.h"
+#include "RenderSettings.h"
 
 #include <string>
 #include <vector>
@@ -97,6 +98,7 @@ struct FpsMapRenderSettings
   bool            _PBRDirectLighting = true;
   float           _DirectLightIntensity = 1.f;
   float           _SpecularIBLMaxRoughness = 0.5f;
+  ShadingType     _ShadingType = ShadingType::PBR;
   int             _Bounces = 1;
   int             _NbSamplesPerPixel = 1;
   bool            _Denoise = false;

@@ -915,6 +915,7 @@ void FpsGameEditor::SyncMapFromRuntimeSettings( FpsGameEditorContext & ioContext
   renderSettings._PBRDirectLighting = ioContext._Settings._PBRDirectLighting;
   renderSettings._DirectLightIntensity = ioContext._Settings._DirectLightIntensity;
   renderSettings._SpecularIBLMaxRoughness = ioContext._Settings._SpecularIBLMaxRoughness;
+  renderSettings._ShadingType = ioContext._Settings._ShadingType;
   renderSettings._Bounces = ioContext._Settings._Bounces;
   renderSettings._NbSamplesPerPixel = ioContext._Settings._NbSamplesPerPixel;
   renderSettings._Denoise = ioContext._Settings._Denoise;
@@ -2602,6 +2603,14 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
       }
       if ( ImGui::Checkbox("Transparency", &ioContext._Settings._Transparency) )
         notifyPersistedRenderSettingsChanged();
+
+      static const char * shadingTypes[] = { "Phong", "PBR" };
+      int shadingType = ( ShadingType::PBR == ioContext._Settings._ShadingType ) ? 1 : 0;
+      if ( ImGui::Combo("Lighting", &shadingType, shadingTypes, 2) )
+      {
+        ioContext._Settings._ShadingType = ( 1 == shadingType ) ? ShadingType::PBR : ShadingType::Phong;
+        notifyPersistedRenderSettingsChanged();
+      }
     }
 
     if ( ImGui::CollapsingHeader("Software Debug") )
