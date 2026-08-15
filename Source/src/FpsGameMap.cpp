@@ -324,6 +324,11 @@ static const char * RendererModeName( FpsRendererMode iMode )
 
 static bool ParseShadingType( const std::string & iToken, ShadingType & oType )
 {
+  if ( IsEqual(iToken, "flat") )
+  {
+    oType = ShadingType::Flat;
+    return true;
+  }
   if ( IsEqual(iToken, "phong") )
   {
     oType = ShadingType::Phong;
@@ -339,6 +344,8 @@ static bool ParseShadingType( const std::string & iToken, ShadingType & oType )
 
 static const char * ShadingTypeName( ShadingType iType )
 {
+  if ( ShadingType::Flat == iType )
+    return "flat";
   return ( ShadingType::PBR == iType ) ? "pbr" : "phong";
 }
 

@@ -2604,11 +2604,13 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
       if ( ImGui::Checkbox("Transparency", &ioContext._Settings._Transparency) )
         notifyPersistedRenderSettingsChanged();
 
-      static const char * shadingTypes[] = { "Phong", "PBR" };
-      int shadingType = ( ShadingType::PBR == ioContext._Settings._ShadingType ) ? 1 : 0;
-      if ( ImGui::Combo("Lighting", &shadingType, shadingTypes, 2) )
+      static const char * shadingTypes[] = { "Flat", "Phong", "PBR" };
+      int shadingType = ( ShadingType::Flat == ioContext._Settings._ShadingType ) ? 0
+                      : ( ShadingType::PBR == ioContext._Settings._ShadingType ? 2 : 1 );
+      if ( ImGui::Combo("Lighting", &shadingType, shadingTypes, 3) )
       {
-        ioContext._Settings._ShadingType = ( 1 == shadingType ) ? ShadingType::PBR : ShadingType::Phong;
+        ioContext._Settings._ShadingType = ( 0 == shadingType ) ? ShadingType::Flat
+                                       : ( 2 == shadingType ? ShadingType::PBR : ShadingType::Phong );
         notifyPersistedRenderSettingsChanged();
       }
     }
