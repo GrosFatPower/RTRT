@@ -1511,6 +1511,22 @@ int Test5::DrawLightsUI()
     if ( ImGui::Checkbox("Show lights", &_Settings._ShowLights) )
       NotifyLightEdited();
 
+    if ( RendererType::OpenGLRasterizer == _RendererType )
+    {
+      if ( ImGui::Checkbox("Uniform ambient light", &_Settings._EnableUniformLight) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
+      if ( _Settings._EnableUniformLight )
+      {
+        float ambientColor[3] = { _Settings._UniformLightCol.r, _Settings._UniformLightCol.g, _Settings._UniformLightCol.b };
+        if ( ImGui::ColorEdit3("Ambient light color", ambientColor) )
+        {
+          _Settings._UniformLightCol = Vec3( ambientColor[0], ambientColor[1], ambientColor[2] );
+          _Renderer -> Notify(DirtyState::RenderSettings);
+        }
+      }
+    }
+
     ImGui::Checkbox("Enable light gizmo", &_LightGizmoEnabled);
     ImGui::Checkbox("Light gizmo snap", &_LightGizmoSnap);
     if ( _LightGizmoSnap )
