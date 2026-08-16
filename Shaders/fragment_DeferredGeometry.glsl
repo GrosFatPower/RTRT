@@ -9,6 +9,7 @@ in vec3 fragWorldPos;
 in vec3 fragNormal;
 in vec2 fragUV;
 flat in int v_MaterialID; // optional: present if vertex shader provides it
+noperspective in vec2 v_Velocity;
 
 // G-buffer MRT outputs
 layout(location = 0) out vec4 gAlbedo;   // RGB: albedo, A: unused / opacity
@@ -16,6 +17,7 @@ layout(location = 1) out vec4 gNormal;   // RGB: normal encoded in 0..1, A: unus
 layout(location = 2) out vec4 gPosition; // RGB: world position, A: unused
 layout(location = 3) out vec4 gMaterial; // R: roughness, G: metallic, B: reflectance, A: unused
 layout(location = 4) out vec4 gEmission; // RGB: emission, A: unused
+layout(location = 5) out vec2 gVelocity; // Current UV minus previous-frame UV
 
 // Optional fallback uniform (simple default albedo if no material sampling)
 uniform vec3 u_DefaultAlbedo = vec3(0.8, 0.8, 0.8);
@@ -60,4 +62,6 @@ void main()
   gPosition = vec4(fragWorldPos, 1.0);
   gMaterial = vec4(roughness, metallic, reflectance, 1.0);
   gEmission = vec4(emission, 1.0);
+
+  gVelocity = v_Velocity;
 }

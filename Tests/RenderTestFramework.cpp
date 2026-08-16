@@ -42,6 +42,8 @@ void RenderTestCase::ApplySettings( RenderSettings & ioSettings ) const
   ioSettings._RenderResolution = Vec2i(_Width, _Height);
   ioSettings._RenderScale = 100;
   ioSettings._FXAA = false;
+  ioSettings._AntiAliasing = _AntiAliasing;
+  ioSettings._TAAHistoryWeight = _TAAHistoryWeight;
   ioSettings._ToneMapping = false;
   ioSettings._EnableSkybox = !_EnvironmentMapPath.empty();
 
@@ -134,6 +136,34 @@ bool ReadBool( const Json & iObject, const char * iName, bool & oValue, std::str
   return true;
 }
 
+bool ReadAntiAliasing( const Json & iObject, RenderTestCase & ioTestCase, std::string & oError )
+{
+  if ( !iObject.contains("anti_aliasing") )
+    return true;
+  if ( !iObject["anti_aliasing"].is_string() )
+    return SetManifestError(oError, "'anti_aliasing' must be none, fxaa, smaa, or taa.");
+  const std::string value = iObject["anti_aliasing"].get<std::string>();
+  if ( "none" == value ) ioTestCase._AntiAliasing = AntiAliasingMode::None;
+  else if ( "fxaa" == value ) ioTestCase._AntiAliasing = AntiAliasingMode::FXAA;
+  else if ( "smaa" == value ) ioTestCase._AntiAliasing = AntiAliasingMode::SMAA;
+  else if ( "taa" == value ) ioTestCase._AntiAliasing = AntiAliasingMode::TAA;
+  else return SetManifestError(oError, "'anti_aliasing' must be none, fxaa, smaa, or taa.");
+  return true;
+}
+
+bool ReadTAAHistoryWeight( const Json & iObject, RenderTestCase & ioTestCase, std::string & oError )
+{
+  if ( !iObject.contains("taa_history_weight") )
+    return true;
+  if ( !iObject["taa_history_weight"].is_number() )
+    return SetManifestError(oError, "'taa_history_weight' must be between 0 and 0.98.");
+  const float value = iObject["taa_history_weight"].get<float>();
+  if ( value < 0.f || value > .98f )
+    return SetManifestError(oError, "'taa_history_weight' must be between 0 and 0.98.");
+  ioTestCase._TAAHistoryWeight = value;
+  return true;
+}
+
 bool ReadResolution( const Json & iObject, int & oWidth, int & oHeight, std::string & oError, bool iRequired )
 {
   if ( !iObject.contains("resolution") )
@@ -202,6 +232,8 @@ bool ReadSettings( const Json & iObject, RenderTestCase & ioTestCase, std::strin
       && ReadBool(settings, "w_buffer", ioTestCase._WBuffer, oError)
       && ReadBool(settings, "transparency", ioTestCase._Transparency, oError)
       && ReadBool(settings, "denoise", ioTestCase._Denoise, oError)
+      && ReadAntiAliasing(settings, ioTestCase, oError)
+      && ReadTAAHistoryWeight(settings, ioTestCase, oError)
       && ReadPositiveInt(settings, "samples_per_pixel", ioTestCase._SamplesPerPixel, oError, false)
       && ReadPositiveInt(settings, "bounces", ioTestCase._Bounces, oError, false);
 }
@@ -449,7 +481,7 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
         "resolution": [64, 32],
         "frames": 3,
         "thresholds": { "mean_absolute_error": 0.1, "max_absolute_error": 0.2, "pixel_error": 0.3, "mismatch_ratio": 0.4 },
-        "settings": { "specular_ibl": true, "ssr": false }
+        "settings": { "specular_ibl": true, "ssr": false, "anti_aliasing": "taa", "taa_history_weight": 0.8 }
       }
     },
     "tests": [
@@ -463,6 +495,7 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
     if ( ParseRenderTestCases(validManifest, parsedCases, parseError) && ( 1u == parsedCases.size() )
       && ( 4 == parsedCases[0]._FrameCount ) && parsedCases[0]._OverrideCamera && !parsedCases[0]._SSR
       && ( 16 == parsedCases[0]._DebugMode ) && parsedCases[0]._DiagnosticOnly
+      && ( AntiAliasingMode::TAA == parsedCases[0]._AntiAliasing ) && ( .8f == parsedCases[0]._TAAHistoryWeight )
       && ( "Tests/Baselines/valid.pfm" == parsedCases[0]._BaselinePath.generic_string() ) )
       return true;
     std::cerr << "Unit test failed: valid render-test manifest. " << parseError << std::endl;
@@ -479,7 +512,9 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
     R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene" }, { "name": "test", "profile": "test", "scene": "test.scene" }] })",
     R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 0, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene" }] })",
     R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "camera": { "position": [0, 0], "pivot": [0, 0, 0], "fov": 40 } }] })",
-    R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "debug_mode": -1 }] })"
+    R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "debug_mode": -1 }] })",
+    R"({ "version": 1, "profiles": { "test": { "backend": "deferred", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 }, "settings": { "anti_aliasing": "invalid" } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene" }] })",
+    R"({ "version": 1, "profiles": { "test": { "backend": "deferred", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 }, "settings": { "taa_history_weight": 1.0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene" }] })"
   };
   if ( !RunUnitTest("manifest_validation", [&invalidManifests, &parsedCases, &parseError]() {
     for ( const std::string & invalidManifest : invalidManifests )

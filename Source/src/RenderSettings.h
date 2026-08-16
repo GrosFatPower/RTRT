@@ -20,6 +20,14 @@ enum class SamplingMode
   Trilinear
 };
 
+enum class AntiAliasingMode
+{
+  None = 0,
+  FXAA,
+  SMAA,
+  TAA
+};
+
 struct RenderSettings
 {
   Vec2i        _RenderResolution      = { 0, 0 };
@@ -36,6 +44,7 @@ struct RenderSettings
   bool         _RussianRoulette       = true;                   // PathTracer
   bool         _ToneMapping           = true;
   bool         _FXAA                  = false;
+  AntiAliasingMode _AntiAliasing      = AntiAliasingMode::None; // Deferred renderer
   bool         _Accumulate            = true;                   // PathTracer
   bool         _Denoise               = false;                  // PathTracer
   bool         _TiledRendering        = false;
@@ -76,6 +85,10 @@ struct RenderSettings
   float        _SpecularIBLIntensity  = 0.5f;                   // Deferred renderer
   float        _SpecularIBLMaxRoughness = 0.5f;                 // Deferred renderer
   float        _DirectLightIntensity  = 1.0f;                   // Deferred renderer
+  float        _TAAHistoryWeight      = 0.95f;                  // Deferred renderer
+  float        _TAAJitterScale        = 1.0f;                   // Deferred renderer. 1 = half-pixel sequence.
+  float        _TAADepthThreshold     = 0.01f;                  // Deferred renderer
+  float        _TAANormalThreshold    = 0.5f;                   // Deferred renderer
   float        _DenoiserThreshold     = 0.05f;                  // PathTracer
   float        _DenoiserSigmaSpatial  = 2.0f;                   // PathTracer
   float        _DenoiserSigmaRange    = 0.1f;                   // PathTracer

@@ -29,6 +29,19 @@ namespace RTRT
 
 static Vec3 S_WireColor = Vec3(1.f, 0.f, 0.f);
 static float S_WireWidth = 3.0f;
+
+static float Halton( int iIndex, int iBase )
+{
+  float result = 0.f;
+  float fraction = 1.f;
+  while ( iIndex > 0 )
+  {
+    fraction /= float(iBase);
+    result += fraction * float(iIndex % iBase);
+    iIndex /= iBase;
+  }
+  return result;
+}
 // ----------------------------------------------------------------------------
 // HELPER TYPES
 // ----------------------------------------------------------------------------
@@ -76,12 +89,15 @@ DeferredRenderer::DeferredRenderer(Scene& iScene, RenderSettings& iSettings)
 // ----------------------------------------------------------------------------
 DeferredRenderer::~DeferredRenderer()
 {
-  for ( auto & timerIDs : _TimerIDs )
+  for ( auto & timerFrames : _TimerIDs )
   {
-    if ( timerIDs[0] )
-      glDeleteQueries(1, &timerIDs[0]);
-    if ( timerIDs[1] )
-      glDeleteQueries(1, &timerIDs[1]);
+    for ( auto & timerIDs : timerFrames )
+    {
+      if ( timerIDs[0] )
+        glDeleteQueries(1, &timerIDs[0]);
+      if ( timerIDs[1] )
+        glDeleteQueries(1, &timerIDs[1]);
+    }
   }
 
   GLUtil::DeleteFBO(_GBufferFBO);
@@ -92,12 +108,18 @@ DeferredRenderer::~DeferredRenderer()
   GLUtil::DeleteFBO(_SSAOBlurFBO);
   GLUtil::DeleteFBO(_SSRFBO);
   GLUtil::DeleteFBO(_SSRSourceFBO);
+  GLUtil::DeleteFBO(_SMAAEdgeFBO);
+  GLUtil::DeleteFBO(_SMAAWeightFBO);
+  GLUtil::DeleteFBO(_AAOutputFBO);
+  GLUtil::DeleteFBO(_TAAHistoryFBO[0]);
+  GLUtil::DeleteFBO(_TAAHistoryFBO[1]);
 
   GLUtil::DeleteTEX(_GAlbedoTEX);
   GLUtil::DeleteTEX(_GNormalTEX);
   GLUtil::DeleteTEX(_GPositionTEX);
   GLUtil::DeleteTEX(_GMaterialTEX);
   GLUtil::DeleteTEX(_GEmissionTEX);
+  GLUtil::DeleteTEX(_GVelocityTEX);
   GLUtil::DeleteTEX(_GDepthTEX);
   GLUtil::DeleteTEX(_SSAOTEX);
   GLUtil::DeleteTEX(_SSAOBlurTEX);
@@ -107,6 +129,16 @@ DeferredRenderer::~DeferredRenderer()
   GLUtil::DeleteTEX(_ShadowCubeMapTEX);
   GLUtil::DeleteTEX(_Shadow2DMapTEX);
   GLUtil::DeleteTEX(_BRDFLUTTEX);
+  GLUtil::DeleteTEX(_SMAAEdgeTEX);
+  GLUtil::DeleteTEX(_SMAAWeightTEX);
+  GLUtil::DeleteTEX(_AAOutputTEX);
+  for ( int i = 0; i < 2; ++i )
+  {
+    GLUtil::DeleteTEX(_TAAHistoryTEX[i]);
+    GLUtil::DeleteTEX(_TAAHistoryDepthTEX[i]);
+    GLUtil::DeleteTEX(_TAAHistoryNormalTEX[i]);
+    GLUtil::DeleteTEX(_TAADebugTEX[i]);
+  }
 
   GLUtil::DeleteTBO(_TexIndTBO);
   GLUtil::DeleteTEX(_TexArrayTEX);
@@ -136,6 +168,12 @@ int DeferredRenderer::Initialize()
   if ( 0 != InitializeFrameBuffers() )
   {
     std::cout << "DeferredRenderer : Failed to initialize G-buffer !" << std::endl;
+    return 1;
+  }
+
+  if ( 0 != InitializeAntiAliasing() )
+  {
+    std::cout << "DeferredRenderer : Failed to initialize anti-aliasing targets !" << std::endl;
     return 1;
   }
 
@@ -183,6 +221,7 @@ int DeferredRenderer::Update()
   if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
   {
     this -> ResizeRenderTarget();
+    ResetTAAHistory();
   }
 
   if ( _DirtyStates & (unsigned long)DirtyState::Textures )
@@ -192,7 +231,21 @@ int DeferredRenderer::Update()
   }
 
   if ( _DirtyStates & (unsigned long)DirtyState::SceneEnvMap )
+  {
     this -> ReloadEnvMap();
+    ResetTAAHistory();
+  }
+
+  if ( _DirtyStates & ( (unsigned long)DirtyState::SceneLights | (unsigned long)DirtyState::SceneMaterials | (unsigned long)DirtyState::Textures ) )
+    ResetTAAHistory();
+
+  if ( ( _DirtyStates & (unsigned long)DirtyState::SceneCamera ) && _HasPreviousCamera )
+  {
+    const Camera & camera = _Scene.GetCamera();
+    if ( ( glm::length(camera.GetPos() - _PreviousCameraPos) > 2.f )
+      || ( glm::dot(camera.GetForward(), _PreviousCameraForward) < .8f ) )
+      ResetTAAHistory();
+  }
 
   if ( _DirtyStates & ( (unsigned long)DirtyState::SceneMaterials | (unsigned long)DirtyState::SceneInstances ) )
     BuildDeferredDrawLists();
@@ -220,7 +273,9 @@ int DeferredRenderer::Update()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::Done()
 {
+  UpdatePreviousTransforms();
   _FrameNum++;
+  _TimerWriteIndex = ( _TimerWriteIndex + 1 ) % TimerQueryFrameCount;
 
   CleanStates();
 
@@ -234,14 +289,19 @@ int DeferredRenderer::InitializeStats()
 {
   _PassTimes.fill(0.);
   _PassEnabled.fill(false);
-  _TimerWritten.fill(false);
+  _TimerActive.fill(false);
+  _TimerPending = {};
+  _TimerWriteIndex = 0;
 
-  for ( auto & timerIDs : _TimerIDs )
+  for ( auto & timerFrames : _TimerIDs )
   {
-    if ( !timerIDs[0] )
-      glGenQueries(1, &timerIDs[0]);
-    if ( !timerIDs[1] )
-      glGenQueries(1, &timerIDs[1]);
+    for ( auto & timerIDs : timerFrames )
+    {
+      if ( !timerIDs[0] )
+        glGenQueries(1, &timerIDs[0]);
+      if ( !timerIDs[1] )
+        glGenQueries(1, &timerIDs[1]);
+    }
   }
 
   return 0;
@@ -254,10 +314,18 @@ int DeferredRenderer::UpdateStats()
 {
   for ( int i = 0; i < TimingCount; ++i )
   {
-    if ( _TimerWritten[i] )
-      _PassTimes[i] = ReadTimer(i);
-    else
-      _PassTimes[i] = 0.;
+    for ( int queryIndex = 0; queryIndex < TimerQueryFrameCount; ++queryIndex )
+    {
+      if ( !_TimerPending[i][queryIndex] )
+        continue;
+
+      double time = 0.;
+      if ( ReadTimer(i, queryIndex, time) )
+      {
+        _PassTimes[i] = time;
+        _TimerPending[i][queryIndex] = false;
+      }
+    }
   }
 
   _PassEnabled.fill(false);
@@ -274,11 +342,16 @@ void DeferredRenderer::BeginTimer( int iTimerID )
     return;
 
   _PassEnabled[iTimerID] = true;
-  _TimerWritten[iTimerID] = true;
+  _TimerActive[iTimerID] = false;
+  if ( _TimerPending[iTimerID][_TimerWriteIndex] )
+    return;
+
+  _TimerActive[iTimerID] = true;
+  _TimerPending[iTimerID][_TimerWriteIndex] = true;
 #if defined(__APPLE__)
-  glBeginQuery(GL_TIME_ELAPSED, _TimerIDs[iTimerID][0]);
+  glBeginQuery(GL_TIME_ELAPSED, _TimerIDs[iTimerID][_TimerWriteIndex][0]);
 #else
-  glQueryCounter(_TimerIDs[iTimerID][0], GL_TIMESTAMP);
+  glQueryCounter(_TimerIDs[iTimerID][_TimerWriteIndex][0], GL_TIMESTAMP);
 #endif
 }
 
@@ -289,43 +362,50 @@ void DeferredRenderer::EndTimer( int iTimerID )
 {
   if ( ( iTimerID < 0 ) || ( iTimerID >= TimingCount ) )
     return;
+  if ( !_TimerActive[iTimerID] )
+    return;
 
 #if defined(__APPLE__)
   glEndQuery(GL_TIME_ELAPSED);
 #else
-  glQueryCounter(_TimerIDs[iTimerID][1], GL_TIMESTAMP);
+  glQueryCounter(_TimerIDs[iTimerID][_TimerWriteIndex][1], GL_TIMESTAMP);
 #endif
+  _TimerActive[iTimerID] = false;
 }
 
 // ----------------------------------------------------------------------------
 // ReadTimer
 // ----------------------------------------------------------------------------
-double DeferredRenderer::ReadTimer( int iTimerID )
+bool DeferredRenderer::ReadTimer( int iTimerID, int iQueryIndex, double & oTime )
 {
-  if ( ( iTimerID < 0 ) || ( iTimerID >= TimingCount ) )
-    return 0.;
+  if ( ( iTimerID < 0 ) || ( iTimerID >= TimingCount ) || ( iQueryIndex < 0 ) || ( iQueryIndex >= TimerQueryFrameCount ) )
+    return false;
 
   GLuint64 startTime = 0, endTime = 0, executionTime = 0;
   GLint resultAvailable = 0;
 
 #if defined(__APPLE__)
-  while ( !resultAvailable )
-    glGetQueryObjectiv(_TimerIDs[iTimerID][0], GL_QUERY_RESULT_AVAILABLE, &resultAvailable);
-  glGetQueryObjectui64v(_TimerIDs[iTimerID][0], GL_QUERY_RESULT, &executionTime);
+  glGetQueryObjectiv(_TimerIDs[iTimerID][iQueryIndex][0], GL_QUERY_RESULT_AVAILABLE, &resultAvailable);
+  if ( !resultAvailable )
+    return false;
+  glGetQueryObjectui64v(_TimerIDs[iTimerID][iQueryIndex][0], GL_QUERY_RESULT, &executionTime);
 #else
-  while ( !resultAvailable )
-    glGetQueryObjectiv(_TimerIDs[iTimerID][0], GL_QUERY_RESULT_AVAILABLE, &resultAvailable);
-  glGetQueryObjectui64v(_TimerIDs[iTimerID][0], GL_QUERY_RESULT, &startTime);
+  glGetQueryObjectiv(_TimerIDs[iTimerID][iQueryIndex][0], GL_QUERY_RESULT_AVAILABLE, &resultAvailable);
+  if ( !resultAvailable )
+    return false;
+  glGetQueryObjectui64v(_TimerIDs[iTimerID][iQueryIndex][0], GL_QUERY_RESULT, &startTime);
 
   resultAvailable = 0;
-  while ( !resultAvailable )
-    glGetQueryObjectiv(_TimerIDs[iTimerID][1], GL_QUERY_RESULT_AVAILABLE, &resultAvailable);
-  glGetQueryObjectui64v(_TimerIDs[iTimerID][1], GL_QUERY_RESULT, &endTime);
+  glGetQueryObjectiv(_TimerIDs[iTimerID][iQueryIndex][1], GL_QUERY_RESULT_AVAILABLE, &resultAvailable);
+  if ( !resultAvailable )
+    return false;
+  glGetQueryObjectui64v(_TimerIDs[iTimerID][iQueryIndex][1], GL_QUERY_RESULT, &endTime);
 
   executionTime = endTime - startTime;
 #endif
 
-  return (double)executionTime / 1000000000.;
+  oTime = (double)executionTime / 1000000000.;
+  return true;
 }
 
 // ----------------------------------------------------------------------------
@@ -356,6 +436,8 @@ int DeferredRenderer::GetRenderPassTimings( std::vector<RenderPassTiming> & oTim
   oTimings.push_back({ "Wireframe", _PassTimes[TimingWireframe], true, _PassEnabled[TimingWireframe] });
   oTimings.push_back({ "SSR source copy", _PassTimes[TimingSSRSourceCopy], true, _PassEnabled[TimingSSRSourceCopy] });
   oTimings.push_back({ "Composite / screen", _PassTimes[TimingCompositeScreen], true, _PassEnabled[TimingCompositeScreen] });
+  oTimings.push_back({ "SMAA / FXAA", _PassTimes[TimingSMAA], true, _PassEnabled[TimingSMAA] });
+  oTimings.push_back({ "TAA resolve", _PassTimes[TimingTAA], true, _PassEnabled[TimingTAA] });
   return 0;
 }
 
@@ -1328,6 +1410,12 @@ int DeferredRenderer::InitializeFrameBuffers()
   targetDesc._DataType       = _GEmissionTEX._DataType;
   GLUtil::CreateTexture(targetDesc, _GEmissionTEX);
 
+  targetDesc._Slot           = _GVelocityTEX._Slot;
+  targetDesc._InternalFormat = _GVelocityTEX._InternalFormat;
+  targetDesc._DataFormat     = _GVelocityTEX._DataFormat;
+  targetDesc._DataType       = _GVelocityTEX._DataType;
+  GLUtil::CreateTexture(targetDesc, _GVelocityTEX);
+
   targetDesc._Slot           = _GDepthTEX._Slot;
   targetDesc._InternalFormat = _GDepthTEX._InternalFormat;
   targetDesc._DataFormat     = _GDepthTEX._DataFormat;
@@ -1342,6 +1430,7 @@ int DeferredRenderer::InitializeFrameBuffers()
   gBufferDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT2, &_GPositionTEX });
   gBufferDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT3, &_GMaterialTEX });
   gBufferDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT4, &_GEmissionTEX });
+  gBufferDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT5, &_GVelocityTEX });
   gBufferDesc._Attachments.push_back({ GL_DEPTH_ATTACHMENT, &_GDepthTEX });
   if ( !GLUtil::CreateFrameBuffer(gBufferDesc, _GBufferFBO) )
   {
@@ -1371,6 +1460,86 @@ int DeferredRenderer::InitializeFrameBuffers()
 }
 
 // ----------------------------------------------------------------------------
+// InitializeAntiAliasing
+// ----------------------------------------------------------------------------
+int DeferredRenderer::InitializeAntiAliasing()
+{
+  ResetTAAHistory();
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// EnsureAntiAliasingTargets
+// ----------------------------------------------------------------------------
+int DeferredRenderer::EnsureAntiAliasingTargets( bool iNeedSMAA, bool iNeedTAA )
+{
+  GLTextureDesc desc;
+  desc._Target = GL_TEXTURE_2D;
+  desc._Width = RenderWidth();
+  desc._Height = RenderHeight();
+  desc._MinFilter = GL_LINEAR;
+  desc._MagFilter = GL_LINEAR;
+  desc._WrapS = GL_CLAMP_TO_EDGE;
+  desc._WrapT = GL_CLAMP_TO_EDGE;
+
+  auto createTexture = [&]( GLTexture & ioTexture )
+  {
+    desc._Slot = ioTexture._Slot;
+    desc._InternalFormat = ioTexture._InternalFormat;
+    desc._DataFormat = ioTexture._DataFormat;
+    desc._DataType = ioTexture._DataType;
+    GLUtil::CreateTexture(desc, ioTexture);
+  };
+
+  if ( !_AAOutputFBO._Handle )
+  {
+    createTexture(_AAOutputTEX);
+    GLFrameBufferDesc outputDesc;
+    outputDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_AAOutputTEX });
+    if ( !GLUtil::CreateFrameBuffer(outputDesc, _AAOutputFBO) )
+      return 1;
+  }
+
+  if ( iNeedSMAA && !_SMAAEdgeFBO._Handle )
+  {
+    createTexture(_SMAAEdgeTEX);
+    createTexture(_SMAAWeightTEX);
+
+    GLFrameBufferDesc edgeDesc;
+    edgeDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_SMAAEdgeTEX });
+    if ( !GLUtil::CreateFrameBuffer(edgeDesc, _SMAAEdgeFBO) )
+      return 1;
+
+    GLFrameBufferDesc weightDesc;
+    weightDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_SMAAWeightTEX });
+    if ( !GLUtil::CreateFrameBuffer(weightDesc, _SMAAWeightFBO) )
+      return 1;
+  }
+
+  if ( iNeedTAA && !_TAAHistoryFBO[0]._Handle )
+  {
+    for ( int i = 0; i < 2; ++i )
+    {
+      createTexture(_TAAHistoryTEX[i]);
+      createTexture(_TAAHistoryDepthTEX[i]);
+      createTexture(_TAAHistoryNormalTEX[i]);
+      createTexture(_TAADebugTEX[i]);
+
+      GLFrameBufferDesc historyDesc;
+      historyDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_TAAHistoryTEX[i] });
+      historyDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT1, &_TAAHistoryDepthTEX[i] });
+      historyDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT2, &_TAAHistoryNormalTEX[i] });
+      historyDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT3, &_TAADebugTEX[i] });
+      if ( !GLUtil::CreateFrameBuffer(historyDesc, _TAAHistoryFBO[i]) )
+        return 1;
+    }
+    ResetTAAHistory();
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // ResizeRenderTarget
 // ----------------------------------------------------------------------------
 int DeferredRenderer::ResizeRenderTarget()
@@ -1384,6 +1553,16 @@ int DeferredRenderer::ResizeRenderTarget()
   GLUtil::ResizeFBO(_SSAOBlurFBO, RenderWidth(), RenderHeight());
   GLUtil::ResizeFBO(_SSRFBO, RenderWidth(), RenderHeight());
   GLUtil::ResizeFBO(_SSRSourceFBO, RenderWidth(), RenderHeight());
+  if ( _SMAAEdgeFBO._Handle )
+    GLUtil::ResizeFBO(_SMAAEdgeFBO, RenderWidth(), RenderHeight());
+  if ( _SMAAWeightFBO._Handle )
+    GLUtil::ResizeFBO(_SMAAWeightFBO, RenderWidth(), RenderHeight());
+  if ( _AAOutputFBO._Handle )
+    GLUtil::ResizeFBO(_AAOutputFBO, RenderWidth(), RenderHeight());
+  if ( _TAAHistoryFBO[0]._Handle )
+    GLUtil::ResizeFBO(_TAAHistoryFBO[0], RenderWidth(), RenderHeight());
+  if ( _TAAHistoryFBO[1]._Handle )
+    GLUtil::ResizeFBO(_TAAHistoryFBO[1], RenderWidth(), RenderHeight());
 
   return 0;
 }
@@ -1433,7 +1612,7 @@ int DeferredRenderer::RecompileShaders()
   _BRDFLUTShader.reset(brdfLutProg);
 
   // Optional post-process/composite (reuse existing postprocess if desired)
-  ShaderSource postFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Postprocess.glsl"));
+  ShaderSource postFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_PostProcess.glsl"));
   ShaderProgram* postProg = ShaderProgram::LoadShaders(defaultVert, postFrag);
   if (!postProg)
     return 1;
@@ -1465,6 +1644,36 @@ int DeferredRenderer::RecompileShaders()
   if ( !transparentProg )
     return 1;
   _TransparentShader.reset(transparentProg);
+
+  ShaderSource fxaaFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_FXAA.glsl"));
+  ShaderProgram* fxaaProg = ShaderProgram::LoadShaders(defaultVert, fxaaFrag);
+  if ( !fxaaProg )
+    return 1;
+  _FXAAShader.reset(fxaaProg);
+
+  ShaderSource smaaEdgeFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_SMAAEdge.glsl"));
+  ShaderProgram* smaaEdgeProg = ShaderProgram::LoadShaders(defaultVert, smaaEdgeFrag);
+  if ( !smaaEdgeProg )
+    return 1;
+  _SMAAEdgeShader.reset(smaaEdgeProg);
+
+  ShaderSource smaaWeightFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_SMAAWeights.glsl"));
+  ShaderProgram* smaaWeightProg = ShaderProgram::LoadShaders(defaultVert, smaaWeightFrag);
+  if ( !smaaWeightProg )
+    return 1;
+  _SMAAWeightShader.reset(smaaWeightProg);
+
+  ShaderSource smaaResolveFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_SMAAResolve.glsl"));
+  ShaderProgram* smaaResolveProg = ShaderProgram::LoadShaders(defaultVert, smaaResolveFrag);
+  if ( !smaaResolveProg )
+    return 1;
+  _SMAAResolveShader.reset(smaaResolveProg);
+
+  ShaderSource taaFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_TAA.glsl"));
+  ShaderProgram* taaProg = ShaderProgram::LoadShaders(defaultVert, taaFrag);
+  if ( !taaProg )
+    return 1;
+  _TAAShader.reset(taaProg);
  
   return 0;
 }
@@ -1547,6 +1756,15 @@ int DeferredRenderer::UpdateUniforms()
   Mat4x4 P;
   _Scene.GetCamera().ComputePerspectiveProjMatrix(ratio, P, &top, &right);
 
+  if ( AntiAliasingMode::TAA == _Settings._AntiAliasing )
+  {
+    int jitterIndex = int(_FrameNum % 8u) + 1;
+    Vec2 jitter = Vec2(Halton(jitterIndex, 2), Halton(jitterIndex, 3)) - Vec2(0.5f);
+    float jitterScale = std::clamp(_Settings._TAAJitterScale, 0.f, 1.5f);
+    P[2][0] += jitter.x * jitterScale * 2.f / float(std::max(RenderWidth(), 1));
+    P[2][1] += jitter.y * jitterScale * 2.f / float(std::max(RenderHeight(), 1));
+  }
+
   Vec3 camPos = _Scene.GetCamera().GetPos();
   Vec3 camUp = _Scene.GetCamera().GetUp();
   Vec3 camRight = _Scene.GetCamera().GetRight();
@@ -1575,6 +1793,7 @@ int DeferredRenderer::UpdateUniforms()
     _GeometryShader -> SetUniform("u_CameraPos", camPos);
     _GeometryShader -> SetUniform("u_View", V);
     _GeometryShader -> SetUniform("u_Proj", P);
+    _GeometryShader -> SetUniform("u_PreviousViewProj", _PreviousViewProj);
     _GeometryShader -> SetUniform("u_TexIndTexture",    (int)DeferredTexSlot::_TexInd);
     _GeometryShader -> SetUniform("u_TexArrayTexture",  (int)DeferredTexSlot::_TexArray);
     _GeometryShader -> SetUniform("u_MaterialsTexture", (int)DeferredTexSlot::_Materials);
@@ -1862,7 +2081,8 @@ int DeferredRenderer::UpdateUniforms()
     _CompositeShader -> SetUniform("u_Gamma", _Settings._Gamma);
     _CompositeShader -> SetUniform("u_Exposure", _Settings._Exposure);
     _CompositeShader -> SetUniform("u_ToneMapping", ( _Settings._ToneMapping ? 1 : 0 ));
-    _CompositeShader -> SetUniform("u_FXAA", (_Settings._FXAA ?  1 : 0 ));
+    _CompositeShader -> SetUniform("u_FXAA", 0);
+    _CompositeShader -> SetUniform("u_DebugMode", _DebugMode);
 
     _CompositeShader -> StopUsing();
   }
@@ -2043,6 +2263,179 @@ int DeferredRenderer::UpdateSSRSource()
 }
 
 // ----------------------------------------------------------------------------
+// ResetTAAHistory
+// ----------------------------------------------------------------------------
+void DeferredRenderer::ResetTAAHistory()
+{
+  _TAAHistoryValid = false;
+  _TAAReadIndex = 0;
+  _TAAVisualizationIndex = 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdatePreviousTransforms
+// ----------------------------------------------------------------------------
+void DeferredRenderer::UpdatePreviousTransforms()
+{
+  const std::vector<MeshInstance> & instances = _Scene.GetMeshInstances();
+  _PreviousInstanceTransforms.resize(instances.size());
+  for ( size_t i = 0; i < instances.size(); ++i )
+    _PreviousInstanceTransforms[i] = instances[i]._Transform;
+
+  Mat4x4 view;
+  Mat4x4 projection;
+  _Scene.GetCamera().ComputeLookAtMatrix(view);
+  _Scene.GetCamera().ComputePerspectiveProjMatrix(RenderWidth() / float(std::max(RenderHeight(), 1)), projection);
+  if ( AntiAliasingMode::TAA == _Settings._AntiAliasing )
+  {
+    int jitterIndex = int(_FrameNum % 8u) + 1;
+    Vec2 jitter = Vec2(Halton(jitterIndex, 2), Halton(jitterIndex, 3)) - Vec2(0.5f);
+    float jitterScale = std::clamp(_Settings._TAAJitterScale, 0.f, 1.5f);
+    projection[2][0] += jitter.x * jitterScale * 2.f / float(std::max(RenderWidth(), 1));
+    projection[2][1] += jitter.y * jitterScale * 2.f / float(std::max(RenderHeight(), 1));
+  }
+  _PreviousViewProj = projection * view;
+  _PreviousCameraPos = _Scene.GetCamera().GetPos();
+  _PreviousCameraForward = _Scene.GetCamera().GetForward();
+  _HasPreviousCamera = true;
+}
+
+// ----------------------------------------------------------------------------
+// GetFinalColorTexture
+// ----------------------------------------------------------------------------
+GLTexture & DeferredRenderer::GetFinalColorTexture()
+{
+  if ( _DebugMode & (int)DeferredDebugModes::SMAAEdges )
+    return _SMAAEdgeTEX;
+  if ( _DebugMode & (int)DeferredDebugModes::SMAAWeights )
+    return _SMAAWeightTEX;
+  if ( _DebugMode & (int)DeferredDebugModes::MotionVectors )
+    return _GVelocityTEX;
+  if ( _DebugMode & (int)DeferredDebugModes::TAAHistory )
+    return _TAAHistoryTEX[_TAAVisualizationIndex];
+  if ( _DebugMode & (int)DeferredDebugModes::TAARejection )
+    return _TAADebugTEX[_TAAVisualizationIndex];
+
+  if ( AntiAliasingMode::None != _Settings._AntiAliasing )
+    return _AAOutputTEX;
+  return _LightingTEX;
+}
+
+// ----------------------------------------------------------------------------
+// RenderAntiAliasing
+// ----------------------------------------------------------------------------
+int DeferredRenderer::RenderAntiAliasing()
+{
+  const int aaDebugMask = (int)DeferredDebugModes::AAOutput | (int)DeferredDebugModes::SMAAEdges
+    | (int)DeferredDebugModes::SMAAWeights | (int)DeferredDebugModes::MotionVectors
+    | (int)DeferredDebugModes::TAAHistory | (int)DeferredDebugModes::TAARejection;
+  const bool debugView = ( _DebugMode & aaDebugMask ) != 0;
+  AntiAliasingMode mode = _Settings._AntiAliasing;
+  if ( _DebugMode & ( (int)DeferredDebugModes::SMAAEdges | (int)DeferredDebugModes::SMAAWeights ) )
+    mode = AntiAliasingMode::SMAA;
+  else if ( _DebugMode & ( (int)DeferredDebugModes::TAAHistory | (int)DeferredDebugModes::TAARejection ) )
+    mode = AntiAliasingMode::TAA;
+
+  const bool taaOutputDebug = ( _DebugMode & ( (int)DeferredDebugModes::AAOutput
+    | (int)DeferredDebugModes::TAAHistory | (int)DeferredDebugModes::TAARejection ) ) != 0;
+
+  if ( AntiAliasingMode::None == mode || debugView && ( mode != AntiAliasingMode::SMAA ) && ( mode != AntiAliasingMode::TAA ) )
+    return 0;
+  if ( 0 != EnsureAntiAliasingTargets(AntiAliasingMode::SMAA == mode, AntiAliasingMode::TAA == mode) )
+    return 1;
+
+  glDisable(GL_DEPTH_TEST);
+  glDepthMask(GL_FALSE);
+  glDisable(GL_CULL_FACE);
+  glDisable(GL_BLEND);
+
+  const Vec2 invResolution(1.f / float(std::max(RenderWidth(), 1)), 1.f / float(std::max(RenderHeight(), 1)));
+  if ( AntiAliasingMode::FXAA == mode )
+  {
+    glBindFramebuffer(GL_FRAMEBUFFER, _AAOutputFBO._Handle);
+    glViewport(0, 0, RenderWidth(), RenderHeight());
+    _FXAAShader -> Use();
+    _FXAAShader -> SetUniform("u_Input", (int)_LightingTEX._Slot);
+    _FXAAShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
+    GLUtil::ActivateTexture(_LightingTEX);
+    _Quad.Render(*_FXAAShader);
+    _FXAAShader -> StopUsing();
+  }
+  else if ( AntiAliasingMode::SMAA == mode )
+  {
+    glBindFramebuffer(GL_FRAMEBUFFER, _SMAAEdgeFBO._Handle);
+    glViewport(0, 0, RenderWidth(), RenderHeight());
+    _SMAAEdgeShader -> Use();
+    _SMAAEdgeShader -> SetUniform("u_Input", (int)_LightingTEX._Slot);
+    _SMAAEdgeShader -> SetUniform("u_InvResolution", invResolution.x, invResolution.y);
+    GLUtil::ActivateTexture(_LightingTEX);
+    _Quad.Render(*_SMAAEdgeShader);
+    _SMAAEdgeShader -> StopUsing();
+
+    glBindFramebuffer(GL_FRAMEBUFFER, _SMAAWeightFBO._Handle);
+    _SMAAWeightShader -> Use();
+    _SMAAWeightShader -> SetUniform("u_Edges", (int)_SMAAEdgeTEX._Slot);
+    _SMAAWeightShader -> SetUniform("u_InvResolution", invResolution.x, invResolution.y);
+    GLUtil::ActivateTexture(_SMAAEdgeTEX);
+    _Quad.Render(*_SMAAWeightShader);
+    _SMAAWeightShader -> StopUsing();
+
+    glBindFramebuffer(GL_FRAMEBUFFER, _AAOutputFBO._Handle);
+    _SMAAResolveShader -> Use();
+    _SMAAResolveShader -> SetUniform("u_Input", (int)_LightingTEX._Slot);
+    _SMAAResolveShader -> SetUniform("u_Weights", (int)_SMAAWeightTEX._Slot);
+    _SMAAResolveShader -> SetUniform("u_InvResolution", invResolution.x, invResolution.y);
+    GLUtil::ActivateTexture(_LightingTEX);
+    GLUtil::ActivateTexture(_SMAAWeightTEX);
+    _Quad.Render(*_SMAAResolveShader);
+    _SMAAResolveShader -> StopUsing();
+  }
+  else if ( AntiAliasingMode::TAA == mode && ( !debugView || taaOutputDebug ) )
+  {
+    int writeIndex = 1 - _TAAReadIndex;
+    glBindFramebuffer(GL_FRAMEBUFFER, _TAAHistoryFBO[writeIndex]._Handle);
+    glViewport(0, 0, RenderWidth(), RenderHeight());
+    _TAAShader -> Use();
+    _TAAShader -> SetUniform("u_CurrentColor", (int)_LightingTEX._Slot);
+    _TAAShader -> SetUniform("u_CurrentDepth", (int)_GDepthTEX._Slot);
+    _TAAShader -> SetUniform("u_CurrentNormal", (int)_GNormalTEX._Slot);
+    _TAAShader -> SetUniform("u_Velocity", (int)_GVelocityTEX._Slot);
+    _TAAShader -> SetUniform("u_HistoryColor", (int)_TAAHistoryTEX[_TAAReadIndex]._Slot);
+    _TAAShader -> SetUniform("u_HistoryDepth", (int)_TAAHistoryDepthTEX[_TAAReadIndex]._Slot);
+    _TAAShader -> SetUniform("u_HistoryNormal", (int)_TAAHistoryNormalTEX[_TAAReadIndex]._Slot);
+    _TAAShader -> SetUniform("u_HistoryValid", _TAAHistoryValid ? 1 : 0);
+    _TAAShader -> SetUniform("u_HistoryWeight", std::clamp(_Settings._TAAHistoryWeight, 0.f, .98f));
+    _TAAShader -> SetUniform("u_DepthThreshold", std::clamp(_Settings._TAADepthThreshold, .0001f, .25f));
+    _TAAShader -> SetUniform("u_NormalThreshold", std::clamp(_Settings._TAANormalThreshold, 0.f, 1.f));
+    _TAAShader -> SetUniform("u_InvResolution", invResolution.x, invResolution.y);
+    GLUtil::ActivateTexture(_LightingTEX);
+    GLUtil::ActivateTexture(_GDepthTEX);
+    GLUtil::ActivateTexture(_GNormalTEX);
+    GLUtil::ActivateTexture(_GVelocityTEX);
+    GLUtil::ActivateTexture(_TAAHistoryTEX[_TAAReadIndex]);
+    GLUtil::ActivateTexture(_TAAHistoryDepthTEX[_TAAReadIndex]);
+    GLUtil::ActivateTexture(_TAAHistoryNormalTEX[_TAAReadIndex]);
+    _Quad.Render(*_TAAShader);
+    _TAAShader -> StopUsing();
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, _TAAHistoryFBO[writeIndex]._Handle);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, _AAOutputFBO._Handle);
+    glDrawBuffer(GL_COLOR_ATTACHMENT0);
+    glBlitFramebuffer(0, 0, RenderWidth(), RenderHeight(), 0, 0, RenderWidth(), RenderHeight(), GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    _TAAVisualizationIndex = writeIndex;
+    if ( !debugView )
+    {
+      _TAAReadIndex = writeIndex;
+      _TAAHistoryValid = true;
+    }
+  }
+
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // RenderTransparent
 // ----------------------------------------------------------------------------
 int DeferredRenderer::RenderTransparent()
@@ -2059,7 +2452,8 @@ int DeferredRenderer::RenderTransparent()
   Mat4x4 view;
   _Scene.GetCamera().ComputeLookAtMatrix(view);
 
-  glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
+  const bool temporalOutput = ( AntiAliasingMode::TAA == _Settings._AntiAliasing );
+  glBindFramebuffer(GL_FRAMEBUFFER, temporalOutput ? _AAOutputFBO._Handle : _LightingFBO._Handle);
   glViewport(0, 0, RenderWidth(), RenderHeight());
 
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, _GDepthTEX._Handle, 0);
@@ -2168,6 +2562,9 @@ int DeferredRenderer::RenderToTexture()
 
       // Per-instance uniforms expected by geometry shader
       _GeometryShader -> SetUniform("u_Model", inst._Transform);
+      const Mat4x4 & previousTransform = ( static_cast<size_t>(instID) < _PreviousInstanceTransforms.size() )
+        ? _PreviousInstanceTransforms[instID] : inst._Transform;
+      _GeometryShader -> SetUniform("u_PreviousModel", previousTransform);
       _GeometryShader -> SetUniform("u_MaterialID", inst._MaterialID);
 
       GLuint vao = _MeshVAOs[meshID];
@@ -2237,6 +2634,13 @@ int DeferredRenderer::RenderToTexture()
     EndTimer(TimingLighting);
   }
 
+  if ( AntiAliasingMode::TAA == _Settings._AntiAliasing )
+  {
+    BeginTimer(TimingTAA);
+    RenderAntiAliasing();
+    EndTimer(TimingTAA);
+  }
+
   BeginTimer(TimingTransparency);
   RenderTransparent();
   EndTimer(TimingTransparency);
@@ -2248,7 +2652,7 @@ int DeferredRenderer::RenderToTexture()
   { 
     BeginTimer(TimingWireframe);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
+    glBindFramebuffer(GL_FRAMEBUFFER, ( AntiAliasingMode::TAA == _Settings._AntiAliasing ) ? _AAOutputFBO._Handle : _LightingFBO._Handle);
     glViewport(0, 0, RenderWidth(), RenderHeight());
 
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, _GDepthTEX._Handle, 0);
@@ -2311,6 +2715,16 @@ int DeferredRenderer::RenderToTexture()
     EndTimer(TimingSSRSourceCopy);
   }
 
+  const bool aaPassEnabled = ( AntiAliasingMode::TAA != _Settings._AntiAliasing ) && ( ( AntiAliasingMode::None != _Settings._AntiAliasing )
+    || ( _DebugMode & ( (int)DeferredDebugModes::SMAAEdges | (int)DeferredDebugModes::SMAAWeights
+      | (int)DeferredDebugModes::TAAHistory | (int)DeferredDebugModes::TAARejection ) ) );
+  if ( aaPassEnabled )
+  {
+    BeginTimer(TimingSMAA);
+    RenderAntiAliasing();
+    EndTimer(TimingSMAA);
+  }
+
   return 0;
 }
 
@@ -2331,7 +2745,9 @@ int DeferredRenderer::RenderToScreen()
 
     _CompositeShader -> Use();
 
-    this -> BindRenderToScreenTextures();
+    GLTexture & finalTexture = GetFinalColorTexture();
+    _CompositeShader -> SetUniform("u_ScreenTexture", (int)finalTexture._Slot);
+    GLUtil::ActivateTexture(finalTexture);
 
     _Quad.Render(*_CompositeShader);
 
@@ -2350,7 +2766,8 @@ int DeferredRenderer::RenderToScreen()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::ReadbackFinalColor( RenderImage & oImage )
 {
-  if ( !_LightingTEX._Handle || ( RenderWidth() <= 0 ) || ( RenderHeight() <= 0 ) )
+  GLTexture & finalTexture = GetFinalColorTexture();
+  if ( !finalTexture._Handle || ( RenderWidth() <= 0 ) || ( RenderHeight() <= 0 ) )
     return 1;
 
   oImage._Width = RenderWidth();
@@ -2358,7 +2775,7 @@ int DeferredRenderer::ReadbackFinalColor( RenderImage & oImage )
   oImage._Pixels.resize((size_t)oImage._Width * (size_t)oImage._Height * 4u);
 
   while ( GL_NO_ERROR != glGetError() ) {}
-  glBindTexture(GL_TEXTURE_2D, _LightingTEX._Handle);
+  glBindTexture(GL_TEXTURE_2D, finalTexture._Handle);
   glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, oImage._Pixels.data());
   glBindTexture(GL_TEXTURE_2D, 0);
   FlipImageVertically(oImage);

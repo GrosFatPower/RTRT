@@ -60,6 +60,8 @@ struct RenderTestCase
   bool            _SoftwareSIMD = false;
   bool            _SoftwareFallback = false;
   bool            _Transparency = true;
+  AntiAliasingMode _AntiAliasing = AntiAliasingMode::None;
+  float           _TAAHistoryWeight = .95f;
 
   void ApplySettings( RenderSettings & ioSettings ) const;
   bool ApplyScene( Scene & ioScene ) const;

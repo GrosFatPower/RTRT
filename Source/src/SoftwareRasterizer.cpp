@@ -845,7 +845,7 @@ int SoftwareRasterizer::RecompileShaders()
     return 1;
   _RenderToTextureShader.reset(newShader);
 
-  fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_Postprocess.glsl"));
+  fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_PostProcess.glsl"));
   newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if (!newShader)
     return 1;

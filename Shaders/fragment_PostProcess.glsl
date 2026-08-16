@@ -25,7 +25,10 @@ void main()
   vec3 color = pixelValue.xyz;
   float alpha = pixelValue.w;
 
-  if ( 0 != u_ToneMapping )
+  if ( ( u_DebugMode & 0x8000 ) != 0 )
+    color = vec3(0.5) + vec3(color.r, color.g, 0.0) * 4.0;
+
+  if ( ( 0 != u_ToneMapping ) && ( 0 == ( u_DebugMode & ( 0x1000 | 0x2000 | 0x4000 | 0x8000 | 0x10000 | 0x20000 ) ) ) )
   {
     color = ReinhardToneMapping_Luminance( color );
     color = GammaCorrection( color );

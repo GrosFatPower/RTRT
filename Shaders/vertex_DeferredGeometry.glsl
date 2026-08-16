@@ -7,8 +7,10 @@ layout(location = 2) in vec2 a_UV;
 
 // Per-instance uniforms (set from C++)
 uniform mat4 u_Model;
+uniform mat4 u_PreviousModel;
 uniform mat4 u_View;
 uniform mat4 u_Proj;
+uniform mat4 u_PreviousViewProj;
 uniform int  u_MaterialID;
 
 // Outputs to fragment shader
@@ -16,6 +18,7 @@ out vec3 fragWorldPos;
 out vec3 fragNormal;
 out vec2 fragUV;
 flat out int v_MaterialID;
+noperspective out vec2 v_Velocity;
 
 void main()
 {
@@ -31,5 +34,9 @@ void main()
   v_MaterialID = u_MaterialID; // forwarded as flat int
 
   // Clip-space position
-  gl_Position = u_Proj * u_View * worldPos;
+  vec4 currentClip = u_Proj * u_View * worldPos;
+  vec4 previousClip = u_PreviousViewProj * u_PreviousModel * vec4(a_Position, 1.0);
+  // Velocity is in screen UV units, so it must not receive perspective interpolation.
+  v_Velocity = ( currentClip.xy / currentClip.w - previousClip.xy / previousClip.w ) * 0.5;
+  gl_Position = currentClip;
 }

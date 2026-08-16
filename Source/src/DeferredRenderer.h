@@ -40,6 +40,14 @@ struct DeferredTexSlot
   static constexpr TextureSlot _SSR           = 14; // Reuses the SSAO noise slot outside the SSAO pass.
   static constexpr TextureSlot _SSRSource     = 5;  // Reuses the lighting slot outside the lighting/composite passes.
   static constexpr TextureSlot _BRDFLUT       = 15;
+  static constexpr TextureSlot _GVelocity     = 16;
+  static constexpr TextureSlot _SMAAEdges     = 17;
+  static constexpr TextureSlot _SMAAWeights   = 18;
+  static constexpr TextureSlot _AAOutput      = 19;
+  static constexpr TextureSlot _TAAHistory    = 20;
+  static constexpr TextureSlot _TAAHistoryDepth = 21;
+  static constexpr TextureSlot _TAAHistoryNormal = 22;
+  static constexpr TextureSlot _TAADebug      = 23;
 };
 
 enum class DeferredDebugModes
@@ -56,7 +64,13 @@ enum class DeferredDebugModes
   DirectDiffuse  = 0x100,
   DirectSpecular = 0x200,
   Diagnostic     = 0x400,
-  Position       = 0x800
+  Position       = 0x800,
+  AAOutput       = 0x1000,
+  SMAAEdges      = 0x2000,
+  SMAAWeights    = 0x4000,
+  MotionVectors  = 0x8000,
+  TAAHistory     = 0x10000,
+  TAARejection   = 0x20000
 };
 
 class DeferredRenderer : public Renderer
@@ -95,6 +109,8 @@ protected:
   int InitializeSSAO();
   int InitializeSSR();
   int InitializeBRDFLUT();
+  int InitializeAntiAliasing();
+  int EnsureAntiAliasingTargets( bool iNeedSMAA, bool iNeedTAA );
   int InitializeStats();
   int UpdateStats();
 
@@ -113,6 +129,10 @@ protected:
   int RenderSSR();
   int RenderTransparent();
   int UpdateSSRSource();
+  int RenderAntiAliasing();
+  void ResetTAAHistory();
+  void UpdatePreviousTransforms();
+  GLTexture & GetFinalColorTexture();
 
   void BuildDeferredDrawLists();
   void SortTransparentInstances();
@@ -122,7 +142,7 @@ protected:
 
   void BeginTimer( int iTimerID );
   void EndTimer( int iTimerID );
-  double ReadTimer( int iTimerID );
+  bool ReadTimer( int iTimerID, int iQueryIndex, double & oTime );
   void SetTimingEnabled( int iTimerID, bool iEnabled );
 
   void ComputeSceneBounds( bool iResetShadowBounds = false );
@@ -149,11 +169,37 @@ protected:
   GLTexture     _GPositionTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GPosition, GL_RGBA16F, GL_RGBA, GL_FLOAT };
   GLTexture     _GMaterialTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GMaterial, GL_RGBA16F, GL_RGBA, GL_FLOAT };
   GLTexture     _GEmissionTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GEmission, GL_RGBA16F, GL_RGBA, GL_FLOAT };
+  GLTexture     _GVelocityTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GVelocity, GL_RG16F, GL_RG, GL_FLOAT };
   GLTexture     _GDepthTEX    = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GDepth, GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT };
 
   // Lighting target (single texture)
   GLFrameBuffer _LightingFBO;
   GLTexture     _LightingTEX  = { 0, GL_TEXTURE_2D, DeferredTexSlot::_Lighting, GL_RGBA32F, GL_RGBA, GL_FLOAT };
+
+  // Anti-aliasing targets. SMAA uses edge and weight intermediates; TAA ping-pongs history.
+  GLFrameBuffer _SMAAEdgeFBO;
+  GLFrameBuffer _SMAAWeightFBO;
+  GLFrameBuffer _AAOutputFBO;
+  GLFrameBuffer _TAAHistoryFBO[2];
+  GLTexture     _SMAAEdgeTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_SMAAEdges, GL_RG16F, GL_RG, GL_FLOAT };
+  GLTexture     _SMAAWeightTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_SMAAWeights, GL_RGBA16F, GL_RGBA, GL_FLOAT };
+  GLTexture     _AAOutputTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_AAOutput, GL_RGBA32F, GL_RGBA, GL_FLOAT };
+  GLTexture     _TAAHistoryTEX[2] = {
+    { 0, GL_TEXTURE_2D, DeferredTexSlot::_TAAHistory, GL_RGBA16F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, DeferredTexSlot::_TAAHistory, GL_RGBA16F, GL_RGBA, GL_FLOAT }
+  };
+  GLTexture     _TAAHistoryDepthTEX[2] = {
+    { 0, GL_TEXTURE_2D, DeferredTexSlot::_TAAHistoryDepth, GL_R16F, GL_RED, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, DeferredTexSlot::_TAAHistoryDepth, GL_R16F, GL_RED, GL_FLOAT }
+  };
+  GLTexture     _TAAHistoryNormalTEX[2] = {
+    { 0, GL_TEXTURE_2D, DeferredTexSlot::_TAAHistoryNormal, GL_RGBA16F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, DeferredTexSlot::_TAAHistoryNormal, GL_RGBA16F, GL_RGBA, GL_FLOAT }
+  };
+  GLTexture     _TAADebugTEX[2] = {
+    { 0, GL_TEXTURE_2D, DeferredTexSlot::_TAADebug, GL_RGBA16F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, DeferredTexSlot::_TAADebug, GL_RGBA16F, GL_RGBA, GL_FLOAT }
+  };
 
   // SSAO targets
   GLFrameBuffer _SSAOFBO;
@@ -195,9 +241,22 @@ protected:
   std::unique_ptr<ShaderProgram> _SSRShader;
   std::unique_ptr<ShaderProgram> _BRDFLUTShader;
   std::unique_ptr<ShaderProgram> _TransparentShader;
+  std::unique_ptr<ShaderProgram> _FXAAShader;
+  std::unique_ptr<ShaderProgram> _SMAAEdgeShader;
+  std::unique_ptr<ShaderProgram> _SMAAWeightShader;
+  std::unique_ptr<ShaderProgram> _SMAAResolveShader;
+  std::unique_ptr<ShaderProgram> _TAAShader;
 
   // Frame counters
   unsigned int _FrameNum = 1;
+  int _TAAReadIndex = 0;
+  int _TAAVisualizationIndex = 0;
+  bool _TAAHistoryValid = false;
+  Mat4x4 _PreviousViewProj = Mat4x4(1.f);
+  std::vector<Mat4x4> _PreviousInstanceTransforms;
+  Vec3 _PreviousCameraPos = Vec3(0.f);
+  Vec3 _PreviousCameraForward = Vec3(0.f, 0.f, -1.f);
+  bool _HasPreviousCamera = false;
 
   // GPU mesh resources (one entry per Scene::GetMeshes())
   std::vector<GLuint> _MeshVAOs;
@@ -248,13 +307,18 @@ protected:
     TimingWireframe,
     TimingSSRSourceCopy,
     TimingCompositeScreen,
+    TimingSMAA,
+    TimingTAA,
     TimingCount
   };
 
+  static constexpr int TimerQueryFrameCount = 4;
   std::array<double, TimingCount> _PassTimes = {};
   std::array<bool, TimingCount>   _PassEnabled = {};
-  std::array<bool, TimingCount>   _TimerWritten = {};
-  std::array<std::array<GLuint, 2>, TimingCount> _TimerIDs = {};
+  std::array<bool, TimingCount>   _TimerActive = {};
+  std::array<std::array<bool, TimerQueryFrameCount>, TimingCount> _TimerPending = {};
+  std::array<std::array<std::array<GLuint, 2>, TimerQueryFrameCount>, TimingCount> _TimerIDs = {};
+  int _TimerWriteIndex = 0;
 };
 
 } // namespace RTRT

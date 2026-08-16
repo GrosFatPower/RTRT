@@ -140,6 +140,21 @@ Supported optional test fields are `resolution`, `frames`, `thresholds`, `enviro
 
 `debug_mode` is a non-negative renderer debug-mode bit mask. Set `diagnostic_only` to `true` with a debug mode to save `actual.pfm` and `actual.png` without reading, comparing, or modifying a baseline. Deferred diagnostic captures render background pixels black so environment-map filtering cannot affect a pass comparison. The runner reports these cases as `CAPTURED`; use the same diagnostic manifest on two platforms and compare the generated artifacts when isolating a renderer difference.
 
+### Deferred anti-aliasing
+
+Deferred profile and test `settings` may select one anti-aliasing mode:
+
+```json
+"settings": {
+  "anti_aliasing": "taa",
+  "taa_history_weight": 0.90
+}
+```
+
+Accepted values are `none`, `fxaa`, `smaa`, and `taa`. `taa_history_weight` is optional and must be between `0.0` and `0.98`. TAA tests should render at least eight frames so the deterministic temporal history has warmed up before the final image is captured.
+
+The deferred diagnostic manifest contains captures for SMAA edges, SMAA blend weights, motion vectors, TAA history, and TAA rejection. Use these captures to inspect intermediate anti-aliasing data without creating or comparing a baseline.
+
 Use a separate manifest while experimenting, without editing the committed catalog:
 
 ```powershell

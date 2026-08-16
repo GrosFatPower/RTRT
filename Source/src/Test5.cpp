@@ -855,11 +855,34 @@ int Test5::DrawSettingsUI()
         if ( ImGui::Checkbox( "Transparency", &_Settings._Transparency ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
+        static const char * ANTI_ALIASING_MODES[] = { "None", "FXAA", "SMAA", "TAA" };
+        int antiAliasingMode = static_cast<int>(_Settings._AntiAliasing);
+        if ( ImGui::Combo( "Anti-aliasing", &antiAliasingMode, ANTI_ALIASING_MODES, 4 ) )
+        {
+          _Settings._AntiAliasing = static_cast<AntiAliasingMode>(antiAliasingMode);
+          _Renderer -> Notify(DirtyState::RenderSettings);
+        }
+
+        if ( AntiAliasingMode::TAA == _Settings._AntiAliasing )
+        {
+          if ( ImGui::SliderFloat( "TAA history weight", &_Settings._TAAHistoryWeight, 0.f, .98f ) )
+            _Renderer -> Notify(DirtyState::RenderSettings);
+
+          if ( ImGui::SliderFloat( "TAA jitter scale", &_Settings._TAAJitterScale, 0.f, 1.5f ) )
+            _Renderer -> Notify(DirtyState::RenderSettings);
+
+          if ( ImGui::SliderFloat( "TAA depth threshold", &_Settings._TAADepthThreshold, .0001f, .25f, "%.4f", ImGuiSliderFlags_Logarithmic ) )
+            _Renderer -> Notify(DirtyState::RenderSettings);
+
+          if ( ImGui::SliderFloat( "TAA normal threshold", &_Settings._TAANormalThreshold, 0.f, 1.f ) )
+            _Renderer -> Notify(DirtyState::RenderSettings);
+        }
+
       }
     }
 
-    if ( ImGui::Checkbox( "FXAA", &_Settings._FXAA ) )
-    {}
+    if ( RendererType::OpenGLRasterizer != _RendererType )
+      ImGui::Checkbox( "FXAA", &_Settings._FXAA );
 
     if ( ImGui::Checkbox( "Tone mapping", &_Settings._ToneMapping ) )
       _Renderer -> Notify(DirtyState::RenderSettings);
@@ -884,10 +907,13 @@ int Test5::DrawSettingsUI()
       g_DebugMode = 0;
 
       static const char * COLORorDEPTHorNORMALS[] = { "Color", "Depth", "Normals" };
-      static const char * COLORorDEPTHorNORMALSorSHADOWSorSSAO[] = { "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params", "SSR", "Direct diffuse", "Direct specular" };
+      static const char * COLORorDEPTHorNORMALSorSHADOWSorSSAO[] = {
+        "Color", "Depth", "Normals", "Shadows", "SSAO", "Specular IBL", "Material Params", "SSR", "Direct diffuse", "Direct specular",
+        "Anti-aliasing output", "SMAA edges", "SMAA blend weights", "Motion vectors", "TAA history", "TAA rejection"
+      };
 
       static int bufferChoice = 0;
-      int maxBufferChoice = ( RendererType::OpenGLRasterizer == _RendererType ) ? ( 10 ) : ( 3 );
+      int maxBufferChoice = ( RendererType::OpenGLRasterizer == _RendererType ) ? ( 16 ) : ( 3 );
       if ( ( RendererType::SoftwareRasterizer == _RendererType ) && ( bufferChoice > 2 ) )
         bufferChoice = 0;
 
@@ -934,6 +960,18 @@ int Test5::DrawSettingsUI()
           g_DebugMode |= (int)DeferredDebugModes::DirectDiffuse;
         else if ( 9 == bufferChoice )
           g_DebugMode |= (int)DeferredDebugModes::DirectSpecular;
+        else if ( 10 == bufferChoice )
+          g_DebugMode |= (int)DeferredDebugModes::AAOutput;
+        else if ( 11 == bufferChoice )
+          g_DebugMode |= (int)DeferredDebugModes::SMAAEdges;
+        else if ( 12 == bufferChoice )
+          g_DebugMode |= (int)DeferredDebugModes::SMAAWeights;
+        else if ( 13 == bufferChoice )
+          g_DebugMode |= (int)DeferredDebugModes::MotionVectors;
+        else if ( 14 == bufferChoice )
+          g_DebugMode |= (int)DeferredDebugModes::TAAHistory;
+        else if ( 15 == bufferChoice )
+          g_DebugMode |= (int)DeferredDebugModes::TAARejection;
 
         if ( showWires )
           g_DebugMode |= (int)DeferredDebugModes::Wires;
