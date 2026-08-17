@@ -31,7 +31,11 @@ enum class TexType
   UVs,
   VertInd,
   TexInd,
-  TexArray,
+  TexArray0,
+  TexArray1,
+  TexArray2,
+  TexArray3,
+  TexArray4,
   MeshBBox,
   MeshIdRange,
   Materials,
@@ -143,7 +147,7 @@ private:
   GLuint                     _VtxUVTextureID                  = 0;
   GLuint                     _VtxIndTextureID                 = 0;
   GLuint                     _TexIndTextureID                 = 0;
-  GLuint                     _TexArrayTextureID               = 0;
+  GLuint                     _TexArrayTextureID[S_TextureBucketCount] = {};
   GLuint                     _MeshBBoxTextureID               = 0;
   GLuint                     _MeshIdRangeTextureID            = 0;
   GLuint                     _MaterialsTextureID              = 0;

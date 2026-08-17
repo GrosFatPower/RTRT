@@ -30,6 +30,8 @@ namespace RTRT
 PathTracer::PathTracer( Scene & iScene, RenderSettings & iSettings )
 : Renderer(iScene, iSettings)
 {
+  for ( int i = 0; i < S_TextureBucketCount; ++i )
+    _TexArrayTEX[i] = { 0, GL_TEXTURE_2D_ARRAY, PathTracerTexSlot::_TexArray0 + static_cast<TextureSlot>(i), GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE };
   UpdateRenderResolution();
 }
 
@@ -411,7 +413,8 @@ int PathTracer::UpdatePathTraceUniforms()
     _PathTraceShader -> SetUniform("u_VtxUVTexture",                  (int)PathTracerTexSlot::_UVs);
     _PathTraceShader -> SetUniform("u_VtxIndTexture",                 (int)PathTracerTexSlot::_VertInd);
     _PathTraceShader -> SetUniform("u_TexIndTexture",                 (int)PathTracerTexSlot::_TexInd);
-    _PathTraceShader -> SetUniform("u_TexArrayTexture",               (int)PathTracerTexSlot::_TexArray);
+    for ( int i = 0; i < S_TextureBucketCount; ++i )
+      _PathTraceShader -> SetUniform("u_TexArrayTexture" + std::to_string(i), (int)( PathTracerTexSlot::_TexArray0 + i ));
     _PathTraceShader -> SetUniform("u_MeshBBoxTexture",               (int)PathTracerTexSlot::_MeshBBox);
     _PathTraceShader -> SetUniform("u_MeshIDRangeTexture",            (int)PathTracerTexSlot::_MeshIdRange);
     _PathTraceShader -> SetUniform("u_MaterialsTexture",              (int)PathTracerTexSlot::_Materials);
@@ -460,7 +463,8 @@ int PathTracer::BindPathTraceTextures()
   GLUtil::ActivateTexture(_BLASPackedNormalsTBO._Tex);
   GLUtil::ActivateTexture(_BLASPackedUVsTBO._Tex);
 
-  GLUtil::ActivateTexture(_TexArrayTEX);
+  for ( const GLTexture & texture : _TexArrayTEX )
+    GLUtil::ActivateTexture(texture);
 
   GLUtil::ActivateTexture(_MaterialsTEX);
   GLUtil::ActivateTexture(_TLASTransformsIDTEX);
@@ -1003,7 +1007,8 @@ int PathTracer::UnloadScene( bool iDeleteOutputTextures )
   GLUtil::DeleteTBO(_BLASPackedNormalsTBO);
   GLUtil::DeleteTBO(_BLASPackedUVsTBO);
 
-  GLUtil::DeleteTEX(_TexArrayTEX);
+  for ( GLTexture & texture : _TexArrayTEX )
+    GLUtil::DeleteTEX(texture);
   GLUtil::DeleteTEX(_MaterialsTEX);
   GLUtil::DeleteTEX(_TLASTransformsIDTEX);
 
@@ -1053,23 +1058,34 @@ int PathTracer::ReloadScene()
     
     GLUtil::InitializeTBO(_VtxIndTBO, sizeof(Vec3i) * _Scene.GetIndices().size(), &_Scene.GetIndices()[0], GL_RGB32I);
     
-    if ( _Scene.GetTextureArrayIDs().size() )
+    const std::vector<TextureArrayMapping> & textureMappings = _Scene.GetTextureArrayMappings();
+    const std::array<CompiledTextureBucket, S_TextureBucketCount> & textureBuckets = _Scene.GetCompiledTextureBuckets();
+    if ( textureMappings.size() )
     {
-      GLUtil::InitializeTBO(_TexIndTBO, sizeof(int) * _Scene.GetTextureArrayIDs().size(), &_Scene.GetTextureArrayIDs()[0], GL_R32I);
+      GLUtil::InitializeTBO(_TexIndTBO, sizeof(TextureArrayMapping) * textureMappings.size(), textureMappings.data(), GL_RGBA32I);
 
-      GLTextureDesc texArrayDesc;
-      texArrayDesc._Target         = _TexArrayTEX._Target;
-      texArrayDesc._Slot           = _TexArrayTEX._Slot;
-      texArrayDesc._Width          = _Settings._TextureSize.x;
-      texArrayDesc._Height         = _Settings._TextureSize.y;
-      texArrayDesc._Depth          = _Scene.GetNbCompiledTex();
-      texArrayDesc._InternalFormat = _TexArrayTEX._InternalFormat;
-      texArrayDesc._DataFormat     = _TexArrayTEX._DataFormat;
-      texArrayDesc._DataType       = _TexArrayTEX._DataType;
-      texArrayDesc._Data           = &_Scene.GetTextureArray()[0];
-      texArrayDesc._MinFilter      = GL_LINEAR;
-      texArrayDesc._MagFilter      = GL_LINEAR;
-      GLUtil::CreateTexture(texArrayDesc, _TexArrayTEX);
+      for ( int i = 0; i < S_TextureBucketCount; ++i )
+      {
+        const CompiledTextureBucket & bucket = textureBuckets[i];
+        if ( bucket._LayerCount <= 0 )
+          continue;
+
+        GLTexture & texture = _TexArrayTEX[i];
+        GLTextureDesc texArrayDesc;
+        texArrayDesc._Target         = texture._Target;
+        texArrayDesc._Slot           = texture._Slot;
+        texArrayDesc._Width          = bucket._Size;
+        texArrayDesc._Height         = bucket._Size;
+        texArrayDesc._Depth          = bucket._LayerCount;
+        texArrayDesc._InternalFormat = texture._InternalFormat;
+        texArrayDesc._DataFormat     = texture._DataFormat;
+        texArrayDesc._DataType       = texture._DataType;
+        texArrayDesc._Data           = bucket._Pixels.data();
+        texArrayDesc._MinFilter      = GL_LINEAR;
+        texArrayDesc._MagFilter      = GL_LINEAR;
+        texArrayDesc._GenerateMipMap = false;
+        GLUtil::CreateTexture(texArrayDesc, texture);
+      }
     }
 
     GLUtil::InitializeTBO(_MeshBBoxTBO, sizeof(Vec3) * _Scene.GetMeshBBoxes().size(), &_Scene.GetMeshBBoxes()[0], GL_RGB32F);

@@ -3,6 +3,7 @@
 
 #include "Renderer.h"
 #include "RenderSettings.h"
+#include "Scene.h"
 #include "QuadMesh.h"
 #include "GLUtil.h"
 #include "ShaderProgram.h"
@@ -29,17 +30,17 @@ struct DeferredTexSlot
   static constexpr TextureSlot _GEmission     = 5; // Reuses the lighting slot while the lighting target is not sampled.
   static constexpr TextureSlot _Lighting      = 5;
   static constexpr TextureSlot _TexInd        = 6;
-  static constexpr TextureSlot _TexArray      = 7;
-  static constexpr TextureSlot _Materials     = 8;
-  static constexpr TextureSlot _EnvMap        = 9;
-  static constexpr TextureSlot _ShadowCubeMap = 10;
-  static constexpr TextureSlot _Shadow2DMap   = 11;
-  static constexpr TextureSlot _SSAO          = 12;
-  static constexpr TextureSlot _SSAOBlur      = 13;
-  static constexpr TextureSlot _SSAONoise     = 14;
-  static constexpr TextureSlot _SSR           = 14; // Reuses the SSAO noise slot outside the SSAO pass.
+  static constexpr TextureSlot _TexArray0     = 7;
+  static constexpr TextureSlot _Materials     = 12;
+  static constexpr TextureSlot _EnvMap        = 13;
+  static constexpr TextureSlot _ShadowCubeMap = 14;
+  static constexpr TextureSlot _Shadow2DMap   = 15;
+  static constexpr TextureSlot _SSAO          = 16;
+  static constexpr TextureSlot _SSAOBlur      = 17;
+  static constexpr TextureSlot _SSAONoise     = 18;
+  static constexpr TextureSlot _SSR           = 18; // Reuses the SSAO noise slot outside the SSAO pass.
   static constexpr TextureSlot _SSRSource     = 5;  // Reuses the lighting slot outside the lighting/composite passes.
-  static constexpr TextureSlot _BRDFLUT       = 15;
+  static constexpr TextureSlot _BRDFLUT       = 19;
 };
 
 enum class DeferredDebugModes
@@ -179,7 +180,7 @@ protected:
 
   // Scene data
   GLTextureBuffer _TexIndTBO     = { 0, { 0, GL_TEXTURE_BUFFER, DeferredTexSlot::_TexInd } };
-  GLTexture       _TexArrayTEX   = { 0, GL_TEXTURE_2D_ARRAY, DeferredTexSlot::_TexArray, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE };
+  GLTexture       _TexArrayTEX[S_TextureBucketCount];
   GLTexture       _MaterialsTEX  = { 0, GL_TEXTURE_2D, DeferredTexSlot::_Materials, GL_RGBA32F, GL_RGBA, GL_FLOAT };
   GLTexture       _EnvMapTEX     = { 0, GL_TEXTURE_2D, DeferredTexSlot::_EnvMap, GL_RGB32F,  GL_RGB,  GL_FLOAT };
 

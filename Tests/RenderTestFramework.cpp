@@ -407,6 +407,40 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
   PrintSkipped("simd_loaded_scene_data");
 #endif
 
+  if ( !RunUnitTest("texture_bucket_catalog", []() {
+    std::vector<unsigned char> smallPixels(256 * 128 * 4, 64);
+    std::vector<unsigned char> widePixels(1024 * 850 * 4, 128);
+    std::vector<unsigned char> oversizedPixels(2048 * 4, 192);
+    std::vector<unsigned char> unsupportedPixels(16 * 16 * 3, 255);
+
+    Scene scene;
+    int smallID = scene.AddTexture("unit_small", smallPixels.data(), 256, 128, 4);
+    int wideID = scene.AddTexture("unit_wide", widePixels.data(), 1024, 850, 4);
+    int oversizedID = scene.AddTexture("unit_oversized", oversizedPixels.data(), 2048, 1, 4);
+    scene.AddTexture("unit_unsupported", unsupportedPixels.data(), 16, 16, 3);
+
+    Material material;
+    material._BaseColorTexId = static_cast<float>(smallID);
+    material._NormalMapTexID = static_cast<float>(wideID);
+    material._EmissionMapTexID = static_cast<float>(oversizedID);
+    scene.AddMaterial(material, "unit_bucket_material");
+    scene.CompileMeshData(Vec2i(1024), true, false);
+
+    const std::vector<TextureArrayMapping> & mappings = scene.GetTextureArrayMappings();
+    const std::array<CompiledTextureBucket, S_TextureBucketCount> & buckets = scene.GetCompiledTextureBuckets();
+    if ( ( mappings.size() != 4u )
+      || ( mappings[smallID]._BucketID != 0 ) || ( mappings[smallID]._ContentWidth != 256 ) || ( mappings[smallID]._ContentHeight != 128 )
+      || ( mappings[wideID]._BucketID != 2 ) || ( mappings[wideID]._ContentWidth != 1024 ) || ( mappings[wideID]._ContentHeight != 850 )
+      || ( mappings[oversizedID]._BucketID != 2 ) || ( mappings[oversizedID]._ContentWidth != 1024 ) || ( mappings[oversizedID]._ContentHeight != 1 )
+      || ( mappings[3]._BucketID != -1 ) || ( buckets[0]._LayerCount != 1 ) || ( buckets[2]._LayerCount != 2 ) )
+    {
+      std::cerr << "Unit test failed: texture bucket catalog." << std::endl;
+      return false;
+    }
+    return true;
+  }) )
+    return 1;
+
   RenderImage image;
   image._Width = 2;
   image._Height = 1;

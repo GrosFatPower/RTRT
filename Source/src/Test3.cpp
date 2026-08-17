@@ -249,7 +249,7 @@ void Test3::ClearSceneData()
   glDeleteTextures(1, &_VtxUVTextureID);
   glDeleteTextures(1, &_VtxIndTextureID);
   glDeleteTextures(1, &_TexIndTextureID);
-  glDeleteTextures(1, &_TexArrayTextureID);
+  glDeleteTextures(S_TextureBucketCount, _TexArrayTextureID);
   glDeleteTextures(1, &_MeshBBoxTextureID);
   glDeleteTextures(1, &_MeshIdRangeTextureID);
   glDeleteTextures(1, &_MaterialsTextureID);
@@ -594,7 +594,8 @@ int Test3::UpdateUniforms()
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxUVTexture"),                  (int)TexType::UVs);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxIndTexture"),                 (int)TexType::VertInd);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexIndTexture"),                 (int)TexType::TexInd);
-      glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexArrayTexture"),               (int)TexType::TexArray);
+      for ( int i = 0; i < S_TextureBucketCount; ++i )
+        glUniform1i(glGetUniformLocation(RTTProgramID, ( "u_TexArrayTexture" + std::to_string(i) ).c_str()), (int)TexType::TexArray0 + i);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshBBoxTexture"),               (int)TexType::MeshBBox);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshIDRangeTexture"),            (int)TexType::MeshIdRange);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_MaterialsTexture"),              (int)TexType::Materials);
@@ -1428,20 +1429,28 @@ int Test3::InitializeScene()
     glBindTexture(GL_TEXTURE_BUFFER, _VtxIndTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32I, _VtxIndBufferID);
 
-    if ( _Scene.GetTextureArrayIDs().size() )
+    const std::vector<TextureArrayMapping> & textureMappings = _Scene.GetTextureArrayMappings();
+    const std::array<CompiledTextureBucket, S_TextureBucketCount> & textureBuckets = _Scene.GetCompiledTextureBuckets();
+    if ( textureMappings.size() )
     {
       glGenBuffers(1, &_TexIndBufferID);
       glBindBuffer(GL_TEXTURE_BUFFER, _TexIndBufferID);
-      glBufferData(GL_TEXTURE_BUFFER, sizeof(int) * _Scene.GetTextureArrayIDs().size(), &_Scene.GetTextureArrayIDs()[0], GL_STATIC_DRAW);
+      glBufferData(GL_TEXTURE_BUFFER, sizeof(TextureArrayMapping) * textureMappings.size(), textureMappings.data(), GL_STATIC_DRAW);
       glGenTextures(1, &_TexIndTextureID);
       glBindTexture(GL_TEXTURE_BUFFER, _TexIndTextureID);
-      glTexBuffer(GL_TEXTURE_BUFFER, GL_R32I, _TexIndBufferID);
+      glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32I, _TexIndBufferID);
 
-      glGenTextures(1, &_TexArrayTextureID);
-      glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTextureID);
-      glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, _Settings._TextureSize.x, _Settings._TextureSize.y, _Scene.GetNbCompiledTex(), 0, GL_RGBA, GL_UNSIGNED_BYTE, &_Scene.GetTextureArray()[0]);
-      glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      for ( int i = 0; i < S_TextureBucketCount; ++i )
+      {
+        const CompiledTextureBucket & bucket = textureBuckets[i];
+        if ( bucket._LayerCount <= 0 )
+          continue;
+        glGenTextures(1, &_TexArrayTextureID[i]);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTextureID[i]);
+        glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, bucket._Size, bucket._Size, bucket._LayerCount, 0, GL_RGBA, GL_UNSIGNED_BYTE, bucket._Pixels.data());
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      }
       glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     }
 
@@ -1726,8 +1735,11 @@ void Test3::RenderToTexture()
   glBindTexture(GL_TEXTURE_BUFFER, _VtxIndTextureID);
   glActiveTexture(TEX_UNIT(TexType::TexInd));
   glBindTexture(GL_TEXTURE_BUFFER, _TexIndTextureID);
-  glActiveTexture(TEX_UNIT(TexType::TexArray));
-  glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTextureID);
+  for ( int i = 0; i < S_TextureBucketCount; ++i )
+  {
+    glActiveTexture(TEX_UNIT(TexType::TexArray0) + i);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTextureID[i]);
+  }
   glActiveTexture(TEX_UNIT(TexType::MeshBBox));
   glBindTexture(GL_TEXTURE_BUFFER, _MeshBBoxTextureID);
   glActiveTexture(TEX_UNIT(TexType::MeshIdRange));

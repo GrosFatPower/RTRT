@@ -3,6 +3,7 @@
 
 #include "Renderer.h"
 #include "RenderSettings.h"
+#include "Scene.h"
 #include "QuadMesh.h"
 #include "GLUtil.h"
 
@@ -31,23 +32,23 @@ struct PathTracerTexSlot
   static const TextureSlot _UVs                     = 11;
   static const TextureSlot _VertInd                 = 12;
   static const TextureSlot _TexInd                  = 13;
-  static const TextureSlot _TexArray                = 14;
-  static const TextureSlot _MeshBBox                = 15;
-  static const TextureSlot _MeshIdRange             = 16;
-  static const TextureSlot _Materials               = 17;
-  static const TextureSlot _TLASNodes               = 18;
-  static const TextureSlot _TLASTransformsID        = 19;
-  static const TextureSlot _TLASMeshMatID           = 20;
-  static const TextureSlot _BLASNodes               = 21;
-  static const TextureSlot _BLASNodesRange          = 22;
-  static const TextureSlot _BLASPackedIndices       = 23;
-  static const TextureSlot _BLASPackedIndicesRange  = 24;
-  static const TextureSlot _BLASPackedVertices      = 25;
-  static const TextureSlot _BLASPackedNormals       = 26;
-  static const TextureSlot _BLASPackedUVs           = 27;
-  static const TextureSlot _EnvMap                  = 28;
-  static const TextureSlot _EnvMapCDF               = 29;
-  static const TextureSlot _Temporary               = 31;
+  static const TextureSlot _TexArray0               = 14;
+  static const TextureSlot _MeshBBox                = 19;
+  static const TextureSlot _MeshIdRange             = 20;
+  static const TextureSlot _Materials               = 21;
+  static const TextureSlot _TLASNodes               = 22;
+  static const TextureSlot _TLASTransformsID        = 23;
+  static const TextureSlot _TLASMeshMatID           = 24;
+  static const TextureSlot _BLASNodes               = 25;
+  static const TextureSlot _BLASNodesRange          = 26;
+  static const TextureSlot _BLASPackedIndices       = 27;
+  static const TextureSlot _BLASPackedIndicesRange  = 28;
+  static const TextureSlot _BLASPackedVertices      = 29;
+  static const TextureSlot _BLASPackedNormals       = 30;
+  static const TextureSlot _BLASPackedUVs           = 31;
+  static const TextureSlot _EnvMap                  = 32;
+  static const TextureSlot _EnvMapCDF               = 33;
+  static const TextureSlot _Temporary               = 35;
 };
 
 class PathTracer : public Renderer
@@ -177,7 +178,7 @@ protected:
     { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulatePos,     GL_RGBA32F, GL_RGBA, GL_FLOAT }
   };
   GLTexture _DenoisedTEX         = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Denoised,         GL_RGBA32F, GL_RGBA, GL_FLOAT };
-  GLTexture _TexArrayTEX         = { 0, GL_TEXTURE_2D_ARRAY, PathTracerTexSlot::_TexArray,   GL_RGBA8,   GL_RGBA, GL_UNSIGNED_BYTE };
+  GLTexture _TexArrayTEX[S_TextureBucketCount];
   GLTexture _MaterialsTEX        = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Materials,        GL_RGBA32F, GL_RGBA, GL_FLOAT };
   GLTexture _TLASTransformsIDTEX = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_TLASTransformsID, GL_RGBA32F, GL_RGBA, GL_FLOAT };
   GLTexture _EnvMapTEX           = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_EnvMap,           GL_RGB32F,  GL_RGB,  GL_FLOAT };

@@ -27,7 +27,7 @@ struct RenderSettings
   Vec2i        _TileResolution        = { -1, -1 };
   Vec3         _BackgroundColor       = { 0.f, 0.f, 0.f };
   Vec3         _UniformLightCol       = { .3f, .3f, .3f };
-  Vec2i        _TextureSize           = { 2048, 2048 };
+  Vec2i        _TextureSize           = { 4096, 4096 };
   bool         _ShowLights            = false;                  // PathTracer
   bool         _EnableBackGround      = true;
   bool         _EnableSkybox          = true;

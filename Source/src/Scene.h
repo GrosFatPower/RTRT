@@ -13,6 +13,7 @@
 #include <vector>
 #include <map>
 #include <memory>
+#include <array>
 
 namespace RTRT
 {
@@ -20,6 +21,25 @@ namespace RTRT
 class Texture;
 class Mesh;
 struct Material;
+
+static constexpr int S_TextureBucketCount = 5;
+
+struct CompiledTextureBucket
+{
+  int                        _Size = 0;
+  std::vector<unsigned char> _Pixels;
+  int                        _LayerCount = 0;
+};
+
+struct TextureArrayMapping
+{
+  int _BucketID = -1;
+  int _LayerID = -1;
+  int _ContentWidth = 0;
+  int _ContentHeight = 0;
+};
+
+static_assert(sizeof(TextureArrayMapping) == 4 * sizeof(int), "Texture array mapping must match the GLSL ivec4 layout");
 
 class Scene
 {
@@ -84,8 +104,8 @@ public:
   const std::vector<Vec3>          & GetNormals()                const { return _Normals;                 }
   const std::vector<Vec3>          & GetUVMatID()                const { return _UVMatID;                 }
   const std::vector<Vec3i>         & GetIndices()                const { return _Indices;                 }
-  const std::vector<int>           & GetTextureArrayIDs()        const { return _TextureArrayIDs;         }
-  const std::vector<unsigned char> & GetTextureArray()           const { return _TextureArray;            }
+  const std::array<CompiledTextureBucket, S_TextureBucketCount> & GetCompiledTextureBuckets() const { return _CompiledTextureBuckets; }
+  const std::vector<TextureArrayMapping> & GetTextureArrayMappings() const { return _TextureArrayMappings; }
   const std::vector<Vec3>          & GetMeshBBoxes()             const { return _MeshBBoxes;              }
   const std::vector<int>           & GetMeshIdxRange()           const { return _MeshIdxRange;            }
   const std::vector<GpuBvh::Node>  & GetTLASNode()               const { return _TLAS._Nodes;             }
@@ -121,8 +141,8 @@ private:
   std::vector<Vec3>              _UVMatID;
   std::vector<Vec3i>             _Indices;
   int                            _NbCompiledTex = 0;
-  std::vector<int>               _TextureArrayIDs;
-  std::vector<unsigned char>     _TextureArray;
+  std::array<CompiledTextureBucket, S_TextureBucketCount> _CompiledTextureBuckets;
+  std::vector<TextureArrayMapping> _TextureArrayMappings;
   std::vector<Vec3>              _MeshBBoxes;
   std::vector<int>               _MeshIdxRange;
 

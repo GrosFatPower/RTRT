@@ -96,10 +96,10 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
 
   if ( baseColorTexID >= 0 )
   {
-    int texArrayID = texelFetch(u_TexIndTexture, baseColorTexID).x;
-    if ( texArrayID >= 0 )
+    ivec4 texMapping = GetMaterialTextureMapping(baseColorTexID);
+    if ( texMapping.x >= 0 )
     {
-      vec4 texColor = texture( u_TexArrayTexture, vec3( ioClosestHit._UV, float( texArrayID ) ) );
+      vec4 texColor = SampleMaterialTexture(texMapping, ioClosestHit._UV);
       oMat._Albedo *= texColor.rgb;
       oMat._Opacity *= texColor.a;
     }
@@ -107,10 +107,10 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
 
   if ( normalMapTexID >= 0 )
   {
-    int texArrayID = texelFetch(u_TexIndTexture, normalMapTexID).x;
-    if ( texArrayID >= 0 )
+    ivec4 texMapping = GetMaterialTextureMapping(normalMapTexID);
+    if ( texMapping.x >= 0 )
     {  
-      vec3 texNormal = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).xyz;
+      vec3 texNormal = SampleMaterialTexture(texMapping, ioClosestHit._UV).xyz;
       texNormal = normalize(texNormal * 2.0 - 1.0);
       ioClosestHit._Normal = normalize(ioClosestHit._Tangent * texNormal.x + ioClosestHit._Bitangent * texNormal.y + ioClosestHit._Normal * texNormal.z);
     }
@@ -118,10 +118,10 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
 
   if ( metallicRoughnessTexID >= 0 )
   {
-    int texArrayID = texelFetch(u_TexIndTexture, metallicRoughnessTexID).x;
-    if ( texArrayID >= 0 )
+    ivec4 texMapping = GetMaterialTextureMapping(metallicRoughnessTexID);
+    if ( texMapping.x >= 0 )
     {  
-      vec2 metalRoughness = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).bg;
+      vec2 metalRoughness = SampleMaterialTexture(texMapping, ioClosestHit._UV).bg;
       oMat._Metallic = metalRoughness.x;
       //oMat._Roughness = metalRoughness.y;
       oMat._Roughness = max(metalRoughness.y * metalRoughness.y, EPSILON);
@@ -130,9 +130,9 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
 
   if ( emissionMapTexID >= 0 )
   {
-    int texArrayID = texelFetch(u_TexIndTexture, emissionMapTexID).x;
-    if ( texArrayID >= 0 )
-      oMat._Emission = texture(u_TexArrayTexture, vec3(ioClosestHit._UV, float(texArrayID))).rgb;
+    ivec4 texMapping = GetMaterialTextureMapping(emissionMapTexID);
+    if ( texMapping.x >= 0 )
+      oMat._Emission = SampleMaterialTexture(texMapping, ioClosestHit._UV).rgb;
   }
 
   float aspect = sqrt(1.f - oMat._Anisotropic * .9f);
@@ -161,10 +161,10 @@ float LoadOpacityValues( in int iMatID, in vec2 iUV, out int oAlphaMode, out flo
   int baseColorTexID = int(Params7.x);
   if ( baseColorTexID >= 0 )
   {
-    int texArrayID = texelFetch(u_TexIndTexture, baseColorTexID).x;
-    if ( texArrayID >= 0 )
+    ivec4 texMapping = GetMaterialTextureMapping(baseColorTexID);
+    if ( texMapping.x >= 0 )
     {
-      vec4 texColor = texture( u_TexArrayTexture, vec3( iUV, float( texArrayID ) ) );
+      vec4 texColor = SampleMaterialTexture(texMapping, iUV);
       opacity *= texColor.a;
     }
   }

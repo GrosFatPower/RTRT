@@ -6,20 +6,68 @@
 #include <iostream>
 #include <memory>
 #include <chrono>
+#include <array>
+#include <algorithm>
 
 namespace RTRT
 {
 
+static constexpr std::array<int, S_TextureBucketCount> S_TextureBucketSizes = { 256, 512, 1024, 2048, 4096 };
+
+// ----------------------------------------------------------------------------
+// Helper functions
+// ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// Texture buckets : GetTextureBucketID
+// ----------------------------------------------------------------------------
+static int GetTextureBucketID( int iSize )
+{
+  for ( int i = 0; i < S_TextureBucketCount; ++i )
+  {
+    if ( iSize <= S_TextureBucketSizes[i] )
+      return i;
+  }
+  return S_TextureBucketCount - 1;
+}
+
+// ----------------------------------------------------------------------------
+// Texture buckets : GetTextureBucketLimit
+// ----------------------------------------------------------------------------
+static int GetTextureBucketLimit( Vec2i iTextureArraySize )
+{
+  int requestedSize = std::max(iTextureArraySize.x, iTextureArraySize.y);
+  if ( requestedSize <= 0 )
+    return S_TextureBucketSizes[S_TextureBucketCount - 1];
+
+  int bucketID = 0;
+  for ( int i = 0; i < S_TextureBucketCount; ++i )
+  {
+    if ( S_TextureBucketSizes[i] <= requestedSize )
+      bucketID = i;
+  }
+  return S_TextureBucketSizes[bucketID];
+}
+
+// ----------------------------------------------------------------------------
+// CTOR
+// ----------------------------------------------------------------------------
 Scene::Scene()
   : _Camera({0.f,0.f,-1.f}, {0.f,0.f,0.f}, 80.f)
 {
 }
 
+// ----------------------------------------------------------------------------
+// DTOR
+// ----------------------------------------------------------------------------
 Scene::~Scene()
 {
   Clear();
 }
 
+// ----------------------------------------------------------------------------
+// Clear
+// ----------------------------------------------------------------------------
 void Scene::Clear()
 {
   for (auto & texture : _Textures)
@@ -50,8 +98,8 @@ void Scene::Clear()
   _UVMatID.clear();
   _Indices.clear();
   _NbCompiledTex = 0;
-  _TextureArrayIDs.clear();
-  _TextureArray.clear();
+  _CompiledTextureBuckets = {};
+  _TextureArrayMappings.clear();
   _MeshBBoxes.clear();
   _MeshIdxRange.clear();
 
@@ -67,6 +115,9 @@ void Scene::Clear()
   _BLASPackedUVs.clear();
 }
 
+// ----------------------------------------------------------------------------
+// AddTexture
+// ----------------------------------------------------------------------------
 int Scene::AddTexture( const std::string & iFilename, int iNbComponents, TexFormat iFormat )
 {
   int texID = -1;
@@ -104,6 +155,9 @@ int Scene::AddTexture( const std::string & iFilename, int iNbComponents, TexForm
   return texID;
 }
 
+// ----------------------------------------------------------------------------
+// AddTexture
+// ----------------------------------------------------------------------------
 int Scene::AddTexture( const std::string & iTexName, unsigned char * iTexData, int iWidth, int iHeight, int iNbComponents )
 {
   int texID = this -> FindTextureID(iTexName);
@@ -124,6 +178,9 @@ int Scene::AddTexture( const std::string & iTexName, unsigned char * iTexData, i
   return texID;
 }
 
+// ----------------------------------------------------------------------------
+// AddMesh
+// ----------------------------------------------------------------------------
 int Scene::AddMesh( Mesh * iMesh )
 {
   int meshID = -1;
@@ -147,7 +204,9 @@ int Scene::AddMesh( Mesh * iMesh )
   return meshID;
 }
 
-
+// ----------------------------------------------------------------------------
+// AddMesh
+// ----------------------------------------------------------------------------
 int Scene::AddMesh( const std::string & iFilename )
 {
   int meshID = -1;
@@ -185,6 +244,9 @@ int Scene::AddMesh( const std::string & iFilename )
   return meshID;
 }
 
+// ----------------------------------------------------------------------------
+// AddMaterial
+// ----------------------------------------------------------------------------
 int Scene::AddMaterial( Material & ioMaterial, const std::string & iName )
 {
   int matID = static_cast<int>(_Materials.size());
@@ -196,6 +258,9 @@ int Scene::AddMaterial( Material & ioMaterial, const std::string & iName )
   return matID;
 }
 
+// ----------------------------------------------------------------------------
+// AddMeshInstance
+// ----------------------------------------------------------------------------
 int Scene::AddMeshInstance( MeshInstance & iMeshInstance )
 {
   int instanceID = static_cast<int>(_MeshInstances.size());
@@ -203,6 +268,9 @@ int Scene::AddMeshInstance( MeshInstance & iMeshInstance )
   return instanceID;
 }
 
+// ----------------------------------------------------------------------------
+// FindMaterialID
+// ----------------------------------------------------------------------------
 int Scene::FindMaterialID( const std::string & iMateralName ) const
 {
   int matID = -1;
@@ -214,6 +282,9 @@ int Scene::FindMaterialID( const std::string & iMateralName ) const
   return matID;
 }
 
+// ----------------------------------------------------------------------------
+// FindMaterialName
+// ----------------------------------------------------------------------------
 std::string Scene::FindMaterialName( int iMaterialID ) const
 {
   for ( auto it = _MaterialIDs.begin(); it != _MaterialIDs.end(); ++it )
@@ -225,6 +296,9 @@ std::string Scene::FindMaterialName( int iMaterialID ) const
   return "";
 }
 
+// ----------------------------------------------------------------------------
+// FindTextureID
+// ----------------------------------------------------------------------------
 int Scene::FindTextureID( const std::string & iTextureName ) const
 {
   int texID = -1;
@@ -241,6 +315,9 @@ int Scene::FindTextureID( const std::string & iTextureName ) const
   return texID;
 }
 
+// ----------------------------------------------------------------------------
+// FindMeshID
+// ----------------------------------------------------------------------------
 int Scene::FindMeshID( const std::string& iMeshName ) const
 {
   int meshID = -1;
@@ -257,6 +334,9 @@ int Scene::FindMeshID( const std::string& iMeshName ) const
   return meshID;
 }
 
+// ----------------------------------------------------------------------------
+// FindPrimitiveName
+// ----------------------------------------------------------------------------
 std::string Scene::FindPrimitiveName( int iPrimitiveInstanceID ) const
 {
   for ( auto it = _PrimitiveNames.begin(); it != _PrimitiveNames.end(); ++it )
@@ -268,6 +348,9 @@ std::string Scene::FindPrimitiveName( int iPrimitiveInstanceID ) const
   return "";
 }
 
+// ----------------------------------------------------------------------------
+// AddPrimitive
+// ----------------------------------------------------------------------------
 int Scene::AddPrimitive( const Primitive & iPrimitive )
 {
   int PrimitiveID = static_cast<int>(_Primitives.size());
@@ -289,6 +372,9 @@ int Scene::AddPrimitive( const Primitive & iPrimitive )
   return -1;
 }
 
+// ----------------------------------------------------------------------------
+// AddPrimitiveInstance
+// ----------------------------------------------------------------------------
 int Scene::AddPrimitiveInstance( PrimitiveInstance & iPrimitiveInstance )
 {
   int instanceID = static_cast<int>(_PrimitiveInstances.size());
@@ -313,6 +399,9 @@ int Scene::AddPrimitiveInstance( PrimitiveInstance & iPrimitiveInstance )
   return instanceID;
 }
 
+// ----------------------------------------------------------------------------
+// AddPrimitiveInstance
+// ----------------------------------------------------------------------------
 int Scene::AddPrimitiveInstance( int iPrimitiveID, int iMaterialID, const Mat4x4 & iTransform )
 {
   std::string PrimitiveName;
@@ -326,16 +415,25 @@ int Scene::AddPrimitiveInstance( int iPrimitiveID, int iMaterialID, const Mat4x4
   return -1;
 }
 
+// ----------------------------------------------------------------------------
+// LoadEnvMap
+// ----------------------------------------------------------------------------
 bool Scene::LoadEnvMap( const std::string & iFilename )
 {
   return _EnvMap.Load(iFilename);
 }
 
+// ----------------------------------------------------------------------------
+// ResetEnvMap
+// ----------------------------------------------------------------------------
 void Scene::ResetEnvMap()
 {
   return _EnvMap.Reset();
 }
 
+// ----------------------------------------------------------------------------
+// RebuildTLASData
+// ----------------------------------------------------------------------------
 int Scene::RebuildTLASData()
 {
   _TLAS.Clear();
@@ -354,6 +452,9 @@ int Scene::RebuildTLASData()
   return 0;
 }
 
+// ----------------------------------------------------------------------------
+// CompileMeshData
+// ----------------------------------------------------------------------------
 void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, bool iBuildBVH )
 {
   auto startTime = std::chrono::system_clock::now();
@@ -364,8 +465,8 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
   _UVMatID.clear();
   _Indices.clear();
   _NbCompiledTex = 0;
-  _TextureArrayIDs.clear();
-  _TextureArray.clear();
+  _CompiledTextureBuckets = {};
+  _TextureArrayMappings.clear();
   _MeshBBoxes.clear();
   _MeshIdxRange.clear();
   _TLAS.Clear();
@@ -515,38 +616,81 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
 
     if ( MatTextures.size() )
     {
-      _TextureArrayIDs = std::vector<int>(_Textures.size(), -1);
+      const int maxBucketSize = GetTextureBucketLimit(iTextureArraySize);
+      _TextureArrayMappings.resize(_Textures.size());
+      for ( int i = 0; i < S_TextureBucketCount; ++i )
+        _CompiledTextureBuckets[i]._Size = S_TextureBucketSizes[i];
 
-      int textureUCSize = iTextureArraySize.x * iTextureArraySize.y * 4;
-      _TextureArray.resize(textureUCSize * MatTextures.size());
-
-      _NbCompiledTex = 0;
-      for ( int i = 0; i < MatTextures.size(); ++i )
+      for ( Texture * curTexture : MatTextures )
       {
-        Texture * curTexture = MatTextures[i];
-
         // 4 component-uchar only
         if ( 4 != curTexture -> GetNbComponents() )
           continue;
         unsigned char * texUCData = curTexture -> GetUCData();
         if ( !texUCData )
           continue;
-      
-        // Resize if necessary
-        if ( ( curTexture -> GetWidth() != iTextureArraySize.x ) || ( curTexture -> GetHeight() != iTextureArraySize.y ) )
+
+        const int sourceWidth = curTexture -> GetWidth();
+        const int sourceHeight = curTexture -> GetHeight();
+        const int sourceSize = std::max(sourceWidth, sourceHeight);
+        if ( ( sourceWidth <= 0 ) || ( sourceHeight <= 0 ) )
+          continue;
+
+        const int targetSize = std::min(sourceSize, maxBucketSize);
+        const int bucketID = GetTextureBucketID(targetSize);
+        CompiledTextureBucket & bucket = _CompiledTextureBuckets[bucketID];
+        const int bucketSize = bucket._Size;
+        const float resizeScale = std::min(1.f, float(bucketSize) / float(sourceSize));
+        const int contentWidth = std::max(1, int(std::round(float(sourceWidth) * resizeScale)));
+        const int contentHeight = std::max(1, int(std::round(float(sourceHeight) * resizeScale)));
+
+        std::vector<unsigned char> resizedPixels;
+        const unsigned char * sourcePixels = texUCData;
+        if ( ( contentWidth != sourceWidth ) || ( contentHeight != sourceHeight ) )
         {
-          unsigned char * resizedTex = new unsigned char[textureUCSize];
-          stbir_resize_uint8(texUCData, curTexture -> GetWidth(), curTexture -> GetHeight(), 0, resizedTex, iTextureArraySize.x, iTextureArraySize.y, 0, 4);
-          std::copy(resizedTex, resizedTex + textureUCSize, &_TextureArray[_NbCompiledTex * textureUCSize]);
-          delete[] resizedTex;
+          resizedPixels.resize(contentWidth * contentHeight * 4);
+          stbir_resize_uint8(texUCData, sourceWidth, sourceHeight, 0, resizedPixels.data(), contentWidth, contentHeight, 0, 4);
+          sourcePixels = resizedPixels.data();
         }
-        else
-            std::copy(texUCData, texUCData + textureUCSize, &_TextureArray[_NbCompiledTex * textureUCSize]);
 
         int texID = curTexture -> GetTexID();
-        _TextureArrayIDs[texID] = _NbCompiledTex;
+        if ( ( texID < 0 ) || ( texID >= static_cast<int>(_TextureArrayMappings.size()) ) )
+          continue;
+
+        const int layerSize = bucketSize * bucketSize * 4;
+        const int layerID = bucket._LayerCount++;
+        const size_t layerOffset = static_cast<size_t>(layerID) * layerSize;
+        bucket._Pixels.resize(layerOffset + layerSize, 0);
+        unsigned char * layerPixels = bucket._Pixels.data() + layerOffset;
+        for ( int y = 0; y < contentHeight; ++y )
+        {
+          unsigned char * dstRow = layerPixels + ( y * bucketSize * 4 );
+          const unsigned char * srcRow = sourcePixels + ( y * contentWidth * 4 );
+          std::copy(srcRow, srcRow + contentWidth * 4, dstRow);
+          for ( int x = contentWidth; x < bucketSize; ++x )
+            std::copy(dstRow + ( contentWidth - 1 ) * 4, dstRow + contentWidth * 4, dstRow + x * 4);
+        }
+        for ( int y = contentHeight; y < bucketSize; ++y )
+        {
+          unsigned char * dstRow = layerPixels + ( y * bucketSize * 4 );
+          const unsigned char * srcRow = layerPixels + ( contentHeight - 1 ) * bucketSize * 4;
+          std::copy(srcRow, srcRow + bucketSize * 4, dstRow);
+        }
+
+        _TextureArrayMappings[texID] = { bucketID, layerID, contentWidth, contentHeight };
         _NbCompiledTex++;
       }
+
+      size_t baseMemory = 0;
+      std::cout << "Scene : Texture buckets";
+      for ( const CompiledTextureBucket & bucket : _CompiledTextureBuckets )
+      {
+        if ( bucket._LayerCount <= 0 )
+          continue;
+        std::cout << " " << bucket._Size << "=" << bucket._LayerCount;
+        baseMemory += bucket._Pixels.size();
+      }
+      std::cout << " (" << _NbCompiledTex << " textures, " << ( baseMemory / ( 1024 * 1024 ) ) << " MiB base, " << ( baseMemory * 4 / 3 / ( 1024 * 1024 ) ) << " MiB with mips)" << std::endl;
     }
   }
 
