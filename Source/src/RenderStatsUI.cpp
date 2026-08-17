@@ -114,6 +114,34 @@ void DrawSceneStats( Scene * ioScene )
   ImGui::Text("Nb vertices           : %d", (int)ioScene -> GetVertices().size());
   ImGui::Text("Nb triangles          : %d", (int)ioScene -> GetIndices().size() / 3);
   ImGui::Text("Nb meshes instances   : %d", ioScene -> GetNbMeshInstances());
+
+  const std::array<CompiledTextureBucket, S_TextureBucketCount> & textureBuckets = ioScene -> GetCompiledTextureBuckets();
+  size_t baseMemory = 0;
+  int bucketCount = 0;
+  for ( const CompiledTextureBucket & bucket : textureBuckets )
+  {
+    if ( bucket._LayerCount <= 0 )
+      continue;
+    baseMemory += bucket._Pixels.size();
+    bucketCount++;
+  }
+
+  if ( bucketCount > 0 )
+  {
+    const float baseMemoryMiB = float(baseMemory) / float(1024 * 1024);
+    const float mipMemoryMiB = baseMemoryMiB * 4.f / 3.f;
+    ImGui::Separator();
+    ImGui::Text("Material texture buckets");
+    ImGui::Text("Compiled material maps : %d", ioScene -> GetNbCompiledTex());
+    for ( const CompiledTextureBucket & bucket : textureBuckets )
+    {
+      if ( bucket._LayerCount <= 0 )
+        continue;
+      const float bucketMemoryMiB = float(bucket._Pixels.size()) / float(1024 * 1024);
+      ImGui::Text("%4d x %4d : %3d layers, %7.1f MiB", bucket._Size, bucket._Size, bucket._LayerCount, bucketMemoryMiB);
+    }
+    ImGui::Text("Base / full mip chain : %.1f / %.1f MiB", baseMemoryMiB, mipMemoryMiB);
+  }
 }
 
 }
