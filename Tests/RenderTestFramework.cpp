@@ -407,7 +407,8 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
   PrintSkipped("simd_loaded_scene_data");
 #endif
 
-  if ( !RunUnitTest("texture_bucket_catalog", []() {
+  if ( !RunUnitTest("texture_bucket_catalog", [iQuiet]() {
+    ScopedOutputSilencer outputSilencer(iQuiet);
     std::vector<unsigned char> smallPixels(256 * 128 * 4, 64);
     std::vector<unsigned char> widePixels(1024 * 850 * 4, 128);
     std::vector<unsigned char> oversizedPixels(2048 * 4, 192);
