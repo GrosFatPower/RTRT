@@ -213,6 +213,8 @@ protected:
   double _DenoiseTime        = 0.;
   double _RenderToScreenTime = 0.;
 
+  bool _UseTextureBuckets = true;
+
   GLuint _PathTraceTimeId[2]      = { 0, 0 };
   GLuint _AccumulateTimeId[2]     = { 0, 0 };
   GLuint _DenoiseTimeId[2]        = { 0, 0 };

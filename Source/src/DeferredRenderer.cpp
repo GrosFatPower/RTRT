@@ -27,6 +27,21 @@
 namespace RTRT
 {
 
+static constexpr GLint S_DeferredNonTextureArraySamplers = 7;
+
+// ----------------------------------------------------------------------------
+// Texture arrays : ConfigureTextureBucketShader
+// ----------------------------------------------------------------------------
+static void ConfigureTextureBucketShader( ShaderSource & ioShaderSource, bool iUseTextureBuckets )
+{
+  if ( iUseTextureBuckets )
+    return;
+
+  const size_t versionEnd = ioShaderSource._Src.find('\n');
+  if ( versionEnd != std::string::npos )
+    ioShaderSource._Src.insert(versionEnd + 1, "#define USE_TEXTURE_BUCKETS 0\n");
+}
+
 static Vec3 S_WireColor = Vec3(1.f, 0.f, 0.f);
 static float S_WireWidth = 3.0f;
 // ----------------------------------------------------------------------------
@@ -68,6 +83,12 @@ struct IndexTripletHash
 DeferredRenderer::DeferredRenderer(Scene& iScene, RenderSettings& iSettings)
 : Renderer(iScene, iSettings)
 {
+  GLint maxFragmentSamplers = 0;
+  glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &maxFragmentSamplers);
+  _UseTextureBuckets = maxFragmentSamplers >= ( S_DeferredNonTextureArraySamplers + S_TextureBucketCount );
+  if ( !_UseTextureBuckets )
+    std::cout << "DeferredRenderer : " << maxFragmentSamplers << " fragment samplers available; using a single texture array compatibility path." << std::endl;
+
   for ( int i = 0; i < S_TextureBucketCount; ++i )
     _TexArrayTEX[i] = { 0, GL_TEXTURE_2D_ARRAY, DeferredTexSlot::_TexArray0 + static_cast<TextureSlot>(i), GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE };
 }
@@ -1094,7 +1115,7 @@ int DeferredRenderer::ReloadScene()
   UnloadScene();
 
   if ( ( _Settings._TextureSize.x > 0 ) && ( _Settings._TextureSize.y > 0 ) )
-    _Scene.CompileMeshData( _Settings._TextureSize, true, false );
+    _Scene.CompileMeshData( _Settings._TextureSize, true, false, _UseTextureBuckets );
 
   const std::vector<Mesh*> & meshes = _Scene.GetMeshes();
   const size_t meshCount = meshes.size();
@@ -1410,6 +1431,7 @@ int DeferredRenderer::RecompileShaders()
   // Geometry pass shader (standard vertex + fragment that writes G-buffer)
   ShaderSource geomVert = Shader::LoadShader(PathUtils::GetShaderPath("vertex_DeferredGeometry.glsl"));
   ShaderSource geomFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_DeferredGeometry.glsl"));
+  ConfigureTextureBucketShader(geomFrag, _UseTextureBuckets);
   ShaderProgram* geomProg = ShaderProgram::LoadShaders(geomVert, geomFrag);
   if (!geomProg)
     return 1;
@@ -1476,6 +1498,7 @@ int DeferredRenderer::RecompileShaders()
   _ShadowDirectionalShader.reset(shadowDirProg);
 
   ShaderSource transparentFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_DeferredTransparent.glsl"));
+  ConfigureTextureBucketShader(transparentFrag, _UseTextureBuckets);
   ShaderProgram* transparentProg = ShaderProgram::LoadShaders(geomVert, transparentFrag);
   if ( !transparentProg )
     return 1;
@@ -1525,8 +1548,9 @@ int DeferredRenderer::BindLightingTextures()
   GLUtil::ActivateTextures(_GBufferFBO); 
 
   GLUtil::ActivateTexture(_TexIndTBO._Tex);
-  for ( const GLTexture & texture : _TexArrayTEX )
-    GLUtil::ActivateTexture(texture);
+  const int textureArrayCount = _UseTextureBuckets ? S_TextureBucketCount : 1;
+  for ( int i = 0; i < textureArrayCount; ++i )
+    GLUtil::ActivateTexture(_TexArrayTEX[i]);
   GLUtil::ActivateTexture(_MaterialsTEX);
 
   GLUtil::ActivateTexture(_EnvMapTEX);
@@ -1592,8 +1616,11 @@ int DeferredRenderer::UpdateUniforms()
     _GeometryShader -> SetUniform("u_View", V);
     _GeometryShader -> SetUniform("u_Proj", P);
     _GeometryShader -> SetUniform("u_TexIndTexture",    (int)DeferredTexSlot::_TexInd);
-    for ( int i = 0; i < S_TextureBucketCount; ++i )
+    const int textureArrayCount = _UseTextureBuckets ? S_TextureBucketCount : 1;
+    for ( int i = 0; i < textureArrayCount; ++i )
       _GeometryShader -> SetUniform("u_TexArrayTexture" + std::to_string(i), (int)( DeferredTexSlot::_TexArray0 + i ));
+    if ( !_UseTextureBuckets )
+      _GeometryShader -> SetUniform("u_TextureArraySize", _Scene.GetCompiledTextureBuckets()[0]._Size);
     _GeometryShader -> SetUniform("u_MaterialsTexture", (int)DeferredTexSlot::_Materials);
     _GeometryShader -> StopUsing();
   }
@@ -1794,8 +1821,11 @@ int DeferredRenderer::UpdateUniforms()
     _TransparentShader -> SetUniform("u_View", V);
     _TransparentShader -> SetUniform("u_Proj", P);
     _TransparentShader -> SetUniform("u_TexIndTexture",    (int)DeferredTexSlot::_TexInd);
-    for ( int i = 0; i < S_TextureBucketCount; ++i )
+    const int textureArrayCount = _UseTextureBuckets ? S_TextureBucketCount : 1;
+    for ( int i = 0; i < textureArrayCount; ++i )
       _TransparentShader -> SetUniform("u_TexArrayTexture" + std::to_string(i), (int)( DeferredTexSlot::_TexArray0 + i ));
+    if ( !_UseTextureBuckets )
+      _TransparentShader -> SetUniform("u_TextureArraySize", _Scene.GetCompiledTextureBuckets()[0]._Size);
     _TransparentShader -> SetUniform("u_MaterialsTexture", (int)DeferredTexSlot::_Materials);
     _TransparentShader -> SetUniform("u_GDepth", (int)DeferredTexSlot::_GDepth);
 
@@ -2170,8 +2200,9 @@ int DeferredRenderer::RenderToTexture()
     _GeometryShader -> Use();
 
   GLUtil::ActivateTexture(_TexIndTBO._Tex);
-  for ( const GLTexture & texture : _TexArrayTEX )
-    GLUtil::ActivateTexture(texture);
+  const int textureArrayCount = _UseTextureBuckets ? S_TextureBucketCount : 1;
+  for ( int i = 0; i < textureArrayCount; ++i )
+    GLUtil::ActivateTexture(_TexArrayTEX[i]);
     GLUtil::ActivateTexture(_MaterialsTEX);
 
     const std::vector<MeshInstance> & instances = _Scene.GetMeshInstances();

@@ -455,7 +455,7 @@ int Scene::RebuildTLASData()
 // ----------------------------------------------------------------------------
 // CompileMeshData
 // ----------------------------------------------------------------------------
-void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, bool iBuildBVH )
+void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, bool iBuildBVH, bool iUseTextureBuckets )
 {
   auto startTime = std::chrono::system_clock::now();
 
@@ -618,8 +618,15 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
     {
       const int maxBucketSize = GetTextureBucketLimit(iTextureArraySize);
       _TextureArrayMappings.resize(_Textures.size());
-      for ( int i = 0; i < S_TextureBucketCount; ++i )
-        _CompiledTextureBuckets[i]._Size = S_TextureBucketSizes[i];
+      if ( iUseTextureBuckets )
+      {
+        for ( int i = 0; i < S_TextureBucketCount; ++i )
+          _CompiledTextureBuckets[i]._Size = S_TextureBucketSizes[i];
+      }
+      else
+      {
+        _CompiledTextureBuckets[0]._Size = maxBucketSize;
+      }
 
       for ( Texture * curTexture : MatTextures )
       {
@@ -637,7 +644,7 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
           continue;
 
         const int targetSize = std::min(sourceSize, maxBucketSize);
-        const int bucketID = GetTextureBucketID(targetSize);
+        const int bucketID = iUseTextureBuckets ? GetTextureBucketID(targetSize) : 0;
         CompiledTextureBucket & bucket = _CompiledTextureBuckets[bucketID];
         const int bucketSize = bucket._Size;
         const float resizeScale = std::min(1.f, float(bucketSize) / float(sourceSize));
@@ -682,7 +689,7 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
       }
 
       size_t baseMemory = 0;
-      std::cout << "Scene : Texture buckets";
+      std::cout << "Scene : " << ( iUseTextureBuckets ? "Texture buckets" : "Texture array" );
       for ( const CompiledTextureBucket & bucket : _CompiledTextureBuckets )
       {
         if ( bucket._LayerCount <= 0 )

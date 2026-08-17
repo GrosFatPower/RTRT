@@ -20,6 +20,21 @@ namespace fs = std::filesystem;
 namespace RTRT
 {
 
+static constexpr GLint S_PathTracerNonTextureArraySamplers = 14;
+
+// ----------------------------------------------------------------------------
+// Texture arrays : ConfigureTextureBucketShader
+// ----------------------------------------------------------------------------
+static void ConfigureTextureBucketShader( ShaderSource & ioShaderSource, bool iUseTextureBuckets )
+{
+  if ( iUseTextureBuckets )
+    return;
+
+  const size_t versionEnd = ioShaderSource._Src.find('\n');
+  if ( versionEnd != std::string::npos )
+    ioShaderSource._Src.insert(versionEnd + 1, "#define USE_TEXTURE_BUCKETS 0\n");
+}
+
 // ----------------------------------------------------------------------------
 // METHODS
 // ----------------------------------------------------------------------------
@@ -30,6 +45,12 @@ namespace RTRT
 PathTracer::PathTracer( Scene & iScene, RenderSettings & iSettings )
 : Renderer(iScene, iSettings)
 {
+  GLint maxFragmentSamplers = 0;
+  glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &maxFragmentSamplers);
+  _UseTextureBuckets = maxFragmentSamplers >= ( S_PathTracerNonTextureArraySamplers + S_TextureBucketCount );
+  if ( !_UseTextureBuckets )
+    std::cout << "PathTracer : " << maxFragmentSamplers << " fragment samplers available; using a single texture array compatibility path." << std::endl;
+
   for ( int i = 0; i < S_TextureBucketCount; ++i )
     _TexArrayTEX[i] = { 0, GL_TEXTURE_2D_ARRAY, PathTracerTexSlot::_TexArray0 + static_cast<TextureSlot>(i), GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE };
   UpdateRenderResolution();
@@ -413,8 +434,11 @@ int PathTracer::UpdatePathTraceUniforms()
     _PathTraceShader -> SetUniform("u_VtxUVTexture",                  (int)PathTracerTexSlot::_UVs);
     _PathTraceShader -> SetUniform("u_VtxIndTexture",                 (int)PathTracerTexSlot::_VertInd);
     _PathTraceShader -> SetUniform("u_TexIndTexture",                 (int)PathTracerTexSlot::_TexInd);
-    for ( int i = 0; i < S_TextureBucketCount; ++i )
+    const int textureArrayCount = _UseTextureBuckets ? S_TextureBucketCount : 1;
+    for ( int i = 0; i < textureArrayCount; ++i )
       _PathTraceShader -> SetUniform("u_TexArrayTexture" + std::to_string(i), (int)( PathTracerTexSlot::_TexArray0 + i ));
+    if ( !_UseTextureBuckets )
+      _PathTraceShader -> SetUniform("u_TextureArraySize", _Scene.GetCompiledTextureBuckets()[0]._Size);
     _PathTraceShader -> SetUniform("u_MeshBBoxTexture",               (int)PathTracerTexSlot::_MeshBBox);
     _PathTraceShader -> SetUniform("u_MeshIDRangeTexture",            (int)PathTracerTexSlot::_MeshIdRange);
     _PathTraceShader -> SetUniform("u_MaterialsTexture",              (int)PathTracerTexSlot::_Materials);
@@ -463,8 +487,9 @@ int PathTracer::BindPathTraceTextures()
   GLUtil::ActivateTexture(_BLASPackedNormalsTBO._Tex);
   GLUtil::ActivateTexture(_BLASPackedUVsTBO._Tex);
 
-  for ( const GLTexture & texture : _TexArrayTEX )
-    GLUtil::ActivateTexture(texture);
+  const int textureArrayCount = _UseTextureBuckets ? S_TextureBucketCount : 1;
+  for ( int i = 0; i < textureArrayCount; ++i )
+    GLUtil::ActivateTexture(_TexArrayTEX[i]);
 
   GLUtil::ActivateTexture(_MaterialsTEX);
   GLUtil::ActivateTexture(_TLASTransformsIDTEX);
@@ -947,6 +972,7 @@ int PathTracer::RecompileShaders()
 {
   ShaderSource vertexShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("vertex_Default.glsl"));
   ShaderSource fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_PathTracer.glsl"));
+  ConfigureTextureBucketShader(fragmentShaderSrc, _UseTextureBuckets);
 
   ShaderProgram * newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !newShader )
@@ -1039,7 +1065,7 @@ int PathTracer::ReloadScene()
   UnloadScene();
 
   if ( ( _Settings._TextureSize.x > 0 ) && ( _Settings._TextureSize.y > 0 ) )
-    _Scene.CompileMeshData( _Settings._TextureSize, true, true );
+    _Scene.CompileMeshData( _Settings._TextureSize, true, true, _UseTextureBuckets );
   else
     return 1;
 
@@ -1064,7 +1090,8 @@ int PathTracer::ReloadScene()
     {
       GLUtil::InitializeTBO(_TexIndTBO, sizeof(TextureArrayMapping) * textureMappings.size(), textureMappings.data(), GL_RGBA32I);
 
-      for ( int i = 0; i < S_TextureBucketCount; ++i )
+      const int textureArrayCount = _UseTextureBuckets ? S_TextureBucketCount : 1;
+      for ( int i = 0; i < textureArrayCount; ++i )
       {
         const CompiledTextureBucket & bucket = textureBuckets[i];
         if ( bucket._LayerCount <= 0 )

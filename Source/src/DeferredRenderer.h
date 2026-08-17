@@ -184,6 +184,8 @@ protected:
   GLTexture       _MaterialsTEX  = { 0, GL_TEXTURE_2D, DeferredTexSlot::_Materials, GL_RGBA32F, GL_RGBA, GL_FLOAT };
   GLTexture       _EnvMapTEX     = { 0, GL_TEXTURE_2D, DeferredTexSlot::_EnvMap, GL_RGB32F,  GL_RGB,  GL_FLOAT };
 
+  bool _UseTextureBuckets = true;
+
   // Shaders
   std::unique_ptr<ShaderProgram> _GeometryShader;
   std::unique_ptr<ShaderProgram> _LightingShader;

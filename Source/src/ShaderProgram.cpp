@@ -5,6 +5,7 @@
 
 #include "ShaderProgram.h"
 #include <stdexcept>
+#include <vector>
 
 #include "glm/gtc/type_ptr.hpp"
 
@@ -34,10 +35,9 @@ ShaderProgram::ShaderProgram(const std::vector<std::shared_ptr<Shader>> & iShade
     std::string msg("Error while linking program\n");
     GLint logSize = 0;
     glGetProgramiv(_ShaderProgramID, GL_INFO_LOG_LENGTH, &logSize);
-    char* info = new char[logSize + 1];
-    glGetShaderInfoLog(_ShaderProgramID, logSize, NULL, info);
-    msg += info;
-    delete[] info;
+    std::vector<char> info(logSize + 1, '\0');
+    glGetProgramInfoLog(_ShaderProgramID, logSize, NULL, info.data());
+    msg += info.data();
     glDeleteProgram(_ShaderProgramID);
     _ShaderProgramID = 0;
     printf("Error %s\n", msg.c_str());
