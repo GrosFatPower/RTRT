@@ -43,6 +43,34 @@ struct DeferredTexSlot
   static constexpr TextureSlot _BRDFLUT       = 19;
 };
 
+// Compact sampler bindings used while a particular deferred pass is active.
+// They intentionally differ from DeferredTexSlot so independent passes can
+// reuse low texture units without exceeding fragment sampler limits.
+struct DeferredMaterialPassTexSlot
+{
+  static constexpr TextureSlot _TextureIndices = 0;
+  static constexpr TextureSlot _TextureArray0  = 1;
+  static constexpr TextureSlot _Materials      = _TextureArray0 + S_TextureBucketCount;
+};
+
+struct DeferredLightingPassTexSlot
+{
+  static constexpr TextureSlot _SSAO          = 6;
+  static constexpr TextureSlot _SSR           = 7;
+  static constexpr TextureSlot _EnvMap        = 8;
+  static constexpr TextureSlot _BRDFLUT       = 9;
+  static constexpr TextureSlot _ShadowCubeMap = 10;
+  static constexpr TextureSlot _Shadow2DMap   = 11;
+};
+
+struct DeferredTransparentPassTexSlot
+{
+  static constexpr TextureSlot _EnvMap        = 7;
+  static constexpr TextureSlot _BRDFLUT       = 8;
+  static constexpr TextureSlot _ShadowCubeMap = 9;
+  static constexpr TextureSlot _Shadow2DMap   = 10;
+};
+
 enum class DeferredDebugModes
 {
   ColorBuffer    = 0x000,
@@ -104,7 +132,9 @@ protected:
   int BindGBufferTextures();
   int BindSSAOPassTextures();
   int BindSSRPassTextures();
+  int BindMaterialTextures();
   int BindLightingTextures();
+  int BindTransparentTextures();
   int BindRenderToScreenTextures();
 
   int UpdateUniforms();

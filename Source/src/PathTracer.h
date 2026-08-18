@@ -104,6 +104,7 @@ protected:
   int BindDenoiserTextures();
   int BindDenoiserImageTextures();
   int BindRenderToScreenTextures();
+  void CopyAccumulateBuffer( int iSourceIndex, int iDestinationIndex );
 
   int InitializeStats();
   int UpdateStats();
@@ -136,7 +137,7 @@ protected:
   GLFrameBuffer _RenderTargetFBO;
   GLFrameBuffer _RenderTargetLowResFBO;
   GLFrameBuffer _RenderTargetTileFBO;
-  GLFrameBuffer _AccumulateFBO;
+  GLFrameBuffer _AccumulateFBO[2];
   GLFrameBuffer _DenoiseFBO;
 
   // Texture buffers
@@ -170,12 +171,24 @@ protected:
     { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT },
     { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetPos,     GL_RGBA32F, GL_RGBA, GL_FLOAT }
   };
-  GLTexture _RenderTargetLowResTEX = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetLowRes, GL_RGBA32F, GL_RGBA, GL_FLOAT };
-  GLTexture _AccumulateTEX[3] =
+  GLTexture _RenderTargetLowResTEX[3] =
   {
-    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Accumulate,        GL_RGBA32F, GL_RGBA, GL_FLOAT },
-    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulateNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT },
-    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulatePos,     GL_RGBA32F, GL_RGBA, GL_FLOAT }
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetLowRes,  GL_RGBA32F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetPos,     GL_RGBA32F, GL_RGBA, GL_FLOAT }
+  };
+  GLTexture _AccumulateTEX[2][3] =
+  {
+    {
+      { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Accumulate,        GL_RGBA32F, GL_RGBA, GL_FLOAT },
+      { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulateNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT },
+      { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulatePos,     GL_RGBA32F, GL_RGBA, GL_FLOAT }
+    },
+    {
+      { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Accumulate,        GL_RGBA32F, GL_RGBA, GL_FLOAT },
+      { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulateNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT },
+      { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulatePos,     GL_RGBA32F, GL_RGBA, GL_FLOAT }
+    }
   };
   GLTexture _DenoisedTEX         = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Denoised,         GL_RGBA32F, GL_RGBA, GL_FLOAT };
   GLTexture _TexArrayTEX[S_TextureBucketCount];
@@ -197,6 +210,7 @@ protected:
   // Accumulate
   unsigned int _FrameNum          = 1;
   unsigned int _NbCompleteFrames  = 0;
+  int          _AccumulateReadIndex = 0;
   bool         _DenoisedThisFrame = false;
   bool         _PathTraceTimerWritten = false;
   bool         _AccumulateTimerWritten = false;

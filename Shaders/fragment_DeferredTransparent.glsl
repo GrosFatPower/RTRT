@@ -16,7 +16,6 @@ flat in int v_MaterialID;
 
 out vec4 fragColor;
 
-uniform sampler2D   u_GDepth;
 uniform sampler2D   u_EnvMap;
 uniform sampler2D   u_BRDFLUT;
 uniform vec2        u_EnvMapRes = vec2(1.0);

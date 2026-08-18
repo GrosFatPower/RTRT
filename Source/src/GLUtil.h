@@ -105,6 +105,21 @@ class GLUtil
 {
 public:
 
+// SelectTextureSlot
+static GLint SelectTextureSlot( TextureSlot iSlot )
+{
+  GLint previousTexture = GL_TEXTURE0;
+  glGetIntegerv(GL_ACTIVE_TEXTURE, &previousTexture);
+  glActiveTexture(GL_TEXTURE0 + iSlot);
+  return previousTexture;
+}
+
+// RestoreTextureSlot
+static void RestoreTextureSlot( GLint iPreviousTexture )
+{
+  glActiveTexture(static_cast<GLenum>(iPreviousTexture));
+}
+
 // DeleteTEX
 static void DeleteTEX( GLTexture & ioTEX )
 {
@@ -179,9 +194,11 @@ static void CreateTextureBuffer( const GLTextureBufferDesc & iDesc, GLTextureBuf
   if ( !ioTBO._Tex._Handle )
     glGenTextures(1, &ioTBO._Tex._Handle);
 
+  const GLint previousTexture = SelectTextureSlot(ioTBO._Tex._Slot);
   glBindTexture(GL_TEXTURE_BUFFER, ioTBO._Tex._Handle);
   glTexBuffer(GL_TEXTURE_BUFFER, iDesc._InternalFormat, ioTBO._Handle);
   glBindTexture(GL_TEXTURE_BUFFER, 0);
+  RestoreTextureSlot(previousTexture);
 }
 
 // InitializeTBO
@@ -215,6 +232,7 @@ static void UploadTexture( const GLTextureDesc & iDesc, GLTexture & ioTex )
   ioTex._DataFormat     = iDesc._DataFormat;
   ioTex._DataType       = iDesc._DataType;
 
+  const GLint previousTexture = SelectTextureSlot(ioTex._Slot);
   glBindTexture(ioTex._Target, ioTex._Handle);
 
   if ( ( GL_TEXTURE_2D_ARRAY == ioTex._Target ) || ( GL_TEXTURE_CUBE_MAP_ARRAY == ioTex._Target ) )
@@ -240,6 +258,7 @@ static void UploadTexture( const GLTextureDesc & iDesc, GLTexture & ioTex )
     glTexParameteri(ioTex._Target, GL_TEXTURE_MAX_LEVEL, 0);
 
   glBindTexture(ioTex._Target, 0);
+  RestoreTextureSlot(previousTexture);
 }
 
 // CreateTexture
@@ -254,6 +273,7 @@ static void CreateTexture( const GLTextureDesc & iDesc, GLTexture & ioTex )
 // ResizeTexture
 static void ResizeTexture( GLTexture & ioTex, GLsizei iWidth, GLsizei iHeight )
 {
+  const GLint previousTexture = SelectTextureSlot(ioTex._Slot);
   glBindTexture(ioTex._Target, ioTex._Handle);
 
   if ( GL_TEXTURE_CUBE_MAP == ioTex._Target )
@@ -265,6 +285,7 @@ static void ResizeTexture( GLTexture & ioTex, GLsizei iWidth, GLsizei iHeight )
     glTexImage2D(ioTex._Target, 0, ioTex._InternalFormat, iWidth, iHeight, 0, ioTex._DataFormat, ioTex._DataType, nullptr);
 
   glBindTexture(ioTex._Target, 0);
+  RestoreTextureSlot(previousTexture);
 }
 
 // UpdateTexture2D
@@ -273,9 +294,11 @@ static bool UpdateTexture2D( GLTexture & ioTex, GLsizei iWidth, GLsizei iHeight,
   if ( !ioTex._Handle || ( GL_TEXTURE_2D != ioTex._Target ) || ( iWidth <= 0 ) || ( iHeight <= 0 ) || !iData )
     return false;
 
+  const GLint previousTexture = SelectTextureSlot(ioTex._Slot);
   glBindTexture(GL_TEXTURE_2D, ioTex._Handle);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, iWidth, iHeight, ioTex._DataFormat, ioTex._DataType, iData);
   glBindTexture(GL_TEXTURE_2D, 0);
+  RestoreTextureSlot(previousTexture);
 
   return true;
 }
@@ -343,6 +366,13 @@ static void ActivateTexture( const GLTexture & iTex )
   glBindTexture(iTex._Target, iTex._Handle);
 }
 
+// ActivateTexture
+static void ActivateTexture( const GLTexture & iTex, TextureSlot iSlot )
+{
+  glActiveTexture(GL_TEXTURE0 + iSlot);
+  glBindTexture(iTex._Target, iTex._Handle);
+}
+
 // ActivateTextures
 static void ActivateTextures( const GLFrameBuffer & iFBO )
 {
@@ -399,18 +429,22 @@ static void EnableAnisotropyIfAvailable( const GLTexture & iTex, float iRequeste
     glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &maxAniso);
     GLfloat aniso = std::min<GLfloat>(iRequestedAniso, maxAniso);
 
+    const GLint previousTexture = SelectTextureSlot(iTex._Slot);
     glBindTexture(iTex._Target, iTex._Handle);
     glTexParameterf(iTex._Target, GL_TEXTURE_MAX_ANISOTROPY_EXT, aniso);
     glBindTexture(iTex._Target, 0);
+    RestoreTextureSlot(previousTexture);
   }
 }
 
 // SetMinFilter
 static void SetMinFilter( const GLTexture & iTex, GLint iTexMinFilter )
 {
+  const GLint previousTexture = SelectTextureSlot(iTex._Slot);
   glBindTexture(iTex._Target, iTex._Handle);
   glTexParameteri(iTex._Target, GL_TEXTURE_MIN_FILTER, iTexMinFilter);
   glBindTexture(iTex._Target, 0);
+  RestoreTextureSlot(previousTexture);
 }
 
 // UniformArrayElementName

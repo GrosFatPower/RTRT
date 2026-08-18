@@ -255,6 +255,30 @@
       "scene": "tungsten-material-testball.scene"
     },
     {
+      "name": "deferred_boy",
+      "profile": "deferred",
+      "scene": "boy.scene",
+      "resolution": [640, 480],
+      "camera": {
+        "position": [0.3, 0.11, 0.1],
+        "pivot": [0.0, 0.07, 0.0],
+        "fov": 80.0,
+        "near": 0.01
+      }
+    },
+    {
+      "name": "pathtracer_boy",
+      "profile": "pathtracer",
+      "scene": "boy.scene",
+      "resolution": [640, 480],
+      "camera": {
+        "position": [0.3, 0.11, 0.1],
+        "pivot": [0.0, 0.07, 0.0],
+        "fov": 80.0,
+        "near": 0.01
+      }
+    },
+    {
       "name": "deferred_cornell",
       "profile": "deferred",
       "scene": "cornell_box.scene",
