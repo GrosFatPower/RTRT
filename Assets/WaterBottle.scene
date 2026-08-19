@@ -1,0 +1,32 @@
+renderer
+{
+	resolution 850 720
+	windowresolution 850 720
+	maxdepth 2
+	tilewidth 256
+	tileheight 256
+}
+
+camera
+{
+	position -0.272900 0.082844 0.121503
+	lookat 0.0 0.0 0.0
+	fov 80
+	near 0.1
+}
+
+gltf
+{
+	file WaterBottle/WaterBottle.gltf
+}
+
+light
+{
+	type sphere
+	position -0.3 0.180 0.06
+	emission 1.0 1.0 1.0
+	intensity 30
+	radius 0.1
+	castshadow true
+	shadowradius 0.000
+}
