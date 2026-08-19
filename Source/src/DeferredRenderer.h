@@ -233,17 +233,17 @@ protected:
   unsigned int _FrameNum = 1;
 
   // GPU mesh resources (one entry per Scene::GetMeshes())
-  std::vector<GLuint> _MeshVAOs;
-  std::vector<GLuint> _MeshVBOs;
-  std::vector<GLuint> _MeshEBOs;
-  std::vector<int>    _MeshIndexCount;
+  std::vector<GLuint>                _MeshVAOs;
+  std::vector<GLuint>                _MeshVBOs;
+  std::vector<GLuint>                _MeshEBOs;
+  std::vector<int>                   _MeshIndexCount;
   std::vector<std::vector<uint32_t>> _TransparentMeshBaseIndices;
   std::vector<std::vector<Vec3>>     _TransparentMeshLocalTriCenters;
   std::vector<std::vector<uint32_t>> _TransparentMeshSortedIndices;
   std::vector<std::vector<int>>      _TransparentMeshSortedTriOrder;
   std::vector<std::vector<float>>    _TransparentMeshTriDepths;
-  std::vector<int>    _OpaqueMeshInstanceIDs;
-  std::vector<int>    _TransparentMeshInstanceIDs;
+  std::vector<int>                   _OpaqueMeshInstanceIDs;
+  std::vector<int>                   _TransparentMeshInstanceIDs;
 
   // Scene bounds
   AABB<Vec3> _SceneBounds;
