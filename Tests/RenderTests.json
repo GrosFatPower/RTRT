@@ -250,6 +250,12 @@
       "environment_map": "HDR/Background_05.hdr"
     },
     {
+      "name": "software_water_bottle",
+      "profile": "software",
+      "scene": "WaterBottle.scene",
+      "resolution": [850, 720]
+    },
+    {
       "name": "deferred_ibl_ssr",
       "profile": "deferred",
       "scene": "tungsten-material-testball.scene"
@@ -314,6 +320,12 @@
       }
     },
     {
+      "name": "deferred_water_bottle",
+      "profile": "deferred",
+      "scene": "WaterBottle.scene",
+      "resolution": [850, 720]
+    },
+    {
       "name": "deferred_barbershopchair_01",
       "profile": "deferred",
       "scene": "BarberShopChair_01.scene",
@@ -357,6 +369,13 @@
       "scene": "teapot.scene",
       "frames": 60,
       "environment_map": "HDR/Background_05.hdr"
+    },
+    {
+      "name": "pathtracer_water_bottle",
+      "profile": "pathtracer",
+      "scene": "WaterBottle.scene",
+      "resolution": [850, 720],
+      "frames": 60
     },
     {
       "name": "pathtracer_barbershopchair_01",
