@@ -1221,7 +1221,7 @@ void SoftwareRasterizer::UpdateMipMaps()
   {
     if ( tex )
     {
-      if ( _GenerateMipMaps )
+      if ( _Settings._GenerateMipMaps )
         tex -> GenerateMipMaps();
       else
         tex -> ClearMipMaps();
@@ -1234,10 +1234,10 @@ void SoftwareRasterizer::UpdateMipMaps()
 // ----------------------------------------------------------------------------
 void SoftwareRasterizer::SetGenerateMipMaps(bool iGenerate)
 {
-  if (_GenerateMipMaps == iGenerate)
+  if (_Settings._GenerateMipMaps == iGenerate)
     return;
 
-  _GenerateMipMaps = iGenerate;
+  _Settings._GenerateMipMaps = iGenerate;
 
   this -> UpdateMipMaps();
 }

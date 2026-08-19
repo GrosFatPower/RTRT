@@ -112,7 +112,7 @@ public:
   void SetEnablePBOUpload( bool iEnabled ) { _EnablePBOUpload = iEnabled; }
 
   void SetGenerateMipMaps(bool iGenerate);
-  bool GetGenerateMipMaps() const { return _GenerateMipMaps; }
+  bool GetGenerateMipMaps() const { return _Settings._GenerateMipMaps; }
 
 protected:
 
@@ -265,9 +265,6 @@ protected:
 #else
   bool _EnablePBOUpload = false;
 #endif
-
-  // Textures filtering
-  bool _GenerateMipMaps = false;
 
   // Frame data
   unsigned int _FrameNum = 1;

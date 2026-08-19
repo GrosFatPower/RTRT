@@ -47,6 +47,7 @@ struct RenderSettings
   bool         _SpecularIBL           = true;                   // Deferred renderer
   bool         _PBRDirectLighting     = true;                   // Deferred renderer
   bool         _Transparency          = true;                   // Deferred and software renderers
+  bool         _GenerateMipMaps       = true;                   // Deferred and software renderers
   SamplingMode _Sampling              = SamplingMode::Bilinear; // Raster
   bool         _WBuffer               = true;                   // Raster
   ShadingType  _ShadingType           = ShadingType::PBR;       // Raster
@@ -57,6 +58,7 @@ struct RenderSettings
   int          _MaxShadowCastingLights = 4;                     // Deferred renderer
   int          _SSAOKernelSize        = 16;                     // Deferred renderer
   int          _SSRMaxSteps           = 48;                     // Deferred renderer
+  int          _AnisotropicLevel      = 16;                     // Deferred renderer texture filtering
   float        _LowResRatio           = 0.1f;                   // PathTracer
   float        _TargetFPS             = 60.f;
   float        _Gamma                 = 2.f;

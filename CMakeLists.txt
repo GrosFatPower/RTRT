@@ -115,6 +115,7 @@ if(WIN32)
 elseif(APPLE)
   find_library(APPKIT_LIBRARY AppKit REQUIRED)
   target_link_libraries(nativefiledialog PUBLIC ${APPKIT_LIBRARY})
+  target_compile_options(nativefiledialog PRIVATE -Wno-deprecated-declarations)
 else()
   target_include_directories(nativefiledialog PRIVATE ${GTK3_INCLUDE_DIRS})
   target_link_libraries(nativefiledialog PUBLIC ${GTK3_LIBRARIES})
@@ -170,6 +171,9 @@ endif()
 function(ConfigureRTRTTarget iTarget)
 target_include_directories(${iTarget}
   PUBLIC ${CMAKE_SOURCE_DIR}/Source/src
+)
+
+target_include_directories(${iTarget} SYSTEM
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glfw/include
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/imgui
   PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/imguizmo

@@ -104,9 +104,9 @@ public:
   virtual int ReadbackFinalColor( RenderImage & oImage ) override;
 
   void SetGenerateMipMaps(bool iGenerate);
-  bool GetGenerateMipMaps() const { return _GenerateMipMaps; }
+  bool GetGenerateMipMaps() const { return _Settings._GenerateMipMaps; }
   void SetAnisotropicLevel(int iLevel);
-  int GetAnisotropicLevel() const { return _AnisotropicLevel; }
+  int GetAnisotropicLevel() const { return _Settings._AnisotropicLevel; }
   float GetEffectiveShadowFar() const { return _ShadowFar; }
   virtual int GetRenderPassTimings( std::vector<RenderPassTiming> & oTimings ) const override;
 
@@ -265,10 +265,6 @@ protected:
 
   // SSAO state
   std::array<Vec3, 32> _SSAOKernel;
-
-  // Textures filtering
-  bool _GenerateMipMaps = true;
-  int  _AnisotropicLevel = 16;
 
   enum TimingID
   {

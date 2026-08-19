@@ -1243,13 +1243,13 @@ int DeferredRenderer::ReloadScene()
     texArrayDesc._DataFormat     = texture._DataFormat;
     texArrayDesc._DataType       = texture._DataType;
     texArrayDesc._Data           = hasTextureLayers ? bucket._Pixels.data() : fallbackPixel;
-    texArrayDesc._MinFilter      = _GenerateMipMaps ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR;
+    texArrayDesc._MinFilter      = _Settings._GenerateMipMaps ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR;
     texArrayDesc._MagFilter      = GL_LINEAR;
-    texArrayDesc._GenerateMipMap = _GenerateMipMaps;
+    texArrayDesc._GenerateMipMap = _Settings._GenerateMipMaps;
     GLUtil::CreateTexture(texArrayDesc, texture);
 
-    if ( _GenerateMipMaps && _AnisotropicLevel )
-      GLUtil::EnableAnisotropyIfAvailable(texture, (float)_AnisotropicLevel);
+    if ( _Settings._GenerateMipMaps && _Settings._AnisotropicLevel )
+      GLUtil::EnableAnisotropyIfAvailable(texture, (float)_Settings._AnisotropicLevel);
   }
 
   GLTextureDesc materialsDesc;
@@ -1276,7 +1276,7 @@ int DeferredRenderer::ReloadScene()
 // ----------------------------------------------------------------------------
 void DeferredRenderer::SetGenerateMipMaps(bool iGenerate)
 {
-  _GenerateMipMaps = iGenerate;
+  _Settings._GenerateMipMaps = iGenerate;
   _DirtyStates |= (unsigned long)DirtyState::Textures;
 }
 
@@ -1285,7 +1285,7 @@ void DeferredRenderer::SetGenerateMipMaps(bool iGenerate)
 // ----------------------------------------------------------------------------
 void DeferredRenderer::SetAnisotropicLevel(int iLevel)
 {
-  _AnisotropicLevel = iLevel;
+  _Settings._AnisotropicLevel = std::max(0, iLevel);
   _DirtyStates |= (unsigned long)DirtyState::Textures;
 }
 

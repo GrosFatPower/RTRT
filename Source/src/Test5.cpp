@@ -733,7 +733,7 @@ int Test5::DrawSettingsUI()
       SoftwareRasterizer * softwareRasterizer = _Renderer -> AsSoftwareRasterizer();
       if ( softwareRasterizer )
       {
-        bool generateMips = softwareRasterizer ->  GetGenerateMipMaps();
+        bool generateMips = _Settings._GenerateMipMaps;
         if ( ImGui::Checkbox( "Generate mip maps", &generateMips ) )
           softwareRasterizer -> SetGenerateMipMaps(generateMips);
       }
@@ -746,11 +746,11 @@ int Test5::DrawSettingsUI()
       DeferredRenderer * deferredRenderer = _Renderer -> AsDeferredRenderer();
       if ( deferredRenderer )
       {
-        bool generateMips = deferredRenderer ->  GetGenerateMipMaps();
+        bool generateMips = _Settings._GenerateMipMaps;
         if ( ImGui::Checkbox( "Generate mip maps", &generateMips ) )
           deferredRenderer -> SetGenerateMipMaps(generateMips);
 
-        int anisoLevel = deferredRenderer -> GetAnisotropicLevel();
+        int anisoLevel = _Settings._AnisotropicLevel;
         if ( ImGui::SliderInt( "Anisotropic level", &anisoLevel, 1, 16 ) )
           deferredRenderer -> SetAnisotropicLevel(anisoLevel);
 
