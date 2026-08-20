@@ -3,7 +3,7 @@ add_subdirectory(glm)
 
 add_library(nlohmann_json INTERFACE)
 add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
-target_include_directories(nlohmann_json SYSTEM
+target_include_directories(nlohmann_json SYSTEM BEFORE
   INTERFACE nlohmann-json/single_include
 )
 
@@ -31,7 +31,7 @@ if (RTRT_BUILD_IMGUI)
     add_library(imgui STATIC ${imgui_sources})
   endif()
   
-  target_include_directories(imgui
+  target_include_directories(imgui BEFORE
     PUBLIC ${imgui_dir}
 	PUBLIC ${imgui_dir}/backends
 	PUBLIC glfw/include
@@ -48,7 +48,7 @@ add_library(imguizmo STATIC
   ${imguizmo_dir}/ImGuizmo.h
 )
 
-target_include_directories(imguizmo
+target_include_directories(imguizmo BEFORE
   PUBLIC ${imguizmo_dir}
 )
 
