@@ -44,11 +44,14 @@ void RenderTestCase::ApplySettings( RenderSettings & ioSettings ) const
   ioSettings._FXAA = false;
   ioSettings._ToneMapping = false;
   ioSettings._EnableSkybox = !_EnvironmentMapPath.empty();
+  ioSettings._EnableBackGround = _Background;
+  ioSettings._EnableUniformLight = _UniformLight;
 
   if ( RendererBackend::DeferredRenderer == _Backend )
   {
     ioSettings._SpecularIBL = _SpecularIBL;
     ioSettings._SSR = _SSR;
+    ioSettings._SSAO = _SSAO;
   }
   else if ( RendererBackend::PathTracer == _Backend )
   {
@@ -196,6 +199,9 @@ bool ReadSettings( const Json & iObject, RenderTestCase & ioTestCase, std::strin
 
   return ReadBool(settings, "specular_ibl", ioTestCase._SpecularIBL, oError)
       && ReadBool(settings, "ssr", ioTestCase._SSR, oError)
+      && ReadBool(settings, "ssao", ioTestCase._SSAO, oError)
+      && ReadBool(settings, "background", ioTestCase._Background, oError)
+      && ReadBool(settings, "uniform_light", ioTestCase._UniformLight, oError)
       && ReadBool(settings, "accumulate", ioTestCase._Accumulate, oError)
       && ReadBool(settings, "auto_scale", ioTestCase._AutoScale, oError)
       && ReadBool(settings, "tiled_rendering", ioTestCase._TiledRendering, oError)

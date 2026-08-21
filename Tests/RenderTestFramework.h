@@ -48,6 +48,9 @@ struct RenderTestCase
   std::string     _EnvironmentMapPath;
   bool            _SpecularIBL = true;
   bool            _SSR = true;
+  bool            _SSAO = true;
+  bool            _Background = true;
+  bool            _UniformLight = true;
   bool            _Accumulate = true;
   bool            _AutoScale = true;
   bool            _TiledRendering = false;

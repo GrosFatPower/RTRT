@@ -79,6 +79,43 @@
       "baseline": "Tests/Baselines/software_textured_box.pfm"
     },
     {
+      "name": "software_textured_box_single_light",
+      "profile": "software",
+      "scene": "TexturedBox.scene",
+      "settings": {
+        "background": false,
+        "uniform_light": false,
+        "specular_ibl": false,
+        "ssr": false,
+        "ssao": false
+      }
+    },
+    {
+      "name": "deferred_textured_box_single_light",
+      "profile": "deferred",
+      "scene": "TexturedBox.scene",
+      "settings": {
+        "background": false,
+        "uniform_light": false,
+        "specular_ibl": false,
+        "ssr": false,
+        "ssao": false
+      }
+    },
+    {
+      "name": "pathtracer_textured_box_single_light",
+      "profile": "pathtracer",
+      "scene": "TexturedBox.scene",
+      "frames": 60,
+      "settings": {
+        "background": false,
+        "uniform_light": false,
+        "specular_ibl": false,
+        "ssr": false,
+        "ssao": false
+      }
+    },
+    {
       "name": "software_transparency",
       "profile": "software",
       "scene": "SoftwareTransparency.scene",
