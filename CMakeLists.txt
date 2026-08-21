@@ -173,19 +173,20 @@ target_include_directories(${iTarget}
   PUBLIC ${CMAKE_SOURCE_DIR}/Source/src
 )
 
-target_include_directories(${iTarget} SYSTEM
-  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glfw/include
-  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/imgui
-  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/imguizmo
-  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/stb
-  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glm
-  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinyobjloader
-  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinydir
-  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinygltf
-  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/nativefiledialog/src/include
-  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/tinybvh
-  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/RadeonRays
-  PUBLIC ${GLEW_INCLUDE_DIRS}
+target_include_directories(${iTarget} BEFORE PUBLIC
+  ${CMAKE_SOURCE_DIR}/Dependencies/glfw/include
+  ${CMAKE_SOURCE_DIR}/Dependencies/imgui
+  ${CMAKE_SOURCE_DIR}/Dependencies/imgui/backends
+  ${CMAKE_SOURCE_DIR}/Dependencies/imguizmo
+  ${CMAKE_SOURCE_DIR}/Dependencies/stb
+  ${CMAKE_SOURCE_DIR}/Dependencies/glm
+  ${CMAKE_SOURCE_DIR}/Dependencies/tinyobjloader
+  ${CMAKE_SOURCE_DIR}/Dependencies/tinydir
+  ${CMAKE_SOURCE_DIR}/Dependencies/tinygltf
+  ${CMAKE_SOURCE_DIR}/Dependencies/nativefiledialog/src/include
+  ${CMAKE_SOURCE_DIR}/Dependencies/tinybvh
+  ${CMAKE_SOURCE_DIR}/Dependencies/RadeonRays
+  ${GLEW_INCLUDE_DIRS}
 )
 
 target_link_directories(${iTarget}
