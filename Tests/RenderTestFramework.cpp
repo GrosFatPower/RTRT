@@ -390,6 +390,42 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
     return 1;
   if ( !RunUnitTest("obj_static_import", [iQuiet]() { return GLTFTestUtil::CheckObjImport(iQuiet); }) )
     return 1;
+  if ( !RunUnitTest("scene_optional_mesh_warning", [&iArtifactsDir, iQuiet]() {
+    std::error_code errorCode;
+    std::filesystem::create_directories(iArtifactsDir, errorCode);
+    const std::filesystem::path scenePath = iArtifactsDir / "optional_mesh.scene";
+    std::ofstream file(scenePath);
+    file << "mesh\n{\n  file missing.obj\n}\n";
+    file.close();
+
+    Scene scene;
+    RenderSettings settings;
+    bool loaded = false;
+    {
+      ScopedOutputSilencer outputSilencer(iQuiet);
+      loaded = Loader::LoadScene(scenePath.string(), scene, settings);
+    }
+    return loaded && ( 0 == scene.GetNbMeshes() ) && ( 0 == scene.GetNbMeshInstances() );
+  }) )
+    return 1;
+  if ( !RunUnitTest("scene_light_argument_diagnostic", [&iArtifactsDir, iQuiet]() {
+    std::error_code errorCode;
+    std::filesystem::create_directories(iArtifactsDir, errorCode);
+    const std::filesystem::path scenePath = iArtifactsDir / "invalid_light.scene";
+    std::ofstream file(scenePath);
+    file << "light\n{\n  position 1.0 2.0\n}\n";
+    file.close();
+
+    Scene scene;
+    RenderSettings settings;
+    bool loaded = true;
+    {
+      ScopedOutputSilencer outputSilencer(iQuiet);
+      loaded = Loader::LoadScene(scenePath.string(), scene, settings);
+    }
+    return !loaded && ( 0 == scene.GetNbLights() );
+  }) )
+    return 1;
   if ( !RunUnitTest("external_prop_file_filter", []() {
     return DroppedFileUtils::IsDroppedPropPath("prop.obj")
         && DroppedFileUtils::IsDroppedPropPath("prop.gltf")

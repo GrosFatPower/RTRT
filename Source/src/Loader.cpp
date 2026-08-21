@@ -77,6 +77,128 @@ bool IsEqual( const std::string & iStr1, const std::string & iStr2 )
   return ( ( iStr1.size() == iStr2.size() )
         && std::equal(iStr1.begin(), iStr1.end(), iStr2.begin(), &CompareChar) );
 }
+
+// ----------------------------------------------------------------------------
+// Scene loader : SceneDiagnostics
+// ----------------------------------------------------------------------------
+class SceneDiagnostics
+{
+public:
+  explicit SceneDiagnostics( const std::string & iFilename )
+  : _Filename(iFilename)
+  {
+  }
+
+  void Warn( int iLine, const std::string & iMessage )
+  {
+    Report(_Warnings, "warning", iLine, iMessage);
+  }
+
+  void Error( int iLine, const std::string & iMessage )
+  {
+    _HasErrors = true;
+    Report(_Errors, "error", iLine, iMessage);
+  }
+
+  bool HasErrors() const { return _HasErrors; }
+
+private:
+  void Report( std::set<std::string> & ioMessages, const char * iSeverity, int iLine, const std::string & iMessage )
+  {
+    const std::string message = _Filename + ":" + std::to_string(iLine) + ": " + iMessage;
+    if ( ioMessages.insert(message).second )
+      std::cout << "Scene " << iSeverity << ": " << message << std::endl;
+  }
+
+  std::string _Filename;
+  std::set<std::string> _Warnings;
+  std::set<std::string> _Errors;
+  bool _HasErrors = false;
+};
+
+// ----------------------------------------------------------------------------
+// Scene loader : SceneBlockDiagnostics
+// ----------------------------------------------------------------------------
+class SceneBlockDiagnostics
+{
+public:
+  SceneBlockDiagnostics( SceneDiagnostics & ioDiagnostics, const std::string & iBlockName, int iStartLine, bool iRecoverable )
+  : _Diagnostics(ioDiagnostics)
+  , _BlockName(iBlockName)
+  , _Line(iStartLine)
+  , _Recoverable(iRecoverable)
+  {
+  }
+
+  void NextLine() { ++_Line; }
+  void SetDirective( const std::string & iDirective )
+  {
+    _Directive = iDirective;
+    _DirectiveLine = _Line;
+  }
+
+  void ExpectedArgumentCount( int iExpected, int iActual )
+  {
+    Error("'" + _Directive + "' expects " + std::to_string(iExpected) + " value" + ( 1 == iExpected ? "" : "s" )
+      + ", but received " + std::to_string(iActual));
+  }
+
+  void InvalidValue( const std::string & iMessage )
+  {
+    Error("'" + _Directive + "' " + iMessage);
+  }
+
+  void ReportFailure( bool iFailed )
+  {
+    if ( !iFailed )
+      return;
+
+    if ( _HasDetailedError )
+      return;
+
+    std::string message = "invalid " + _BlockName + " block";
+    if ( !_Directive.empty() )
+      message += " near '" + _Directive + "'";
+
+    const int line = 0 < _DirectiveLine ? _DirectiveLine : _Line;
+    if ( _Recoverable )
+      _Diagnostics.Warn(line, message + "; block is ignored");
+    else
+      _Diagnostics.Error(line, message);
+  }
+
+private:
+  void Error( const std::string & iMessage )
+  {
+    _Diagnostics.Error(_Line, iMessage);
+    _HasDetailedError = true;
+  }
+
+  SceneDiagnostics & _Diagnostics;
+  std::string _BlockName;
+  std::string _Directive;
+  int _Line = 0;
+  int _DirectiveLine = 0;
+  bool _Recoverable = false;
+  bool _HasDetailedError = false;
+};
+
+void ConsumeMalformedSceneBlock( std::ifstream & iStr, State & ioState, SceneBlockDiagnostics & ioDiagnostics )
+{
+  std::string line;
+  while ( std::getline(iStr, line) )
+  {
+    ioDiagnostics.NextLine();
+    std::vector<std::string> tokens;
+    Tokenize(line, tokens);
+    if ( !tokens.empty() && '}' == tokens[0][0] )
+    {
+      ioState = State::ExpectNewBlock;
+      break;
+    }
+  }
+}
+
 // ----------------------------------------------------------------------------
 // GLTF loader : GltfDiagnostics
 // ----------------------------------------------------------------------------
@@ -1176,173 +1298,141 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene & oScene, Re
 
   printf("Loading Scene...\n");
 
-  int parsingError = 0;
-  State curState = State::ExpectNewBlock;
+  SceneDiagnostics diagnostics(iFilename);
 
   std::string line;
-  while( std::getline( file, line ) && !parsingError )
+  int lineNumber = 0;
+  while( std::getline( file, line ) )
   {
+    ++lineNumber;
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
-    if ( State::ExpectNewBlock != curState )
+
+    if ( '}' == tokens[0][0] )
     {
-      parsingError++;
-      continue;
-    }
-    if ( ( '}' == tokens[0][0] ) || ( '}' == tokens[0][0] ) )
-    {
-      parsingError++;
+      diagnostics.Error(lineNumber, "unexpected closing bracket");
       continue;
     }
 
-    //--------------------------------------------
-    // Material - START
     if ( ( 2 == nbTokens ) && ( IsEqual("material", tokens[0]) ) )
     {
       std::cout << "New material : " << tokens[1] << std::endl;
-
-      std::string materialName = tokens[1];
-
-      parsingError += Loader::ParseMaterial(file, path, materialName, oScene);
-
-      if ( !parsingError )
-        curState = State::ExpectNewBlock;
+      try
+      {
+        Loader::ParseMaterial(file, path, tokens[1], oScene, diagnostics, lineNumber);
+      }
+      catch ( const std::exception & error )
+      {
+        diagnostics.Error(lineNumber, "unable to parse material block '" + tokens[1] + "': " + error.what());
+      }
     }
-    // Material - END
-    //--------------------------------------------
-
-
-    //--------------------------------------------
-    // Mesh - START
-    if ( IsEqual("mesh", tokens[0]) )
+    else if ( IsEqual("mesh", tokens[0]) )
     {
       std::cout << "New mesh" << std::endl;
-
-      parsingError += Loader::ParseMeshData(file, path, oScene);
-
-      if ( !parsingError )
-        curState = State::ExpectNewBlock;
+      try
+      {
+        Loader::ParseMeshData(file, path, oScene, diagnostics, lineNumber);
+      }
+      catch ( const std::exception & error )
+      {
+        diagnostics.Warn(lineNumber, "mesh block was skipped: " + std::string(error.what()));
+      }
     }
-    // Mesh - END
-    //--------------------------------------------
-
-
-    //--------------------------------------------
-    // Sphere - START
-    if ( IsEqual("sphere", tokens[0]) )
+    else if ( IsEqual("sphere", tokens[0]) )
     {
       std::cout << "New sphere" << std::endl;
-
-      parsingError += Loader::ParseSphere(file, oScene);
-
-      if ( !parsingError )
-        curState = State::ExpectNewBlock;
+      try
+      {
+        Loader::ParseSphere(file, oScene, diagnostics, lineNumber);
+      }
+      catch ( const std::exception & error )
+      {
+        diagnostics.Error(lineNumber, "unable to parse sphere block: " + std::string(error.what()));
+      }
     }
-    // Sphere - END
-    //--------------------------------------------
-
-
-    //--------------------------------------------
-    // Box - START
-    if ( IsEqual("box", tokens[0]) )
+    else if ( IsEqual("box", tokens[0]) )
     {
       std::cout << "New box" << std::endl;
-
-      parsingError += Loader::ParseBox(file, oScene);
-
-      if ( !parsingError )
-        curState = State::ExpectNewBlock;
+      try
+      {
+        Loader::ParseBox(file, oScene, diagnostics, lineNumber);
+      }
+      catch ( const std::exception & error )
+      {
+        diagnostics.Error(lineNumber, "unable to parse box block: " + std::string(error.what()));
+      }
     }
-    // Box - END
-    //--------------------------------------------
-
-
-    //--------------------------------------------
-    // Plane - START
-    if ( IsEqual("plane", tokens[0]) )
+    else if ( IsEqual("plane", tokens[0]) )
     {
       std::cout << "New plane" << std::endl;
-
-      parsingError += Loader::ParsePlane(file, oScene);
-
-      if ( !parsingError )
-        curState = State::ExpectNewBlock;
+      try
+      {
+        Loader::ParsePlane(file, oScene, diagnostics, lineNumber);
+      }
+      catch ( const std::exception & error )
+      {
+        diagnostics.Error(lineNumber, "unable to parse plane block: " + std::string(error.what()));
+      }
     }
-    // Plane - END
-    //--------------------------------------------
-
-
-    //--------------------------------------------
-    // Light - START
-    if ( IsEqual("light", tokens[0]) )
+    else if ( IsEqual("light", tokens[0]) )
     {
       std::cout << "New light" << std::endl;
-
-      parsingError += Loader::ParseLight(file, oScene);
-
-      if ( !parsingError )
-        curState = State::ExpectNewBlock;
+      try
+      {
+        Loader::ParseLight(file, oScene, diagnostics, lineNumber);
+      }
+      catch ( const std::exception & error )
+      {
+        diagnostics.Error(lineNumber, "unable to parse light block: " + std::string(error.what()));
+      }
     }
-    // Light - END
-    //--------------------------------------------
-
-
-    //--------------------------------------------
-    // Camera - START
-    if ( IsEqual("camera", tokens[0]) )
+    else if ( IsEqual("camera", tokens[0]) )
     {
       std::cout << "New camera" << std::endl;
-
-      parsingError += Loader::ParseCamera(file, oScene);
-
-      if ( !parsingError )
-        curState = State::ExpectNewBlock;
+      try
+      {
+        Loader::ParseCamera(file, oScene, diagnostics, lineNumber);
+      }
+      catch ( const std::exception & error )
+      {
+        diagnostics.Error(lineNumber, "unable to parse camera block: " + std::string(error.what()));
+      }
     }
-    // Camera - END
-    //--------------------------------------------
-
-
-    //--------------------------------------------
-    // Renderer - START
-    if ( IsEqual("renderer", tokens[0]) )
+    else if ( IsEqual("renderer", tokens[0]) )
     {
       std::cout << "New renderer" << std::endl;
 
       RenderSettings settings;
-      parsingError += Loader::ParseRenderSettings(file, path, settings, oScene);
-
-      if ( !parsingError )
+      try
       {
-        oRenderSettings = settings;
-
-        curState = State::ExpectNewBlock;
+        if ( !Loader::ParseRenderSettings(file, path, settings, oScene, diagnostics, lineNumber) )
+          oRenderSettings = settings;
+      }
+      catch ( const std::exception & error )
+      {
+        diagnostics.Warn(lineNumber, "renderer settings block was ignored: " + std::string(error.what()));
       }
     }
-    // Renderer - END
-    //--------------------------------------------
-
-
-    //--------------------------------------------
-    // GLTF - START
-    if ( IsEqual("gltf", tokens[0]) )
+    else if ( IsEqual("gltf", tokens[0]) )
     {
       std::cout << "New gltf model" << std::endl;
-
-      parsingError += Loader::ParseGLTF(file, path, oScene, oRenderSettings);
-
-      if ( !parsingError )
-        curState = State::ExpectNewBlock;
+      try
+      {
+        Loader::ParseGLTF(file, path, oScene, oRenderSettings, diagnostics, lineNumber);
+      }
+      catch ( const std::exception & error )
+      {
+        diagnostics.Warn(lineNumber, "glTF block was skipped: " + std::string(error.what()));
+      }
     }
-    // GLTF - END
-    //--------------------------------------------
-   
-
+    else
+      diagnostics.Warn(lineNumber, "unknown scene directive '" + tokens[0] + "' is ignored");
   }
 
-  if ( parsingError )
+  if ( diagnostics.HasErrors() )
   {
     printf("ERROR\n");
     oScene.Clear();
@@ -1414,9 +1504,10 @@ bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTra
 // ----------------------------------------------------------------------------
 // ParseMaterial
 // ----------------------------------------------------------------------------
-int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, const std::string & iMaterialName, Scene & ioScene )
+int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, const std::string & iMaterialName, Scene & ioScene, SceneDiagnostics & ioDiagnostics, int iStartLine )
 {
   int parsingError = 0;
+  SceneBlockDiagnostics blockDiagnostics(ioDiagnostics, "material '" + iMaterialName + "'", iStartLine, false);
 
   Material newMaterial;
 
@@ -1431,11 +1522,14 @@ int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, cons
   std::string line;
   while( std::getline( iStr, line ) && !parsingError )
   {
+    blockDiagnostics.NextLine();
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+      blockDiagnostics.SetDirective(tokens[0]);
 
     if ( State::ExpectOpenBracket == curState )
     {
@@ -1629,6 +1723,8 @@ int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, cons
         parsingError++;
     }
   }
+  if ( parsingError && State::ExpectNewBlock != curState )
+    ConsumeMalformedSceneBlock(iStr, curState, blockDiagnostics);
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
@@ -1660,15 +1756,17 @@ int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, cons
      ioScene.AddMaterial(newMaterial, iMaterialName);
   }
 
+  blockDiagnostics.ReportFailure( 0 != parsingError );
   return parsingError;
 }
 
 // ----------------------------------------------------------------------------
 // ParseLight
 // ----------------------------------------------------------------------------
-int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
+int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene, SceneDiagnostics & ioDiagnostics, int iStartLine )
 {
   int parsingError = 0;
+  SceneBlockDiagnostics blockDiagnostics(ioDiagnostics, "light", iStartLine, false);
 
   Light newLight;
   Vec3 v1, v2;
@@ -1677,11 +1775,14 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
   std::string line;
   while( std::getline( iStr, line ) && !parsingError )
   {
+    blockDiagnostics.NextLine();
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+      blockDiagnostics.SetDirective(tokens[0]);
 
     if ( State::ExpectOpenBracket == curState )
     {
@@ -1711,7 +1812,10 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
       if ( 4 == nbTokens )
         newLight._Pos = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
+      {
+        blockDiagnostics.ExpectedArgumentCount(3, nbTokens - 1);
         parsingError++;
+      }
     }
     else if ( IsEqual("emission", tokens[0]) )
     {
@@ -1722,35 +1826,50 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
         newLight._Emission = glm::min( emission, Vec3(1.f) );
       }
       else
+      {
+        blockDiagnostics.ExpectedArgumentCount(3, nbTokens - 1);
         parsingError++;
+      }
     }
     else if ( IsEqual("intensity", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newLight._Intensity = std::max(0.f, std::stof(tokens[1]));
       else
+      {
+        blockDiagnostics.ExpectedArgumentCount(1, nbTokens - 1);
         parsingError++;
+      }
     }
     else if ( IsEqual("v1", tokens[0]) )
     {
       if ( 4 == nbTokens )
         v1 = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
+      {
+        blockDiagnostics.ExpectedArgumentCount(3, nbTokens - 1);
         parsingError++;
+      }
     }
     else if ( IsEqual("v2", tokens[0]) )
     {
       if ( 4 == nbTokens )
         v2 = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
+      {
+        blockDiagnostics.ExpectedArgumentCount(3, nbTokens - 1);
         parsingError++;
+      }
     }
     else if ( IsEqual("radius", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newLight._Radius = std::stof(tokens[1]);
       else
+      {
+        blockDiagnostics.ExpectedArgumentCount(1, nbTokens - 1);
         parsingError++;
+      }
     }
     else if ( IsEqual("castshadow", tokens[0]) )
     {
@@ -1761,17 +1880,26 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
         else if ( IsEqual("false", tokens[1]) || IsEqual("0", tokens[1]) )
           newLight._CastShadow = false;
         else
+        {
+          blockDiagnostics.InvalidValue("must be true, false, 1, or 0");
           parsingError++;
+        }
       }
       else
+      {
+        blockDiagnostics.ExpectedArgumentCount(1, nbTokens - 1);
         parsingError++;
+      }
     }
     else if ( IsEqual("shadowradius", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newLight._ShadowRadius = std::max(0.f, std::stof(tokens[1]));
       else
+      {
+        blockDiagnostics.ExpectedArgumentCount(1, nbTokens - 1);
         parsingError++;
+      }
     }
     else if ( IsEqual("type", tokens[0]) )
     {
@@ -1784,12 +1912,20 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
         else if ( IsEqual("distant", tokens[1]) )
           newLight._Type = (float) LightType::DistantLight;
         else
+        {
+          blockDiagnostics.InvalidValue("must be quad, sphere, or distant");
           parsingError++;
+        }
       }
       else
+      {
+        blockDiagnostics.ExpectedArgumentCount(1, nbTokens - 1);
         parsingError++;
+      }
     }
   }
+  if ( parsingError && State::ExpectNewBlock != curState )
+    ConsumeMalformedSceneBlock(iStr, curState, blockDiagnostics);
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
@@ -1813,15 +1949,17 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
     ioScene.AddLight(newLight);
   }
 
+  blockDiagnostics.ReportFailure( 0 != parsingError );
   return parsingError;
 }
 
 // ----------------------------------------------------------------------------
 // ParseCamera
 // ----------------------------------------------------------------------------
-int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
+int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene, SceneDiagnostics & ioDiagnostics, int iStartLine )
 {
   int parsingError = 0;
+  SceneBlockDiagnostics blockDiagnostics(ioDiagnostics, "camera", iStartLine, false);
 
   Vec3 pos({0.f, 0.f, -1.f});
   Vec3 lookAt({0.f, 0.f, 0.f});
@@ -1838,11 +1976,14 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
   std::string line;
   while( std::getline( iStr, line ) && !parsingError )
   {
+    blockDiagnostics.NextLine();
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+      blockDiagnostics.SetDirective(tokens[0]);
 
     if ( State::ExpectOpenBracket == curState )
     {
@@ -1943,6 +2084,8 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
     }
 
   }
+  if ( parsingError && State::ExpectNewBlock != curState )
+    ConsumeMalformedSceneBlock(iStr, curState, blockDiagnostics);
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
@@ -1977,15 +2120,17 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
     ioScene.SetCamera(newCamera);
   }
 
+  blockDiagnostics.ReportFailure( 0 != parsingError );
   return parsingError;
 }
 
 // ----------------------------------------------------------------------------
 // ParseRenderSettings
 // ----------------------------------------------------------------------------
-int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath, RenderSettings & oSettings, Scene & ioScene )
+int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath, RenderSettings & oSettings, Scene & ioScene, SceneDiagnostics & ioDiagnostics, int iStartLine )
 {
   int parsingError = 0;
+  SceneBlockDiagnostics blockDiagnostics(ioDiagnostics, "renderer", iStartLine, true);
 
   bool hasRenderResolution = false;
   bool hasWindowResolution = false;
@@ -1996,11 +2141,14 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath
   std::string line;
   while( std::getline( iStr, line ) && !parsingError )
   {
+    blockDiagnostics.NextLine();
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+      blockDiagnostics.SetDirective(tokens[0]);
 
     if ( State::ExpectOpenBracket == curState )
     {
@@ -2148,6 +2296,8 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath
         parsingError++;
     }
   }
+  if ( parsingError && State::ExpectNewBlock != curState )
+    ConsumeMalformedSceneBlock(iStr, curState, blockDiagnostics);
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
@@ -2175,15 +2325,17 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath
       ioScene.LoadEnvMap(iPath + envMapFile);
   }
 
+  blockDiagnostics.ReportFailure( 0 != parsingError );
   return parsingError;
 }
 
 // ----------------------------------------------------------------------------
 // ParseSphere
 // ----------------------------------------------------------------------------
-int Loader::ParseSphere( std::ifstream & iStr, Scene & ioScene )
+int Loader::ParseSphere( std::ifstream & iStr, Scene & ioScene, SceneDiagnostics & ioDiagnostics, int iStartLine )
 {
   int parsingError = 0;
+  SceneBlockDiagnostics blockDiagnostics(ioDiagnostics, "sphere", iStartLine, false);
 
   std::string materialName;
   Mat4x4 transMat(1.f), rotMat(1.f), scaleMat(1.f);
@@ -2196,11 +2348,14 @@ int Loader::ParseSphere( std::ifstream & iStr, Scene & ioScene )
   std::string line;
   while( std::getline( iStr, line ) && !parsingError )
   {
+    blockDiagnostics.NextLine();
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+      blockDiagnostics.SetDirective(tokens[0]);
 
     if ( State::ExpectOpenBracket == curState )
     {
@@ -2302,6 +2457,8 @@ int Loader::ParseSphere( std::ifstream & iStr, Scene & ioScene )
         parsingError++;
     }
   }
+  if ( parsingError && State::ExpectNewBlock != curState )
+    ConsumeMalformedSceneBlock(iStr, curState, blockDiagnostics);
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
@@ -2326,15 +2483,17 @@ int Loader::ParseSphere( std::ifstream & iStr, Scene & ioScene )
     }
   }
 
+  blockDiagnostics.ReportFailure( 0 != parsingError );
   return parsingError;
 }
 
 // ----------------------------------------------------------------------------
 // ParseBox
 // ----------------------------------------------------------------------------
-int Loader::ParseBox( std::ifstream & iStr, Scene & ioScene )
+int Loader::ParseBox( std::ifstream & iStr, Scene & ioScene, SceneDiagnostics & ioDiagnostics, int iStartLine )
 {
   int parsingError = 0;
+  SceneBlockDiagnostics blockDiagnostics(ioDiagnostics, "box", iStartLine, false);
 
   std::string materialName;
   Mat4x4 transMat(1.f), rotMat(1.f), scaleMat(1.f);
@@ -2347,11 +2506,14 @@ int Loader::ParseBox( std::ifstream & iStr, Scene & ioScene )
   std::string line;
   while( std::getline( iStr, line ) && !parsingError )
   {
+    blockDiagnostics.NextLine();
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+      blockDiagnostics.SetDirective(tokens[0]);
 
     if ( State::ExpectOpenBracket == curState )
     {
@@ -2460,6 +2622,8 @@ int Loader::ParseBox( std::ifstream & iStr, Scene & ioScene )
         parsingError++;
     }
   }
+  if ( parsingError && State::ExpectNewBlock != curState )
+    ConsumeMalformedSceneBlock(iStr, curState, blockDiagnostics);
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
@@ -2484,15 +2648,17 @@ int Loader::ParseBox( std::ifstream & iStr, Scene & ioScene )
     }
   }
 
+  blockDiagnostics.ReportFailure( 0 != parsingError );
   return parsingError;
 }
 
 // ----------------------------------------------------------------------------
 // ParsePlane
 // ----------------------------------------------------------------------------
-int Loader::ParsePlane( std::ifstream & iStr, Scene & ioScene )
+int Loader::ParsePlane( std::ifstream & iStr, Scene & ioScene, SceneDiagnostics & ioDiagnostics, int iStartLine )
 {
   int parsingError = 0;
+  SceneBlockDiagnostics blockDiagnostics(ioDiagnostics, "plane", iStartLine, false);
 
   std::string materialName;
   Mat4x4 transMat(1.f), rotMat(1.f), scaleMat(1.f);
@@ -2505,11 +2671,14 @@ int Loader::ParsePlane( std::ifstream & iStr, Scene & ioScene )
   std::string line;
   while( std::getline( iStr, line ) && !parsingError )
   {
+    blockDiagnostics.NextLine();
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+      blockDiagnostics.SetDirective(tokens[0]);
 
     if ( State::ExpectOpenBracket == curState )
     {
@@ -2618,6 +2787,8 @@ int Loader::ParsePlane( std::ifstream & iStr, Scene & ioScene )
         parsingError++;
     }
   }
+  if ( parsingError && State::ExpectNewBlock != curState )
+    ConsumeMalformedSceneBlock(iStr, curState, blockDiagnostics);
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
@@ -2642,15 +2813,17 @@ int Loader::ParsePlane( std::ifstream & iStr, Scene & ioScene )
     }
   }
 
+  blockDiagnostics.ReportFailure( 0 != parsingError );
   return parsingError;
 }
 
 // ----------------------------------------------------------------------------
 // ParseMeshData
 // ----------------------------------------------------------------------------
-int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scene & ioScene )
+int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scene & ioScene, SceneDiagnostics & ioDiagnostics, int iStartLine )
 {
   int parsingError = 0;
+  SceneBlockDiagnostics blockDiagnostics(ioDiagnostics, "mesh", iStartLine, true);
 
   std::string meshName;
   std::string meshFileName;
@@ -2664,11 +2837,14 @@ int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scen
   std::string line;
   while( std::getline( iStr, line ) && !parsingError )
   {
+    blockDiagnostics.NextLine();
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+      blockDiagnostics.SetDirective(tokens[0]);
 
     if ( State::ExpectOpenBracket == curState )
     {
@@ -2703,7 +2879,10 @@ int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scen
     else if ( IsEqual("file", tokens[0]) )
     {
       if ( 2 == nbTokens )
+      {
         meshFileName = tokens[1];
+        blockDiagnostics.SetDirective("file '" + meshFileName + "'");
+      }
       else
         parsingError++;
     }
@@ -2777,6 +2956,8 @@ int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scen
         parsingError++;
     }
   }
+  if ( parsingError && State::ExpectNewBlock != curState )
+    ConsumeMalformedSceneBlock(iStr, curState, blockDiagnostics);
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
@@ -2806,15 +2987,17 @@ int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scen
       parsingError++;
   }
 
+  blockDiagnostics.ReportFailure( 0 != parsingError );
   return parsingError;
 }
 
 // ----------------------------------------------------------------------------
 // ParseGLTF
 // ----------------------------------------------------------------------------
-int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & ioScene, RenderSettings & ioSettings )
+int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & ioScene, RenderSettings & ioSettings, SceneDiagnostics & ioDiagnostics, int iStartLine )
 {
   int parsingError = 0;
+  SceneBlockDiagnostics blockDiagnostics(ioDiagnostics, "glTF", iStartLine, true);
 
   fs::path filepath;
   Mat4x4 transMat(1.f), rotMat(1.f), scaleMat(1.f);
@@ -2826,11 +3009,15 @@ int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & 
   std::string line;
   while( std::getline( iStr, line ) && !parsingError )
   {
+    blockDiagnostics.NextLine();
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+      blockDiagnostics.SetDirective(tokens[0]);
 
     if ( State::ExpectOpenBracket == curState )
     {
@@ -2860,6 +3047,7 @@ int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & 
       if ( 2 == nbTokens )
       {
         filepath = iPath + tokens[1];
+        blockDiagnostics.SetDirective("file '" + tokens[1] + "'");
 
         if ( filepath.extension() == ".gltf" )
           isBinary = false;
@@ -2934,6 +3122,8 @@ int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & 
         parsingError++;
     }
   }
+  if ( parsingError && State::ExpectNewBlock != curState )
+    ConsumeMalformedSceneBlock(iStr, curState, blockDiagnostics);
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
@@ -2949,6 +3139,15 @@ int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & 
       printf("Unable to load gltf %s\n", filepath.string().c_str());
   }
 
+  if ( !parsingError && filepath.empty() )
+  {
+    blockDiagnostics.SetDirective("file");
+    parsingError++;
+  }
+  else if ( !parsingError && !fs::exists(filepath) )
+    parsingError++;
+
+  blockDiagnostics.ReportFailure( 0 != parsingError );
   return parsingError;
 }
 
