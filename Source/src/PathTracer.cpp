@@ -1172,13 +1172,17 @@ int PathTracer::ReloadScene()
     if ( 0 != this -> UploadTLASData() )
       return 1;
 
-    GLUtil::InitializeTBO(_BLASNodesTBO, sizeof(GpuBvh::Node) * _Scene.GetBLASNode().size(), &_Scene.GetBLASNode()[0], GL_RGB32F);
-    GLUtil::InitializeTBO(_BLASNodesRangeTBO, sizeof(Vec2i) * _Scene.GetBLASNodeRange().size(), &_Scene.GetBLASNodeRange()[0], GL_RG32I);
-    GLUtil::InitializeTBO(_BLASPackedIndicesTBO, sizeof(Vec3i) * _Scene.GetBLASPackedIndices().size(), &_Scene.GetBLASPackedIndices()[0], GL_RGB32I);
-    GLUtil::InitializeTBO(_BLASPackedIndicesRangeTBO, sizeof(Vec2i) * _Scene.GetBLASPackedIndicesRange().size(), &_Scene.GetBLASPackedIndicesRange()[0], GL_RG32I);
-    GLUtil::InitializeTBO(_BLASPackedVerticesTBO, sizeof(Vec3) * _Scene.GetBLASPackedVertices().size(), &_Scene.GetBLASPackedVertices()[0], GL_RGB32F);
-    GLUtil::InitializeTBO(_BLASPackedNormalsTBO, sizeof(Vec3) * _Scene.GetBLASPackedNormals().size(), &_Scene.GetBLASPackedNormals()[0], GL_RGB32F);
-    GLUtil::InitializeTBO(_BLASPackedUVsTBO, sizeof(Vec2) * _Scene.GetBLASPackedUVs().size(), &_Scene.GetBLASPackedUVs()[0], GL_RG32F);
+    const auto uploadBLASTBO = [this]( GLTextureBuffer & ioTBO, const auto & iData, GLenum iFormat ) {
+      return UploadOrCreateTBO(ioTBO, static_cast<GLsizeiptr>(sizeof(iData[0]) * iData.size()), iData.empty() ? nullptr : iData.data(), iFormat);
+    };
+    if ( 0 != uploadBLASTBO(_BLASNodesTBO, _Scene.GetBLASNode(), GL_RGB32F)
+      || 0 != uploadBLASTBO(_BLASNodesRangeTBO, _Scene.GetBLASNodeRange(), GL_RG32I)
+      || 0 != uploadBLASTBO(_BLASPackedIndicesTBO, _Scene.GetBLASPackedIndices(), GL_RGB32I)
+      || 0 != uploadBLASTBO(_BLASPackedIndicesRangeTBO, _Scene.GetBLASPackedIndicesRange(), GL_RG32I)
+      || 0 != uploadBLASTBO(_BLASPackedVerticesTBO, _Scene.GetBLASPackedVertices(), GL_RGB32F)
+      || 0 != uploadBLASTBO(_BLASPackedNormalsTBO, _Scene.GetBLASPackedNormals(), GL_RGB32F)
+      || 0 != uploadBLASTBO(_BLASPackedUVsTBO, _Scene.GetBLASPackedUVs(), GL_RG32F) )
+      return 1;
   }
 
   //this -> ReloadEnvMap();

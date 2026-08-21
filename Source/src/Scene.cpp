@@ -722,15 +722,22 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
       const std::vector<Vec3>  & curNormals  = mesh -> GetNormals();
       const std::vector<Vec2>  & curUVs      = mesh -> GetUVs();
   
-      const Vec3i offset(_BLASPackedVertices.size(), _BLASPackedNormals.size(), _BLASPackedUVs.size());
+      const int vertexOffset = static_cast<int>(_BLASPackedVertices.size());
+      const int normalOffset = static_cast<int>(_BLASPackedNormals.size());
+      const int fallbackUVIndex = static_cast<int>(_BLASPackedUVs.size());
       _BLASPackedVertices.insert(_BLASPackedVertices.end(), curVertices.begin(), curVertices.end());
       _BLASPackedNormals. insert(_BLASPackedNormals.end(),  curNormals.begin(),  curNormals.end());
+      // BVH shaders always interpolate UVs, including geometry without texture coordinates.
+      _BLASPackedUVs.emplace_back(0.f);
       _BLASPackedUVs.     insert(_BLASPackedUVs.end(),      curUVs.begin(),      curUVs.end());
 
       int nbIndices = static_cast<int>(curBLAS -> GetPackedTriangleIdx().size());
       startIdx = static_cast<int>(_BLASPackedIndices.size());
-      for (auto & indices : curBLAS -> GetPackedTriangleIdx())
-        _BLASPackedIndices.emplace_back(indices + offset);
+      for (const Vec3i & indices : curBLAS -> GetPackedTriangleIdx())
+      {
+        const int uvIndex = ( indices.z >= 0 ) ? fallbackUVIndex + 1 + indices.z : fallbackUVIndex;
+        _BLASPackedIndices.emplace_back(indices.x + vertexOffset, indices.y + normalOffset, uvIndex);
+      }
       _BLASPackedIndicesRange.emplace_back(startIdx, nbIndices);
     }
   }
