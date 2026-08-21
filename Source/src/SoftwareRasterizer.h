@@ -14,7 +14,6 @@
 
 #include <array>
 #include <memory>
-#include <mutex>
 
 namespace RTRT
 {
@@ -202,7 +201,7 @@ protected:
   int RasterizeARM(RasterData::Tile& ioTile);
 #endif
 
-  void ComputeLOD( RasterData::RasterTriangle & ioRasterTri );
+  void ComputeLOD( RasterData::RasterTriangle & ioRasterTri, const RasterData::Varying iVaryings[3] );
   void UpdateInstanceBounds( CompiledInstanceRange & ioRange );
   bool IsInstanceVisible( const CompiledInstanceRange & iRange, const Mat4x4 & iViewProjection ) const;
   void BeginTimer( int iTimerID );
@@ -310,7 +309,7 @@ protected:
   std::vector<int>                                     _VisibleInstanceRanges;
   std::vector<unsigned char>                           _TriangleVisible;
   std::vector<RasterData::ProjectedVertex>             _ProjVerticesBuf;
-  std::mutex                                           _ProjVerticesMutex;
+  std::vector<std::vector<RasterData::ProjectedVertex>> _ClippedVerticesBuf;
   std::vector<std::vector<RasterData::RasterTriangle>> _RasterTrianglesBuf;
   std::vector< std::vector<RasterData::Fragment>>      _Fragments;
   std::vector< std::vector<RasterData::TransparentHit>> _TransparentFragments;

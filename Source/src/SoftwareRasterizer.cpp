@@ -196,9 +196,13 @@ int SoftwareRasterizer::UpdateNumberOfWorkers(bool iForce)
     JobSystem::Get().Initialize(_NbJobs);
 
     _RasterTrianglesBuf.resize(_NbJobs);
+    _ClippedVerticesBuf.resize(_NbJobs);
 
     for (unsigned int i = 0; i < _NbJobs; ++i)
+    {
       _RasterTrianglesBuf[i].reserve(std::max(_Triangles.size() / _NbJobs, (size_t)1));
+      _ClippedVerticesBuf[i].reserve(std::max(_Triangles.size() / _NbJobs, (size_t)1));
+    }
 
     _Fragments.resize(_NbJobs);
     _TransparentFragments.resize(_NbJobs);
@@ -869,6 +873,7 @@ int SoftwareRasterizer::UnloadScene()
   _Triangles.clear();
   _InstanceRanges.clear();
   _ProjVerticesBuf.clear();
+  _ClippedVerticesBuf.clear();
   for ( auto & rasterTriangles : _RasterTrianglesBuf )
     rasterTriangles.clear();
   for ( auto & fragments : _Fragments )
@@ -909,10 +914,8 @@ int SoftwareRasterizer::ReloadScene()
     instanceRange._Transform = meshInst._Transform;
     instanceRange._VertexStart = static_cast<int>(_VertexBuffer.size());
     instanceRange._TriangleStart = static_cast<int>(_Triangles.size());
-    if ( !meshInst._Visible )
-      continue;
-
-    _CachedVisibleMeshInstanceCount++;
+    if ( meshInst._Visible )
+      _CachedVisibleMeshInstanceCount++;
 
     if ( ( meshInst._MeshID < 0 ) || ( meshInst._MeshID >= static_cast<int>(meshes.size()) ) )
       continue;
@@ -1027,25 +1030,12 @@ bool SoftwareRasterizer::CanRefreshSceneInstanceTransforms() const
   const std::vector<MeshInstance> & meshInstances = _Scene.GetMeshInstances();
   const std::vector<Mesh*>        & meshes        = _Scene.GetMeshes();
 
-  int visibleMeshInstanceCount = 0;
-  for ( const MeshInstance & meshInst : meshInstances )
-  {
-    if ( meshInst._Visible )
-      visibleMeshInstanceCount++;
-  }
-  if ( visibleMeshInstanceCount != _CachedVisibleMeshInstanceCount )
-    return false;
-
   for ( int instID = 0; instID < static_cast<int>(meshInstances.size()); ++instID )
   {
     const MeshInstance & meshInst = meshInstances[instID];
     const CompiledInstanceRange & instanceRange = _InstanceRanges[instID];
-    if ( meshInst._Visible != instanceRange._Visible )
-      return false;
     if ( meshInst._MeshID != instanceRange._MeshID )
       return false;
-    if ( !meshInst._Visible )
-      continue;
     if ( ( meshInst._MeshID < 0 ) || ( meshInst._MeshID >= static_cast<int>(meshes.size()) ) )
       return false;
     Mesh * curMesh = meshes[meshInst._MeshID];
@@ -1074,7 +1064,8 @@ int SoftwareRasterizer::RefreshSceneInstanceTransforms()
     const MeshInstance & meshInst = meshInstances[instID];
     const bool transformChanged = 0 != std::memcmp(&instanceRange._Transform, &meshInst._Transform, sizeof(Mat4x4));
     const bool materialChanged = instanceRange._MaterialID != meshInst._MaterialID;
-    if ( !transformChanged && !materialChanged )
+    const bool visibilityChanged = instanceRange._Visible != meshInst._Visible;
+    if ( !transformChanged && !materialChanged && !visibilityChanged )
       continue;
 
     _Stats._ChangedInstances++;
@@ -1114,10 +1105,18 @@ int SoftwareRasterizer::RefreshSceneInstanceTransforms()
         tri._MatID = meshInst._MaterialID;
     }
     _Stats._RefreshedTriangles += instanceRange._TriangleCount;
+    instanceRange._Visible = meshInst._Visible;
     instanceRange._Transform = meshInst._Transform;
     instanceRange._MaterialID = meshInst._MaterialID;
     if ( transformChanged )
       UpdateInstanceBounds(instanceRange);
+  }
+
+  _CachedVisibleMeshInstanceCount = 0;
+  for ( const CompiledInstanceRange & instanceRange : _InstanceRanges )
+  {
+    if ( instanceRange._Visible )
+      _CachedVisibleMeshInstanceCount++;
   }
 
   _FrameNum = 0;
@@ -1161,10 +1160,16 @@ int SoftwareRasterizer::RefreshAllSceneInstanceTransforms()
   for ( int instanceID = 0; instanceID < static_cast<int>(_InstanceRanges.size()); ++instanceID )
   {
     CompiledInstanceRange & range = _InstanceRanges[instanceID];
+    range._Visible = meshInstances[instanceID]._Visible;
     range._Transform = meshInstances[instanceID]._Transform;
     range._MaterialID = meshInstances[instanceID]._MaterialID;
+    UpdateInstanceBounds(range);
+  }
+  _CachedVisibleMeshInstanceCount = 0;
+  for ( const CompiledInstanceRange & range : _InstanceRanges )
+  {
     if ( range._Visible )
-      UpdateInstanceBounds(range);
+      _CachedVisibleMeshInstanceCount++;
   }
   _FrameNum = 0;
   return 0;
@@ -1869,7 +1874,10 @@ int SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM)
   int nbTriangles = static_cast<int>(_Triangles.size());
 
   for ( unsigned int i = 0; i < _NbJobs; ++i )
+  {
     _RasterTrianglesBuf[i].clear();
+    _ClippedVerticesBuf[i].clear();
+  }
 
   for (unsigned int i = 0; i < _NbJobs; ++i)
   {
@@ -1882,6 +1890,25 @@ int SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM)
   }
 
   JobSystem::Get().Wait();
+
+  size_t generatedVertexCount = 0;
+  for ( const auto & clippedVertices : _ClippedVerticesBuf )
+    generatedVertexCount += clippedVertices.size();
+  _ProjVerticesBuf.reserve(_ProjVerticesBuf.size() + generatedVertexCount);
+
+  for ( unsigned int i = 0; i < _NbJobs; ++i )
+  {
+    const int vertexOffset = static_cast<int>(_ProjVerticesBuf.size());
+    _ProjVerticesBuf.insert(_ProjVerticesBuf.end(), _ClippedVerticesBuf[i].begin(), _ClippedVerticesBuf[i].end());
+    for ( rd::RasterTriangle & rasterTri : _RasterTrianglesBuf[i] )
+    {
+      for ( int vertex = 0; vertex < 3; ++vertex )
+      {
+        if ( rasterTri._Indices[vertex] < 0 )
+          rasterTri._Indices[vertex] = vertexOffset - rasterTri._Indices[vertex] - 1;
+      }
+    }
+  }
 
   _Stats._ClippedTriangles = 0;
   for ( const auto & rasterTriangles : _RasterTrianglesBuf )
@@ -1898,16 +1925,21 @@ void SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, i
 {
   if ( _RasterTrianglesBuf[iThreadBin].capacity() < static_cast<size_t>(iEndInd - iStartInd) )
     _RasterTrianglesBuf[iThreadBin].reserve(iEndInd - iStartInd);
+  std::vector<rd::ProjectedVertex> & clippedVertices = _ClippedVerticesBuf[iThreadBin];
 
   for (int i = iStartInd; i < iEndInd; ++i)
   {
     if ( i < static_cast<int>(_TriangleVisible.size()) && !_TriangleVisible[i] )
       continue;
     rd::Triangle& tri = _Triangles[i];
+    const rd::ProjectedVertex sourceVertices[3] = {
+      _ProjVerticesBuf[tri._Indices[0]],
+      _ProjVerticesBuf[tri._Indices[1]],
+      _ProjVerticesBuf[tri._Indices[2]] };
 
-    uint32_t clipCode0 = SutherlandHodgman::ComputeClipCode(_ProjVerticesBuf[tri._Indices[0]]._ProjPos);
-    uint32_t clipCode1 = SutherlandHodgman::ComputeClipCode(_ProjVerticesBuf[tri._Indices[1]]._ProjPos);
-    uint32_t clipCode2 = SutherlandHodgman::ComputeClipCode(_ProjVerticesBuf[tri._Indices[2]]._ProjPos);
+    uint32_t clipCode0 = SutherlandHodgman::ComputeClipCode(sourceVertices[0]._ProjPos);
+    uint32_t clipCode1 = SutherlandHodgman::ComputeClipCode(sourceVertices[1]._ProjPos);
+    uint32_t clipCode2 = SutherlandHodgman::ComputeClipCode(sourceVertices[2]._ProjPos);
 
     if (clipCode0 | clipCode1 | clipCode2)
     {
@@ -1915,9 +1947,9 @@ void SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, i
       if (!(clipCode0 & clipCode1 & clipCode2))
       {
         Polygon poly = SutherlandHodgman::ClipTriangle(
-          _ProjVerticesBuf[tri._Indices[0]]._ProjPos,
-          _ProjVerticesBuf[tri._Indices[1]]._ProjPos,
-          _ProjVerticesBuf[tri._Indices[2]]._ProjPos,
+          sourceVertices[0]._ProjPos,
+          sourceVertices[1]._ProjPos,
+          sourceVertices[2]._ProjPos,
           (clipCode0 ^ clipCode1) | (clipCode1 ^ clipCode2) | (clipCode2 ^ clipCode0));
 
         for (int j = 2; j < poly.Size(); ++j)
@@ -1926,32 +1958,34 @@ void SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, i
           Polygon::Point Points[3] = { poly[0], poly[j - 1], poly[j] };
 
           rd::RasterTriangle rasterTri;
+          rd::Varying clippedVaryings[3];
           for (int k = 0; k < 3; ++k)
           {
             if (Points[k]._Distances.x == 1.f)
             {
               rasterTri._Indices[k] = tri._Indices[0]; // == V0
+              clippedVaryings[k] = sourceVertices[0]._Attrib;
             }
             else if (Points[k]._Distances.y == 1.f)
             {
               rasterTri._Indices[k] = tri._Indices[1]; // == V1
+              clippedVaryings[k] = sourceVertices[1]._Attrib;
             }
             else if (Points[k]._Distances.z == 1.f)
             {
               rasterTri._Indices[k] = tri._Indices[2]; // == V2
+              clippedVaryings[k] = sourceVertices[2]._Attrib;
             }
             else
             {
               rd::ProjectedVertex newProjVert;
               newProjVert._ProjPos = Points[k]._Pos;
-              newProjVert._Attrib = _ProjVerticesBuf[tri._Indices[0]]._Attrib * Points[k]._Distances.x +
-                _ProjVerticesBuf[tri._Indices[1]]._Attrib * Points[k]._Distances.y +
-                _ProjVerticesBuf[tri._Indices[2]]._Attrib * Points[k]._Distances.z;
-              {
-                std::unique_lock<std::mutex> lock(_ProjVerticesMutex);
-                rasterTri._Indices[k] = static_cast<int>(_ProjVerticesBuf.size());
-                _ProjVerticesBuf.emplace_back(newProjVert);
-              }
+              newProjVert._Attrib = sourceVertices[0]._Attrib * Points[k]._Distances.x +
+                sourceVertices[1]._Attrib * Points[k]._Distances.y +
+                sourceVertices[2]._Attrib * Points[k]._Distances.z;
+              clippedVaryings[k] = newProjVert._Attrib;
+              rasterTri._Indices[k] = -static_cast<int>(clippedVertices.size()) - 1;
+              clippedVertices.emplace_back(newProjVert);
             }
 
             Vec3 homogeneousProjPos; // NDC space
@@ -1974,7 +2008,24 @@ void SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, i
           rasterTri._MatID = tri._MatID;
           rasterTri._Normal = tri._Normal;
 
-          this -> ComputeLOD(rasterTri);
+          const Vec3 dp1 = clippedVaryings[1]._WorldPos - clippedVaryings[0]._WorldPos;
+          const Vec3 dp2 = clippedVaryings[2]._WorldPos - clippedVaryings[0]._WorldPos;
+          const Vec2 duv1 = clippedVaryings[1]._UV - clippedVaryings[0]._UV;
+          const Vec2 duv2 = clippedVaryings[2]._UV - clippedVaryings[0]._UV;
+          const float determinant = duv1.x * duv2.y - duv1.y * duv2.x;
+          if ( abs(determinant) > EPSILON )
+          {
+            rasterTri._Tangent = glm::normalize(( dp1 * duv2.y - dp2 * duv1.y ) / determinant);
+            rasterTri._Bitangent = glm::normalize(glm::cross(rasterTri._Normal, rasterTri._Tangent)) * glm::sign(determinant);
+          }
+          else
+          {
+            const Vec3 up = ( abs(rasterTri._Normal.z) < .999f ) ? Vec3(0.f, 0.f, 1.f) : Vec3(1.f, 0.f, 0.f);
+            rasterTri._Tangent = glm::normalize(glm::cross(up, rasterTri._Normal));
+            rasterTri._Bitangent = glm::cross(rasterTri._Normal, rasterTri._Tangent);
+          }
+
+          this -> ComputeLOD(rasterTri, clippedVaryings);
 
           _RasterTrianglesBuf[iThreadBin].emplace_back(std::move(rasterTri));
         }
@@ -1988,7 +2039,7 @@ void SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, i
       {
         rasterTri._Indices[j] = tri._Indices[j];
 
-        rd::ProjectedVertex& projVert = _ProjVerticesBuf[tri._Indices[j]];
+        const rd::ProjectedVertex& projVert = sourceVertices[j];
 
         Vec3 homogeneousProjPos; // NDC space
         rasterTri._InvW[j] = 1.f / projVert._ProjPos.w;
@@ -2010,9 +2061,13 @@ void SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, i
       rasterTri._MatID = tri._MatID;
       rasterTri._Normal = tri._Normal;
 
-      const rd::Varying & v0 = _ProjVerticesBuf[tri._Indices[0]]._Attrib;
-      const rd::Varying & v1 = _ProjVerticesBuf[tri._Indices[1]]._Attrib;
-      const rd::Varying & v2 = _ProjVerticesBuf[tri._Indices[2]]._Attrib;
+      const rd::Varying sourceVaryings[3] = {
+        sourceVertices[0]._Attrib,
+        sourceVertices[1]._Attrib,
+        sourceVertices[2]._Attrib };
+      const rd::Varying & v0 = sourceVaryings[0];
+      const rd::Varying & v1 = sourceVaryings[1];
+      const rd::Varying & v2 = sourceVaryings[2];
       Vec3 dp1 = v1._WorldPos - v0._WorldPos;
       Vec3 dp2 = v2._WorldPos - v0._WorldPos;
       Vec2 duv1 = v1._UV - v0._UV;
@@ -2030,7 +2085,7 @@ void SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, i
         rasterTri._Bitangent = glm::cross(rasterTri._Normal, rasterTri._Tangent);
       }
 
-      this -> ComputeLOD(rasterTri);
+      this -> ComputeLOD(rasterTri, sourceVaryings);
 
       _RasterTrianglesBuf[iThreadBin].emplace_back(std::move(rasterTri));
     }
@@ -2040,7 +2095,7 @@ void SoftwareRasterizer::ClipTriangles(const Mat4x4& iRasterM, int iThreadBin, i
 // ----------------------------------------------------------------------------
 // ComputeLOD
 // ----------------------------------------------------------------------------
-void SoftwareRasterizer::ComputeLOD( RasterData::RasterTriangle & ioRasterTri )
+void SoftwareRasterizer::ComputeLOD( RasterData::RasterTriangle & ioRasterTri, const RasterData::Varying iVaryings[3] )
 {
   ioRasterTri._LOD = 0.f;
 
@@ -2052,10 +2107,9 @@ void SoftwareRasterizer::ComputeLOD( RasterData::RasterTriangle & ioRasterTri )
       const Texture * tex = _Scene.GetTextures()[(unsigned int)mat._BaseColorTexId];
       if ( tex )
       {
-        // get UVs for the three vertices (works for both original or newly created proj verts)
-        Vec2 uv0 = _ProjVerticesBuf[ioRasterTri._Indices[0]]._Attrib._UV;
-        Vec2 uv1 = _ProjVerticesBuf[ioRasterTri._Indices[1]]._Attrib._UV;
-        Vec2 uv2 = _ProjVerticesBuf[ioRasterTri._Indices[2]]._Attrib._UV;
+        const Vec2 uv0 = iVaryings[0]._UV;
+        const Vec2 uv1 = iVaryings[1]._UV;
+        const Vec2 uv2 = iVaryings[2]._UV;
 
         // screen-space positions
         Vec2 p0 = Vec2(ioRasterTri._V[0].x, ioRasterTri._V[0].y);
