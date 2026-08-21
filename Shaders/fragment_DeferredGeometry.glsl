@@ -14,7 +14,7 @@ flat in int v_MaterialID; // optional: present if vertex shader provides it
 layout(location = 0) out vec4 gAlbedo;   // RGB: albedo, A: unused / opacity
 layout(location = 1) out vec4 gNormal;   // RGB: normal encoded in 0..1, A: unused
 layout(location = 2) out vec4 gPosition; // RGB: world position, A: unused
-layout(location = 3) out vec4 gMaterial; // R: roughness, G: metallic, B: reflectance, A: unused
+layout(location = 3) out vec4 gMaterial; // R: perceptual roughness, G: metallic, B: reflectance, A: unused
 layout(location = 4) out vec4 gEmission; // RGB: emission, A: unused
 
 // Optional fallback uniform (simple default albedo if no material sampling)

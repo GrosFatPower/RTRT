@@ -47,7 +47,7 @@ struct Material
 
   // Params4
   float _Metallic               = 0.f;
-  float _Roughness              = 0.5f;
+  float _Roughness              = 0.5f; // Perceptual roughness; GGX alpha is roughness squared.
   float _Subsurface             = 0.f;
   float _SpecTint               = 0.f;
  

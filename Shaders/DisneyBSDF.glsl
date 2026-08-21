@@ -317,7 +317,8 @@ vec3 DisneySample( in HitPoint iHP, in Material iMat, in float iEta, in vec3 iV,
     if ( H.z < 0.f )
       H = -H;
 
-    float fresnel = DisneyFresnel(iMat, iEta, dot(oL, H), dot(iV, H)); // TODO: Refactor into metallic BRDF and specular BSDF
+    float VdotH = dot(iV, H);
+    float fresnel = DisneyFresnel(iMat, iEta, VdotH, VdotH); // TODO: Refactor into metallic BRDF and specular BSDF
     float F = 1.f - ((1.f - fresnel) * iMat._SpecTrans * (1.f - iMat._Metallic));
 
     if ( rand() < F )

@@ -11,6 +11,13 @@
 #include RNG.glsl
 #include ToneMapping.glsl
 
+struct LightDirectionSample
+{
+  vec3  _Direction;
+  float _Distance;
+  float _Pdf;
+};
+
 // ----------------------------------------------------------------------------
 // ComputeONB
 // Orthonormal Basis
@@ -179,13 +186,39 @@ vec3 UniformSampleSphere()
 }
 
 // ----------------------------------------------------------------------------
-// GetLightDirSample
+// SampleSphereLightDirection
 // ----------------------------------------------------------------------------
-vec3 GetLightDirSample( in vec3 iSamplePos, in vec3 iLightPos, in float iLightRadius )
+bool SampleSphereLightDirection( in vec3 iSamplePos, in vec3 iLightPos, in float iLightRadius, out LightDirectionSample oSample )
 {
-  vec3 lightSample = iLightPos + RandomUnitVector() * iLightRadius;
+  vec3 toCenter = iLightPos - iSamplePos;
+  float dist2 = dot(toCenter, toCenter);
+  float radius = max(iLightRadius, RESOLUTION);
+  float radius2 = radius * radius;
 
-  return lightSample - iSamplePos;
+  if ( dist2 <= radius2 )
+  {
+    oSample._Direction = UniformSampleSphere();
+    oSample._Pdf = INV_4_PI;
+  }
+  else
+  {
+    vec3 centerDir = toCenter * inversesqrt(dist2);
+    float cosThetaMax = sqrt(max(1.f - radius2 / dist2, 0.f));
+    float cosTheta = 1.f - rand() * (1.f - cosThetaMax);
+    float sinTheta = sqrt(max(1.f - cosTheta * cosTheta, 0.f));
+    float phi = TWO_PI * rand();
+    vec3 T, BT;
+    ComputeOnB(centerDir, T, BT);
+    oSample._Direction = normalize(T * (sinTheta * cos(phi)) + BT * (sinTheta * sin(phi)) + centerDir * cosTheta);
+    oSample._Pdf = 1.f / max(TWO_PI * (1.f - cosThetaMax), EPSILON);
+  }
+
+  float hitDist = 0.f;
+  if ( !SphereIntersection(vec4(iLightPos, radius), Ray(iSamplePos, oSample._Direction), hitDist) || ( hitDist <= 0.f ) )
+    return false;
+
+  oSample._Distance = hitDist;
+  return true;
 }
 
 // ----------------------------------------------------------------------------
@@ -199,20 +232,57 @@ vec3 GetLightDirSample( in vec3 iSamplePos, in vec3 iLightPos, in vec3 iDirU, in
 }
 
 // ----------------------------------------------------------------------------
-// GetLightDirSample
+// SampleLightDirection
 // ----------------------------------------------------------------------------
+bool SampleLightDirection( in vec3 iSamplePos, in Light iLight, out LightDirectionSample oSample )
+{
+  if ( QUAD_LIGHT == iLight._Type )
+  {
+    vec3 lightPos = iLight._Pos + rand() * iLight._DirU + rand() * iLight._DirV;
+    vec3 toLight = lightPos - iSamplePos;
+    float dist2 = dot(toLight, toLight);
+    vec3 lightNormal = cross(iLight._DirU, iLight._DirV);
+    float area = length(lightNormal);
+    if ( ( dist2 <= EPSILON ) || ( area <= EPSILON ) )
+      return false;
+
+    oSample._Distance = sqrt(dist2);
+    oSample._Direction = toLight / oSample._Distance;
+    lightNormal /= area;
+    float cosine = abs(dot(lightNormal, -oSample._Direction));
+    if ( cosine <= EPSILON )
+      return false;
+    oSample._Pdf = dist2 / (cosine * area);
+    return true;
+  }
+
+  if ( SPHERE_LIGHT == iLight._Type )
+    return SampleSphereLightDirection(iSamplePos, iLight._Pos, iLight._Radius, oSample);
+
+  oSample._Direction = normalize(iLight._Pos);
+  oSample._Distance = INFINITY;
+  oSample._Pdf = 1.f;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// GetLightDirSample
+// Legacy helpers used by the non-path-traced ray renderer.
+// ----------------------------------------------------------------------------
+vec3 GetLightDirSample( in vec3 iSamplePos, in vec3 iLightPos, in float iLightRadius )
+{
+  LightDirectionSample lightSample;
+  if ( SampleSphereLightDirection(iSamplePos, iLightPos, iLightRadius, lightSample) )
+    return lightSample._Direction * lightSample._Distance;
+  return vec3(0.f);
+}
+
 vec3 GetLightDirSample( in vec3 iSamplePos, in Light iLight )
 {
-  vec3 lightSample;
-
-  if ( QUAD_LIGHT == iLight._Type )
-    lightSample = GetLightDirSample(iSamplePos, iLight._Pos, iLight._DirU, iLight._DirV);
-  else if ( SPHERE_LIGHT == iLight._Type )
-    lightSample = GetLightDirSample(iSamplePos, iLight._Pos, iLight._Radius);
-  else
-    lightSample = iLight._Pos;
-
-  return lightSample;
+  LightDirectionSample lightSample;
+  if ( SampleLightDirection(iSamplePos, iLight, lightSample) )
+    return lightSample._Direction * lightSample._Distance;
+  return vec3(0.f);
 }
 
 // ----------------------------------------------------------------------------
@@ -348,7 +418,8 @@ float LightPDF( in Light iLight, in Ray iRay )
   {
     vec3 centerToOrig = iRay._Orig - iLight._Pos;
     float distToCenterSq = dot(centerToOrig, centerToOrig);
-    float radSq = iLight._Radius * iLight._Radius;
+    float radius = max(iLight._Radius, RESOLUTION);
+    float radSq = radius * radius;
     if ( distToCenterSq < radSq )
     {
       // We are inside the sphere.
@@ -360,7 +431,7 @@ float LightPDF( in Light iLight, in Ray iRay )
       // We are outside the sphere.
       // The sphere area is therefore visible as a circle with a solid angle of at most 2pi.
       float hitDist = 0.f;
-      if ( SphereIntersection(vec4(iLight._Pos, iLight._Radius), iRay, hitDist) && ( hitDist > 0.f ) )
+      if ( SphereIntersection(vec4(iLight._Pos, radius), iRay, hitDist) && ( hitDist > 0.f ) )
       {
         float discriminant = 1.f - ( radSq / distToCenterSq );
         float cosThetaMax = sqrt(max(0.f, discriminant));
@@ -371,7 +442,8 @@ float LightPDF( in Light iLight, in Ray iRay )
   }
   else
   {
-    pdf = 1.f;
+    vec3 lightDir = normalize(iLight._Pos);
+    pdf = ( dot(lightDir, iRay._Dir) > 0.999999f ) ? 1.f : 0.f;
   }
 
   return pdf;

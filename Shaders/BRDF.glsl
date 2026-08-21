@@ -99,8 +99,7 @@ vec3 BRDF( in vec3 iN, in vec3 iV, in vec3 iL, in Material iMat )
   float VdotH = max(dot(iV, H), 0.f);
   float NdotH = max(dot(iN, H), 0.f);
 
-  float alpha = max(iMat._Roughness, RESOLUTION);
-  alpha *= alpha;
+  float alpha = max(iMat._Roughness * iMat._Roughness, RESOLUTION);
   vec3  F = FresnelSchlick(iMat._F0, VdotH);    // Fresnel reflectance (Schlick approximation)
   float D = DistributionGGX(alpha, NdotH);      // Normal distribution function
   float G = GeometrySmith(alpha, NdotV, NdotL); // Geometry term

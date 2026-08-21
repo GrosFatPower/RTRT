@@ -88,9 +88,6 @@ void main()
 
   for ( int i = 0; i < u_NbLights; ++i )
   {
-    DeferredLightSample lightSample;
-    bool hasLightSample = BuildDeferredLightSample(u_Lights[i], hitPoint._Pos, N, u_DirectLightIntensity, lightSample);
-
     vec3 L;
     if ( u_Lights[i]._Type == DISTANT_LIGHT )
       L = normalize(u_Lights[i]._Pos);
@@ -101,13 +98,15 @@ void main()
 
     float visibility = 1.0;
     bool hasShadow = false;
-    visibility = ComputeShadowForLight(i, int(u_Lights[i]._Type), hitPoint._Pos, N, hasLightSample ? lightSample._L : L, hasShadow);
+    vec3 shadowL = L;
+    bool hasLightSample = GetDeferredLightCenterDirection(u_Lights[i], hitPoint._Pos, shadowL);
+    visibility = ComputeShadowForLight(i, int(u_Lights[i]._Type), hitPoint._Pos, N, shadowL, hasShadow);
 
     if ( hasLightSample )
     {
       vec3 lightDiffuse;
       vec3 lightSpecular;
-      EvaluateDeferredPBRLight(pbrSurface, N, V, lightSample, lightDiffuse, lightSpecular);
+      EvaluateDeferredPBRLight(pbrSurface, hitPoint._Pos, N, V, u_Lights[i], u_DirectLightIntensity, lightDiffuse, lightSpecular);
       directDiffuse += lightDiffuse * visibility * ( 1.0 - specTrans );
       directSpecular += lightSpecular * visibility;
     }

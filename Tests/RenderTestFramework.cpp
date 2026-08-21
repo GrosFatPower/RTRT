@@ -268,6 +268,7 @@ bool ParseRenderTestCases( const std::string & iContents, std::vector<RenderTest
         || !ReadThresholds(test, testCase, oError, false) || !ReadSettings(test, testCase, oError)
         || !ReadString(test, "environment_map", testCase._EnvironmentMapPath, oError, false)
         || !ReadNonNegativeInt(test, "debug_mode", testCase._DebugMode, oError) || !ReadBool(test, "diagnostic_only", testCase._DiagnosticOnly, oError)
+        || !ReadBool(test, "clamp_comparison", testCase._ClampComparison, oError)
         || !ReadBool(test, "software_optimized", testCase._SoftwareOptimized, oError)
         || !ReadBool(test, "software_simd", testCase._SoftwareSIMD, oError)
         || !ReadBool(test, "software_fallback", testCase._SoftwareFallback, oError) )
@@ -277,6 +278,13 @@ bool ParseRenderTestCases( const std::string & iContents, std::vector<RenderTest
       if ( !ReadString(test, "baseline", baseline, oError, false) )
         return false;
       testCase._BaselinePath = baseline.empty() ? ( std::filesystem::path("Tests/Baselines") / ( testCase._Name + ".pfm" ) ) : std::filesystem::path(baseline);
+
+      std::string referenceBaseline;
+      if ( !ReadString(test, "reference_baseline", referenceBaseline, oError, false) )
+        return false;
+      if ( test.contains("reference_baseline") && referenceBaseline.empty() )
+        return SetManifestError(oError, "'reference_baseline' must not be empty.");
+      testCase._ReferenceBaselinePath = referenceBaseline;
 
       if ( test.contains("camera") )
       {
@@ -488,7 +496,8 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
       }
     },
     "tests": [
-      { "name": "valid", "profile": "test", "scene": "test.scene", "frames": 4, "debug_mode": 16, "diagnostic_only": true,
+      { "name": "valid", "profile": "test", "scene": "test.scene", "frames": 4, "debug_mode": 16, "diagnostic_only": true, "clamp_comparison": true,
+        "reference_baseline": "Tests/Baselines/reference.pfm",
         "camera": { "position": [1, 2, 3], "pivot": [0, 0, 0], "fov": 40, "near": 0.5 } }
     ]
   })";
@@ -498,7 +507,9 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
     if ( ParseRenderTestCases(validManifest, parsedCases, parseError) && ( 1u == parsedCases.size() )
       && ( 4 == parsedCases[0]._FrameCount ) && parsedCases[0]._OverrideCamera && !parsedCases[0]._SSR
       && ( 16 == parsedCases[0]._DebugMode ) && parsedCases[0]._DiagnosticOnly
-      && ( "Tests/Baselines/valid.pfm" == parsedCases[0]._BaselinePath.generic_string() ) )
+      && parsedCases[0]._ClampComparison
+      && ( "Tests/Baselines/valid.pfm" == parsedCases[0]._BaselinePath.generic_string() )
+      && ( "Tests/Baselines/reference.pfm" == parsedCases[0]._ReferenceBaselinePath.generic_string() ) )
       return true;
     std::cerr << "Unit test failed: valid render-test manifest. " << parseError << std::endl;
     return false;
@@ -514,7 +525,8 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
     R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene" }, { "name": "test", "profile": "test", "scene": "test.scene" }] })",
     R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 0, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene" }] })",
     R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "camera": { "position": [0, 0], "pivot": [0, 0, 0], "fov": 40 } }] })",
-    R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "debug_mode": -1 }] })"
+    R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "debug_mode": -1 }] })",
+    R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "reference_baseline": "" }] })"
   };
   if ( !RunUnitTest("manifest_validation", [&invalidManifests, &parsedCases, &parseError]() {
     for ( const std::string & invalidManifest : invalidManifests )

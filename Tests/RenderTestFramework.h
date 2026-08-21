@@ -38,6 +38,7 @@ struct RenderTestCase
   float           _PixelErrorThreshold = 0.f;
   float           _MismatchRatioThreshold = 0.f;
   std::filesystem::path _BaselinePath;
+  std::filesystem::path _ReferenceBaselinePath;
   bool            _OverrideCamera = false;
   Vec3            _CameraPosition = Vec3(0.f);
   Vec3            _CameraPivot = Vec3(0.f);
@@ -53,6 +54,7 @@ struct RenderTestCase
   bool            _Denoise = false;
   int             _DebugMode = 0;
   bool            _DiagnosticOnly = false;
+  bool            _ClampComparison = false;
   int             _SamplesPerPixel = 1;
   int             _Bounces = 4;
   bool            _SoftwareOptimized = false;

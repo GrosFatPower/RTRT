@@ -253,8 +253,8 @@ void SetupMaterial(const RasterData::Fragment& iFrag, const RasterData::RasterTr
       //else
         metallicRoughness = Vec3(tex->Sample(iFrag._Attrib._UV));
 
-      oMat._Metallic = metallicRoughness.b;
-      oMat._Roughness = metallicRoughness.g;
+      oMat._Metallic = MathUtil::Clamp(oMat._Metallic * metallicRoughness.b, 0.f, 1.f);
+      oMat._Roughness = MathUtil::Clamp(oMat._Roughness * metallicRoughness.g, 0.f, 1.f);
     }
   }
   
@@ -348,6 +348,7 @@ TransparentShadingResult BlinnPhongFragmentShader::ProcessTransparent(const rd::
   Vec3 F0;
   Vec3 N = glm::normalize(iFrag._Attrib._Normal);
   SetupMaterial(iFrag, iTri, _Uniforms, iTri._MatID, mat, F0, N);
+
   const float specTrans = MathUtil::Clamp(mat._SpecTrans, 0.f, 1.f);
   result._Alpha = MathUtil::Clamp(mat._Opacity, 0.f, 1.f) * ( 1.f - specTrans );
   const Vec3 V = glm::normalize(_Uniforms._CameraPos - iFrag._Attrib._WorldPos);

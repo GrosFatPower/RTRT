@@ -475,7 +475,7 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel, GltfDiagnosti
       material._AlphaMode = (float)AlphaMode::Mask;
 
     // Roughness and Metallic
-    material._Roughness = sqrtf((float)pbr.roughnessFactor); // Repo's disney material doesn't use squared roughness
+    material._Roughness = MathUtil::Clamp((float)pbr.roughnessFactor, 0.f, 1.f);
     material._Metallic = (float)pbr.metallicFactor;
     if ( pbr.metallicRoughnessTexture.index > -1 )
     {
@@ -947,7 +947,7 @@ int AddObjMaterial( Scene & ioScene, const tinyobj::material_t & iObjMaterial, c
   material._Opacity = MathUtil::Clamp(iObjMaterial.dissolve, 0.f, 1.f);
   material._AlphaMode = (float)(( material._Opacity < .999f ) ? AlphaMode::Blend : AlphaMode::Opaque);
   material._IOR = std::max(1.f, static_cast<float>(iObjMaterial.ior));
-  material._Roughness = ( iObjMaterial.roughness > 0.f ) ? sqrtf(MathUtil::Clamp(iObjMaterial.roughness, 0.f, 1.f)) : sqrtf(2.f / std::max(2.f, static_cast<float>(iObjMaterial.shininess) + 2.f));
+  material._Roughness = ( iObjMaterial.roughness > 0.f ) ? MathUtil::Clamp(iObjMaterial.roughness, 0.f, 1.f) : powf(2.f / std::max(2.f, static_cast<float>(iObjMaterial.shininess) + 2.f), 0.25f);
   material._Metallic = MathUtil::Clamp(iObjMaterial.metallic, 0.f, 1.f);
 
   LoadObjTexture(ioScene, iDirectory, iObjMaterial.diffuse_texname, material._BaseColorTexId, ioDiagnostics);

@@ -323,7 +323,15 @@
       "name": "deferred_water_bottle",
       "profile": "deferred",
       "scene": "WaterBottle.scene",
-      "resolution": [850, 720]
+      "resolution": [850, 720],
+      "reference_baseline": "Tests/Baselines/pathtracer_water_bottle.pfm",
+      "clamp_comparison": true,
+      "thresholds": {
+        "mean_absolute_error": 0.025,
+        "max_absolute_error": 1.0,
+        "pixel_error": 0.10,
+        "mismatch_ratio": 0.05
+      }
     },
     {
       "name": "deferred_barbershopchair_01",
@@ -375,7 +383,7 @@
       "profile": "pathtracer",
       "scene": "WaterBottle.scene",
       "resolution": [850, 720],
-      "frames": 60
+      "frames": 256
     },
     {
       "name": "pathtracer_barbershopchair_01",

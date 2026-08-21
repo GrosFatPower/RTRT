@@ -43,6 +43,10 @@ bool CheckStaticImport( bool iQuiet )
   if ( ( std::abs(instance._Transform[3][0] - 1.f) > .0001f ) || ( std::abs(instance._Transform[3][1] - 2.f) > .0001f ) || ( std::abs(instance._Transform[3][2] - 3.f) > .0001f ) )
     return false;
 
+  const std::vector<Material> & materials = scene.GetMaterials();
+  if ( materials.empty() || ( std::abs(materials[0]._Roughness - .36f) > .0001f ) || ( std::abs(materials[0]._Metallic - .25f) > .0001f ) )
+    return false;
+
   Light * light = scene.GetLight(0);
   const Camera & camera = scene.GetCamera();
   return light

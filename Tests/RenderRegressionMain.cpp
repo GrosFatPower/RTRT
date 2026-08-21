@@ -14,6 +14,7 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -264,17 +265,30 @@ RenderCaseOutcome RunRenderCase( const RTRT::Tests::RenderTestCase & iTestCase, 
     return outcome;
   }
 
+  const fs::path expectedPath = iTestCase._ReferenceBaselinePath.empty()
+    ? baselinePath
+    : ( fs::path(RTRT::PathUtils::GetAssetPath("..")) / iTestCase._ReferenceBaselinePath );
   RTRT::RenderImage expected;
-  if ( !RTRT::Tests::ReadPFM(baselinePath, expected) )
+  if ( !RTRT::Tests::ReadPFM(expectedPath, expected) )
   {
-    std::cerr << "Baseline is not initialized: " << baselinePath << std::endl;
+    std::cerr << "Baseline is not initialized: " << expectedPath << std::endl;
     outcome._Status = RenderCaseStatus::Skipped;
     outcome._Reason = "baseline is not initialized";
     return outcome;
   }
 
+  RTRT::RenderImage comparisonActual = actual;
+  RTRT::RenderImage comparisonExpected = expected;
+  if ( iTestCase._ClampComparison )
+  {
+    for ( float & value : comparisonActual._Pixels )
+      value = std::clamp(value, 0.f, 1.f);
+    for ( float & value : comparisonExpected._Pixels )
+      value = std::clamp(value, 0.f, 1.f);
+  }
+
   RTRT::Tests::ImageMetrics metrics;
-  if ( !RTRT::Tests::CompareImages(actual, expected, iTestCase._PixelErrorThreshold, metrics) )
+  if ( !RTRT::Tests::CompareImages(comparisonActual, comparisonExpected, iTestCase._PixelErrorThreshold, metrics) )
   {
     std::cerr << "Image dimensions do not match for " << iTestCase._Name << std::endl;
     outcome._Reason = "image dimensions do not match";
@@ -292,7 +306,7 @@ RenderCaseOutcome RunRenderCase( const RTRT::Tests::RenderTestCase & iTestCase, 
   RTRT::Tests::WritePFM(artifactPath / "expected.pfm", expected);
   RTRT::Tests::WriteDiagnosticPNG(artifactPath / "actual.png", actual);
   RTRT::Tests::WriteDiagnosticPNG(artifactPath / "expected.png", expected);
-  RTRT::Tests::WriteDiffPNG(artifactPath / "diff.png", actual, expected);
+  RTRT::Tests::WriteDiffPNG(artifactPath / "diff.png", comparisonActual, comparisonExpected);
   WriteMetrics(artifactPath / "metrics.txt", metrics);
   outcome._Reason = "image mismatch";
   return outcome;
