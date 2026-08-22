@@ -302,6 +302,9 @@
       "profile": "deferred",
       "scene": "boy.scene",
       "resolution": [640, 480],
+      "thresholds": {
+        "max_absolute_error": 12.5
+      },
       "camera": {
         "position": [0.3, 0.11, 0.1],
         "pivot": [0.0, 0.07, 0.0],
@@ -314,6 +317,9 @@
       "profile": "pathtracer",
       "scene": "boy.scene",
       "resolution": [640, 480],
+      "thresholds": {
+        "max_absolute_error": 0.5
+      },
       "camera": {
         "position": [0.3, 0.11, 0.1],
         "pivot": [0.0, 0.07, 0.0],
@@ -360,6 +366,9 @@
       "name": "deferred_refraction",
       "profile": "deferred",
       "scene": "DeferredRefraction.scene",
+      "thresholds": {
+        "max_absolute_error": 12.5
+      },
       "settings": {
         "ssr": false,
         "ssao": false,
