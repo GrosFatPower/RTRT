@@ -90,6 +90,13 @@ static void ApplyMapRenderSettings( const FpsGameMap & iMap, FpsGameSettings & i
   ioRenderSettings._SSRMaxDistance = std::max(0.001f, settings._SSRMaxDistance);
   ioRenderSettings._SSRThickness = std::max(0.001f, settings._SSRThickness);
   ioRenderSettings._SSRFade = MathUtil::Clamp(settings._SSRFade, 0.f, 1.f);
+  ioRenderSettings._Transparency = settings._Transparency;
+  ioRenderSettings._Refraction = settings._Refraction;
+  ioRenderSettings._RefractionMaxSteps = MathUtil::Clamp(settings._RefractionMaxSteps, 4, 128);
+  ioRenderSettings._RefractionStepSize = std::max(0.001f, settings._RefractionStepSize);
+  ioRenderSettings._RefractionMaxDistance = std::max(0.001f, settings._RefractionMaxDistance);
+  ioRenderSettings._RefractionThickness = std::max(0.001f, settings._RefractionThickness);
+  ioRenderSettings._RefractionEdgeFade = MathUtil::Clamp(settings._RefractionEdgeFade, 0.001f, 1.f);
 
   ioRenderSettings._PBRDirectLighting = settings._PBRDirectLighting;
   ioRenderSettings._DirectLightIntensity = std::max(0.f, settings._DirectLightIntensity);
@@ -135,6 +142,13 @@ static void CaptureMapRenderSettings( FpsGameMap & ioMap, const FpsGameSettings 
   settings._SSRMaxDistance = iRenderSettings._SSRMaxDistance;
   settings._SSRThickness = iRenderSettings._SSRThickness;
   settings._SSRFade = iRenderSettings._SSRFade;
+  settings._Transparency = iRenderSettings._Transparency;
+  settings._Refraction = iRenderSettings._Refraction;
+  settings._RefractionMaxSteps = iRenderSettings._RefractionMaxSteps;
+  settings._RefractionStepSize = iRenderSettings._RefractionStepSize;
+  settings._RefractionMaxDistance = iRenderSettings._RefractionMaxDistance;
+  settings._RefractionThickness = iRenderSettings._RefractionThickness;
+  settings._RefractionEdgeFade = iRenderSettings._RefractionEdgeFade;
   settings._PBRDirectLighting = iRenderSettings._PBRDirectLighting;
   settings._DirectLightIntensity = iRenderSettings._DirectLightIntensity;
   settings._SpecularIBLMaxRoughness = iRenderSettings._SpecularIBLMaxRoughness;

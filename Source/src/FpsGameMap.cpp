@@ -693,6 +693,41 @@ protected:
         if ( !ParseFloat(tokens[1], settings._SSRFade) )
           return Error("invalid render ssrFade");
       }
+      else if ( IsEqual(tokens[0], "transparency") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseBool(tokens[1], settings._Transparency) )
+          return Error("invalid render transparency");
+      }
+      else if ( IsEqual(tokens[0], "refraction") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseBool(tokens[1], settings._Refraction) )
+          return Error("invalid render refraction");
+      }
+      else if ( IsEqual(tokens[0], "refractionmaxsteps") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseInt(tokens[1], settings._RefractionMaxSteps) )
+          return Error("invalid render refractionMaxSteps");
+      }
+      else if ( IsEqual(tokens[0], "refractionstepsize") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], settings._RefractionStepSize) )
+          return Error("invalid render refractionStepSize");
+      }
+      else if ( IsEqual(tokens[0], "refractionmaxdistance") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], settings._RefractionMaxDistance) )
+          return Error("invalid render refractionMaxDistance");
+      }
+      else if ( IsEqual(tokens[0], "refractionthickness") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], settings._RefractionThickness) )
+          return Error("invalid render refractionThickness");
+      }
+      else if ( IsEqual(tokens[0], "refractionedgefade") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], settings._RefractionEdgeFade) )
+          return Error("invalid render refractionEdgeFade");
+      }
       else if ( IsEqual(tokens[0], "pbrdirectlighting") && ( 2 == static_cast<int>(tokens.size()) ) )
       {
         if ( !ParseBool(tokens[1], settings._PBRDirectLighting) )
@@ -1366,6 +1401,13 @@ bool FpsGameMapLoader::Save( const std::string & iFilename, const FpsGameMap & i
     file << "  ssrMaxDistance " << settings._SSRMaxDistance << "\n";
     file << "  ssrThickness " << settings._SSRThickness << "\n";
     file << "  ssrFade " << settings._SSRFade << "\n";
+    file << "  transparency " << ( settings._Transparency ? "true" : "false" ) << "\n";
+    file << "  refraction " << ( settings._Refraction ? "true" : "false" ) << "\n";
+    file << "  refractionMaxSteps " << settings._RefractionMaxSteps << "\n";
+    file << "  refractionStepSize " << settings._RefractionStepSize << "\n";
+    file << "  refractionMaxDistance " << settings._RefractionMaxDistance << "\n";
+    file << "  refractionThickness " << settings._RefractionThickness << "\n";
+    file << "  refractionEdgeFade " << settings._RefractionEdgeFade << "\n";
     file << "  pbrDirectLighting " << ( settings._PBRDirectLighting ? "true" : "false" ) << "\n";
     file << "  directLightIntensity " << settings._DirectLightIntensity << "\n";
     file << "  iblMaxRoughness " << settings._SpecularIBLMaxRoughness << "\n";

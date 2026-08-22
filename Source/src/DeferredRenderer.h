@@ -69,6 +69,9 @@ struct DeferredTransparentPassTexSlot
   static constexpr TextureSlot _BRDFLUT       = 8;
   static constexpr TextureSlot _ShadowCubeMap = 9;
   static constexpr TextureSlot _Shadow2DMap   = 10;
+  static constexpr TextureSlot _SceneColor    = 11;
+  static constexpr TextureSlot _GDepth        = 12;
+  static constexpr TextureSlot _GPosition     = 13;
 };
 
 enum class DeferredDebugModes
@@ -143,7 +146,7 @@ protected:
   int RenderSSAO();
   int RenderSSR();
   int RenderTransparent();
-  int UpdateSSRSource();
+  int UpdateSceneColorSource( bool iGenerateMipMaps );
 
   void BuildDeferredDrawLists();
   void SortTransparentInstances();
@@ -244,6 +247,7 @@ protected:
   std::vector<std::vector<float>>    _TransparentMeshTriDepths;
   std::vector<int>                   _OpaqueMeshInstanceIDs;
   std::vector<int>                   _TransparentMeshInstanceIDs;
+  bool                               _HasRefractiveInstances = false;
 
   // Scene bounds
   AABB<Vec3> _SceneBounds;
@@ -273,6 +277,7 @@ protected:
     TimingSSAO,
     TimingSSR,
     TimingLighting,
+    TimingRefractionSourceCopy,
     TimingTransparency,
     TimingWireframe,
     TimingSSRSourceCopy,

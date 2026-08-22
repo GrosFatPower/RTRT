@@ -357,6 +357,26 @@
       }
     },
     {
+      "name": "deferred_refraction",
+      "profile": "deferred",
+      "scene": "DeferredRefraction.scene",
+      "settings": {
+        "ssr": false,
+        "ssao": false,
+        "refraction": true
+      }
+    },
+    {
+      "name": "deferred_refraction_disabled",
+      "profile": "deferred",
+      "scene": "DeferredRefraction.scene",
+      "settings": {
+        "ssr": false,
+        "ssao": false,
+        "refraction": false
+      }
+    },
+    {
       "name": "deferred_water_bottle",
       "profile": "deferred",
       "scene": "WaterBottle.scene",

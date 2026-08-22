@@ -52,6 +52,13 @@ void RenderTestCase::ApplySettings( RenderSettings & ioSettings ) const
     ioSettings._SpecularIBL = _SpecularIBL;
     ioSettings._SSR = _SSR;
     ioSettings._SSAO = _SSAO;
+    ioSettings._Transparency = _Transparency;
+    ioSettings._Refraction = _Refraction;
+    ioSettings._RefractionMaxSteps = std::max(4, std::min(128, _RefractionMaxSteps));
+    ioSettings._RefractionStepSize = std::max(0.001f, _RefractionStepSize);
+    ioSettings._RefractionMaxDistance = std::max(0.001f, _RefractionMaxDistance);
+    ioSettings._RefractionThickness = std::max(0.001f, _RefractionThickness);
+    ioSettings._RefractionEdgeFade = std::max(0.001f, _RefractionEdgeFade);
   }
   else if ( RendererBackend::PathTracer == _Backend )
   {
@@ -114,6 +121,16 @@ bool ReadPositiveInt( const Json & iObject, const char * iName, int & oValue, st
   if ( !iObject[iName].is_number_integer() || ( iObject[iName].get<int>() <= 0 ) )
     return SetManifestError(oError, std::string("'") + iName + "' must be a positive integer.");
   oValue = iObject[iName].get<int>();
+  return true;
+}
+
+bool ReadPositiveFloat( const Json & iObject, const char * iName, float & oValue, std::string & oError )
+{
+  if ( !iObject.contains(iName) )
+    return true;
+  if ( !iObject[iName].is_number() || ( iObject[iName].get<float>() <= 0.f ) )
+    return SetManifestError(oError, std::string("'") + iName + "' must be a positive number.");
+  oValue = iObject[iName].get<float>();
   return true;
 }
 
@@ -207,6 +224,12 @@ bool ReadSettings( const Json & iObject, RenderTestCase & ioTestCase, std::strin
       && ReadBool(settings, "tiled_rendering", ioTestCase._TiledRendering, oError)
       && ReadBool(settings, "w_buffer", ioTestCase._WBuffer, oError)
       && ReadBool(settings, "transparency", ioTestCase._Transparency, oError)
+      && ReadBool(settings, "refraction", ioTestCase._Refraction, oError)
+      && ReadPositiveInt(settings, "refraction_max_steps", ioTestCase._RefractionMaxSteps, oError, false)
+      && ReadPositiveFloat(settings, "refraction_step_size", ioTestCase._RefractionStepSize, oError)
+      && ReadPositiveFloat(settings, "refraction_max_distance", ioTestCase._RefractionMaxDistance, oError)
+      && ReadPositiveFloat(settings, "refraction_thickness", ioTestCase._RefractionThickness, oError)
+      && ReadPositiveFloat(settings, "refraction_edge_fade", ioTestCase._RefractionEdgeFade, oError)
       && ReadBool(settings, "denoise", ioTestCase._Denoise, oError)
       && ReadPositiveInt(settings, "samples_per_pixel", ioTestCase._SamplesPerPixel, oError, false)
       && ReadPositiveInt(settings, "bounces", ioTestCase._Bounces, oError, false);
@@ -534,7 +557,8 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
         "resolution": [64, 32],
         "frames": 3,
         "thresholds": { "mean_absolute_error": 0.1, "max_absolute_error": 0.2, "pixel_error": 0.3, "mismatch_ratio": 0.4 },
-        "settings": { "specular_ibl": true, "ssr": false }
+        "settings": { "specular_ibl": true, "ssr": false, "refraction": true, "refraction_max_steps": 64,
+          "refraction_step_size": 0.12, "refraction_max_distance": 24.0, "refraction_thickness": 0.3, "refraction_edge_fade": 0.1 }
       }
     },
     "tests": [
@@ -548,6 +572,11 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
   if ( !RunUnitTest("manifest_valid", [&validManifest, &parsedCases, &parseError]() {
     if ( ParseRenderTestCases(validManifest, parsedCases, parseError) && ( 1u == parsedCases.size() )
       && ( 4 == parsedCases[0]._FrameCount ) && parsedCases[0]._OverrideCamera && !parsedCases[0]._SSR
+      && parsedCases[0]._Refraction && ( 64 == parsedCases[0]._RefractionMaxSteps )
+      && ( std::abs(parsedCases[0]._RefractionStepSize - 0.12f) < 1e-6f )
+      && ( std::abs(parsedCases[0]._RefractionMaxDistance - 24.f) < 1e-6f )
+      && ( std::abs(parsedCases[0]._RefractionThickness - 0.3f) < 1e-6f )
+      && ( std::abs(parsedCases[0]._RefractionEdgeFade - 0.1f) < 1e-6f )
       && ( 16 == parsedCases[0]._DebugMode ) && parsedCases[0]._DiagnosticOnly
       && parsedCases[0]._ClampComparison
       && ( "Tests/Baselines/valid.pfm" == parsedCases[0]._BaselinePath.generic_string() )
@@ -568,7 +597,8 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
     R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 0, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene" }] })",
     R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "camera": { "position": [0, 0], "pivot": [0, 0, 0], "fov": 40 } }] })",
     R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "debug_mode": -1 }] })",
-    R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "reference_baseline": "" }] })"
+    R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "reference_baseline": "" }] })",
+    R"({ "version": 1, "profiles": { "test": { "backend": "deferred", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 }, "settings": { "refraction_step_size": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene" }] })"
   };
   if ( !RunUnitTest("manifest_validation", [&invalidManifests, &parsedCases, &parseError]() {
     for ( const std::string & invalidManifest : invalidManifests )

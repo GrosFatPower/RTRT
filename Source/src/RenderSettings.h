@@ -47,6 +47,7 @@ struct RenderSettings
   bool         _SpecularIBL           = true;                   // Deferred renderer
   bool         _PBRDirectLighting     = true;                   // Deferred renderer
   bool         _Transparency          = true;                   // Deferred and software renderers
+  bool         _Refraction            = false;                  // Deferred renderer
   bool         _GenerateMipMaps       = true;                   // Deferred and software renderers
   SamplingMode _Sampling              = SamplingMode::Bilinear; // Raster
   bool         _WBuffer               = true;                   // Raster
@@ -58,6 +59,7 @@ struct RenderSettings
   int          _MaxShadowCastingLights = 4;                     // Deferred renderer
   int          _SSAOKernelSize        = 16;                     // Deferred renderer
   int          _SSRMaxSteps           = 48;                     // Deferred renderer
+  int          _RefractionMaxSteps    = 48;                     // Deferred renderer
   int          _AnisotropicLevel      = 16;                     // Deferred renderer texture filtering
   float        _LowResRatio           = 0.1f;                   // PathTracer
   float        _TargetFPS             = 60.f;
@@ -75,6 +77,10 @@ struct RenderSettings
   float        _SSRIntensity          = 0.6f;                   // Deferred renderer
   float        _SSRMaxRoughness       = 0.55f;                  // Deferred renderer
   float        _SSRFade               = 0.18f;                  // Deferred renderer
+  float        _RefractionStepSize    = 0.18f;                  // Deferred renderer
+  float        _RefractionMaxDistance = 35.f;                   // Deferred renderer
+  float        _RefractionThickness   = 0.25f;                  // Deferred renderer
+  float        _RefractionEdgeFade    = 0.18f;                  // Deferred renderer
   float        _SpecularIBLIntensity  = 0.5f;                   // Deferred renderer
   float        _SpecularIBLMaxRoughness = 0.5f;                 // Deferred renderer
   float        _DirectLightIntensity  = 1.0f;                   // Deferred renderer

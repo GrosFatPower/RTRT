@@ -65,6 +65,12 @@ struct RenderTestCase
   bool            _SoftwareSIMD = false;
   bool            _SoftwareFallback = false;
   bool            _Transparency = true;
+  bool            _Refraction = false;
+  int             _RefractionMaxSteps = 48;
+  float           _RefractionStepSize = 0.18f;
+  float           _RefractionMaxDistance = 35.f;
+  float           _RefractionThickness = 0.25f;
+  float           _RefractionEdgeFade = 0.18f;
 
   void ApplySettings( RenderSettings & ioSettings ) const;
   bool ApplyScene( Scene & ioScene ) const;

@@ -873,7 +873,8 @@ int SoftwareRasterizer::UnloadScene()
   _Triangles.clear();
   _InstanceRanges.clear();
   _ProjVerticesBuf.clear();
-  _ClippedVerticesBuf.clear();
+  for ( auto & clippedVertices : _ClippedVerticesBuf )
+    clippedVertices.clear();
   for ( auto & rasterTriangles : _RasterTrianglesBuf )
     rasterTriangles.clear();
   for ( auto & fragments : _Fragments )

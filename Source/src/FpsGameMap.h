@@ -95,6 +95,13 @@ struct FpsMapRenderSettings
   float           _SSRMaxDistance = 35.f;
   float           _SSRThickness = 0.25f;
   float           _SSRFade = 0.18f;
+  bool            _Transparency = true;
+  bool            _Refraction = true;
+  int             _RefractionMaxSteps = 48;
+  float           _RefractionStepSize = 0.18f;
+  float           _RefractionMaxDistance = 35.f;
+  float           _RefractionThickness = 0.25f;
+  float           _RefractionEdgeFade = 0.18f;
   bool            _PBRDirectLighting = true;
   float           _DirectLightIntensity = 1.f;
   float           _SpecularIBLMaxRoughness = 0.5f;

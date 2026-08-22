@@ -912,6 +912,13 @@ void FpsGameEditor::SyncMapFromRuntimeSettings( FpsGameEditorContext & ioContext
   renderSettings._SSRMaxDistance = ioContext._Settings._SSRMaxDistance;
   renderSettings._SSRThickness = ioContext._Settings._SSRThickness;
   renderSettings._SSRFade = ioContext._Settings._SSRFade;
+  renderSettings._Transparency = ioContext._Settings._Transparency;
+  renderSettings._Refraction = ioContext._Settings._Refraction;
+  renderSettings._RefractionMaxSteps = ioContext._Settings._RefractionMaxSteps;
+  renderSettings._RefractionStepSize = ioContext._Settings._RefractionStepSize;
+  renderSettings._RefractionMaxDistance = ioContext._Settings._RefractionMaxDistance;
+  renderSettings._RefractionThickness = ioContext._Settings._RefractionThickness;
+  renderSettings._RefractionEdgeFade = ioContext._Settings._RefractionEdgeFade;
   renderSettings._PBRDirectLighting = ioContext._Settings._PBRDirectLighting;
   renderSettings._DirectLightIntensity = ioContext._Settings._DirectLightIntensity;
   renderSettings._SpecularIBLMaxRoughness = ioContext._Settings._SpecularIBLMaxRoughness;
@@ -2543,6 +2550,28 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
       if ( ImGui::SliderFloat("SSR thickness", &ioContext._Settings._SSRThickness, 0.01f, 2.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
         notifyPersistedRenderSettingsChanged();
       if ( ImGui::SliderFloat("SSR edge fade", &ioContext._Settings._SSRFade, 0.01f, 0.5f) )
+        notifyPersistedRenderSettingsChanged();
+    }
+
+    if ( ImGui::CollapsingHeader("Transparency", ImGuiTreeNodeFlags_DefaultOpen) )
+    {
+      if ( ImGui::Checkbox("Transparency##Deferred", &ioContext._Settings._Transparency) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::Checkbox("Refraction", &ioContext._Settings._Refraction) )
+        notifyPersistedRenderSettingsChanged();
+      int refractionMaxSteps = ioContext._Settings._RefractionMaxSteps;
+      if ( ImGui::SliderInt("Refraction max steps", &refractionMaxSteps, 4, 128) )
+      {
+        ioContext._Settings._RefractionMaxSteps = std::max(4, std::min(128, refractionMaxSteps));
+        notifyPersistedRenderSettingsChanged();
+      }
+      if ( ImGui::SliderFloat("Refraction step size", &ioContext._Settings._RefractionStepSize, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("Refraction max distance", &ioContext._Settings._RefractionMaxDistance, 1.f, 100.f) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("Refraction thickness", &ioContext._Settings._RefractionThickness, 0.01f, 2.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("Refraction edge fade", &ioContext._Settings._RefractionEdgeFade, 0.01f, 0.5f) )
         notifyPersistedRenderSettingsChanged();
     }
 

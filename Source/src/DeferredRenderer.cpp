@@ -27,7 +27,7 @@
 namespace RTRT
 {
 
-static constexpr GLint S_DeferredNonTextureArraySamplers = 7;
+static constexpr GLint S_DeferredNonTextureArraySamplers = 9;
 
 // ----------------------------------------------------------------------------
 // Texture arrays : ConfigureTextureBucketShader
@@ -375,6 +375,7 @@ int DeferredRenderer::GetRenderPassTimings( std::vector<RenderPassTiming> & oTim
   oTimings.push_back({ "SSAO", _PassTimes[TimingSSAO], true, _PassEnabled[TimingSSAO] });
   oTimings.push_back({ "SSR", _PassTimes[TimingSSR], true, _PassEnabled[TimingSSR] });
   oTimings.push_back({ "Lighting", _PassTimes[TimingLighting], true, _PassEnabled[TimingLighting] });
+  oTimings.push_back({ "Refraction source copy", _PassTimes[TimingRefractionSourceCopy], true, _PassEnabled[TimingRefractionSourceCopy] });
   oTimings.push_back({ "Transparency", _PassTimes[TimingTransparency], true, _PassEnabled[TimingTransparency] });
   oTimings.push_back({ "Wireframe", _PassTimes[TimingWireframe], true, _PassEnabled[TimingWireframe] });
   oTimings.push_back({ "SSR source copy", _PassTimes[TimingSSRSourceCopy], true, _PassEnabled[TimingSSRSourceCopy] });
@@ -412,6 +413,7 @@ int DeferredRenderer::UnloadScene()
   _TransparentMeshTriDepths.clear();
   _OpaqueMeshInstanceIDs.clear();
   _TransparentMeshInstanceIDs.clear();
+  _HasRefractiveInstances = false;
 
   _HasShadowLight = false;
   _ShadowCasters.clear();
@@ -518,8 +520,10 @@ void DeferredRenderer::BuildDeferredDrawLists()
 {
   _OpaqueMeshInstanceIDs.clear();
   _TransparentMeshInstanceIDs.clear();
+  _HasRefractiveInstances = false;
 
   const std::vector<MeshInstance> & instances = _Scene.GetMeshInstances();
+  const std::vector<Material> & materials = _Scene.GetMaterials();
   _OpaqueMeshInstanceIDs.reserve(instances.size());
   _TransparentMeshInstanceIDs.reserve(instances.size());
 
@@ -530,7 +534,12 @@ void DeferredRenderer::BuildDeferredDrawLists()
       continue;
 
     if ( IsTransparentMaterial( inst._MaterialID ) )
+    {
       _TransparentMeshInstanceIDs.push_back(i);
+      if ( ( inst._MaterialID >= 0 ) && ( static_cast<size_t>(inst._MaterialID) < materials.size() )
+        && ( materials[inst._MaterialID]._SpecTrans > MATERIAL_TRANSMISSION_THRESHOLD ) )
+        _HasRefractiveInstances = true;
+    }
     else
       _OpaqueMeshInstanceIDs.push_back(i);
   }
@@ -1040,6 +1049,7 @@ int DeferredRenderer::InitializeSSR()
   ssrDesc._InternalFormat = _SSRSourceTEX._InternalFormat;
   ssrDesc._DataFormat     = _SSRSourceTEX._DataFormat;
   ssrDesc._DataType       = _SSRSourceTEX._DataType;
+  ssrDesc._GenerateMipMap = true;
   GLUtil::CreateTexture(ssrDesc, _SSRSourceTEX);
 
   GLFrameBufferDesc ssrSourceFBODesc;
@@ -1606,6 +1616,9 @@ int DeferredRenderer::BindTransparentTextures()
   GLUtil::ActivateTexture(_BRDFLUTTEX, DeferredTransparentPassTexSlot::_BRDFLUT);
   GLUtil::ActivateTexture(_ShadowCubeMapTEX, DeferredTransparentPassTexSlot::_ShadowCubeMap);
   GLUtil::ActivateTexture(_Shadow2DMapTEX, DeferredTransparentPassTexSlot::_Shadow2DMap);
+  GLUtil::ActivateTexture(_SSRSourceTEX, DeferredTransparentPassTexSlot::_SceneColor);
+  GLUtil::ActivateTexture(_GDepthTEX, DeferredTransparentPassTexSlot::_GDepth);
+  GLUtil::ActivateTexture(_GPositionTEX, DeferredTransparentPassTexSlot::_GPosition);
 
   return 0;
 }
@@ -1908,6 +1921,17 @@ int DeferredRenderer::UpdateUniforms()
       _TransparentShader -> SetUniform("u_EnablePBRDirectLighting", _Settings._PBRDirectLighting ? 1 : 0);
       _TransparentShader -> SetUniform("u_DirectLightIntensity", _Settings._DirectLightIntensity);
       _TransparentShader -> SetUniform("u_SpecularIBLMaxRoughness", _Settings._SpecularIBLMaxRoughness);
+      _TransparentShader -> SetUniform("u_SceneColor", (int)DeferredTransparentPassTexSlot::_SceneColor);
+      _TransparentShader -> SetUniform("u_GDepth", (int)DeferredTransparentPassTexSlot::_GDepth);
+      _TransparentShader -> SetUniform("u_GPosition", (int)DeferredTransparentPassTexSlot::_GPosition);
+      _TransparentShader -> SetUniform("u_Resolution", (float)RenderWidth(), (float)RenderHeight());
+      _TransparentShader -> SetUniform("u_EnableRefraction", _Settings._Refraction ? 1 : 0);
+      _TransparentShader -> SetUniform("u_RefractionMaxSteps", std::min(std::max(_Settings._RefractionMaxSteps, 4), 128));
+      _TransparentShader -> SetUniform("u_RefractionStepSize", std::max(_Settings._RefractionStepSize, 0.001f));
+      _TransparentShader -> SetUniform("u_RefractionMaxDistance", std::max(_Settings._RefractionMaxDistance, 0.001f));
+      _TransparentShader -> SetUniform("u_RefractionThickness", std::max(_Settings._RefractionThickness, 0.001f));
+      _TransparentShader -> SetUniform("u_RefractionEdgeFade", std::max(_Settings._RefractionEdgeFade, 0.001f));
+      _TransparentShader -> SetUniform("u_SceneColorMipCount", std::floor(std::log2((float)std::max(RenderWidth(), RenderHeight()))) + 1.f);
       float transparentEnvMipCount = 1.f;
       if ( _Scene.GetEnvMap().GetWidth() > 0 && _Scene.GetEnvMap().GetHeight() > 0 )
       {
@@ -2116,9 +2140,9 @@ int DeferredRenderer::RenderSSR()
 }
 
 // ----------------------------------------------------------------------------
-// UpdateSSRSource
+// UpdateSceneColorSource
 // ----------------------------------------------------------------------------
-int DeferredRenderer::UpdateSSRSource()
+int DeferredRenderer::UpdateSceneColorSource( bool iGenerateMipMaps )
 {
   if ( !_LightingFBO._Handle || !_SSRSourceFBO._Handle )
     return 1;
@@ -2131,6 +2155,14 @@ int DeferredRenderer::UpdateSSRSource()
                     0, 0, RenderWidth(), RenderHeight(),
                     GL_COLOR_BUFFER_BIT, GL_NEAREST);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  if ( iGenerateMipMaps )
+  {
+    glBindTexture(GL_TEXTURE_2D, _SSRSourceTEX._Handle);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
 
   return 0;
 }
@@ -2329,9 +2361,25 @@ int DeferredRenderer::RenderToTexture()
     EndTimer(TimingLighting);
   }
 
+  const bool refractionPassEnabled = _Settings._Transparency && _Settings._Refraction && _HasRefractiveInstances;
+  if ( refractionPassEnabled )
+  {
+    BeginTimer(TimingRefractionSourceCopy);
+    UpdateSceneColorSource(true);
+    EndTimer(TimingRefractionSourceCopy);
+  }
+  else
+    SetTimingEnabled(TimingRefractionSourceCopy, false);
+
   BeginTimer(TimingTransparency);
   RenderTransparent();
   EndTimer(TimingTransparency);
+  if ( refractionPassEnabled )
+  {
+    glBindTexture(GL_TEXTURE_2D, _SSRSourceTEX._Handle);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
   if ( !_Settings._Transparency || _TransparentMeshInstanceIDs.empty() )
     SetTimingEnabled(TimingTransparency, false);
 
@@ -2397,7 +2445,7 @@ int DeferredRenderer::RenderToTexture()
   if ( 0 == ( _DebugMode & ~(int)DeferredDebugModes::Wires ) )
   {
     BeginTimer(TimingSSRSourceCopy);
-    UpdateSSRSource();
+    UpdateSceneColorSource(false);
     EndTimer(TimingSSRSourceCopy);
   }
 

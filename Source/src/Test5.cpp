@@ -855,6 +855,28 @@ int Test5::DrawSettingsUI()
         if ( ImGui::Checkbox( "Transparency", &_Settings._Transparency ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
+        if ( ImGui::Checkbox( "Refraction", &_Settings._Refraction ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        int refractionMaxSteps = _Settings._RefractionMaxSteps;
+        if ( ImGui::SliderInt( "Refraction max steps", &refractionMaxSteps, 4, 128 ) )
+        {
+          _Settings._RefractionMaxSteps = std::max(4, std::min(128, refractionMaxSteps));
+          _Renderer -> Notify(DirtyState::RenderSettings);
+        }
+
+        if ( ImGui::SliderFloat( "Refraction step size", &_Settings._RefractionStepSize, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_Logarithmic ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "Refraction max distance", &_Settings._RefractionMaxDistance, 1.f, 100.f ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "Refraction thickness", &_Settings._RefractionThickness, 0.01f, 2.f, "%.3f", ImGuiSliderFlags_Logarithmic ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "Refraction edge fade", &_Settings._RefractionEdgeFade, 0.01f, 0.5f ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
       }
     }
 
