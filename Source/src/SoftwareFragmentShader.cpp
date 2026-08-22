@@ -7,101 +7,13 @@ namespace rd = RTRT::RasterData;
 
 namespace RTRT
 {
-
-float DistributionGGX( float iAlpha, float iNdotH );
-float GeometrySmith( float iAlpha, float iNdotV, float iNdotL );
-Vec3 FresnelSchlick( const Vec3 & iF0, float iVdotH );
-
-namespace
-{
-
-Vec3 SampleEnvironment( const rd::DefaultUniform & iUniforms, const Vec3 & iDirection )
-{
-  if ( !iUniforms._EnableEnvMap || !iUniforms._EnvMap || !iUniforms._EnvMap -> IsInitialized() )
-    return Vec3(0.f);
-
-  const Vec3 direction = glm::normalize(iDirection);
-  const float theta = std::asin(MathUtil::Clamp(direction.y, -1.f, 1.f));
-  const float phi = std::atan2(direction.z, direction.x);
-  const Vec2 uv = Vec2(.5f + phi * M_1_PI * .5f, .5f - theta * M_1_PI)
-    + Vec2(iUniforms._EnvMapRotation, 0.f);
-  if ( iUniforms._Sampling >= SamplingMode::Bilinear )
-    return Vec3(iUniforms._EnvMap -> BiLinearSample(uv));
-  return Vec3(iUniforms._EnvMap -> Sample(uv));
-}
-
-float TransmissionF0( float iIOR )
-{
-  const float ior = std::max(iIOR, 1.001f);
-  const float ratio = ( ior - 1.f ) / ( ior + 1.f );
-  return ratio * ratio;
-}
-
-void EvaluatePBRComponents( const Vec3 & iN, const Vec3 & iV, const Vec3 & iL,
-                            const Material & iMat, const Vec3 & iF0,
-                            Vec3 & oDiffuse, Vec3 & oSpecular )
-{
-  const Vec3 H = glm::normalize(iV + iL);
-  const float NdotV = glm::max(glm::dot(iN, iV), 0.f);
-  const float NdotL = glm::max(glm::dot(iN, iL), 0.f);
-  const float VdotH = glm::max(glm::dot(iV, H), 0.f);
-  const float NdotH = glm::max(glm::dot(iN, H), 0.f);
-  float alpha = glm::max(iMat._Roughness, RESOLUTION);
-  alpha *= alpha;
-  const Vec3 F = FresnelSchlick(iF0, VdotH);
-  const float D = DistributionGGX(alpha, NdotH);
-  const float G = GeometrySmith(alpha, NdotV, NdotL);
-  const Vec3 Kd = ( Vec3(1.f) - F ) * ( 1.f - iMat._Metallic );
-  oDiffuse = Kd * iMat._Albedo * INV_PI;
-  oSpecular = D * G * F / glm::max(4.f * NdotV * NdotL, EPSILON);
-}
-
-}
-
 // ----------------------------------------------------------------------------
-// ResolveMaterialOpacity
-// ----------------------------------------------------------------------------
-float ResolveMaterialOpacity( const Material & iMaterial,
-                              const std::vector<Texture*> & iTextures,
-                              SamplingMode iSampling,
-                              const Vec2 & iUV,
-                              float iLOD )
-{
-  float opacity = MathUtil::Clamp(iMaterial._Opacity, 0.f, 1.f);
-  const int textureID = static_cast<int>(iMaterial._BaseColorTexId);
-  if ( ( textureID < 0 ) || ( textureID >= static_cast<int>(iTextures.size()) ) )
-    return opacity;
-
-  const Texture * texture = iTextures[textureID];
-  if ( !texture )
-    return opacity;
-
-  Vec4 texel;
-  if ( iSampling >= SamplingMode::Bilinear )
-    texel = texture -> BiLinearSample(iUV, iLOD, iSampling == SamplingMode::Trilinear);
-  else
-    texel = texture -> Sample(iUV);
-  return opacity * MathUtil::Clamp(texel.a, 0.f, 1.f);
-}
-
-// ----------------------------------------------------------------------------
-// ProcessTransparent
-// ----------------------------------------------------------------------------
-TransparentShadingResult SoftwareFragmentShader::ProcessTransparent(const rd::Fragment& iFrag,
-                                                                    const rd::RasterTriangle & iTri,
-                                                                    MaterialPass iMaterialPass)
-{
-  const Vec4 straightColor = Process(iFrag, iTri);
-  TransparentShadingResult result;
-  result._Alpha = MathUtil::Clamp(straightColor.a, 0.f, 1.f);
-  result._PremultipliedColor = Vec3(straightColor) * result._Alpha;
-  return result;
-}
-
-// ----------------------------------------------------------------------------
-// UTILS
+// Utilities
 // ----------------------------------------------------------------------------
 
+// ----------------------------------------------------------------------------
+// Utilities : ComputeOnB
+// ----------------------------------------------------------------------------
 void ComputeOnB( Vec3 iN, Vec3 & oT, Vec3 & oBT )
 {
   Vec3 up = ( abs( iN.z ) < 0.999 ) ? Vec3( 0, 0, 1. ) : Vec3( 1., 0, 0 );
@@ -111,7 +23,15 @@ void ComputeOnB( Vec3 iN, Vec3 & oT, Vec3 & oBT )
 }
 
 // ----------------------------------------------------------------------------
-// DistributionGGX
+// Utilities : IsFinite
+// ----------------------------------------------------------------------------
+bool IsFinite( const Vec3 & iValue )
+{
+  return std::isfinite(iValue.r) && std::isfinite(iValue.g) && std::isfinite(iValue.b);
+}
+
+// ----------------------------------------------------------------------------
+// PBR Utilities : DistributionGGX
 // GGX/Trowbridge-Reitz : Normal Distribution Function
 // Larger the more micro-facets are aligned to H
 // NDF = alpha^2 / ( PI * ( (n.h)^2  * ( aplha^2 -1 ) + 1 )^2 )
@@ -128,7 +48,7 @@ float DistributionGGX( float iAlpha, float iNdotH )
 }
 
 // ----------------------------------------------------------------------------
-// G1
+// PBR Utilities : G1
 // Schlick-Beckmann Geometry Shadowing Function
 // G_SchilickGGX = (n.v) / ( (n.v) * ( 1 - k ) + k )
 // with k = alpha / 2
@@ -142,7 +62,7 @@ float G1( float iAlpha, float iNdotX )
 }
 
 // ----------------------------------------------------------------------------
-// GeometrySmith
+// PBR Utilities : GeometrySmith
 // Smith Model
 // Smaller the more micro-facets are shadowed by other micro-facets
 // ----------------------------------------------------------------------------
@@ -152,7 +72,7 @@ float GeometrySmith( float iAlpha, float iNdotV, float iNdotL )
 }
 
 // ----------------------------------------------------------------------------
-// FresnelSchlick
+// PBR Utilities : FresnelSchlick
 // Fresnel-Schlick Function
 // Proportion of specular reflectance
 // FSchlick = F0 + (1-F0)(1-(h.v))^5
@@ -163,7 +83,25 @@ Vec3 FresnelSchlick( const Vec3 & iF0, float iVdotH )
 }
 
 // ----------------------------------------------------------------------------
-// Cook-Torrance Microfacet BRDF
+// PBR Utilities : PBRGeometrySchlickGGX
+// ----------------------------------------------------------------------------
+float PBRGeometrySchlickGGX( float iNdotX, float iRoughness )
+{
+  const float r = iRoughness + 1.f;
+  const float k = r * r * .125f;
+  return iNdotX / std::max(iNdotX * ( 1.f - k ) + k, EPSILON);
+}
+
+// ----------------------------------------------------------------------------
+// PBR Utilities : PBRGeometrySmith
+// ----------------------------------------------------------------------------
+float PBRGeometrySmith( float iNdotV, float iNdotL, float iRoughness )
+{
+  return PBRGeometrySchlickGGX(iNdotV, iRoughness) * PBRGeometrySchlickGGX(iNdotL, iRoughness);
+}
+
+// ----------------------------------------------------------------------------
+// PBR Utilities : Cook-Torrance Microfacet BRDF
 // iN   : surface normal
 // iV   : view direction
 // iL   : light direction
@@ -201,7 +139,78 @@ Vec3 BRDF( const Vec3 & iN, const Vec3 & iV, const Vec3 & iL, const Material & i
 }
 
 // ----------------------------------------------------------------------------
-// SetupMaterial
+// PBR Utilities : TransmissionF0
+// ----------------------------------------------------------------------------
+float TransmissionF0( float iIOR )
+{
+  const float ior = std::max(iIOR, 1.001f);
+  const float ratio = ( ior - 1.f ) / ( ior + 1.f );
+  return ratio * ratio;
+}
+
+// ----------------------------------------------------------------------------
+// PBR Utilities : EvaluatePBRComponents
+// ----------------------------------------------------------------------------
+void EvaluatePBRComponents( const Vec3 & iN, const Vec3 & iV, const Vec3 & iL,
+                            const Material & iMat, const Vec3 & iF0,
+                            Vec3 & oDiffuse, Vec3 & oSpecular )
+{
+  oDiffuse = Vec3(0.f);
+  oSpecular = Vec3(0.f);
+  const Vec3 halfVector = iV + iL;
+  if ( glm::dot(halfVector, halfVector) <= EPSILON )
+    return;
+
+  const Vec3 H = glm::normalize(halfVector);
+  const float NdotV = glm::max(glm::dot(iN, iV), 0.f);
+  const float NdotL = glm::max(glm::dot(iN, iL), 0.f);
+  const float VdotH = glm::max(glm::dot(iV, H), 0.f);
+  const float NdotH = glm::max(glm::dot(iN, H), 0.f);
+  float alpha = glm::max(iMat._Roughness, RESOLUTION);
+  alpha *= alpha;
+  const Vec3 F = FresnelSchlick(iF0, VdotH);
+  const float D = DistributionGGX(alpha, NdotH);
+  //const float G = GeometrySmith(alpha, NdotV, NdotL);
+  const float G = PBRGeometrySmith(NdotV, NdotL, iMat._Roughness);
+  const Vec3 Kd = ( Vec3(1.f) - F ) * ( 1.f - iMat._Metallic );
+
+  oDiffuse = Kd * iMat._Albedo * INV_PI;
+  oSpecular = D * G * F / glm::max(4.f * NdotV * NdotL, EPSILON);
+  if ( !IsFinite(oDiffuse) || !IsFinite(oSpecular) )
+  {
+    oDiffuse = Vec3(0.f);
+    oSpecular = Vec3(0.f);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// PBR Utilities : ResolveMaterialOpacity
+// ----------------------------------------------------------------------------
+float ResolveMaterialOpacity( const Material & iMaterial,
+                              const std::vector<Texture*> & iTextures,
+                              SamplingMode iSampling,
+                              const Vec2 & iUV,
+                              float iLOD )
+{
+  float opacity = MathUtil::Clamp(iMaterial._Opacity, 0.f, 1.f);
+  const int textureID = static_cast<int>(iMaterial._BaseColorTexId);
+  if ( ( textureID < 0 ) || ( textureID >= static_cast<int>(iTextures.size()) ) )
+    return opacity;
+
+  const Texture * texture = iTextures[textureID];
+  if ( !texture )
+    return opacity;
+
+  Vec4 texel;
+  if ( iSampling >= SamplingMode::Bilinear )
+    texel = texture -> BiLinearSample(iUV, iLOD, iSampling == SamplingMode::Trilinear);
+  else
+    texel = texture -> Sample(iUV);
+  return opacity * MathUtil::Clamp(texel.a, 0.f, 1.f);
+}
+
+// ----------------------------------------------------------------------------
+// Utilities : SetupMaterial
 // ----------------------------------------------------------------------------
 void SetupMaterial(const RasterData::Fragment& iFrag, const RasterData::RasterTriangle & iTri, const RasterData::DefaultUniform & iUniforms, int iMatID, Material & oMat, Vec3 & oF0, Vec3 & oNormal )
 {
@@ -278,6 +287,38 @@ void SetupMaterial(const RasterData::Fragment& iFrag, const RasterData::RasterTr
   // Base reflectance
   oF0 = Vec3(0.16f * pow(oMat._Reflectance, 2.f));
   oF0 = glm::mix(oF0, oMat._Albedo, oMat._Metallic);
+}
+
+// ----------------------------------------------------------------------------
+// Utilities : SampleEnvironment
+// ----------------------------------------------------------------------------
+Vec3 SampleEnvironment( const rd::DefaultUniform & iUniforms, const Vec3 & iDirection )
+{
+  if ( !iUniforms._EnableEnvMap || !iUniforms._EnvMap || !iUniforms._EnvMap -> IsInitialized() )
+    return Vec3(0.f);
+
+  const Vec3 direction = glm::normalize(iDirection);
+  const float theta = std::asin(MathUtil::Clamp(direction.y, -1.f, 1.f));
+  const float phi = std::atan2(direction.z, direction.x);
+  const Vec2 uv = Vec2(.5f + phi * M_1_PI * .5f, .5f - theta * M_1_PI)
+    + Vec2(iUniforms._EnvMapRotation, 0.f);
+  if ( iUniforms._Sampling >= SamplingMode::Bilinear )
+    return Vec3(iUniforms._EnvMap -> BiLinearSample(uv));
+  return Vec3(iUniforms._EnvMap -> Sample(uv));
+}
+
+// ----------------------------------------------------------------------------
+// ProcessTransparent
+// ----------------------------------------------------------------------------
+TransparentShadingResult SoftwareFragmentShader::ProcessTransparent(const rd::Fragment& iFrag,
+                                                                    const rd::RasterTriangle & iTri,
+                                                                    MaterialPass iMaterialPass)
+{
+  const Vec4 straightColor = Process(iFrag, iTri);
+  TransparentShadingResult result;
+  result._Alpha = MathUtil::Clamp(straightColor.a, 0.f, 1.f);
+  result._PremultipliedColor = Vec3(straightColor) * result._Alpha;
+  return result;
 }
 
 // ----------------------------------------------------------------------------
@@ -424,7 +465,7 @@ Vec4 PBRFragmentShader::Process(const RasterData::Fragment& iFrag, const RasterD
   //  }
   //}
 
-  outColor = glm::clamp(outColor, 0.f, 1.f);
+  outColor = IsFinite(outColor) ? glm::clamp(outColor, 0.f, 1.f) : Vec3(0.f);
 
   const float opacity = ( AlphaMode::Blend == MaterialAlphaMode(mat) ) ? MathUtil::Clamp(mat._Opacity, 0.f, 1.f) : 1.f;
   return Vec4(outColor, opacity);
