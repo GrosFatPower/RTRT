@@ -293,6 +293,13 @@
       "resolution": [850, 720]
     },
     {
+      "name": "software_red_and_glass_boxes",
+      "profile": "software",
+      "scene": "Red_and_Glass_Boxes.scene",
+      "resolution": [800, 600],
+      "environment_map": "HDR/alps_field_2k.hdr"
+    },
+    {
       "name": "deferred_ibl_ssr",
       "profile": "deferred",
       "scene": "tungsten-material-testball.scene"
@@ -389,6 +396,16 @@
       }
     },
     {
+      "name": "deferred_red_and_glass_boxes",
+      "profile": "deferred",
+      "scene": "Red_and_Glass_Boxes.scene",
+      "resolution": [800, 600],
+      "environment_map": "HDR/alps_field_2k.hdr",
+      "settings": {
+        "refraction": true
+      }
+    },
+    {
       "name": "deferred_water_bottle",
       "profile": "deferred",
       "scene": "WaterBottle.scene",
@@ -453,6 +470,14 @@
       "scene": "WaterBottle.scene",
       "resolution": [850, 720],
       "frames": 256
+    },
+    {
+      "name": "pathtracer_red_and_glass_boxes",
+      "profile": "pathtracer",
+      "scene": "Red_and_Glass_Boxes.scene",
+      "resolution": [800, 600],
+      "environment_map": "HDR/alps_field_2k.hdr",
+      "frames": 128
     },
     {
       "name": "pathtracer_barbershopchair_01",
