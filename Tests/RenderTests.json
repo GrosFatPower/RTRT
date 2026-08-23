@@ -401,6 +401,12 @@
       "scene": "Red_and_Glass_Boxes.scene",
       "resolution": [800, 600],
       "environment_map": "HDR/alps_field_2k.hdr",
+      "thresholds": {
+        "mean_absolute_error": 0.025,
+        "max_absolute_error": 12.5,
+        "pixel_error": 0.10,
+        "mismatch_ratio": 0.05
+      },
       "settings": {
         "refraction": true
       }
