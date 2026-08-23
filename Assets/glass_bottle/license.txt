@@ -1,0 +1,8 @@
+Model Information:
+* title:	Glass Bottle
+* source:	https://sketchfab.com/3d-models/glass-bottle-0102f732453e4f4c86c947e1ca5ea19d
+* author:	JungleBird (https://sketchfab.com/junglebird)
+
+Model License:
+* license type:	SKETCHFAB Standard (https://sketchfab.com/licenses)
+* requirements:	Under basic restrictions, use worldwide, on all types of media, commercially or not, and in all types of derivative works
