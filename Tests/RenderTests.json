@@ -396,6 +396,20 @@
       }
     },
     {
+      "name": "deferred_refraction_environment",
+      "profile": "deferred",
+      "scene": "DeferredRefraction.scene",
+      "environment_map": "HDR/Background_05.hdr",
+      "thresholds": {
+        "max_absolute_error": 12.5
+      },
+      "settings": {
+        "ssr": false,
+        "ssao": false,
+        "refraction": true
+      }
+    },
+    {
       "name": "deferred_red_and_glass_boxes",
       "profile": "deferred",
       "scene": "Red_and_Glass_Boxes.scene",
@@ -409,6 +423,28 @@
       },
       "settings": {
         "refraction": true
+      }
+    },
+    {
+      "name": "deferred_red_and_glass_boxes_low_resolution",
+      "profile": "deferred",
+      "scene": "Red_and_Glass_Boxes.scene",
+      "resolution": [400, 300],
+      "environment_map": "HDR/alps_field_2k.hdr",
+      "settings": {
+        "refraction": true,
+        "refraction_pixel_stride": 1.0,
+        "refraction_start_bias": 1.0
+      }
+    },
+    {
+      "name": "deferred_red_and_glass_boxes_refraction_disabled",
+      "profile": "deferred",
+      "scene": "Red_and_Glass_Boxes.scene",
+      "resolution": [800, 600],
+      "environment_map": "HDR/alps_field_2k.hdr",
+      "settings": {
+        "refraction": false
       }
     },
     {

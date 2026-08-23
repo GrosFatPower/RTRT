@@ -908,14 +908,16 @@ void FpsGameEditor::SyncMapFromRuntimeSettings( FpsGameEditorContext & ioContext
   renderSettings._SSRIntensity = ioContext._Settings._SSRIntensity;
   renderSettings._SSRMaxRoughness = ioContext._Settings._SSRMaxRoughness;
   renderSettings._SSRMaxSteps = ioContext._Settings._SSRMaxSteps;
-  renderSettings._SSRStepSize = ioContext._Settings._SSRStepSize;
+  renderSettings._SSRPixelStride = ioContext._Settings._SSRPixelStride;
+  renderSettings._SSRStartBias = ioContext._Settings._SSRStartBias;
   renderSettings._SSRMaxDistance = ioContext._Settings._SSRMaxDistance;
   renderSettings._SSRThickness = ioContext._Settings._SSRThickness;
   renderSettings._SSRFade = ioContext._Settings._SSRFade;
   renderSettings._Transparency = ioContext._Settings._Transparency;
   renderSettings._Refraction = ioContext._Settings._Refraction;
   renderSettings._RefractionMaxSteps = ioContext._Settings._RefractionMaxSteps;
-  renderSettings._RefractionStepSize = ioContext._Settings._RefractionStepSize;
+  renderSettings._RefractionPixelStride = ioContext._Settings._RefractionPixelStride;
+  renderSettings._RefractionStartBias = ioContext._Settings._RefractionStartBias;
   renderSettings._RefractionMaxDistance = ioContext._Settings._RefractionMaxDistance;
   renderSettings._RefractionThickness = ioContext._Settings._RefractionThickness;
   renderSettings._RefractionEdgeFade = ioContext._Settings._RefractionEdgeFade;
@@ -2543,7 +2545,9 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
         ioContext._Settings._SSRMaxSteps = std::max(4, std::min(128, ssrMaxSteps));
         notifyPersistedRenderSettingsChanged();
       }
-      if ( ImGui::SliderFloat("SSR step size", &ioContext._Settings._SSRStepSize, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
+      if ( ImGui::SliderFloat("SSR pixel stride", &ioContext._Settings._SSRPixelStride, 0.25f, 4.f, "%.2f", ImGuiSliderFlags_Logarithmic) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("SSR start bias", &ioContext._Settings._SSRStartBias, 0.25f, 8.f, "%.2f", ImGuiSliderFlags_Logarithmic) )
         notifyPersistedRenderSettingsChanged();
       if ( ImGui::SliderFloat("SSR max distance", &ioContext._Settings._SSRMaxDistance, 1.f, 100.f) )
         notifyPersistedRenderSettingsChanged();
@@ -2565,7 +2569,9 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
         ioContext._Settings._RefractionMaxSteps = std::max(4, std::min(128, refractionMaxSteps));
         notifyPersistedRenderSettingsChanged();
       }
-      if ( ImGui::SliderFloat("Refraction step size", &ioContext._Settings._RefractionStepSize, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
+      if ( ImGui::SliderFloat("Refraction pixel stride", &ioContext._Settings._RefractionPixelStride, 0.25f, 4.f, "%.2f", ImGuiSliderFlags_Logarithmic) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("Refraction start bias", &ioContext._Settings._RefractionStartBias, 0.25f, 8.f, "%.2f", ImGuiSliderFlags_Logarithmic) )
         notifyPersistedRenderSettingsChanged();
       if ( ImGui::SliderFloat("Refraction max distance", &ioContext._Settings._RefractionMaxDistance, 1.f, 100.f) )
         notifyPersistedRenderSettingsChanged();

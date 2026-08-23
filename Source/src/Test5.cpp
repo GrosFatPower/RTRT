@@ -825,7 +825,10 @@ int Test5::DrawSettingsUI()
           _Renderer -> Notify(DirtyState::RenderSettings);
         }
 
-        if ( ImGui::SliderFloat( "SSR step size", &_Settings._SSRStepSize, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_Logarithmic ) )
+        if ( ImGui::SliderFloat( "SSR pixel stride", &_Settings._SSRPixelStride, 0.25f, 4.f, "%.2f", ImGuiSliderFlags_Logarithmic ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "SSR start bias", &_Settings._SSRStartBias, 0.25f, 8.f, "%.2f", ImGuiSliderFlags_Logarithmic ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
         if ( ImGui::SliderFloat( "SSR max distance", &_Settings._SSRMaxDistance, 1.f, 100.f ) )
@@ -865,7 +868,10 @@ int Test5::DrawSettingsUI()
           _Renderer -> Notify(DirtyState::RenderSettings);
         }
 
-        if ( ImGui::SliderFloat( "Refraction step size", &_Settings._RefractionStepSize, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_Logarithmic ) )
+        if ( ImGui::SliderFloat( "Refraction pixel stride", &_Settings._RefractionPixelStride, 0.25f, 4.f, "%.2f", ImGuiSliderFlags_Logarithmic ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "Refraction start bias", &_Settings._RefractionStartBias, 0.25f, 8.f, "%.2f", ImGuiSliderFlags_Logarithmic ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
         if ( ImGui::SliderFloat( "Refraction max distance", &_Settings._RefractionMaxDistance, 1.f, 100.f ) )

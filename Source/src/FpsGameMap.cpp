@@ -552,6 +552,9 @@ protected:
   {
     FpsMapRenderSettings & settings = _Map._RenderSettings;
     settings._HasRenderSettings = true;
+    bool hasSSRPixelStride = false;
+    bool hasRefractionPixelStride = false;
+    bool warnedLegacyTraversal = false;
 
     std::vector<std::string> tokens;
     while ( ReadRequiredLine(ioFile, tokens) )
@@ -675,8 +678,27 @@ protected:
       }
       else if ( IsEqual(tokens[0], "ssrstepsize") && ( 2 == static_cast<int>(tokens.size()) ) )
       {
-        if ( !ParseFloat(tokens[1], settings._SSRStepSize) )
+        float legacyStepSize = 0.f;
+        if ( !ParseFloat(tokens[1], legacyStepSize) || ( legacyStepSize <= 0.f ) )
           return Error("invalid render ssrStepSize");
+        if ( !hasSSRPixelStride )
+          settings._SSRPixelStride = MathUtil::Clamp(legacyStepSize / 0.18f, 0.25f, 4.f);
+        if ( !warnedLegacyTraversal )
+        {
+          std::cerr << "Deprecated SSR/refraction step-size setting; use pixel-stride settings.\n";
+          warnedLegacyTraversal = true;
+        }
+      }
+      else if ( IsEqual(tokens[0], "ssrpixelstride") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], settings._SSRPixelStride) || ( settings._SSRPixelStride <= 0.f ) )
+          return Error("invalid render ssrPixelStride");
+        hasSSRPixelStride = true;
+      }
+      else if ( IsEqual(tokens[0], "ssrstartbias") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], settings._SSRStartBias) || ( settings._SSRStartBias <= 0.f ) )
+          return Error("invalid render ssrStartBias");
       }
       else if ( IsEqual(tokens[0], "ssrmaxdistance") && ( 2 == static_cast<int>(tokens.size()) ) )
       {
@@ -710,8 +732,27 @@ protected:
       }
       else if ( IsEqual(tokens[0], "refractionstepsize") && ( 2 == static_cast<int>(tokens.size()) ) )
       {
-        if ( !ParseFloat(tokens[1], settings._RefractionStepSize) )
+        float legacyStepSize = 0.f;
+        if ( !ParseFloat(tokens[1], legacyStepSize) || ( legacyStepSize <= 0.f ) )
           return Error("invalid render refractionStepSize");
+        if ( !hasRefractionPixelStride )
+          settings._RefractionPixelStride = MathUtil::Clamp(legacyStepSize / 0.18f, 0.25f, 4.f);
+        if ( !warnedLegacyTraversal )
+        {
+          std::cerr << "Deprecated SSR/refraction step-size setting; use pixel-stride settings.\n";
+          warnedLegacyTraversal = true;
+        }
+      }
+      else if ( IsEqual(tokens[0], "refractionpixelstride") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], settings._RefractionPixelStride) || ( settings._RefractionPixelStride <= 0.f ) )
+          return Error("invalid render refractionPixelStride");
+        hasRefractionPixelStride = true;
+      }
+      else if ( IsEqual(tokens[0], "refractionstartbias") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], settings._RefractionStartBias) || ( settings._RefractionStartBias <= 0.f ) )
+          return Error("invalid render refractionStartBias");
       }
       else if ( IsEqual(tokens[0], "refractionmaxdistance") && ( 2 == static_cast<int>(tokens.size()) ) )
       {
@@ -1397,14 +1438,16 @@ bool FpsGameMapLoader::Save( const std::string & iFilename, const FpsGameMap & i
     file << "  ssrIntensity " << settings._SSRIntensity << "\n";
     file << "  ssrMaxRoughness " << settings._SSRMaxRoughness << "\n";
     file << "  ssrMaxSteps " << settings._SSRMaxSteps << "\n";
-    file << "  ssrStepSize " << settings._SSRStepSize << "\n";
+    file << "  ssrPixelStride " << settings._SSRPixelStride << "\n";
+    file << "  ssrStartBias " << settings._SSRStartBias << "\n";
     file << "  ssrMaxDistance " << settings._SSRMaxDistance << "\n";
     file << "  ssrThickness " << settings._SSRThickness << "\n";
     file << "  ssrFade " << settings._SSRFade << "\n";
     file << "  transparency " << ( settings._Transparency ? "true" : "false" ) << "\n";
     file << "  refraction " << ( settings._Refraction ? "true" : "false" ) << "\n";
     file << "  refractionMaxSteps " << settings._RefractionMaxSteps << "\n";
-    file << "  refractionStepSize " << settings._RefractionStepSize << "\n";
+    file << "  refractionPixelStride " << settings._RefractionPixelStride << "\n";
+    file << "  refractionStartBias " << settings._RefractionStartBias << "\n";
     file << "  refractionMaxDistance " << settings._RefractionMaxDistance << "\n";
     file << "  refractionThickness " << settings._RefractionThickness << "\n";
     file << "  refractionEdgeFade " << settings._RefractionEdgeFade << "\n";

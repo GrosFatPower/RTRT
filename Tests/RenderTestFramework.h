@@ -48,6 +48,11 @@ struct RenderTestCase
   std::string     _EnvironmentMapPath;
   bool            _SpecularIBL = true;
   bool            _SSR = true;
+  int             _SSRMaxSteps = 48;
+  float           _SSRPixelStride = 1.f;
+  float           _SSRStartBias = 1.f;
+  float           _SSRMaxDistance = 35.f;
+  float           _SSRThickness = 0.25f;
   bool            _SSAO = true;
   bool            _Background = true;
   bool            _UniformLight = true;
@@ -67,7 +72,8 @@ struct RenderTestCase
   bool            _Transparency = true;
   bool            _Refraction = false;
   int             _RefractionMaxSteps = 48;
-  float           _RefractionStepSize = 0.18f;
+  float           _RefractionPixelStride = 1.f;
+  float           _RefractionStartBias = 1.f;
   float           _RefractionMaxDistance = 35.f;
   float           _RefractionThickness = 0.25f;
   float           _RefractionEdgeFade = 0.18f;

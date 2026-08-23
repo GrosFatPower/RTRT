@@ -51,11 +51,17 @@ void RenderTestCase::ApplySettings( RenderSettings & ioSettings ) const
   {
     ioSettings._SpecularIBL = _SpecularIBL;
     ioSettings._SSR = _SSR;
+    ioSettings._SSRMaxSteps = std::max(4, std::min(128, _SSRMaxSteps));
+    ioSettings._SSRPixelStride = std::max(0.25f, std::min(4.f, _SSRPixelStride));
+    ioSettings._SSRStartBias = std::max(0.25f, std::min(8.f, _SSRStartBias));
+    ioSettings._SSRMaxDistance = std::max(0.001f, _SSRMaxDistance);
+    ioSettings._SSRThickness = std::max(0.001f, _SSRThickness);
     ioSettings._SSAO = _SSAO;
     ioSettings._Transparency = _Transparency;
     ioSettings._Refraction = _Refraction;
     ioSettings._RefractionMaxSteps = std::max(4, std::min(128, _RefractionMaxSteps));
-    ioSettings._RefractionStepSize = std::max(0.001f, _RefractionStepSize);
+    ioSettings._RefractionPixelStride = std::max(0.25f, std::min(4.f, _RefractionPixelStride));
+    ioSettings._RefractionStartBias = std::max(0.25f, std::min(8.f, _RefractionStartBias));
     ioSettings._RefractionMaxDistance = std::max(0.001f, _RefractionMaxDistance);
     ioSettings._RefractionThickness = std::max(0.001f, _RefractionThickness);
     ioSettings._RefractionEdgeFade = std::max(0.001f, _RefractionEdgeFade);
@@ -214,8 +220,11 @@ bool ReadSettings( const Json & iObject, RenderTestCase & ioTestCase, std::strin
   if ( !settings.is_object() )
     return SetManifestError(oError, "'settings' must be an object.");
 
-  return ReadBool(settings, "specular_ibl", ioTestCase._SpecularIBL, oError)
+  if ( !( ReadBool(settings, "specular_ibl", ioTestCase._SpecularIBL, oError)
       && ReadBool(settings, "ssr", ioTestCase._SSR, oError)
+      && ReadPositiveInt(settings, "ssr_max_steps", ioTestCase._SSRMaxSteps, oError, false)
+      && ReadPositiveFloat(settings, "ssr_max_distance", ioTestCase._SSRMaxDistance, oError)
+      && ReadPositiveFloat(settings, "ssr_thickness", ioTestCase._SSRThickness, oError)
       && ReadBool(settings, "ssao", ioTestCase._SSAO, oError)
       && ReadBool(settings, "background", ioTestCase._Background, oError)
       && ReadBool(settings, "uniform_light", ioTestCase._UniformLight, oError)
@@ -226,13 +235,29 @@ bool ReadSettings( const Json & iObject, RenderTestCase & ioTestCase, std::strin
       && ReadBool(settings, "transparency", ioTestCase._Transparency, oError)
       && ReadBool(settings, "refraction", ioTestCase._Refraction, oError)
       && ReadPositiveInt(settings, "refraction_max_steps", ioTestCase._RefractionMaxSteps, oError, false)
-      && ReadPositiveFloat(settings, "refraction_step_size", ioTestCase._RefractionStepSize, oError)
       && ReadPositiveFloat(settings, "refraction_max_distance", ioTestCase._RefractionMaxDistance, oError)
       && ReadPositiveFloat(settings, "refraction_thickness", ioTestCase._RefractionThickness, oError)
       && ReadPositiveFloat(settings, "refraction_edge_fade", ioTestCase._RefractionEdgeFade, oError)
       && ReadBool(settings, "denoise", ioTestCase._Denoise, oError)
       && ReadPositiveInt(settings, "samples_per_pixel", ioTestCase._SamplesPerPixel, oError, false)
-      && ReadPositiveInt(settings, "bounces", ioTestCase._Bounces, oError, false);
+      && ReadPositiveInt(settings, "bounces", ioTestCase._Bounces, oError, false) ) )
+    return false;
+
+  float legacySSRStep = 0.18f;
+  float legacyRefractionStep = 0.18f;
+  if ( !ReadPositiveFloat(settings, "ssr_step_size", legacySSRStep, oError)
+    || !ReadPositiveFloat(settings, "refraction_step_size", legacyRefractionStep, oError)
+    || !ReadPositiveFloat(settings, "ssr_pixel_stride", ioTestCase._SSRPixelStride, oError)
+    || !ReadPositiveFloat(settings, "ssr_start_bias", ioTestCase._SSRStartBias, oError)
+    || !ReadPositiveFloat(settings, "refraction_pixel_stride", ioTestCase._RefractionPixelStride, oError)
+    || !ReadPositiveFloat(settings, "refraction_start_bias", ioTestCase._RefractionStartBias, oError) )
+    return false;
+
+  if ( settings.contains("ssr_step_size") && !settings.contains("ssr_pixel_stride") )
+    ioTestCase._SSRPixelStride = std::max(0.25f, std::min(4.f, legacySSRStep / 0.18f));
+  if ( settings.contains("refraction_step_size") && !settings.contains("refraction_pixel_stride") )
+    ioTestCase._RefractionPixelStride = std::max(0.25f, std::min(4.f, legacyRefractionStep / 0.18f));
+  return true;
 }
 
 bool ReadBackend( const Json & iProfile, RenderTestCase & ioTestCase, std::string & oError )
@@ -264,6 +289,9 @@ bool ParseRenderTestCases( const std::string & iContents, std::vector<RenderTest
   try
   {
     const Json manifest = Json::parse(iContents);
+    if ( ( std::string::npos != iContents.find("\"ssr_step_size\"") )
+      || ( std::string::npos != iContents.find("\"refraction_step_size\"") ) )
+      std::cerr << "Deprecated SSR/refraction step-size setting; use pixel-stride settings.\n";
     if ( !manifest.is_object() || !manifest.contains("version") || !manifest["version"].is_number_integer() || ( 1 != manifest["version"].get<int>() ) )
       return SetManifestError(oError, "Manifest version must be the integer 1.");
     if ( !manifest.contains("profiles") || !manifest["profiles"].is_object() )
@@ -557,8 +585,10 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
         "resolution": [64, 32],
         "frames": 3,
         "thresholds": { "mean_absolute_error": 0.1, "max_absolute_error": 0.2, "pixel_error": 0.3, "mismatch_ratio": 0.4 },
-        "settings": { "specular_ibl": true, "ssr": false, "refraction": true, "refraction_max_steps": 64,
-          "refraction_step_size": 0.12, "refraction_max_distance": 24.0, "refraction_thickness": 0.3, "refraction_edge_fade": 0.1 }
+        "settings": { "specular_ibl": true, "ssr": false, "ssr_step_size": 0.01,
+          "refraction": true, "refraction_max_steps": 64,
+          "refraction_step_size": 0.12, "refraction_pixel_stride": 1.5, "refraction_start_bias": 2.0,
+          "refraction_max_distance": 24.0, "refraction_thickness": 0.3, "refraction_edge_fade": 0.1 }
       }
     },
     "tests": [
@@ -572,8 +602,10 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
   if ( !RunUnitTest("manifest_valid", [&validManifest, &parsedCases, &parseError]() {
     if ( ParseRenderTestCases(validManifest, parsedCases, parseError) && ( 1u == parsedCases.size() )
       && ( 4 == parsedCases[0]._FrameCount ) && parsedCases[0]._OverrideCamera && !parsedCases[0]._SSR
+      && ( std::abs(parsedCases[0]._SSRPixelStride - 0.25f) < 1e-6f )
       && parsedCases[0]._Refraction && ( 64 == parsedCases[0]._RefractionMaxSteps )
-      && ( std::abs(parsedCases[0]._RefractionStepSize - 0.12f) < 1e-6f )
+      && ( std::abs(parsedCases[0]._RefractionPixelStride - 1.5f) < 1e-6f )
+      && ( std::abs(parsedCases[0]._RefractionStartBias - 2.f) < 1e-6f )
       && ( std::abs(parsedCases[0]._RefractionMaxDistance - 24.f) < 1e-6f )
       && ( std::abs(parsedCases[0]._RefractionThickness - 0.3f) < 1e-6f )
       && ( std::abs(parsedCases[0]._RefractionEdgeFade - 0.1f) < 1e-6f )

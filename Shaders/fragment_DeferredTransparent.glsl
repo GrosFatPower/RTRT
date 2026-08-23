@@ -34,7 +34,8 @@ uniform mat4        u_Proj;
 uniform vec2        u_Resolution = vec2(1.0);
 uniform int         u_EnableRefraction = 1;
 uniform int         u_RefractionMaxSteps = 48;
-uniform float       u_RefractionStepSize = 0.18;
+uniform float       u_RefractionPixelStride = 1.0;
+uniform float       u_RefractionStartBias = 1.0;
 uniform float       u_RefractionMaxDistance = 35.0;
 uniform float       u_RefractionThickness = 0.25;
 uniform float       u_RefractionEdgeFade = 0.18;
@@ -42,6 +43,13 @@ uniform float       u_SceneColorMipCount = 1.0;
 
 uniform Camera      u_Camera;
 
+#include ScreenSpaceTrace.glsl
+
+// ----------------------------------------------------------------------------
+// EnvMapUV
+// Converts a world-space direction to the rotated latitude-longitude environment UV.
+// iDir is expected to be normalized.
+// ----------------------------------------------------------------------------
 vec2 EnvMapUV( in vec3 iDir )
 {
   float theta = acos(clamp(iDir.y, -1.0, 1.0));
@@ -49,6 +57,11 @@ vec2 EnvMapUV( in vec3 iDir )
   return vec2((PI + phi) * INV_TWO_PI, theta * INV_PI) + vec2(u_EnvMapRotation, 0.0);
 }
 
+// ----------------------------------------------------------------------------
+// SampleEnvMapNoSeamLod
+// Samples a filtered environment direction while avoiding longitude seam bleeding.
+// iDir selects the direction and iLod selects the roughness mip level.
+// ----------------------------------------------------------------------------
 vec3 SampleEnvMapNoSeamLod( in vec3 iDir, in float iLod )
 {
   vec2 uv = EnvMapUV(iDir);
@@ -60,113 +73,45 @@ vec3 SampleEnvMapNoSeamLod( in vec3 iDir, in float iLod )
   return textureLod(u_EnvMap, uv, iLod).rgb;
 }
 
-bool ProjectWorldPos( in vec3 iPos, out vec2 oUV, out vec3 oViewPos )
-{
-  vec4 viewPos = u_View * vec4(iPos, 1.0);
-  vec4 clipPos = u_Proj * viewPos;
-  if ( clipPos.w <= 0.0001 )
-    return false;
-
-  vec3 ndc = clipPos.xyz / clipPos.w;
-  oUV = ndc.xy * 0.5 + 0.5;
-  oViewPos = viewPos.xyz;
-  return ( oUV.x >= 0.0 ) && ( oUV.y >= 0.0 ) && ( oUV.x <= 1.0 ) && ( oUV.y <= 1.0 );
-}
-
+// ----------------------------------------------------------------------------
+// RefractionEdgeFade
+// Computes refraction confidence near the screen boundary.
+// iUV is normalized screen space; the result ranges from zero to one.
+// ----------------------------------------------------------------------------
 float RefractionEdgeFade( in vec2 iUV )
 {
   vec2 distToEdge = min(iUV, 1.0 - iUV);
   return clamp(min(distToEdge.x, distToEdge.y) / max(u_RefractionEdgeFade, 0.0001), 0.0, 1.0);
 }
 
-bool IsValidRefractionHit( in vec2 iUV, in vec3 iPrevRayViewPos, in vec3 iRayViewPos, out vec3 oScenePos )
-{
-  float depth = texture(u_GDepth, iUV).r;
-  if ( depth >= 1.0 )
-    return false;
-
-  oScenePos = texture(u_GPosition, iUV).xyz;
-  vec3 sceneViewPos = ( u_View * vec4(oScenePos, 1.0) ).xyz;
-  float prevDelta = sceneViewPos.z - iPrevRayViewPos.z;
-  float curDelta = sceneViewPos.z - iRayViewPos.z;
-  return ( prevDelta < 0.0 ) && ( curDelta >= 0.0 )
-    && ( curDelta <= max(u_RefractionThickness, 0.0001) );
-}
-
+// ----------------------------------------------------------------------------
+// SampleRefractedBackground
+// Resolves refracted opaque scene color with stable screen-space fallbacks.
+// iPos/iDir define the ray; roughness selects LOD; oConfidence reports hit quality.
+// ----------------------------------------------------------------------------
 vec3 SampleRefractedBackground( in vec3 iPos, in vec3 iDir, in float iRoughness,
                                 in vec2 iBaseUV, out float oConfidence )
 {
   float lod = iRoughness * iRoughness * max(u_SceneColorMipCount - 1.0, 0.0);
   vec3 baseColor = textureLod(u_SceneColor, iBaseUV, lod).rgb;
-  float stepSize = max(u_RefractionStepSize, 0.001);
-  float maxDistance = max(u_RefractionMaxDistance, stepSize);
-  int maxSteps = clamp(u_RefractionMaxSteps, 4, 128);
-  float startDistance = max(u_RefractionThickness * 2.0, stepSize) + stepSize * 0.5;
+  float maxDistance = max(u_RefractionMaxDistance, 0.001);
+  ScreenTraceResult trace = TraceOpaqueScreenSpace(iPos, iDir, maxDistance,
+    u_RefractionMaxSteps, u_RefractionPixelStride, u_RefractionStartBias,
+    u_RefractionThickness);
 
-  vec3 prevPos = iPos + iDir * startDistance;
-  vec2 prevUV;
-  vec3 prevViewPos;
-  if ( !ProjectWorldPos(prevPos, prevUV, prevViewPos) )
+  if ( SCREEN_TRACE_HIT == trace._Status )
   {
-    oConfidence = 0.0;
-    return baseColor;
+    float edgeFade = RefractionEdgeFade(trace._UV);
+    float distanceFade = 1.0 - clamp(trace._Distance / maxDistance, 0.0, 1.0);
+    oConfidence = edgeFade * distanceFade * trace._Confidence;
+    return mix(baseColor, textureLod(u_SceneColor, trace._UV, lod).rgb, oConfidence);
   }
 
-  vec2 hitUV = iBaseUV;
-  vec3 hitScenePos = vec3(0.0);
-  bool hit = false;
-  for ( int i = 1; i <= 128; ++i )
+  bool environmentMiss = ( SCREEN_TRACE_OFF_SCREEN == trace._Status )
+    || ( SCREEN_TRACE_NO_HIT == trace._Status );
+  if ( environmentMiss && ( u_EnableEnvMap > 0 ) )
   {
-    if ( i > maxSteps )
-      break;
-
-    float dist = startDistance + float(i) * stepSize;
-    if ( dist > maxDistance )
-      break;
-
-    vec3 rayPos = iPos + iDir * dist;
-    vec2 rayUV;
-    vec3 rayViewPos;
-    if ( !ProjectWorldPos(rayPos, rayUV, rayViewPos) )
-      break;
-
-    if ( IsValidRefractionHit(rayUV, prevViewPos, rayViewPos, hitScenePos) )
-    {
-      vec3 lo = prevPos;
-      vec3 hi = rayPos;
-      for ( int refine = 0; refine < 4; ++refine )
-      {
-        vec3 mid = ( lo + hi ) * 0.5;
-        vec2 midUV;
-        vec3 midViewPos;
-        if ( ProjectWorldPos(mid, midUV, midViewPos)
-          && IsValidRefractionHit(midUV, prevViewPos, midViewPos, hitScenePos) )
-        {
-          hi = mid;
-          hitUV = midUV;
-        }
-        else
-          lo = mid;
-      }
-      hit = true;
-      break;
-    }
-
-    prevPos = rayPos;
-    prevViewPos = rayViewPos;
-  }
-
-  if ( hit )
-  {
-    float edgeFade = RefractionEdgeFade(hitUV);
-    float distanceFade = 1.0 - clamp(length(hitScenePos - iPos) / maxDistance, 0.0, 1.0);
-    oConfidence = edgeFade * distanceFade;
-    return mix(baseColor, textureLod(u_SceneColor, hitUV, lod).rgb, oConfidence);
-  }
-
-  if ( u_EnableEnvMap > 0 )
-  {
-    oConfidence = RefractionEdgeFade(prevUV);
+    oConfidence = RefractionEdgeFade(iBaseUV);
     float envLod = min(lod, max(u_EnvMapMipCount - 1.0, 0.0));
     vec3 environment = SampleEnvMapNoSeamLod(iDir, envLod);
     return mix(baseColor, environment, oConfidence);
@@ -176,6 +121,11 @@ vec3 SampleRefractedBackground( in vec3 iPos, in vec3 iDir, in float iRoughness,
   return baseColor;
 }
 
+// ----------------------------------------------------------------------------
+// main
+// Shades and premultiplies one sorted transparent fragment.
+// Material transmission selects refraction; ordinary alpha blending retains v1 behavior.
+// ----------------------------------------------------------------------------
 void main()
 {
   if ( v_MaterialID < 0 )
@@ -275,16 +225,21 @@ void main()
   {
     float coverage = baseAlpha;
     float NdotV = max(dot(N, V), 0.0);
-    float fresnel = dielectricF0 + ( 1.0 - dielectricF0 ) * pow(1.0 - NdotV, 5.0);
+    float ior = max(mat._IOR, 1.0);
+    bool noInterface = ior <= 1.0001;
+    float fresnel = noInterface ? 0.0
+      : dielectricF0 + ( 1.0 - dielectricF0 ) * pow(1.0 - NdotV, 5.0);
     vec3 incident = -V;
-    vec3 refractedDir = refract(incident, N, 1.0 / max(mat._IOR, 1.0));
+    vec3 refractedDir = noInterface ? incident : refract(incident, N, 1.0 / ior);
     if ( dot(refractedDir, refractedDir) <= 0.0001 )
       refractedDir = reflect(incident, N);
 
     vec2 sceneUV = gl_FragCoord.xy / max(u_Resolution, vec2(1.0));
     float refractionConfidence = 0.0;
-    vec3 refractedBackground = SampleRefractedBackground(hitPoint._Pos, normalize(refractedDir), roughness,
-                                                         sceneUV, refractionConfidence);
+    float sceneLod = roughness * roughness * max(u_SceneColorMipCount - 1.0, 0.0);
+    vec3 refractedBackground = noInterface ? textureLod(u_SceneColor, sceneUV, sceneLod).rgb
+      : SampleRefractedBackground(hitPoint._Pos, normalize(refractedDir), roughness,
+                                  sceneUV, refractionConfidence);
     vec3 transmission = refractedBackground * mat._Albedo * specTrans * ( 1.0 - fresnel );
     vec3 diffuse = ( u_EnablePBRDirectLighting != 0 ) ? directDiffuse : legacyDiffuse;
     vec3 specular = ( u_EnablePBRDirectLighting != 0 ) ? directSpecular : legacySpecular;

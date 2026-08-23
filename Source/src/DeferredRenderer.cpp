@@ -1738,7 +1738,8 @@ int DeferredRenderer::UpdateUniforms()
       _SSRShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
       _SSRShader -> SetUniform("u_EnableSSR", _Settings._SSR ? 1 : 0);
       _SSRShader -> SetUniform("u_SSRMaxSteps", std::min(std::max(_Settings._SSRMaxSteps, 4), 128));
-      _SSRShader -> SetUniform("u_SSRStepSize", _Settings._SSRStepSize);
+      _SSRShader -> SetUniform("u_SSRPixelStride", MathUtil::Clamp(_Settings._SSRPixelStride, 0.25f, 4.f));
+      _SSRShader -> SetUniform("u_SSRStartBias", MathUtil::Clamp(_Settings._SSRStartBias, 0.25f, 8.f));
       _SSRShader -> SetUniform("u_SSRMaxDistance", _Settings._SSRMaxDistance);
       _SSRShader -> SetUniform("u_SSRThickness", _Settings._SSRThickness);
       _SSRShader -> SetUniform("u_SSRMaxRoughness", _Settings._SSRMaxRoughness);
@@ -1927,7 +1928,8 @@ int DeferredRenderer::UpdateUniforms()
       _TransparentShader -> SetUniform("u_Resolution", (float)RenderWidth(), (float)RenderHeight());
       _TransparentShader -> SetUniform("u_EnableRefraction", _Settings._Refraction ? 1 : 0);
       _TransparentShader -> SetUniform("u_RefractionMaxSteps", std::min(std::max(_Settings._RefractionMaxSteps, 4), 128));
-      _TransparentShader -> SetUniform("u_RefractionStepSize", std::max(_Settings._RefractionStepSize, 0.001f));
+      _TransparentShader -> SetUniform("u_RefractionPixelStride", MathUtil::Clamp(_Settings._RefractionPixelStride, 0.25f, 4.f));
+      _TransparentShader -> SetUniform("u_RefractionStartBias", MathUtil::Clamp(_Settings._RefractionStartBias, 0.25f, 8.f));
       _TransparentShader -> SetUniform("u_RefractionMaxDistance", std::max(_Settings._RefractionMaxDistance, 0.001f));
       _TransparentShader -> SetUniform("u_RefractionThickness", std::max(_Settings._RefractionThickness, 0.001f));
       _TransparentShader -> SetUniform("u_RefractionEdgeFade", std::max(_Settings._RefractionEdgeFade, 0.001f));

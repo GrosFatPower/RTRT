@@ -47,7 +47,7 @@ struct RenderSettings
   bool         _SpecularIBL           = true;                   // Deferred renderer
   bool         _PBRDirectLighting     = true;                   // Deferred renderer
   bool         _Transparency          = true;                   // Deferred and software renderers
-  bool         _Refraction            = false;                  // Deferred renderer
+  bool         _Refraction            = true;                   // Deferred renderer
   bool         _GenerateMipMaps       = true;                   // Deferred and software renderers
   SamplingMode _Sampling              = SamplingMode::Bilinear; // Raster
   bool         _WBuffer               = true;                   // Raster
@@ -71,13 +71,15 @@ struct RenderSettings
   float        _SSAORadius            = 0.5f;                   // Deferred renderer
   float        _SSAOBias              = 0.025f;                 // Deferred renderer
   float        _SSAOIntensity         = 1.0f;                   // Deferred renderer
-  float        _SSRStepSize           = 0.18f;                  // Deferred renderer
+  float        _SSRPixelStride        = 1.f;                    // Deferred renderer
+  float        _SSRStartBias          = 1.f;                    // Deferred renderer, pixels
   float        _SSRMaxDistance        = 35.f;                   // Deferred renderer
   float        _SSRThickness          = 0.25f;                  // Deferred renderer
   float        _SSRIntensity          = 0.6f;                   // Deferred renderer
   float        _SSRMaxRoughness       = 0.55f;                  // Deferred renderer
   float        _SSRFade               = 0.18f;                  // Deferred renderer
-  float        _RefractionStepSize    = 0.18f;                  // Deferred renderer
+  float        _RefractionPixelStride = 1.f;                    // Deferred renderer
+  float        _RefractionStartBias   = 1.f;                    // Deferred renderer, pixels
   float        _RefractionMaxDistance = 35.f;                   // Deferred renderer
   float        _RefractionThickness   = 0.25f;                  // Deferred renderer
   float        _RefractionEdgeFade    = 0.18f;                  // Deferred renderer

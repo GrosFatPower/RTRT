@@ -201,7 +201,7 @@ The SSR source texture is time-multiplexed instead of adding another full-resolu
 
 ## Refraction and Composition
 
-The transparent fragment shader models one air-to-material interface while retaining back-face culling. It computes `refract(cameraToSurface, normal, 1 / IOR)` and marches the result through world space against opaque G-buffer depth and position. The trace uses bounded fixed-size steps, opaque-depth crossing tests, four binary refinement steps, distance confidence, and screen-edge fading.
+The transparent fragment shader models one air-to-material interface while retaining back-face culling. It computes `refract(cameraToSurface, normal, 1 / IOR)` and traces the result against opaque G-buffer depth and position with the shared SSR/refraction screen-space tracer. The tracer advances along the dominant screen axis in pixel units, perspective-correctly interpolates view depth, brackets crossings from independently sampled endpoints, performs five binary refinement steps, and applies thickness only to the refined residual.
 
 Hit behavior:
 
@@ -227,12 +227,15 @@ Defaults in `RenderSettings`:
 
 - `_Refraction = true`
 - `_RefractionMaxSteps = 48`, clamped to `4..128`
-- `_RefractionStepSize = 0.18`
+- `_RefractionPixelStride = 1.0`, clamped to `0.25..4.0` pixels
+- `_RefractionStartBias = 1.0`, clamped to `0.25..8.0` pixels
 - `_RefractionMaxDistance = 35.0`
 - `_RefractionThickness = 0.25`
 - `_RefractionEdgeFade = 0.18`
 
-The controls are exposed next to deferred transparency in Test5 and in the FPS editor. FPS map serialization uses `refraction`, `refractionMaxSteps`, `refractionStepSize`, `refractionMaxDistance`, `refractionThickness`, and `refractionEdgeFade`. Render regression manifests use the equivalent snake-case names.
+The shared SSR traversal uses `_SSRPixelStride = 1.0` and `_SSRStartBias = 1.0` with the same ranges. Existing `_SSRMaxSteps = 48`, `_SSRMaxDistance = 35.0`, and `_SSRThickness = 0.25` defaults are unchanged. FPS maps serialize `ssrPixelStride` and `ssrStartBias`; regression manifests use `ssr_pixel_stride` and `ssr_start_bias`. The deprecated SSR step-size keys use the same relative conversion and precedence policy as refraction.
+
+The controls are exposed next to deferred transparency in Test5 and in the FPS editor. FPS map serialization uses `refraction`, `refractionMaxSteps`, `refractionPixelStride`, `refractionStartBias`, `refractionMaxDistance`, `refractionThickness`, and `refractionEdgeFade`. Render regression manifests use the equivalent snake-case names. Deprecated `refractionStepSize` and `refraction_step_size` inputs convert to pixel stride with `clamp(oldStepSize / 0.18, 0.25, 4.0)`; a new pixel-stride key takes precedence and serializers emit only the new names.
 
 Refraction is subordinate to `_Transparency`; disabling transparency skips the complete transparent pass.
 
@@ -244,8 +247,22 @@ Committed regression cases:
 
 - `deferred_refraction`: depth-aware refraction enabled.
 - `deferred_refraction_disabled`: the same scene using the v1 transmissive fallback.
+- `deferred_refraction_environment`: environment fallback with IOR `1.0` no-displacement coverage.
+- `deferred_red_and_glass_boxes`: thin and oblique refraction artifact coverage at 800x600.
+- `deferred_red_and_glass_boxes_low_resolution`: pixel-scaled traversal coverage at 400x300.
+- `deferred_red_and_glass_boxes_refraction_disabled`: v1 fallback coverage for the artifact scene.
 
 Existing acceptance scenes remain `coffee_maker.scene`, `mustang.scene`, `hyperion2.scene`, and `WaterBottle.scene`, including orbit, resize, and transparency toggle checks.
+
+## v2 Traversal Stabilization
+
+Status: implemented and regression validated.
+
+The initial v2 fixed world-space ray march produced discrete hit/miss contours on thin or oblique refractive geometry. `Red_and_Glass_Boxes.scene` exposed the issue as repeated environment-colored bands inside the refracted red box. The original crossing test coupled thickness to the ray start offset, rejected overshoot before refinement, and did not maintain an independent signed-depth bracket at both refinement endpoints.
+
+The duplicated refraction and SSR marches now use `ScreenSpaceTrace.glsl`. Empty depth resets the crossing bracket, thickness validates only the refined crossing, and start bias is an independent pixel control. A center-plus-four-neighbor depth test fades unstable refraction candidates toward undisplaced scene color; stable hits use refined view-space distance and edge confidence. Rays without a complete pixel-space march interval and IOR `1.0` materials sample undisplaced scene color. Genuine empty or off-screen refraction misses may use the environment, while every non-hit SSR result returns zero SSR confidence so deferred environment lighting remains authoritative.
+
+Validation completed with artifact-free captures at pixel strides `0.5`, `1.0`, and `2.0`, both committed box resolutions, environment-enabled IOR `1.0` coverage, unchanged refraction-disabled/software/path-tracer box results, dedicated SSR diagnostic review, and the complete 45-case regression suite. The approved `deferred_diningroom` baseline removes the former SSR fixed-step striping.
 
 ## Residual Limitations
 
