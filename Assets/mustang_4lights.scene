@@ -1,11 +1,11 @@
 Renderer
 {
 	resolution 1280 720
-	maxdepth 7
+	maxdepth 3
 	tilewidth 256
 	tileheight 144
-	envMap HDR/peppermint_powerplant_4k.hdr
-	hdrMultiplier 1.411
+	tilewidth 128
+	tileheight 128
 }
 
 Camera
@@ -13,6 +13,50 @@ Camera
 	position 7.3 2.2 9.6
 	lookAt -0.3 0.4 0
 	fov 22
+}
+
+light
+{
+	type sphere
+	position 2 2 2 
+	emission 1. 1. 1.
+	intensity 20
+	radius 0.7
+	castshadow true
+	shadowradius 0.000
+}
+
+light
+{
+	type sphere
+	position -2 2 -2 
+	emission 1. 1. 1.
+	intensity 20
+	radius 0.7
+	castshadow true
+	shadowradius 0.000
+}
+
+light
+{
+	type sphere
+	position 2 2 -2 
+	emission 1. 1. 1.
+	intensity 20
+	radius 0.7
+	castshadow true
+	shadowradius 0.000
+}
+
+light
+{
+	type sphere
+	position -2 2 2 
+	emission 1. 1. 1.
+	intensity 20
+	radius 0.7
+	castshadow true
+	shadowradius 0.000
 }
 
 material floor

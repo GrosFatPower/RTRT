@@ -11,6 +11,7 @@ camera
 	position 0.69 0.33 0.0
 	lookat 0.0 0.07 0.0
 	fov 22
+	near 0.5
 }
 
 material base
