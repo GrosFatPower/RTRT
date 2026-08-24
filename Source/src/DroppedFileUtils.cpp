@@ -34,7 +34,7 @@ bool IsDroppedScenePath( const std::filesystem::path & iPath )
 bool IsDroppedPropPath( const std::filesystem::path & iPath )
 {
   const std::string ext = LowerExtension(iPath);
-  return ( ".gltf" == ext ) || ( ".glb" == ext );
+  return ( ".obj" == ext ) || ( ".gltf" == ext ) || ( ".glb" == ext );
 }
 
 std::string DisplayName( const std::filesystem::path & iPath )

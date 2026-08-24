@@ -1,7 +1,9 @@
 Renderer
 {
 	resolution 1280 720
-	maxDepth 7
+	maxdepth 7
+	tilewidth 256
+	tileheight 144
 	envMap HDR/peppermint_powerplant_4k.hdr
 	hdrMultiplier 1.411
 }

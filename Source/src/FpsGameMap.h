@@ -6,6 +6,7 @@
 #include "Light.h"
 #include "Material.h"
 #include "MathUtil.h"
+#include "RenderSettings.h"
 
 #include <string>
 #include <vector>
@@ -90,13 +91,23 @@ struct FpsMapRenderSettings
   float           _SSRIntensity = 0.6f;
   float           _SSRMaxRoughness = 0.55f;
   int             _SSRMaxSteps = 48;
-  float           _SSRStepSize = 0.18f;
+  float           _SSRPixelStride = 1.f;
+  float           _SSRStartBias = 1.f;
   float           _SSRMaxDistance = 35.f;
   float           _SSRThickness = 0.25f;
   float           _SSRFade = 0.18f;
+  bool            _Transparency = true;
+  bool            _Refraction = true;
+  int             _RefractionMaxSteps = 48;
+  float           _RefractionPixelStride = 1.f;
+  float           _RefractionStartBias = 1.f;
+  float           _RefractionMaxDistance = 35.f;
+  float           _RefractionThickness = 0.25f;
+  float           _RefractionEdgeFade = 0.18f;
   bool            _PBRDirectLighting = true;
   float           _DirectLightIntensity = 1.f;
   float           _SpecularIBLMaxRoughness = 0.5f;
+  ShadingType     _ShadingType = ShadingType::PBR;
   int             _Bounces = 1;
   int             _NbSamplesPerPixel = 1;
   bool            _Denoise = false;

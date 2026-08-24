@@ -11,6 +11,7 @@
 #include "Util.h"
 #include "PathUtils.h"
 #include "Mesh.h"
+#include "NativeFileDialog.h"
 #include "RenderStatsUI.h"
 
 #include <string>
@@ -197,12 +198,89 @@ void Test5::HandleDroppedFiles( int iCount, const char ** iPaths )
       continue;
     }
 
-    _DroppedScenePath = filepath;
-    _DroppedSceneName = DroppedFileUtils::DisplayName(filepath);
+    _CurSceneId = AddExternalSceneFile(filepath);
+    _LastExternalSceneDirectory = filepath.parent_path();
+    _SceneLoadError.clear();
     _ReloadScene = true;
     std::cout << "Test5 : dropped scene " << filepath.generic_string() << std::endl;
     return;
   }
+}
+
+// ----------------------------------------------------------------------------
+// AddExternalSceneFile
+// ----------------------------------------------------------------------------
+int Test5::AddExternalSceneFile( const std::filesystem::path & iFilepath )
+{
+  std::error_code ec;
+  std::filesystem::path normalizedPath = std::filesystem::weakly_canonical(iFilepath, ec);
+  if ( ec )
+  {
+    ec.clear();
+    normalizedPath = std::filesystem::absolute(iFilepath, ec).lexically_normal();
+  }
+  const std::string scenePath = normalizedPath.string();
+
+  for ( int i = 0; i < static_cast<int>(_SceneFiles.size()); ++i )
+  {
+    if ( _SceneFiles[i] == scenePath )
+      return i;
+  }
+
+  std::string sceneName = DroppedFileUtils::DisplayName(normalizedPath);
+  const std::string baseName = sceneName;
+  int suffix = 2;
+  bool duplicateName = true;
+  while ( duplicateName )
+  {
+    duplicateName = false;
+    for ( const char * existingName : _SceneNames )
+    {
+      if ( sceneName == existingName )
+      {
+        sceneName = baseName + " (" + std::to_string(suffix++) + ")";
+        duplicateName = true;
+        break;
+      }
+    }
+  }
+
+  char * const sceneNameBuffer = new char[sceneName.size() + 1u];
+  snprintf(sceneNameBuffer, sceneName.size() + 1u, "%s", sceneName.c_str());
+  _SceneFiles.push_back(scenePath);
+  _SceneNames.push_back(sceneNameBuffer);
+  return static_cast<int>(_SceneFiles.size()) - 1;
+}
+
+// ----------------------------------------------------------------------------
+// LoadSceneFromDialog
+// ----------------------------------------------------------------------------
+void Test5::LoadSceneFromDialog()
+{
+  std::filesystem::path initialDirectory = _LastExternalSceneDirectory.empty() ? std::filesystem::path(PathUtils::GetAssetPath("")) : _LastExternalSceneDirectory;
+  std::filesystem::path selectedPath;
+  std::string error;
+  const NativeFileDialogResult result = OpenFileDialog("scene,obj,gltf,glb", initialDirectory, selectedPath, error);
+  if ( NativeFileDialogResult::Cancelled == result )
+    return;
+  if ( NativeFileDialogResult::Error == result )
+  {
+    _SceneLoadError = "File dialog error: " + error;
+    return;
+  }
+
+  std::error_code ec;
+  selectedPath = std::filesystem::absolute(selectedPath, ec).lexically_normal();
+  if ( ec || !std::filesystem::is_regular_file(selectedPath, ec) || ec )
+  {
+    _SceneLoadError = "Selected scene file does not exist.";
+    return;
+  }
+
+  _CurSceneId = AddExternalSceneFile(selectedPath);
+  _LastExternalSceneDirectory = selectedPath.parent_path();
+  _SceneLoadError.clear();
+  _ReloadScene = true;
 }
 
 // ----------------------------------------------------------------------------
@@ -315,21 +393,23 @@ int Test5::DrawUI()
         if ( selectedSceneId != _CurSceneId )
         {
           _CurSceneId = selectedSceneId;
-          _DroppedScenePath.clear();
-          _DroppedSceneName.clear();
+          _SceneLoadError.clear();
           _ReloadScene = true;
         }
       }
 
-      if ( !_DroppedSceneName.empty() )
-        ImGui::Text("Dropped scene: %s", _DroppedSceneName.c_str());
+      if ( ImGui::Button("Load scene...") )
+        LoadSceneFromDialog();
+
+      if ( !_SceneLoadError.empty() )
+        ImGui::TextColored(ImVec4(1.f, .35f, .35f, 1.f), "%s", _SceneLoadError.c_str());
     }
 
     ImGui::Checkbox("Show rendering stats", &_ShowRenderStatsPanel);
 
     if ( ImGui::Button( "Capture image" ) )
     {
-      const std::string sceneName = _DroppedSceneName.empty() ? std::string(_SceneNames[_CurSceneId]) : _DroppedSceneName;
+      const std::string sceneName = std::string(_SceneNames[_CurSceneId]);
       _CaptureOutputPath = "./" + sceneName + "_" + std::to_string( _NbRenderedFrames ) + "frames.png";
       _RenderToFile = true;
     }
@@ -653,7 +733,7 @@ int Test5::DrawSettingsUI()
       SoftwareRasterizer * softwareRasterizer = _Renderer -> AsSoftwareRasterizer();
       if ( softwareRasterizer )
       {
-        bool generateMips = softwareRasterizer ->  GetGenerateMipMaps();
+        bool generateMips = _Settings._GenerateMipMaps;
         if ( ImGui::Checkbox( "Generate mip maps", &generateMips ) )
           softwareRasterizer -> SetGenerateMipMaps(generateMips);
       }
@@ -666,11 +746,11 @@ int Test5::DrawSettingsUI()
       DeferredRenderer * deferredRenderer = _Renderer -> AsDeferredRenderer();
       if ( deferredRenderer )
       {
-        bool generateMips = deferredRenderer ->  GetGenerateMipMaps();
+        bool generateMips = _Settings._GenerateMipMaps;
         if ( ImGui::Checkbox( "Generate mip maps", &generateMips ) )
           deferredRenderer -> SetGenerateMipMaps(generateMips);
 
-        int anisoLevel = deferredRenderer -> GetAnisotropicLevel();
+        int anisoLevel = _Settings._AnisotropicLevel;
         if ( ImGui::SliderInt( "Anisotropic level", &anisoLevel, 1, 16 ) )
           deferredRenderer -> SetAnisotropicLevel(anisoLevel);
 
@@ -745,7 +825,10 @@ int Test5::DrawSettingsUI()
           _Renderer -> Notify(DirtyState::RenderSettings);
         }
 
-        if ( ImGui::SliderFloat( "SSR step size", &_Settings._SSRStepSize, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_Logarithmic ) )
+        if ( ImGui::SliderFloat( "SSR pixel stride", &_Settings._SSRPixelStride, 0.25f, 4.f, "%.2f", ImGuiSliderFlags_Logarithmic ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "SSR start bias", &_Settings._SSRStartBias, 0.25f, 8.f, "%.2f", ImGuiSliderFlags_Logarithmic ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
         if ( ImGui::SliderFloat( "SSR max distance", &_Settings._SSRMaxDistance, 1.f, 100.f ) )
@@ -773,6 +856,31 @@ int Test5::DrawSettingsUI()
           _Renderer -> Notify(DirtyState::RenderSettings);
 
         if ( ImGui::Checkbox( "Transparency", &_Settings._Transparency ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::Checkbox( "Refraction", &_Settings._Refraction ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        int refractionMaxSteps = _Settings._RefractionMaxSteps;
+        if ( ImGui::SliderInt( "Refraction max steps", &refractionMaxSteps, 4, 128 ) )
+        {
+          _Settings._RefractionMaxSteps = std::max(4, std::min(128, refractionMaxSteps));
+          _Renderer -> Notify(DirtyState::RenderSettings);
+        }
+
+        if ( ImGui::SliderFloat( "Refraction pixel stride", &_Settings._RefractionPixelStride, 0.25f, 4.f, "%.2f", ImGuiSliderFlags_Logarithmic ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "Refraction start bias", &_Settings._RefractionStartBias, 0.25f, 8.f, "%.2f", ImGuiSliderFlags_Logarithmic ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "Refraction max distance", &_Settings._RefractionMaxDistance, 1.f, 100.f ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "Refraction thickness", &_Settings._RefractionThickness, 0.01f, 2.f, "%.3f", ImGuiSliderFlags_Logarithmic ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "Refraction edge fade", &_Settings._RefractionEdgeFade, 0.01f, 0.5f ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 
       }
@@ -1431,6 +1539,22 @@ int Test5::DrawLightsUI()
     if ( ImGui::Checkbox("Show lights", &_Settings._ShowLights) )
       NotifyLightEdited();
 
+    if ( RendererType::OpenGLRasterizer == _RendererType )
+    {
+      if ( ImGui::Checkbox("Uniform ambient light", &_Settings._EnableUniformLight) )
+        _Renderer -> Notify(DirtyState::RenderSettings);
+
+      if ( _Settings._EnableUniformLight )
+      {
+        float ambientColor[3] = { _Settings._UniformLightCol.r, _Settings._UniformLightCol.g, _Settings._UniformLightCol.b };
+        if ( ImGui::ColorEdit3("Ambient light color", ambientColor) )
+        {
+          _Settings._UniformLightCol = Vec3( ambientColor[0], ambientColor[1], ambientColor[2] );
+          _Renderer -> Notify(DirtyState::RenderSettings);
+        }
+      }
+    }
+
     ImGui::Checkbox("Enable light gizmo", &_LightGizmoEnabled);
     ImGui::Checkbox("Light gizmo snap", &_LightGizmoSnap);
     if ( _LightGizmoSnap )
@@ -2008,15 +2132,16 @@ int Test5::ProcessInput()
 int Test5::InitializeScene()
 {
   Scene * newScene = new Scene;
-  const bool useDroppedScene = !_DroppedScenePath.empty();
-  const std::string scenePath = useDroppedScene ? _DroppedScenePath.generic_string()
-                                                : ( ( _CurSceneId >= 0 ) ? _SceneFiles[_CurSceneId] : "" );
-  if ( !newScene || scenePath.empty() || !Loader::LoadScene(scenePath, *newScene, _Settings) )
+  RenderSettings newSettings = _Settings;
+  const std::string scenePath = ( _CurSceneId >= 0 ) && ( _CurSceneId < static_cast<int>(_SceneFiles.size()) ) ? _SceneFiles[_CurSceneId] : "";
+  if ( !newScene || scenePath.empty() || !Loader::LoadScene(scenePath, *newScene, newSettings) )
   {
     std::cout << "Failed to load scene : " << scenePath << std::endl;
+    delete newScene;
     return 1;
   }
   _Scene.reset(newScene);
+  _Settings = newSettings;
   _SelectedMeshInstanceID = -1;
   _SelectedLightID = -1;
 
@@ -2130,7 +2255,9 @@ int Test5::UpdateScene()
     if ( 0 != InitializeScene() )
     {
       std::cout << "ERROR: Scene initialization failed!" << std::endl;
-      return 1;
+      const std::string sceneName = ( _CurSceneId >= 0 ) && ( _CurSceneId < static_cast<int>(_SceneNames.size()) ) ? _SceneNames[_CurSceneId] : "selected scene";
+      _SceneLoadError = "Unable to load scene: " + sceneName;
+      return 0;
     }
 
     _ReloadRenderer = true;

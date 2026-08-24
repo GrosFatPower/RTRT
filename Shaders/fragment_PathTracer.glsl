@@ -157,15 +157,17 @@ vec3 DirectLight( in Ray iRay, in HitPoint iClosestHit, in Material iMat, float 
   }
 
   // Lights sampling
+  if ( u_NbLights > 0 )
   {
     // Choose a light source randomly
     int lightInd = int(rand() * u_NbLights);
 
-    // Get direction to it
-    vec3 lightDir = GetLightDirSample(scatterPos, u_Lights[lightInd]);
+    LightDirectionSample lightSample;
+    if ( !SampleLightDirection(scatterPos, u_Lights[lightInd], lightSample) )
+      return Ld;
 
-    float distToLight = length(lightDir);
-    lightDir = normalize(lightDir);
+    vec3 lightDir = lightSample._Direction;
+    float distToLight = lightSample._Distance;
 
     float cosTheta = dot(iClosestHit._Normal, lightDir);
     if ( cosTheta > 0. )
@@ -173,10 +175,11 @@ vec3 DirectLight( in Ray iRay, in HitPoint iClosestHit, in Material iMat, float 
       Ray shadowRay = Ray(scatterPos, lightDir);
 
       // Get the pdf value for this direction
-      float lightPdf = 0.0f;
+      float lightPdf = lightSample._Pdf;
       for ( int j = 0; j < u_NbLights; ++j )
       {
-        lightPdf += LightPDF(u_Lights[j], shadowRay);
+        if ( j != lightInd )
+          lightPdf += LightPDF(u_Lights[j], shadowRay);
       }
       lightPdf /= u_NbLights;
 

@@ -1,7 +1,9 @@
 #include "RenderTestFramework.h"
 #include "RenderTestImageUtil.h"
 #include "RenderTestSIMDUtil.h"
+#include "RenderTestGLTFUtil.h"
 
+#include "DroppedFileUtils.h"
 #include "RenderSettings.h"
 #include "Scene.h"
 #include "PathUtils.h"
@@ -42,11 +44,27 @@ void RenderTestCase::ApplySettings( RenderSettings & ioSettings ) const
   ioSettings._FXAA = false;
   ioSettings._ToneMapping = false;
   ioSettings._EnableSkybox = !_EnvironmentMapPath.empty();
+  ioSettings._EnableBackGround = _Background;
+  ioSettings._EnableUniformLight = _UniformLight;
 
   if ( RendererBackend::DeferredRenderer == _Backend )
   {
     ioSettings._SpecularIBL = _SpecularIBL;
     ioSettings._SSR = _SSR;
+    ioSettings._SSRMaxSteps = std::max(4, std::min(128, _SSRMaxSteps));
+    ioSettings._SSRPixelStride = std::max(0.25f, std::min(4.f, _SSRPixelStride));
+    ioSettings._SSRStartBias = std::max(0.25f, std::min(8.f, _SSRStartBias));
+    ioSettings._SSRMaxDistance = std::max(0.001f, _SSRMaxDistance);
+    ioSettings._SSRThickness = std::max(0.001f, _SSRThickness);
+    ioSettings._SSAO = _SSAO;
+    ioSettings._Transparency = _Transparency;
+    ioSettings._Refraction = _Refraction;
+    ioSettings._RefractionMaxSteps = std::max(4, std::min(128, _RefractionMaxSteps));
+    ioSettings._RefractionPixelStride = std::max(0.25f, std::min(4.f, _RefractionPixelStride));
+    ioSettings._RefractionStartBias = std::max(0.25f, std::min(8.f, _RefractionStartBias));
+    ioSettings._RefractionMaxDistance = std::max(0.001f, _RefractionMaxDistance);
+    ioSettings._RefractionThickness = std::max(0.001f, _RefractionThickness);
+    ioSettings._RefractionEdgeFade = std::max(0.001f, _RefractionEdgeFade);
   }
   else if ( RendererBackend::PathTracer == _Backend )
   {
@@ -109,6 +127,16 @@ bool ReadPositiveInt( const Json & iObject, const char * iName, int & oValue, st
   if ( !iObject[iName].is_number_integer() || ( iObject[iName].get<int>() <= 0 ) )
     return SetManifestError(oError, std::string("'") + iName + "' must be a positive integer.");
   oValue = iObject[iName].get<int>();
+  return true;
+}
+
+bool ReadPositiveFloat( const Json & iObject, const char * iName, float & oValue, std::string & oError )
+{
+  if ( !iObject.contains(iName) )
+    return true;
+  if ( !iObject[iName].is_number() || ( iObject[iName].get<float>() <= 0.f ) )
+    return SetManifestError(oError, std::string("'") + iName + "' must be a positive number.");
+  oValue = iObject[iName].get<float>();
   return true;
 }
 
@@ -192,16 +220,44 @@ bool ReadSettings( const Json & iObject, RenderTestCase & ioTestCase, std::strin
   if ( !settings.is_object() )
     return SetManifestError(oError, "'settings' must be an object.");
 
-  return ReadBool(settings, "specular_ibl", ioTestCase._SpecularIBL, oError)
+  if ( !( ReadBool(settings, "specular_ibl", ioTestCase._SpecularIBL, oError)
       && ReadBool(settings, "ssr", ioTestCase._SSR, oError)
+      && ReadPositiveInt(settings, "ssr_max_steps", ioTestCase._SSRMaxSteps, oError, false)
+      && ReadPositiveFloat(settings, "ssr_max_distance", ioTestCase._SSRMaxDistance, oError)
+      && ReadPositiveFloat(settings, "ssr_thickness", ioTestCase._SSRThickness, oError)
+      && ReadBool(settings, "ssao", ioTestCase._SSAO, oError)
+      && ReadBool(settings, "background", ioTestCase._Background, oError)
+      && ReadBool(settings, "uniform_light", ioTestCase._UniformLight, oError)
       && ReadBool(settings, "accumulate", ioTestCase._Accumulate, oError)
       && ReadBool(settings, "auto_scale", ioTestCase._AutoScale, oError)
       && ReadBool(settings, "tiled_rendering", ioTestCase._TiledRendering, oError)
       && ReadBool(settings, "w_buffer", ioTestCase._WBuffer, oError)
       && ReadBool(settings, "transparency", ioTestCase._Transparency, oError)
+      && ReadBool(settings, "refraction", ioTestCase._Refraction, oError)
+      && ReadPositiveInt(settings, "refraction_max_steps", ioTestCase._RefractionMaxSteps, oError, false)
+      && ReadPositiveFloat(settings, "refraction_max_distance", ioTestCase._RefractionMaxDistance, oError)
+      && ReadPositiveFloat(settings, "refraction_thickness", ioTestCase._RefractionThickness, oError)
+      && ReadPositiveFloat(settings, "refraction_edge_fade", ioTestCase._RefractionEdgeFade, oError)
       && ReadBool(settings, "denoise", ioTestCase._Denoise, oError)
       && ReadPositiveInt(settings, "samples_per_pixel", ioTestCase._SamplesPerPixel, oError, false)
-      && ReadPositiveInt(settings, "bounces", ioTestCase._Bounces, oError, false);
+      && ReadPositiveInt(settings, "bounces", ioTestCase._Bounces, oError, false) ) )
+    return false;
+
+  float legacySSRStep = 0.18f;
+  float legacyRefractionStep = 0.18f;
+  if ( !ReadPositiveFloat(settings, "ssr_step_size", legacySSRStep, oError)
+    || !ReadPositiveFloat(settings, "refraction_step_size", legacyRefractionStep, oError)
+    || !ReadPositiveFloat(settings, "ssr_pixel_stride", ioTestCase._SSRPixelStride, oError)
+    || !ReadPositiveFloat(settings, "ssr_start_bias", ioTestCase._SSRStartBias, oError)
+    || !ReadPositiveFloat(settings, "refraction_pixel_stride", ioTestCase._RefractionPixelStride, oError)
+    || !ReadPositiveFloat(settings, "refraction_start_bias", ioTestCase._RefractionStartBias, oError) )
+    return false;
+
+  if ( settings.contains("ssr_step_size") && !settings.contains("ssr_pixel_stride") )
+    ioTestCase._SSRPixelStride = std::max(0.25f, std::min(4.f, legacySSRStep / 0.18f));
+  if ( settings.contains("refraction_step_size") && !settings.contains("refraction_pixel_stride") )
+    ioTestCase._RefractionPixelStride = std::max(0.25f, std::min(4.f, legacyRefractionStep / 0.18f));
+  return true;
 }
 
 bool ReadBackend( const Json & iProfile, RenderTestCase & ioTestCase, std::string & oError )
@@ -233,6 +289,9 @@ bool ParseRenderTestCases( const std::string & iContents, std::vector<RenderTest
   try
   {
     const Json manifest = Json::parse(iContents);
+    if ( ( std::string::npos != iContents.find("\"ssr_step_size\"") )
+      || ( std::string::npos != iContents.find("\"refraction_step_size\"") ) )
+      std::cerr << "Deprecated SSR/refraction step-size setting; use pixel-stride settings.\n";
     if ( !manifest.is_object() || !manifest.contains("version") || !manifest["version"].is_number_integer() || ( 1 != manifest["version"].get<int>() ) )
       return SetManifestError(oError, "Manifest version must be the integer 1.");
     if ( !manifest.contains("profiles") || !manifest["profiles"].is_object() )
@@ -266,6 +325,7 @@ bool ParseRenderTestCases( const std::string & iContents, std::vector<RenderTest
         || !ReadThresholds(test, testCase, oError, false) || !ReadSettings(test, testCase, oError)
         || !ReadString(test, "environment_map", testCase._EnvironmentMapPath, oError, false)
         || !ReadNonNegativeInt(test, "debug_mode", testCase._DebugMode, oError) || !ReadBool(test, "diagnostic_only", testCase._DiagnosticOnly, oError)
+        || !ReadBool(test, "clamp_comparison", testCase._ClampComparison, oError)
         || !ReadBool(test, "software_optimized", testCase._SoftwareOptimized, oError)
         || !ReadBool(test, "software_simd", testCase._SoftwareSIMD, oError)
         || !ReadBool(test, "software_fallback", testCase._SoftwareFallback, oError) )
@@ -275,6 +335,13 @@ bool ParseRenderTestCases( const std::string & iContents, std::vector<RenderTest
       if ( !ReadString(test, "baseline", baseline, oError, false) )
         return false;
       testCase._BaselinePath = baseline.empty() ? ( std::filesystem::path("Tests/Baselines") / ( testCase._Name + ".pfm" ) ) : std::filesystem::path(baseline);
+
+      std::string referenceBaseline;
+      if ( !ReadString(test, "reference_baseline", referenceBaseline, oError, false) )
+        return false;
+      if ( test.contains("reference_baseline") && referenceBaseline.empty() )
+        return SetManifestError(oError, "'reference_baseline' must not be empty.");
+      testCase._ReferenceBaselinePath = referenceBaseline;
 
       if ( test.contains("camera") )
       {
@@ -370,6 +437,54 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
     return result;
   };
 
+  if ( !RunUnitTest("gltf_static_import", [iQuiet]() { return GLTFTestUtil::CheckStaticImport(iQuiet); }) )
+    return 1;
+  if ( !RunUnitTest("obj_static_import", [iQuiet]() { return GLTFTestUtil::CheckObjImport(iQuiet); }) )
+    return 1;
+  if ( !RunUnitTest("scene_optional_mesh_warning", [&iArtifactsDir, iQuiet]() {
+    std::error_code errorCode;
+    std::filesystem::create_directories(iArtifactsDir, errorCode);
+    const std::filesystem::path scenePath = iArtifactsDir / "optional_mesh.scene";
+    std::ofstream file(scenePath);
+    file << "mesh\n{\n  file missing.obj\n}\n";
+    file.close();
+
+    Scene scene;
+    RenderSettings settings;
+    bool loaded = false;
+    {
+      ScopedOutputSilencer outputSilencer(iQuiet);
+      loaded = Loader::LoadScene(scenePath.string(), scene, settings);
+    }
+    return loaded && ( 0 == scene.GetNbMeshes() ) && ( 0 == scene.GetNbMeshInstances() );
+  }) )
+    return 1;
+  if ( !RunUnitTest("scene_light_argument_diagnostic", [&iArtifactsDir, iQuiet]() {
+    std::error_code errorCode;
+    std::filesystem::create_directories(iArtifactsDir, errorCode);
+    const std::filesystem::path scenePath = iArtifactsDir / "invalid_light.scene";
+    std::ofstream file(scenePath);
+    file << "light\n{\n  position 1.0 2.0\n}\n";
+    file.close();
+
+    Scene scene;
+    RenderSettings settings;
+    bool loaded = true;
+    {
+      ScopedOutputSilencer outputSilencer(iQuiet);
+      loaded = Loader::LoadScene(scenePath.string(), scene, settings);
+    }
+    return !loaded && ( 0 == scene.GetNbLights() );
+  }) )
+    return 1;
+  if ( !RunUnitTest("external_prop_file_filter", []() {
+    return DroppedFileUtils::IsDroppedPropPath("prop.obj")
+        && DroppedFileUtils::IsDroppedPropPath("prop.gltf")
+        && DroppedFileUtils::IsDroppedPropPath("prop.glb")
+        && !DroppedFileUtils::IsDroppedPropPath("prop.scene");
+  }) )
+    return 1;
+
 #if defined(SIMD_AVX2) || defined(SIMD_ARM_NEON)
   if ( !RunUnitTest("simd_transform", []() { return SIMDTestUtil::CheckSIMDTransforms(); }) )
     return 1;
@@ -392,6 +507,41 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
   PrintSkipped("simd_varying");
   PrintSkipped("simd_loaded_scene_data");
 #endif
+
+  if ( !RunUnitTest("texture_bucket_catalog", [iQuiet]() {
+    ScopedOutputSilencer outputSilencer(iQuiet);
+    std::vector<unsigned char> smallPixels(256 * 128 * 4, 64);
+    std::vector<unsigned char> widePixels(1024 * 850 * 4, 128);
+    std::vector<unsigned char> oversizedPixels(2048 * 4, 192);
+    std::vector<unsigned char> unsupportedPixels(16 * 16 * 3, 255);
+
+    Scene scene;
+    int smallID = scene.AddTexture("unit_small", smallPixels.data(), 256, 128, 4);
+    int wideID = scene.AddTexture("unit_wide", widePixels.data(), 1024, 850, 4);
+    int oversizedID = scene.AddTexture("unit_oversized", oversizedPixels.data(), 2048, 1, 4);
+    scene.AddTexture("unit_unsupported", unsupportedPixels.data(), 16, 16, 3);
+
+    Material material;
+    material._BaseColorTexId = static_cast<float>(smallID);
+    material._NormalMapTexID = static_cast<float>(wideID);
+    material._EmissionMapTexID = static_cast<float>(oversizedID);
+    scene.AddMaterial(material, "unit_bucket_material");
+    scene.CompileMeshData(Vec2i(1024), true, false);
+
+    const std::vector<TextureArrayMapping> & mappings = scene.GetTextureArrayMappings();
+    const std::array<CompiledTextureBucket, S_TextureBucketCount> & buckets = scene.GetCompiledTextureBuckets();
+    if ( ( mappings.size() != 4u )
+      || ( mappings[smallID]._BucketID != 0 ) || ( mappings[smallID]._ContentWidth != 256 ) || ( mappings[smallID]._ContentHeight != 128 )
+      || ( mappings[wideID]._BucketID != 2 ) || ( mappings[wideID]._ContentWidth != 1024 ) || ( mappings[wideID]._ContentHeight != 850 )
+      || ( mappings[oversizedID]._BucketID != 2 ) || ( mappings[oversizedID]._ContentWidth != 1024 ) || ( mappings[oversizedID]._ContentHeight != 1 )
+      || ( mappings[3]._BucketID != -1 ) || ( buckets[0]._LayerCount != 1 ) || ( buckets[2]._LayerCount != 2 ) )
+    {
+      std::cerr << "Unit test failed: texture bucket catalog." << std::endl;
+      return false;
+    }
+    return true;
+  }) )
+    return 1;
 
   RenderImage image;
   image._Width = 2;
@@ -435,11 +585,15 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
         "resolution": [64, 32],
         "frames": 3,
         "thresholds": { "mean_absolute_error": 0.1, "max_absolute_error": 0.2, "pixel_error": 0.3, "mismatch_ratio": 0.4 },
-        "settings": { "specular_ibl": true, "ssr": false }
+        "settings": { "specular_ibl": true, "ssr": false, "ssr_step_size": 0.01,
+          "refraction": true, "refraction_max_steps": 64,
+          "refraction_step_size": 0.12, "refraction_pixel_stride": 1.5, "refraction_start_bias": 2.0,
+          "refraction_max_distance": 24.0, "refraction_thickness": 0.3, "refraction_edge_fade": 0.1 }
       }
     },
     "tests": [
-      { "name": "valid", "profile": "test", "scene": "test.scene", "frames": 4, "debug_mode": 16, "diagnostic_only": true,
+      { "name": "valid", "profile": "test", "scene": "test.scene", "frames": 4, "debug_mode": 16, "diagnostic_only": true, "clamp_comparison": true,
+        "reference_baseline": "Tests/Baselines/reference.pfm",
         "camera": { "position": [1, 2, 3], "pivot": [0, 0, 0], "fov": 40, "near": 0.5 } }
     ]
   })";
@@ -448,8 +602,17 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
   if ( !RunUnitTest("manifest_valid", [&validManifest, &parsedCases, &parseError]() {
     if ( ParseRenderTestCases(validManifest, parsedCases, parseError) && ( 1u == parsedCases.size() )
       && ( 4 == parsedCases[0]._FrameCount ) && parsedCases[0]._OverrideCamera && !parsedCases[0]._SSR
+      && ( std::abs(parsedCases[0]._SSRPixelStride - 0.25f) < 1e-6f )
+      && parsedCases[0]._Refraction && ( 64 == parsedCases[0]._RefractionMaxSteps )
+      && ( std::abs(parsedCases[0]._RefractionPixelStride - 1.5f) < 1e-6f )
+      && ( std::abs(parsedCases[0]._RefractionStartBias - 2.f) < 1e-6f )
+      && ( std::abs(parsedCases[0]._RefractionMaxDistance - 24.f) < 1e-6f )
+      && ( std::abs(parsedCases[0]._RefractionThickness - 0.3f) < 1e-6f )
+      && ( std::abs(parsedCases[0]._RefractionEdgeFade - 0.1f) < 1e-6f )
       && ( 16 == parsedCases[0]._DebugMode ) && parsedCases[0]._DiagnosticOnly
-      && ( "Tests/Baselines/valid.pfm" == parsedCases[0]._BaselinePath.generic_string() ) )
+      && parsedCases[0]._ClampComparison
+      && ( "Tests/Baselines/valid.pfm" == parsedCases[0]._BaselinePath.generic_string() )
+      && ( "Tests/Baselines/reference.pfm" == parsedCases[0]._ReferenceBaselinePath.generic_string() ) )
       return true;
     std::cerr << "Unit test failed: valid render-test manifest. " << parseError << std::endl;
     return false;
@@ -465,7 +628,9 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
     R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene" }, { "name": "test", "profile": "test", "scene": "test.scene" }] })",
     R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 0, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene" }] })",
     R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "camera": { "position": [0, 0], "pivot": [0, 0, 0], "fov": 40 } }] })",
-    R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "debug_mode": -1 }] })"
+    R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "debug_mode": -1 }] })",
+    R"({ "version": 1, "profiles": { "test": { "backend": "software", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "reference_baseline": "" }] })",
+    R"({ "version": 1, "profiles": { "test": { "backend": "deferred", "resolution": [1, 1], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 }, "settings": { "refraction_step_size": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene" }] })"
   };
   if ( !RunUnitTest("manifest_validation", [&invalidManifests, &parsedCases, &parseError]() {
     for ( const std::string & invalidManifest : invalidManifests )

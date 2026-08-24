@@ -38,6 +38,7 @@ struct RenderTestCase
   float           _PixelErrorThreshold = 0.f;
   float           _MismatchRatioThreshold = 0.f;
   std::filesystem::path _BaselinePath;
+  std::filesystem::path _ReferenceBaselinePath;
   bool            _OverrideCamera = false;
   Vec3            _CameraPosition = Vec3(0.f);
   Vec3            _CameraPivot = Vec3(0.f);
@@ -47,12 +48,21 @@ struct RenderTestCase
   std::string     _EnvironmentMapPath;
   bool            _SpecularIBL = true;
   bool            _SSR = true;
+  int             _SSRMaxSteps = 48;
+  float           _SSRPixelStride = 1.f;
+  float           _SSRStartBias = 1.f;
+  float           _SSRMaxDistance = 35.f;
+  float           _SSRThickness = 0.25f;
+  bool            _SSAO = true;
+  bool            _Background = true;
+  bool            _UniformLight = true;
   bool            _Accumulate = true;
   bool            _AutoScale = true;
   bool            _TiledRendering = false;
   bool            _Denoise = false;
   int             _DebugMode = 0;
   bool            _DiagnosticOnly = false;
+  bool            _ClampComparison = false;
   int             _SamplesPerPixel = 1;
   int             _Bounces = 4;
   bool            _SoftwareOptimized = false;
@@ -60,6 +70,13 @@ struct RenderTestCase
   bool            _SoftwareSIMD = false;
   bool            _SoftwareFallback = false;
   bool            _Transparency = true;
+  bool            _Refraction = false;
+  int             _RefractionMaxSteps = 48;
+  float           _RefractionPixelStride = 1.f;
+  float           _RefractionStartBias = 1.f;
+  float           _RefractionMaxDistance = 35.f;
+  float           _RefractionThickness = 0.25f;
+  float           _RefractionEdgeFade = 0.18f;
 
   void ApplySettings( RenderSettings & ioSettings ) const;
   bool ApplyScene( Scene & ioScene ) const;

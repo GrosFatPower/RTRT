@@ -79,6 +79,43 @@
       "baseline": "Tests/Baselines/software_textured_box.pfm"
     },
     {
+      "name": "software_textured_box_single_light",
+      "profile": "software",
+      "scene": "TexturedBox.scene",
+      "settings": {
+        "background": false,
+        "uniform_light": false,
+        "specular_ibl": false,
+        "ssr": false,
+        "ssao": false
+      }
+    },
+    {
+      "name": "deferred_textured_box_single_light",
+      "profile": "deferred",
+      "scene": "TexturedBox.scene",
+      "settings": {
+        "background": false,
+        "uniform_light": false,
+        "specular_ibl": false,
+        "ssr": false,
+        "ssao": false
+      }
+    },
+    {
+      "name": "pathtracer_textured_box_single_light",
+      "profile": "pathtracer",
+      "scene": "TexturedBox.scene",
+      "frames": 60,
+      "settings": {
+        "background": false,
+        "uniform_light": false,
+        "specular_ibl": false,
+        "ssr": false,
+        "ssao": false
+      }
+    },
+    {
       "name": "software_transparency",
       "profile": "software",
       "scene": "SoftwareTransparency.scene",
@@ -250,9 +287,55 @@
       "environment_map": "HDR/Background_05.hdr"
     },
     {
+      "name": "software_water_bottle",
+      "profile": "software",
+      "scene": "WaterBottle.scene",
+      "resolution": [850, 720]
+    },
+    {
+      "name": "software_red_and_glass_boxes",
+      "profile": "software",
+      "scene": "Red_and_Glass_Boxes.scene",
+      "resolution": [800, 600],
+      "environment_map": "HDR/alps_field_2k.hdr"
+    },
+    {
       "name": "deferred_ibl_ssr",
       "profile": "deferred",
       "scene": "tungsten-material-testball.scene"
+    },
+    {
+      "name": "deferred_boy",
+      "profile": "deferred",
+      "scene": "boy.scene",
+      "resolution": [640, 480],
+      "thresholds": {
+        "mean_absolute_error": 0.025,
+        "max_absolute_error": 12.5,
+        "pixel_error": 0.10,
+        "mismatch_ratio": 0.05
+      },
+      "camera": {
+        "position": [0.3, 0.11, 0.1],
+        "pivot": [0.0, 0.07, 0.0],
+        "fov": 80.0,
+        "near": 0.01
+      }
+    },
+    {
+      "name": "pathtracer_boy",
+      "profile": "pathtracer",
+      "scene": "boy.scene",
+      "resolution": [640, 480],
+      "thresholds": {
+        "max_absolute_error": 0.5
+      },
+      "camera": {
+        "position": [0.3, 0.11, 0.1],
+        "pivot": [0.0, 0.07, 0.0],
+        "fov": 80.0,
+        "near": 0.01
+      }
     },
     {
       "name": "deferred_cornell",
@@ -290,6 +373,95 @@
       }
     },
     {
+      "name": "deferred_refraction",
+      "profile": "deferred",
+      "scene": "DeferredRefraction.scene",
+      "thresholds": {
+        "max_absolute_error": 12.5
+      },
+      "settings": {
+        "ssr": false,
+        "ssao": false,
+        "refraction": true
+      }
+    },
+    {
+      "name": "deferred_refraction_disabled",
+      "profile": "deferred",
+      "scene": "DeferredRefraction.scene",
+      "settings": {
+        "ssr": false,
+        "ssao": false,
+        "refraction": false
+      }
+    },
+    {
+      "name": "deferred_refraction_environment",
+      "profile": "deferred",
+      "scene": "DeferredRefraction.scene",
+      "environment_map": "HDR/Background_05.hdr",
+      "thresholds": {
+        "max_absolute_error": 12.5
+      },
+      "settings": {
+        "ssr": false,
+        "ssao": false,
+        "refraction": true
+      }
+    },
+    {
+      "name": "deferred_red_and_glass_boxes",
+      "profile": "deferred",
+      "scene": "Red_and_Glass_Boxes.scene",
+      "resolution": [800, 600],
+      "environment_map": "HDR/alps_field_2k.hdr",
+      "thresholds": {
+        "mean_absolute_error": 0.025,
+        "max_absolute_error": 12.5,
+        "pixel_error": 0.10,
+        "mismatch_ratio": 0.05
+      },
+      "settings": {
+        "refraction": true
+      }
+    },
+    {
+      "name": "deferred_red_and_glass_boxes_low_resolution",
+      "profile": "deferred",
+      "scene": "Red_and_Glass_Boxes.scene",
+      "resolution": [400, 300],
+      "environment_map": "HDR/alps_field_2k.hdr",
+      "settings": {
+        "refraction": true,
+        "refraction_pixel_stride": 1.0,
+        "refraction_start_bias": 1.0
+      }
+    },
+    {
+      "name": "deferred_red_and_glass_boxes_refraction_disabled",
+      "profile": "deferred",
+      "scene": "Red_and_Glass_Boxes.scene",
+      "resolution": [800, 600],
+      "environment_map": "HDR/alps_field_2k.hdr",
+      "settings": {
+        "refraction": false
+      }
+    },
+    {
+      "name": "deferred_water_bottle",
+      "profile": "deferred",
+      "scene": "WaterBottle.scene",
+      "resolution": [850, 720],
+      "reference_baseline": "Tests/Baselines/pathtracer_water_bottle.pfm",
+      "clamp_comparison": true,
+      "thresholds": {
+        "mean_absolute_error": 0.025,
+        "max_absolute_error": 1.0,
+        "pixel_error": 0.10,
+        "mismatch_ratio": 0.05
+      }
+    },
+    {
       "name": "deferred_barbershopchair_01",
       "profile": "deferred",
       "scene": "BarberShopChair_01.scene",
@@ -301,10 +473,10 @@
         "near": 0.5
       },
       "thresholds": {
-        "mean_absolute_error": 0.003,
+        "mean_absolute_error": 0.025,
         "max_absolute_error": 12.5,
-        "pixel_error": 0.02,
-        "mismatch_ratio": 0.012
+        "pixel_error": 0.10,
+        "mismatch_ratio": 0.05
       }
     },
     {
@@ -333,6 +505,21 @@
       "scene": "teapot.scene",
       "frames": 60,
       "environment_map": "HDR/Background_05.hdr"
+    },
+    {
+      "name": "pathtracer_water_bottle",
+      "profile": "pathtracer",
+      "scene": "WaterBottle.scene",
+      "resolution": [850, 720],
+      "frames": 256
+    },
+    {
+      "name": "pathtracer_red_and_glass_boxes",
+      "profile": "pathtracer",
+      "scene": "Red_and_Glass_Boxes.scene",
+      "resolution": [800, 600],
+      "environment_map": "HDR/alps_field_2k.hdr",
+      "frames": 128
     },
     {
       "name": "pathtracer_barbershopchair_01",

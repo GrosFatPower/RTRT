@@ -9,16 +9,9 @@ Test3 : GPU Ray tracer
 
 A (poorly lit) ray tracer written in c++ and GLSL.
 
-![CashRegister_RT](./Captures/RayTracer_CashRegister_01_4k.gltf_458frames.png)
-
-![BarberShopChair_RT](./Captures/RayTracer_BarberShopChair_01.scene_163frames.png)
-
-![mustang_red_RT](./Captures/RayTracer_mustang_red.scene_40frames.png)
-
-![spaceship_RT](./Captures/RayTracer_spaceship.scene_50frames.png)
-
-![diningroom_RT](./Captures/RayTracer_diningroom.scene_4255frames.png)
-
+| ![diningroom_RT](./Captures/RayTracer_diningroom.scene_4255frames.png) | ![BarberShopChair_RT](./Captures/RayTracer_BarberShopChair_01.scene_163frames.png) |
+| -------- | ------- |
+| ![mustang_red_RT](./Captures/RayTracer_mustang_red.scene_40frames.png) | ![spaceship_RT](./Captures/RayTracer_spaceship.scene_50frames.png) |
 
 Test4 : CPU Rasterizer
 --------
@@ -26,62 +19,29 @@ Test4 : CPU Rasterizer
 Software rasterizer running on the CPU.
 Basic phong reflecton model.
 
-![CashRegister](./Captures/Rasterizer_CashRegister_01_4k.gltf.png)
-
-![BarberShopChair](./Captures/Rasterizer_BarberShopChair_01.scene.png)
-
-![mustang_red](./Captures/Rasterizer_mustang_red.scene.png)
-
-![rank3police](./Captures/Rasterizer_rank3police.scene.png)
-
-![spaceship_Rast](./Captures/Rasterizer_spaceship.scene.png)
-
-![Sponza_Rast](./Captures/Rasterizer_Sponza.png)
+| ![CashRegister](./Captures/Rasterizer_CashRegister_01_4k.gltf.png) | ![BarberShopChair](./Captures/Rasterizer_BarberShopChair_01.scene.png) |
+| -------- | ------- |
+| ![mustang_red](./Captures/Rasterizer_mustang_red.scene.png) | ![rank3police](./Captures/Rasterizer_rank3police.scene.png) |
+| ![spaceship_Rast](./Captures/Rasterizer_spaceship.scene.png) | ![Sponza_Rast](./Captures/Rasterizer_Sponza.png) |
 
 
-Test5 : GPU Path tracer / CPU Rasterizer / GPU Deferred renderer
+Test5 : Render lab (GPU Path tracer / CPU Rasterizer / GPU Deferred renderer)
 --------
 
-![mustang_white_PT](./Captures/PathTracer_mustang.scene_70717frames.png)
+| Path tracer | Software rasterizer | Deferred renderer |
+| -------- | ------- | ------- |
+| ![ABeautifulGame_PT](./Captures/PathTracer_ABeautifulGame.png) | ![ABeautifulGame_Rast](./Captures/Rasterizer__Phong_ABeautifulGame.png) | ![ABeautifulGame_GPU](./Captures/Deferred_ABeautifulGame.png) |
+| ![ToyCar_PT](./Captures/PathTracer_ToyCar.png) | ![ToyCar_Rast](./Captures/Rasterizer_Phong_ToyCar.png) | ![ToyCar_GPU](./Captures/Deferred_ToyCar.png) |
 
-![mustang_white_Rast](./Captures/Rasterizer_mustang.scene_72165frames.png)
+![DragonAttenuation_PT](./Captures/PathTracer_DragonAttenuation.png)
 
-![mustang_white_GPU](./Captures/Deferred_mustang.scene_73088frames.png)
-
-![Sponza_PT](./Captures/PathTracer_Sponza.gltf_114067frames.png)
-
-![Sponza_Rast](./Captures/Rasterizer_Sponza.gltf_111413frames.png)
-
-![Sponza_GPU](./Captures/Deferred_Sponza.gltf_110780frames.png)
-
-![spaceship_PT](./Captures/PathTracer_spaceship.scene_92106frames.png)
-
-![spaceship_Rast](./Captures/Rasterizer_spaceship.scene_92020frames.png)
-
-![spaceship_GPU](./Captures/Deferred_spaceship.scene_90674frames.png)
-
-![CoffeeCart_PT](./Captures/PathTracer_CoffeeCart_192890frames.png)
-
-![Teapot_PT](./Captures/PathTracer_renderman_teapot_all_45844frames.png)
-
-![slum_house_PT](./Captures/PathTracer_slum_house.gltf_16578frames.png)
-
-![Teapot_Rast](./Captures/Rasterizer_renderman_teapot_all.png)
-
-![Bedroom_Rast](./Captures/Rasterizer_Bedroom.png)
-
-![Jinx_GPU](./Captures/Deferred_Jinx.png)
-
+![Mustang_PT](./Captures/PathTracer_mustang.scene_70717frames.png)
 
 Test6 : (Very) Basic FPS game
 --------
 
-![FPSGame_PT](./Captures/Test6_FPSGame_PathTracer.png)
-
-![FPSGame_Rast](./Captures/Test6_FPSGame_Software.png)
-
-![FPSGame_GPU](./Captures/Test6_FPSGame_Deferred.png)
-
+| ![FPSGame_PT](./Captures/Test6_FPSGame_PathTracer.png) | ![FPSGame_Rast](./Captures/Test6_FPSGame_Software.png) | ![FPSGame_GPU](./Captures/Test6_FPSGame_Deferred.png) |
+| -------- | ------- | ------- |
 
 References/Credits
 --------

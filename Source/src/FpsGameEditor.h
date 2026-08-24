@@ -130,6 +130,9 @@ public:
   void DrawSettingsPanel( FpsGameEditorContext & ioContext );
   void DrawRenderSettingsPanel( FpsGameEditorContext & ioContext );
   void DrawPerformancePanel( FpsGameEditorContext & ioContext );
+  void SaveMapAsDialog( FpsGameEditorContext & ioContext );
+  void LoadMapFromDialog( FpsGameEditorContext & ioContext );
+  void LoadPropFromDialog( FpsGameEditorContext & ioContext );
   int DrawRenderSettingsUI( FpsGameEditorContext & ioContext );
   int DrawPerformanceUI( FpsGameEditorContext & ioContext );
   int DrawOverlays( FpsGameEditorContext & ioContext );
@@ -154,12 +157,13 @@ protected:
   FpsEditorSelection _Selection;
   int                _SelectedMaterial = 0;
   char               _SavePath[512] = {};
-  char               _LoadPath[512] = {};
   char               _NewMaterialName[128] = "new_material";
   char               _NewPropName[128] = "New Prop";
   int                _NewPropAssetIndex = -1;
   std::vector<std::string> _PropAssetPaths;
   std::vector<bool>  _ObjectInstanceVisible;
+  std::filesystem::path _LastMapDialogDirectory;
+  std::filesystem::path _LastPropDialogDirectory;
   std::string        _StatusMessage;
 };
 

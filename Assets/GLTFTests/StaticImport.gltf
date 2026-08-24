@@ -1,0 +1,20 @@
+{
+  "asset": { "version": "2.0" },
+  "extensionsUsed": [ "KHR_lights_punctual" ],
+  "extensions": {
+    "KHR_lights_punctual": {
+      "lights": [ { "type": "directional", "color": [ 0.5, 0.75, 1.0 ], "intensity": 2.0 } ]
+    }
+  },
+  "buffers": [ { "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA", "byteLength": 36 } ],
+  "bufferViews": [ { "buffer": 0, "byteOffset": 0, "byteLength": 36, "byteStride": 12 } ],
+  "accessors": [ { "bufferView": 0, "byteOffset": 0, "componentType": 5126, "count": 3, "type": "VEC3" } ],
+  "materials": [ { "name": "FactorMaterial", "pbrMetallicRoughness": { "roughnessFactor": 0.36, "metallicFactor": 0.25 } } ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0 }, "material": 0 } ] } ],
+  "cameras": [ { "type": "perspective", "perspective": { "yfov": 1.0471975512, "znear": 0.1, "zfar": 100.0, "aspectRatio": 1.0 } } ],
+  "nodes": [
+    { "children": [ 1 ], "translation": [ 1.0, 2.0, 3.0 ] },
+    { "mesh": 0, "camera": 0, "extensions": { "KHR_lights_punctual": { "light": 0 } } }
+  ],
+  "scenes": [ { "nodes": [ 0 ] } ]
+}

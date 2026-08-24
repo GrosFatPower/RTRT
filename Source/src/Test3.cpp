@@ -52,6 +52,16 @@ static bool g_RenderToFile = false;
 static fs::path g_FilePath;
 
 // ----------------------------------------------------------------------------
+// ConfigureSingleTextureArrayShader
+// ----------------------------------------------------------------------------
+static void ConfigureSingleTextureArrayShader( ShaderSource & ioShaderSource )
+{
+  const size_t versionEnd = ioShaderSource._Src.find('\n');
+  if ( versionEnd != std::string::npos )
+    ioShaderSource._Src.insert(versionEnd + 1, "#define USE_TEXTURE_BUCKETS 0\n");
+}
+
+// ----------------------------------------------------------------------------
 // GLOBAL FUNCTIONS
 // ----------------------------------------------------------------------------
 
@@ -249,7 +259,7 @@ void Test3::ClearSceneData()
   glDeleteTextures(1, &_VtxUVTextureID);
   glDeleteTextures(1, &_VtxIndTextureID);
   glDeleteTextures(1, &_TexIndTextureID);
-  glDeleteTextures(1, &_TexArrayTextureID);
+  glDeleteTextures(S_TextureBucketCount, _TexArrayTextureID);
   glDeleteTextures(1, &_MeshBBoxTextureID);
   glDeleteTextures(1, &_MeshIdRangeTextureID);
   glDeleteTextures(1, &_MaterialsTextureID);
@@ -346,10 +356,9 @@ int Test3::InitializeFrameBuffers()
   glGenTextures(1, &_RenderTextureTileID);
   glActiveTexture(TEX_UNIT(TexType::RenderTargetTile));
   glBindTexture(GL_TEXTURE_2D, _RenderTextureTileID);
-  if ( ( _Settings._TileResolution.x > 0 ) && ( _Settings._TileResolution.y > 0 ) )
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._TileResolution.x, _Settings._TileResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
-  else
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 64, 64, 0, GL_RGBA, GL_FLOAT, NULL);
+  const int intermediateWidth = TiledRendering() ? std::max(_Settings._TileResolution.x, 1) : RenderWidth();
+  const int intermediateHeight = TiledRendering() ? std::max(_Settings._TileResolution.y, 1) : RenderHeight();
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, intermediateWidth, intermediateHeight, 0, GL_RGBA, GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -401,6 +410,7 @@ int Test3::RecompileShaders()
 
   ShaderSource vertexShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("vertex_Default.glsl"));
   ShaderSource fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_RTRenderer.glsl"));
+  ConfigureSingleTextureArrayShader(fragmentShaderSrc);
 
   _RayTraceShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !_RayTraceShader )
@@ -594,7 +604,8 @@ int Test3::UpdateUniforms()
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxUVTexture"),                  (int)TexType::UVs);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_VtxIndTexture"),                 (int)TexType::VertInd);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexIndTexture"),                 (int)TexType::TexInd);
-      glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexArrayTexture"),               (int)TexType::TexArray);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_TexArrayTexture0"),              (int)TexType::TexArray0);
+      glUniform1i(glGetUniformLocation(RTTProgramID, "u_TextureArraySize"), _Scene.GetCompiledTextureBuckets()[0]._Size);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshBBoxTexture"),               (int)TexType::MeshBBox);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_MeshIDRangeTexture"),            (int)TexType::MeshIdRange);
       glUniform1i(glGetUniformLocation(RTTProgramID, "u_MaterialsTexture"),              (int)TexType::Materials);
@@ -662,7 +673,9 @@ int Test3::ResizeTextures()
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, RenderWidth(), RenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
   glBindTexture(GL_TEXTURE_2D, 0);
   glBindTexture(GL_TEXTURE_2D, _RenderTextureTileID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _Settings._TileResolution.x, _Settings._TileResolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
+  const int intermediateWidth = TiledRendering() ? std::max(_Settings._TileResolution.x, 1) : RenderWidth();
+  const int intermediateHeight = TiledRendering() ? std::max(_Settings._TileResolution.y, 1) : RenderHeight();
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, intermediateWidth, intermediateHeight, 0, GL_RGBA, GL_FLOAT, NULL);
   glBindTexture(GL_TEXTURE_2D, 0);
   glBindTexture(GL_TEXTURE_2D, _RenderTextureLowResID);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, LowResRenderWidth(), LowResRenderHeight(), 0, GL_RGBA, GL_FLOAT, NULL);
@@ -1389,7 +1402,7 @@ int Test3::InitializeScene()
   }
 
   // Test - Load first mesh
-  _Scene.CompileMeshData( _Settings._TextureSize );
+  _Scene.CompileMeshData( _Settings._TextureSize, true, true, false );
 
   _NbTriangles = _Scene.GetNbFaces();
   _NbMeshInstances = _Scene.GetNbMeshInstances();
@@ -1428,20 +1441,28 @@ int Test3::InitializeScene()
     glBindTexture(GL_TEXTURE_BUFFER, _VtxIndTextureID);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32I, _VtxIndBufferID);
 
-    if ( _Scene.GetTextureArrayIDs().size() )
+    const std::vector<TextureArrayMapping> & textureMappings = _Scene.GetTextureArrayMappings();
+    const std::array<CompiledTextureBucket, S_TextureBucketCount> & textureBuckets = _Scene.GetCompiledTextureBuckets();
+    if ( textureMappings.size() )
     {
       glGenBuffers(1, &_TexIndBufferID);
       glBindBuffer(GL_TEXTURE_BUFFER, _TexIndBufferID);
-      glBufferData(GL_TEXTURE_BUFFER, sizeof(int) * _Scene.GetTextureArrayIDs().size(), &_Scene.GetTextureArrayIDs()[0], GL_STATIC_DRAW);
+      glBufferData(GL_TEXTURE_BUFFER, sizeof(TextureArrayMapping) * textureMappings.size(), textureMappings.data(), GL_STATIC_DRAW);
       glGenTextures(1, &_TexIndTextureID);
       glBindTexture(GL_TEXTURE_BUFFER, _TexIndTextureID);
-      glTexBuffer(GL_TEXTURE_BUFFER, GL_R32I, _TexIndBufferID);
+      glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32I, _TexIndBufferID);
 
-      glGenTextures(1, &_TexArrayTextureID);
-      glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTextureID);
-      glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, _Settings._TextureSize.x, _Settings._TextureSize.y, _Scene.GetNbCompiledTex(), 0, GL_RGBA, GL_UNSIGNED_BYTE, &_Scene.GetTextureArray()[0]);
-      glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      for ( int i = 0; i < 1; ++i )
+      {
+        const CompiledTextureBucket & bucket = textureBuckets[i];
+        if ( bucket._LayerCount <= 0 )
+          continue;
+        glGenTextures(1, &_TexArrayTextureID[i]);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTextureID[i]);
+        glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, bucket._Size, bucket._Size, bucket._LayerCount, 0, GL_RGBA, GL_UNSIGNED_BYTE, bucket._Pixels.data());
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      }
       glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     }
 
@@ -1567,7 +1588,18 @@ int Test3::InitializeScene()
     glBindTexture(GL_TEXTURE_2D, 0);
   }
   else
+  {
     _Settings._EnableSkybox = false;
+
+    static const float fallbackColor[] = { 0.f, 0.f, 0.f };
+    glGenTextures(1, &_SkyboxTextureID);
+    glActiveTexture(TEX_UNIT(TexType::Skybox));
+    glBindTexture(GL_TEXTURE_2D, _SkyboxTextureID);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, 1, 1, 0, GL_RGB, GL_FLOAT, fallbackColor);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
 
   _RenderSettingsModified = true;
   _SceneCameraModified    = true;
@@ -1726,8 +1758,11 @@ void Test3::RenderToTexture()
   glBindTexture(GL_TEXTURE_BUFFER, _VtxIndTextureID);
   glActiveTexture(TEX_UNIT(TexType::TexInd));
   glBindTexture(GL_TEXTURE_BUFFER, _TexIndTextureID);
-  glActiveTexture(TEX_UNIT(TexType::TexArray));
-  glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTextureID);
+  for ( int i = 0; i < 1; ++i )
+  {
+    glActiveTexture(TEX_UNIT(TexType::TexArray0) + i);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, _TexArrayTextureID[i]);
+  }
   glActiveTexture(TEX_UNIT(TexType::MeshBBox));
   glBindTexture(GL_TEXTURE_BUFFER, _MeshBBoxTextureID);
   glActiveTexture(TEX_UNIT(TexType::MeshIdRange));
@@ -1765,6 +1800,9 @@ void Test3::RenderToTexture()
     glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
     glViewport(0, 0, RenderWidth(), RenderHeight());
 
+    glActiveTexture(TEX_UNIT(TexType::RenderTargetLowRes));
+    glBindTexture(GL_TEXTURE_2D, _RenderTextureLowResID);
+
     _Quad -> Render(*_RenderToTextureShader);
   }
   else if ( TiledRendering() )
@@ -1777,14 +1815,25 @@ void Test3::RenderToTexture()
     glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
     glViewport(_Settings._TileResolution.x * _CurTile.x, _Settings._TileResolution.y * _CurTile.y, _Settings._TileResolution.x, _Settings._TileResolution.y);
 
+    glActiveTexture(TEX_UNIT(TexType::RenderTargetTile));
+    glBindTexture(GL_TEXTURE_2D, _RenderTextureTileID);
+
     _Quad -> Render(*_RenderToTextureShader);
   }
   else
   {
-    glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
+    glBindFramebuffer(GL_FRAMEBUFFER, _TileFrameBufferID);
     glViewport(0, 0, RenderWidth(), RenderHeight());
 
     _Quad -> Render(*_RayTraceShader);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, _FrameBufferID);
+    glViewport(0, 0, RenderWidth(), RenderHeight());
+
+    glActiveTexture(TEX_UNIT(TexType::RenderTargetTile));
+    glBindTexture(GL_TEXTURE_2D, _RenderTextureTileID);
+
+    _Quad -> Render(*_RenderToTextureShader);
   }
 }
 

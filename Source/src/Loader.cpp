@@ -16,14 +16,18 @@
 #include <vector>
 #include <iostream>
 #include <algorithm>
+#include <cmath>
+#include <cstring>
 #include <filesystem> // C++17
 #include <sstream>
 #include <fstream>
+#include <set>
 
 #include <glm/gtc/type_ptr.hpp>
 
 #define TINYGLTF_IMPLEMENTATION
 #include "tiny_gltf.h"
+#include "tiny_obj_loader.h"
 
 namespace fs = std::filesystem;
 
@@ -72,6 +76,370 @@ bool IsEqual( const std::string & iStr1, const std::string & iStr2 )
 {
   return ( ( iStr1.size() == iStr2.size() )
         && std::equal(iStr1.begin(), iStr1.end(), iStr2.begin(), &CompareChar) );
+}
+
+// ----------------------------------------------------------------------------
+// Scene loader : SceneDiagnostics
+// ----------------------------------------------------------------------------
+class SceneDiagnostics
+{
+public:
+  explicit SceneDiagnostics( const std::string & iFilename )
+  : _Filename(iFilename)
+  {
+  }
+
+  void Warn( int iLine, const std::string & iMessage )
+  {
+    Report(_Warnings, "warning", iLine, iMessage);
+  }
+
+  void Error( int iLine, const std::string & iMessage )
+  {
+    _HasErrors = true;
+    Report(_Errors, "error", iLine, iMessage);
+  }
+
+  bool HasErrors() const { return _HasErrors; }
+
+private:
+  void Report( std::set<std::string> & ioMessages, const char * iSeverity, int iLine, const std::string & iMessage )
+  {
+    const std::string message = _Filename + ":" + std::to_string(iLine) + ": " + iMessage;
+    if ( ioMessages.insert(message).second )
+      std::cout << "Scene " << iSeverity << ": " << message << std::endl;
+  }
+
+  std::string _Filename;
+  std::set<std::string> _Warnings;
+  std::set<std::string> _Errors;
+  bool _HasErrors = false;
+};
+
+// ----------------------------------------------------------------------------
+// Scene loader : SceneBlockDiagnostics
+// ----------------------------------------------------------------------------
+class SceneBlockDiagnostics
+{
+public:
+  SceneBlockDiagnostics( SceneDiagnostics & ioDiagnostics, const std::string & iBlockName, int iStartLine, bool iRecoverable )
+  : _Diagnostics(ioDiagnostics)
+  , _BlockName(iBlockName)
+  , _Line(iStartLine)
+  , _Recoverable(iRecoverable)
+  {
+  }
+
+  void NextLine() { ++_Line; }
+  void SetDirective( const std::string & iDirective )
+  {
+    _Directive = iDirective;
+    _DirectiveLine = _Line;
+  }
+
+  void ExpectedArgumentCount( int iExpected, int iActual )
+  {
+    Error("'" + _Directive + "' expects " + std::to_string(iExpected) + " value" + ( 1 == iExpected ? "" : "s" )
+      + ", but received " + std::to_string(iActual));
+  }
+
+  void InvalidValue( const std::string & iMessage )
+  {
+    Error("'" + _Directive + "' " + iMessage);
+  }
+
+  void ReportFailure( bool iFailed )
+  {
+    if ( !iFailed )
+      return;
+
+    if ( _HasDetailedError )
+      return;
+
+    std::string message = "invalid " + _BlockName + " block";
+    if ( !_Directive.empty() )
+      message += " near '" + _Directive + "'";
+
+    const int line = 0 < _DirectiveLine ? _DirectiveLine : _Line;
+    if ( _Recoverable )
+      _Diagnostics.Warn(line, message + "; block is ignored");
+    else
+      _Diagnostics.Error(line, message);
+  }
+
+private:
+  void Error( const std::string & iMessage )
+  {
+    _Diagnostics.Error(_Line, iMessage);
+    _HasDetailedError = true;
+  }
+
+  SceneDiagnostics & _Diagnostics;
+  std::string _BlockName;
+  std::string _Directive;
+  int _Line = 0;
+  int _DirectiveLine = 0;
+  bool _Recoverable = false;
+  bool _HasDetailedError = false;
+};
+
+void ConsumeMalformedSceneBlock( std::ifstream & iStr, State & ioState, SceneBlockDiagnostics & ioDiagnostics )
+{
+  std::string line;
+  while ( std::getline(iStr, line) )
+  {
+    ioDiagnostics.NextLine();
+    std::vector<std::string> tokens;
+    Tokenize(line, tokens);
+    if ( !tokens.empty() && '}' == tokens[0][0] )
+    {
+      ioState = State::ExpectNewBlock;
+      break;
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : GltfDiagnostics
+// ----------------------------------------------------------------------------
+class GltfDiagnostics
+{
+public:
+  void Warn( const std::string & iMessage )
+  {
+    if ( _Warnings.insert(iMessage).second )
+      std::cout << "GLTF warning: " << iMessage << std::endl;
+  }
+
+private:
+  std::set<std::string> _Warnings;
+};
+
+// ----------------------------------------------------------------------------
+// GLTF loader : IsValidIndex
+// ----------------------------------------------------------------------------
+bool IsValidIndex( int iIndex, size_t iCount )
+{
+  return ( iIndex >= 0 ) && ( iIndex < static_cast<int>(iCount) );
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : GetBufferData
+// ----------------------------------------------------------------------------
+bool GetBufferData( const tinygltf::Model & iModel, int iBufferViewIndex, size_t iOffset, size_t iSize, const uint8_t * & oData )
+{
+  if ( !IsValidIndex(iBufferViewIndex, iModel.bufferViews.size()) )
+    return false;
+
+  const tinygltf::BufferView & bufferView = iModel.bufferViews[iBufferViewIndex];
+  if ( !IsValidIndex(bufferView.buffer, iModel.buffers.size()) )
+    return false;
+
+  const std::vector<unsigned char> & buffer = iModel.buffers[bufferView.buffer].data;
+  if ( ( iOffset > bufferView.byteLength ) || ( iSize > ( bufferView.byteLength - iOffset ) ) )
+    return false;
+  const size_t begin = bufferView.byteOffset + iOffset;
+  if ( ( begin > buffer.size() ) || ( iSize > ( buffer.size() - begin ) ) )
+    return false;
+
+  oData = buffer.data() + begin;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : ReadComponent
+// ----------------------------------------------------------------------------
+bool ReadComponent( const uint8_t * iData, int iComponentType, bool iNormalized, double & oValue )
+{
+  switch ( iComponentType )
+  {
+  case TINYGLTF_COMPONENT_TYPE_BYTE:
+    { int8_t value; memcpy(&value, iData, sizeof(value)); oValue = iNormalized ? std::max(-1.0, value / 127.0) : value; return true; }
+  case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
+    { uint8_t value; memcpy(&value, iData, sizeof(value)); oValue = iNormalized ? value / 255.0 : value; return true; }
+  case TINYGLTF_COMPONENT_TYPE_SHORT:
+    { int16_t value; memcpy(&value, iData, sizeof(value)); oValue = iNormalized ? std::max(-1.0, value / 32767.0) : value; return true; }
+  case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
+    { uint16_t value; memcpy(&value, iData, sizeof(value)); oValue = iNormalized ? value / 65535.0 : value; return true; }
+  case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
+    { uint32_t value; memcpy(&value, iData, sizeof(value)); oValue = iNormalized ? value / 4294967295.0 : value; return true; }
+  case TINYGLTF_COMPONENT_TYPE_FLOAT:
+    { float value; memcpy(&value, iData, sizeof(value)); oValue = value; return true; }
+  default:
+    return false;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : ReadAccessor
+// ----------------------------------------------------------------------------
+bool ReadAccessor( const tinygltf::Model & iModel, const tinygltf::Accessor & iAccessor, std::vector<double> & oValues )
+{
+  const int componentSize = tinygltf::GetComponentSizeInBytes(iAccessor.componentType);
+  const int componentCount = tinygltf::GetNumComponentsInType(iAccessor.type);
+  if ( ( componentSize <= 0 ) || ( componentCount <= 0 ) )
+    return false;
+
+  oValues.assign( iAccessor.count * componentCount, 0.0 );
+  const size_t elementSize = static_cast<size_t>(componentSize * componentCount);
+  if ( iAccessor.bufferView >= 0 )
+  {
+    if ( !IsValidIndex(iAccessor.bufferView, iModel.bufferViews.size()) )
+      return false;
+    const tinygltf::BufferView & bufferView = iModel.bufferViews[iAccessor.bufferView];
+    const int stride = iAccessor.ByteStride(bufferView);
+    if ( ( stride < static_cast<int>(elementSize) ) || ( 0 == iAccessor.count ) )
+      return ( 0 == iAccessor.count );
+
+    const uint8_t * data = nullptr;
+    const size_t dataSize = iAccessor.byteOffset + static_cast<size_t>(stride) * ( iAccessor.count - 1 ) + elementSize;
+    if ( !GetBufferData(iModel, iAccessor.bufferView, 0, dataSize, data) )
+      return false;
+
+    for ( size_t element = 0; element < iAccessor.count; ++element )
+    {
+      const uint8_t * source = data + iAccessor.byteOffset + static_cast<size_t>(stride) * element;
+      for ( int component = 0; component < componentCount; ++component )
+      {
+        if ( !ReadComponent(source + component * componentSize, iAccessor.componentType, iAccessor.normalized, oValues[element * componentCount + component]) )
+          return false;
+      }
+    }
+  }
+  else if ( !iAccessor.sparse.isSparse )
+    return false;
+
+  if ( !iAccessor.sparse.isSparse )
+    return true;
+
+  const tinygltf::Accessor::Sparse & sparse = iAccessor.sparse;
+  if ( ( sparse.count < 0 ) || ( static_cast<size_t>(sparse.count) > iAccessor.count ) )
+    return false;
+  const int sparseIndexSize = tinygltf::GetComponentSizeInBytes(sparse.indices.componentType);
+  if ( ( sparseIndexSize <= 0 )
+    || ( ( sparse.indices.componentType != TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE )
+      && ( sparse.indices.componentType != TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT )
+      && ( sparse.indices.componentType != TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT ) ) )
+    return false;
+
+  const uint8_t * sparseIndices = nullptr;
+  const uint8_t * sparseValues = nullptr;
+  if ( !GetBufferData(iModel, sparse.indices.bufferView, sparse.indices.byteOffset, static_cast<size_t>(sparse.count) * sparseIndexSize, sparseIndices)
+    || !GetBufferData(iModel, sparse.values.bufferView, sparse.values.byteOffset, static_cast<size_t>(sparse.count) * elementSize, sparseValues) )
+    return false;
+
+  for ( int sparseElement = 0; sparseElement < sparse.count; ++sparseElement )
+  {
+    double sparseIndexValue = 0.0;
+    if ( !ReadComponent(sparseIndices + sparseElement * sparseIndexSize, sparse.indices.componentType, false, sparseIndexValue) )
+      return false;
+    const size_t element = static_cast<size_t>(sparseIndexValue);
+    if ( element >= iAccessor.count )
+      return false;
+
+    const uint8_t * source = sparseValues + static_cast<size_t>(sparseElement) * elementSize;
+    for ( int component = 0; component < componentCount; ++component )
+    {
+      if ( !ReadComponent(source + component * componentSize, iAccessor.componentType, iAccessor.normalized, oValues[element * componentCount + component]) )
+        return false;
+    }
+  }
+
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : ReadVec3Accessor
+// ----------------------------------------------------------------------------
+bool ReadVec3Accessor( const tinygltf::Model & iModel, int iAccessorIndex, std::vector<Vec3> & oValues )
+{
+  if ( !IsValidIndex(iAccessorIndex, iModel.accessors.size()) )
+    return false;
+  const tinygltf::Accessor & accessor = iModel.accessors[iAccessorIndex];
+  if ( TINYGLTF_TYPE_VEC3 != accessor.type )
+    return false;
+
+  std::vector<double> values;
+  if ( !ReadAccessor(iModel, accessor, values) )
+    return false;
+  oValues.resize(accessor.count);
+  for ( size_t i = 0; i < accessor.count; ++i )
+    oValues[i] = Vec3( static_cast<float>(values[3 * i]), static_cast<float>(values[3 * i + 1]), static_cast<float>(values[3 * i + 2]) );
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : ReadVec2Accessor
+// ----------------------------------------------------------------------------
+bool ReadVec2Accessor( const tinygltf::Model & iModel, int iAccessorIndex, std::vector<Vec2> & oValues )
+{
+  if ( !IsValidIndex(iAccessorIndex, iModel.accessors.size()) )
+    return false;
+  const tinygltf::Accessor & accessor = iModel.accessors[iAccessorIndex];
+  if ( TINYGLTF_TYPE_VEC2 != accessor.type )
+    return false;
+
+  std::vector<double> values;
+  if ( !ReadAccessor(iModel, accessor, values) )
+    return false;
+  oValues.resize(accessor.count);
+  for ( size_t i = 0; i < accessor.count; ++i )
+    oValues[i] = Vec2( static_cast<float>(values[2 * i]), static_cast<float>(values[2 * i + 1]) );
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : ReadIndices
+// ----------------------------------------------------------------------------
+bool ReadIndices( const tinygltf::Model & iModel, int iAccessorIndex, size_t iVertexCount, std::vector<int> & oIndices )
+{
+  if ( !IsValidIndex(iAccessorIndex, iModel.accessors.size()) )
+    return false;
+  const tinygltf::Accessor & accessor = iModel.accessors[iAccessorIndex];
+  if ( ( TINYGLTF_TYPE_SCALAR != accessor.type )
+    || ( ( accessor.componentType != TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE )
+      && ( accessor.componentType != TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT )
+      && ( accessor.componentType != TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT ) ) )
+    return false;
+
+  std::vector<double> values;
+  if ( !ReadAccessor(iModel, accessor, values) )
+    return false;
+  oIndices.resize(accessor.count);
+  for ( size_t i = 0; i < accessor.count; ++i )
+  {
+    if ( ( values[i] < 0.0 ) || ( values[i] >= static_cast<double>(iVertexCount) ) )
+      return false;
+    oIndices[i] = static_cast<int>(values[i]);
+  }
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : WarnTextureInfoLimitations
+// ----------------------------------------------------------------------------
+void WarnTextureInfoLimitations( const tinygltf::TextureInfo & iTextureInfo, GltfDiagnostics & ioDiagnostics )
+{
+  if ( iTextureInfo.texCoord > 0 )
+    ioDiagnostics.Warn("non-zero texture coordinate sets are ignored");
+  if ( iTextureInfo.extensions.find("KHR_texture_transform") != iTextureInfo.extensions.end() )
+    ioDiagnostics.Warn("KHR_texture_transform is ignored");
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : GenerateNormals
+// ----------------------------------------------------------------------------
+void GenerateNormals( const std::vector<Vec3> & iVertices, const std::vector<int> & iIndices, std::vector<Vec3> & oNormals )
+{
+  oNormals.assign(iVertices.size(), Vec3(0.f));
+  for ( size_t i = 0; i + 2 < iIndices.size(); i += 3 )
+  {
+    const int i0 = iIndices[i], i1 = iIndices[i + 1], i2 = iIndices[i + 2];
+    const Vec3 normal = glm::cross(iVertices[i1] - iVertices[i0], iVertices[i2] - iVertices[i0]);
+    oNormals[i0] += normal; oNormals[i1] += normal; oNormals[i2] += normal;
+  }
+  for ( Vec3 & normal : oNormals )
+    normal = ( glm::dot(normal, normal) > 0.f ) ? glm::normalize(normal) : Vec3(0.f, 1.f, 0.f);
 }
 
 // ----------------------------------------------------------------------------
@@ -156,10 +524,12 @@ void GetLocalTransfo( const tinygltf::Node & iGltfNode, Mat4x4 & oLocalTransfoMa
 // ----------------------------------------------------------------------------
 // GLTF loader : LoadTextures
 // ----------------------------------------------------------------------------
-bool LoadTextures( Scene & ioScene, tinygltf::Model & iGltfModel )
+bool LoadTextures( Scene & ioScene, tinygltf::Model & iGltfModel, GltfDiagnostics & ioDiagnostics )
 {
   for ( const tinygltf::Texture & gltfTex : iGltfModel.textures )
   {
+    if ( !IsValidIndex(gltfTex.source, iGltfModel.images.size()) )
+      return false;
     tinygltf::Image & image = iGltfModel.images[gltfTex.source];
 
     std::string texName;
@@ -169,6 +539,9 @@ bool LoadTextures( Scene & ioScene, tinygltf::Model & iGltfModel )
       ioScene.AddTexture(texName, image.image.data(), image.width, image.height, image.component);
     else
       return false;
+
+    if ( gltfTex.sampler >= 0 )
+      ioDiagnostics.Warn("texture sampler settings are ignored");
   }
 
   return true;
@@ -177,7 +550,7 @@ bool LoadTextures( Scene & ioScene, tinygltf::Model & iGltfModel )
 // ----------------------------------------------------------------------------
 // GLTF loader : LoadMaterials
 // ----------------------------------------------------------------------------
-bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
+bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel, GltfDiagnostics & ioDiagnostics )
 {
   bool ret = true;
 
@@ -194,6 +567,8 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
     material._Albedo = Vec3((float)pbr.baseColorFactor[0], (float)pbr.baseColorFactor[1], (float)pbr.baseColorFactor[2]);
     if ( pbr.baseColorTexture.index > -1 )
     {
+      if ( !IsValidIndex(pbr.baseColorTexture.index, iGltfModel.textures.size()) )
+        return false;
       const tinygltf::Texture & gltfTex = iGltfModel.textures[pbr.baseColorTexture.index];
 
       std::string texName;
@@ -210,6 +585,8 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
     // Opacity
     material._Opacity = (float)pbr.baseColorFactor[3];
 
+    WarnTextureInfoLimitations(pbr.baseColorTexture, ioDiagnostics);
+
     // Alpha
     material._AlphaCutoff = (float)gltfMaterial.alphaCutoff;
     if ( !strcmp(gltfMaterial.alphaMode.c_str(), "OPAQUE") )
@@ -220,10 +597,12 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
       material._AlphaMode = (float)AlphaMode::Mask;
 
     // Roughness and Metallic
-    material._Roughness = sqrtf((float)pbr.roughnessFactor); // Repo's disney material doesn't use squared roughness
+    material._Roughness = MathUtil::Clamp((float)pbr.roughnessFactor, 0.f, 1.f);
     material._Metallic = (float)pbr.metallicFactor;
     if ( pbr.metallicRoughnessTexture.index > -1 )
     {
+      if ( !IsValidIndex(pbr.metallicRoughnessTexture.index, iGltfModel.textures.size()) )
+        return false;
       const tinygltf::Texture & gltfTex = iGltfModel.textures[pbr.metallicRoughnessTexture.index];
 
       std::string texName;
@@ -236,10 +615,13 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
         break;
       }
     }
+    WarnTextureInfoLimitations(pbr.metallicRoughnessTexture, ioDiagnostics);
 
     // Normal Map
     if ( gltfMaterial.normalTexture.index > -1 )
     {
+      if ( !IsValidIndex(gltfMaterial.normalTexture.index, iGltfModel.textures.size()) )
+        return false;
       const tinygltf::Texture & gltfTex = iGltfModel.textures[gltfMaterial.normalTexture.index];
 
       std::string texName;
@@ -252,11 +634,19 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
         break;
       }
     }
+    if ( gltfMaterial.normalTexture.texCoord > 0 )
+      ioDiagnostics.Warn("non-zero texture coordinate sets are ignored");
+    if ( gltfMaterial.normalTexture.extensions.find("KHR_texture_transform") != gltfMaterial.normalTexture.extensions.end() )
+      ioDiagnostics.Warn("KHR_texture_transform is ignored");
+    if ( ( gltfMaterial.normalTexture.index >= 0 ) && ( std::abs(gltfMaterial.normalTexture.scale - 1.0) > 0.0001 ) )
+      ioDiagnostics.Warn("normal texture scale is ignored");
 
     // Emission
     material._Emission = Vec3((float)gltfMaterial.emissiveFactor[0], (float)gltfMaterial.emissiveFactor[1], (float)gltfMaterial.emissiveFactor[2]);
     if ( gltfMaterial.emissiveTexture.index > -1 )
     {
+      if ( !IsValidIndex(gltfMaterial.emissiveTexture.index, iGltfModel.textures.size()) )
+        return false;
       const tinygltf::Texture & gltfTex = iGltfModel.textures[gltfMaterial.emissiveTexture.index];
 
       std::string texName;
@@ -269,6 +659,7 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
         break;
       }
     }
+    WarnTextureInfoLimitations(gltfMaterial.emissiveTexture, ioDiagnostics);
 
     // KHR_materials_transmission
     if ( gltfMaterial.extensions.find("KHR_materials_transmission") != gltfMaterial.extensions.end() )
@@ -278,14 +669,49 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
         material._SpecTrans = (float)(ext.Get("transmissionFactor").Get<double>());
     }
 
+    const auto emissiveStrength = gltfMaterial.extensions.find("KHR_materials_emissive_strength");
+    if ( emissiveStrength != gltfMaterial.extensions.end() && emissiveStrength -> second.Has("emissiveStrength") )
+      material._Emission *= static_cast<float>(emissiveStrength -> second.Get("emissiveStrength").Get<double>());
+
+    const auto ior = gltfMaterial.extensions.find("KHR_materials_ior");
+    if ( ior != gltfMaterial.extensions.end() && ior -> second.Has("ior") )
+      material._IOR = static_cast<float>(ior -> second.Get("ior").Get<double>());
+
+    const auto clearcoat = gltfMaterial.extensions.find("KHR_materials_clearcoat");
+    if ( clearcoat != gltfMaterial.extensions.end() )
+    {
+      if ( clearcoat -> second.Has("clearcoatFactor") )
+        material._Clearcoat = static_cast<float>(clearcoat -> second.Get("clearcoatFactor").Get<double>());
+      if ( clearcoat -> second.Has("clearcoatRoughnessFactor") )
+        material._ClearcoatGloss = 1.f - static_cast<float>(clearcoat -> second.Get("clearcoatRoughnessFactor").Get<double>());
+    }
+
+    if ( gltfMaterial.occlusionTexture.index >= 0 )
+      ioDiagnostics.Warn("occlusion textures are ignored");
+    if ( gltfMaterial.doubleSided )
+      ioDiagnostics.Warn("double-sided material semantics are ignored");
+    for ( const auto & extension : gltfMaterial.extensions )
+    {
+      if ( ( "KHR_materials_transmission" != extension.first )
+        && ( "KHR_materials_emissive_strength" != extension.first )
+        && ( "KHR_materials_ior" != extension.first )
+        && ( "KHR_materials_clearcoat" != extension.first ) )
+        ioDiagnostics.Warn("material extension '" + extension.first + "' is ignored");
+    }
+    if ( ( gltfMaterial.extensions.find("KHR_materials_transmission") != gltfMaterial.extensions.end() )
+      && gltfMaterial.extensions.find("KHR_materials_transmission") -> second.Has("transmissionTexture") )
+      ioDiagnostics.Warn("transmission textures are ignored");
+    if ( ( clearcoat != gltfMaterial.extensions.end() )
+      && ( clearcoat -> second.Has("clearcoatTexture") || clearcoat -> second.Has("clearcoatRoughnessTexture") || clearcoat -> second.Has("clearcoatNormalTexture") ) )
+      ioDiagnostics.Warn("clearcoat textures are ignored");
+
     std::string matName;
     GetMaterialName(iGltfModel, gltfMaterial, static_cast<int>(indMat), matName);
 
     ioScene.AddMaterial(material, matName);
   }
 
-  // Default material
-  if ( ret && ( 0 == ioScene.GetMaterials().size() ) )
+  if ( ret && ( ioScene.FindMaterialID("Default Material") < 0 ) )
   {
     Material defaultMat;
     ioScene.AddMaterial(defaultMat, "Default Material");
@@ -297,305 +723,541 @@ bool LoadMaterials( Scene & ioScene, tinygltf::Model & iGltfModel )
 // ----------------------------------------------------------------------------
 // GLTF loader : LoadMeshes
 // ----------------------------------------------------------------------------
-bool LoadMeshes( Scene & ioScene, tinygltf::Model & iGltfModel )
+bool LoadMeshes( Scene & ioScene, tinygltf::Model & iGltfModel, GltfDiagnostics & ioDiagnostics )
 {
-  bool ret = true;
-
   for ( size_t indMesh = 0; indMesh < iGltfModel.meshes.size(); ++indMesh )
   {
     tinygltf::Mesh & gltfMesh = iGltfModel.meshes[indMesh];
+    if ( !gltfMesh.primitives.empty() && !gltfMesh.weights.empty() )
+      ioDiagnostics.Warn("morph target weights are ignored");
 
     for ( size_t indPrim = 0; indPrim < gltfMesh.primitives.size(); ++indPrim )
     {
       tinygltf::Primitive & prim = gltfMesh.primitives[indPrim];
-      // Skip points and lines
-      if ( TINYGLTF_MODE_TRIANGLES != prim.mode )
+      const int mode = ( prim.mode >= 0 ) ? prim.mode : TINYGLTF_MODE_TRIANGLES;
+      if ( ( TINYGLTF_MODE_POINTS == mode ) || ( TINYGLTF_MODE_LINE == mode ) || ( TINYGLTF_MODE_LINE_LOOP == mode ) || ( TINYGLTF_MODE_LINE_STRIP == mode ) )
+      {
+        ioDiagnostics.Warn("point and line primitives are ignored");
         continue;
-
-      // Accessors
-      tinygltf::Accessor indexAccessor, positionAccessor, normalAccessor, uv0Accessor;
-
-      if ( prim.indices >= 0 )
-        indexAccessor = iGltfModel.accessors[prim.indices];
-
-      if ( prim.attributes.count("POSITION") > 0 )
-      {
-        int positionIndex = prim.attributes["POSITION"];
-        if ( positionIndex >= 0 )
-          positionAccessor = iGltfModel.accessors[positionIndex];
       }
+      if ( ( TINYGLTF_MODE_TRIANGLES != mode ) && ( TINYGLTF_MODE_TRIANGLE_STRIP != mode ) && ( TINYGLTF_MODE_TRIANGLE_FAN != mode ) )
+        return false;
 
-      if ( prim.attributes.count("NORMAL") > 0 )
+      const auto positionIt = prim.attributes.find("POSITION");
+      if ( positionIt == prim.attributes.end() ) return false;
+      std::vector<Vec3> vertices;
+      if ( !ReadVec3Accessor(iGltfModel, positionIt -> second, vertices) || vertices.empty() )
+        return false;
+      std::vector<int> sourceIndices;
+      if ( prim.indices >= 0 )
       {
-        int normalIndex = prim.attributes["NORMAL"];
-        if ( normalIndex >= 0 )
-          normalAccessor = iGltfModel.accessors[normalIndex];
+        if ( !ReadIndices(iGltfModel, prim.indices, vertices.size(), sourceIndices) )
+          return false;
       }
       else
-        return false; // Temporary limitation : no normal pre-computation
-
-      if ( prim.attributes.count("TEXCOORD_0") > 0 )
       {
-        int uv0Index = prim.attributes["TEXCOORD_0"];
-        if ( uv0Index >= 0 )
-          uv0Accessor = iGltfModel.accessors[uv0Index];
+        sourceIndices.resize(vertices.size());
+        for ( size_t i = 0; i < vertices.size(); ++i ) sourceIndices[i] = static_cast<int>(i);
       }
 
-      if ( ( indexAccessor.type < 0 )
-        || ( positionAccessor.type < 0 ) )
+      std::vector<int> triangleIndices;
+      if ( TINYGLTF_MODE_TRIANGLES == mode )
       {
-        ret = false;
-        break;
+        if ( 0 != ( sourceIndices.size() % 3 ) ) return false;
+        triangleIndices = sourceIndices;
       }
-
-      // Buffer views
-      tinygltf::BufferView indexBufferView, positionBufferView, normalBufferView, uv0BufferView;
-      const uint8_t* pIndexBuffer = nullptr, * pPositionBuffer = nullptr, * pNormalBuffer = nullptr, * pUV0Buffer = nullptr;
-      size_t indexBufferStride = 0, positionBufferStride = 0, normalBufferStride = 0, uv0BufferStride = 0;
-
-      indexBufferView = iGltfModel.bufferViews[indexAccessor.bufferView];
-      pIndexBuffer = iGltfModel.buffers[indexBufferView.buffer].data.data() + indexBufferView.byteOffset + indexAccessor.byteOffset;
-      indexBufferStride = tinygltf::GetComponentSizeInBytes(indexAccessor.componentType) * tinygltf::GetNumComponentsInType(indexAccessor.type);
-      if ( indexBufferView.byteStride > 0 )
-        indexBufferStride = indexBufferView.byteStride; // ? different
-
-      positionBufferView = iGltfModel.bufferViews[positionAccessor.bufferView];
-      pPositionBuffer = iGltfModel.buffers[positionBufferView.buffer].data.data() + positionBufferView.byteOffset + positionAccessor.byteOffset;
-      positionBufferStride = tinygltf::GetComponentSizeInBytes(positionAccessor.componentType) * tinygltf::GetNumComponentsInType(positionAccessor.type);
-      if ( positionBufferView.byteStride > 0 )
-        positionBufferStride = positionBufferView.byteStride; // ? different
-
-      if ( normalAccessor.type >= 0 )
+      else if ( sourceIndices.size() >= 3 )
       {
-        normalBufferView = iGltfModel.bufferViews[normalAccessor.bufferView];
-        pNormalBuffer = iGltfModel.buffers[normalBufferView.buffer].data.data() + normalBufferView.byteOffset + normalAccessor.byteOffset;
-        normalBufferStride = tinygltf::GetComponentSizeInBytes(normalAccessor.componentType) * tinygltf::GetNumComponentsInType(normalAccessor.type);
-        if ( normalBufferView.byteStride > 0 )
-          normalBufferStride = normalBufferView.byteStride; // ? different
-      }
-
-      if ( uv0Accessor.type >= 0 )
-      {
-        uv0BufferView = iGltfModel.bufferViews[uv0Accessor.bufferView];
-        pUV0Buffer = iGltfModel.buffers[uv0BufferView.buffer].data.data() + uv0BufferView.byteOffset + uv0Accessor.byteOffset;
-        uv0BufferStride = tinygltf::GetComponentSizeInBytes(uv0Accessor.componentType) * tinygltf::GetNumComponentsInType(uv0Accessor.type);
-        if ( uv0BufferView.byteStride > 0 )
-          uv0BufferStride = uv0BufferView.byteStride; // ? different
-      }
-
-      // Get per-vertex data
-      std::vector<Vec3> vertices(positionAccessor.count);
-      std::vector<Vec3> normals;
-      std::vector<Vec2> uvs;
-
-      if ( pNormalBuffer )
-        normals.resize( positionAccessor.count );
-      if ( pUV0Buffer )
-        uvs.resize( positionAccessor.count );
-
-      for ( size_t vtxInd = 0; vtxInd < positionAccessor.count; ++vtxInd )
-      {
+        for ( size_t i = 2; i < sourceIndices.size(); ++i )
         {
-          const uint8_t* address = pPositionBuffer + ( vtxInd * positionBufferStride );
-          memcpy(&vertices[vtxInd], address, sizeof(Vec3));
-        }
-
-        if ( pNormalBuffer )
-        {
-          const uint8_t* address = pNormalBuffer + ( vtxInd * normalBufferStride );
-          memcpy(&normals[vtxInd], address, sizeof(Vec3));
-        }
-
-        if ( pUV0Buffer )
-        {
-          const uint8_t* address = pUV0Buffer + ( vtxInd * uv0BufferStride );
-          memcpy(&uvs[vtxInd], address, sizeof(Vec2));
-        }
-      }
-
-      // Get index data
-      std::vector<int> triIndices(indexAccessor.count);
-      if ( ( 1 == indexBufferStride ) || ( 2 == indexBufferStride ) )
-      {
-        for ( size_t triInd = 0; triInd < indexAccessor.count; ++triInd )
-        {
-          const uint8_t * quarter = pIndexBuffer + ( triInd * indexBufferStride );
-
-          if ( 2 == indexBufferStride )
+          if ( TINYGLTF_MODE_TRIANGLE_FAN == mode )
           {
-            uint16_t * half = (uint16_t*)quarter;
-            triIndices[triInd] = *half;
+            triangleIndices.push_back(sourceIndices[0]); triangleIndices.push_back(sourceIndices[i - 1]); triangleIndices.push_back(sourceIndices[i]);
+          }
+          else if ( 0 == ( i % 2 ) )
+          {
+            triangleIndices.push_back(sourceIndices[i - 2]); triangleIndices.push_back(sourceIndices[i - 1]); triangleIndices.push_back(sourceIndices[i]);
           }
           else
-            triIndices[triInd] = *quarter;
+          {
+            triangleIndices.push_back(sourceIndices[i - 1]); triangleIndices.push_back(sourceIndices[i - 2]); triangleIndices.push_back(sourceIndices[i]);
+          }
         }
       }
+      if ( triangleIndices.empty() ) return false;
+
+      std::vector<Vec3> normals;
+      const auto normalIt = prim.attributes.find("NORMAL");
+      if ( normalIt != prim.attributes.end() )
+      {
+        if ( !ReadVec3Accessor(iGltfModel, normalIt -> second, normals) || ( normals.size() != vertices.size() ) ) return false;
+      }
       else
-        memcpy( triIndices.data(), pIndexBuffer, ( indexAccessor.count * indexBufferStride ));
+      {
+        ioDiagnostics.Warn("missing normals are generated");
+        GenerateNormals(vertices, triangleIndices, normals);
+      }
+
+      std::vector<Vec2> uvs;
+      const auto uvIt = prim.attributes.find("TEXCOORD_0");
+      if ( ( uvIt != prim.attributes.end() ) && ( !ReadVec2Accessor(iGltfModel, uvIt -> second, uvs) || ( uvs.size() != vertices.size() ) ) ) return false;
+      if ( prim.attributes.find("TANGENT") != prim.attributes.end() ) ioDiagnostics.Warn("tangent attributes are ignored");
+      if ( ( prim.attributes.find("JOINTS_0") != prim.attributes.end() ) || ( prim.attributes.find("WEIGHTS_0") != prim.attributes.end() ) ) ioDiagnostics.Warn("skinning attributes are ignored");
+      if ( !prim.targets.empty() ) ioDiagnostics.Warn("morph targets are ignored");
 
       std::vector<Vec3i> indices;
-      indices.reserve(triIndices.size());
+      indices.reserve(triangleIndices.size());
+      for ( int index : triangleIndices ) indices.push_back(Vec3i(index));
 
-      for ( int index : triIndices )
-      {
-        Vec3i inds(index);
-        if ( !pNormalBuffer )
-          inds.y = -1;
-        if ( !pUV0Buffer )
-          inds.z = -1;
-        indices.push_back(inds);
-      }
-
-      // Intanciate mesh object
       std::string meshName;
       GetMeshName( gltfMesh, static_cast<int>(indMesh), static_cast<int>(indPrim), meshName );
-
-      Mesh* newMesh = new Mesh( meshName, vertices, normals, uvs, indices );
-      int meshID = ioScene.AddMesh( newMesh );
-      if ( -1 == meshID )
-      {
-        ret = false;
-        break;
-      }
+      Mesh * newMesh = new Mesh( meshName, vertices, normals, uvs, indices );
+      if ( -1 == ioScene.AddMesh(newMesh) ) return false;
     }
-
-    if ( !ret )
-      break;
   }
-
-  return ret;
+  return true;
 }
 
 // ----------------------------------------------------------------------------
 // GLTF loader : TraverseNodes
 // ----------------------------------------------------------------------------
-void TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx, const Mat4x4 & iParentTransfoMat )
+bool TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx, const Mat4x4 & iParentTransfoMat, const RenderSettings & iRenderSettings, GltfDiagnostics & ioDiagnostics, std::set<int> & ioAncestors )
 {
+  if ( !IsValidIndex(iNodeIdx, iGltfModel.nodes.size()) || !ioAncestors.insert(iNodeIdx).second )
+    return false;
   tinygltf::Node gltfNode = iGltfModel.nodes[iNodeIdx];
+
+  if ( ( !gltfNode.matrix.empty() && ( 16 != gltfNode.matrix.size() ) )
+    || ( !gltfNode.translation.empty() && ( 3 != gltfNode.translation.size() ) )
+    || ( !gltfNode.rotation.empty() && ( 4 != gltfNode.rotation.size() ) )
+    || ( !gltfNode.scale.empty() && ( 3 != gltfNode.scale.size() ) ) )
+    return false;
 
   Mat4x4 localTransfoMat;
   GetLocalTransfo( gltfNode , localTransfoMat );
 
   Mat4x4 transfoMat = iParentTransfoMat * localTransfoMat;
 
-  if ( 0 == gltfNode.children.size() )
+  if ( gltfNode.mesh >= 0 )
   {
-    // Leaf
-    if ( gltfNode.mesh >= 0 )
+    if ( !IsValidIndex(gltfNode.mesh, iGltfModel.meshes.size()) ) return false;
+    tinygltf::Mesh & gltfMesh = iGltfModel.meshes[gltfNode.mesh];
+
+    for ( size_t indPrim = 0; indPrim < gltfMesh.primitives.size(); ++indPrim )
     {
-      tinygltf::Mesh & gltfMesh = iGltfModel.meshes[gltfNode.mesh];
+      tinygltf::Primitive & prim = gltfMesh.primitives[indPrim];
+      const int mode = ( prim.mode >= 0 ) ? prim.mode : TINYGLTF_MODE_TRIANGLES;
+      if ( ( TINYGLTF_MODE_TRIANGLES != mode ) && ( TINYGLTF_MODE_TRIANGLE_STRIP != mode ) && ( TINYGLTF_MODE_TRIANGLE_FAN != mode ) )
+        continue;
 
-      for ( size_t indPrim = 0; indPrim < gltfMesh.primitives.size(); ++indPrim )
+      std::string meshName;
+      GetMeshName( gltfMesh, gltfNode.mesh, static_cast<int>(indPrim), meshName );
+
+      int meshID = ioScene.FindMeshID( meshName );
+      if ( meshID < 0 )
+        continue;
+
+      int matID = 0;
+      if ( prim.material >= 0 )
       {
-        tinygltf::Primitive & prim = gltfMesh.primitives[indPrim];
-        if ( TINYGLTF_MODE_TRIANGLES != prim.mode )
-          continue;
+        if ( !IsValidIndex(prim.material, iGltfModel.materials.size()) ) return false;
+        const tinygltf::Material & gltfMaterial = iGltfModel.materials[prim.material];
 
-        std::string meshName;
-        GetMeshName( gltfMesh, gltfNode.mesh, static_cast<int>(indPrim), meshName );
+        std::string matName;
+        GetMaterialName(iGltfModel, gltfMaterial, prim.material, matName);
+        matID = ioScene.FindMaterialID( matName );
+      }
+      else
+        matID = ioScene.FindMaterialID( "Default Material" );
+      if ( matID < 0 )
+        return false;
 
-        int meshID = ioScene.FindMeshID( meshName );
-        if ( meshID < 0 )
-          continue;
+      std::string instanceName( gltfNode.name );
+      instanceName += "_inst";
+      instanceName += std::to_string(indPrim);
 
-        int matID = 0;
-        if ( prim.material >= 0 )
-        {
-          const tinygltf::Material & gltfMaterial = iGltfModel.materials[prim.material];
+      MeshInstance instance( instanceName, meshID, matID, transfoMat );
+      ioScene.AddMeshInstance(instance);
+    }
+  }
 
-          std::string matName;
-          GetMaterialName(iGltfModel, gltfMaterial, prim.material, matName);
-          matID = ioScene.FindMaterialID( matName );
-        }
+  if ( gltfNode.light >= 0 )
+  {
+    if ( !IsValidIndex(gltfNode.light, iGltfModel.lights.size()) ) return false;
+    const tinygltf::Light & gltfLight = iGltfModel.lights[gltfNode.light];
+
+    Light newLight;
+    if ( gltfLight.color.size() >= 3 )
+    {
+      newLight._Emission = Vec3( static_cast<float>(gltfLight.color[0]),
+                                 static_cast<float>(gltfLight.color[1]),
+                                 static_cast<float>(gltfLight.color[2]) );
+    }
+
+    if ( "directional" == gltfLight.type )
+    {
+      // glTF lights emit along their local -Z axis. This renderer stores the
+      // opposite, surface-to-light direction in _Pos for distant lights.
+      newLight._Pos = glm::normalize( Vec3( transfoMat[2][0], transfoMat[2][1], transfoMat[2][2] ) );
+      newLight._Type = (float)LightType::DistantLight;
+      newLight._Area = 0.f;
+      newLight._Radius = 0.f;
+      newLight._Intensity = static_cast<float>(gltfLight.intensity);
+    }
+    else if ( ( "point" == gltfLight.type ) || ( "spot" == gltfLight.type ) )
+    {
+      // Point and spot lights are represented as small spherical emitters.
+      // Spot cone and range are not supported by the renderer's Light type.
+      const float radius = 0.1f;
+      newLight._Pos = Vec3( transfoMat[3][0], transfoMat[3][1], transfoMat[3][2] );
+      newLight._Radius = radius;
+      newLight._Area = 4.f * static_cast<float>(M_PI) * radius * radius;
+      newLight._Type = (float)LightType::SphereLight;
+      newLight._Intensity = static_cast<float>(gltfLight.intensity) / ( static_cast<float>(M_PI) * radius * radius );
+      if ( "spot" == gltfLight.type )
+        ioDiagnostics.Warn("spot light cone and range are approximated as point lights");
+    }
+    else
+      return false;
+
+    ioScene.AddLight( newLight );
+  }
+
+  if ( gltfNode.camera >= 0 )
+  {
+    if ( !IsValidIndex(gltfNode.camera, iGltfModel.cameras.size()) ) return false;
+    const tinygltf::Camera & curCam = iGltfModel.cameras[gltfNode.camera];
+    if ( "perspective" == curCam.type )
+    {
+      float aspectRatio = static_cast<float>(curCam.perspective.aspectRatio);
+      if ( aspectRatio <= 0.f )
+      {
+        if ( ( iRenderSettings._RenderResolution.x > 0 ) && ( iRenderSettings._RenderResolution.y > 0 ) )
+          aspectRatio = static_cast<float>(iRenderSettings._RenderResolution.x) / iRenderSettings._RenderResolution.y;
         else
-          matID = ioScene.FindMaterialID( "Default Material" );
-        if ( matID < 0 )
-          continue;
-
-        std::string instanceName( gltfNode.name );
-        instanceName += "_inst";
-        instanceName += std::to_string(indPrim);
-
-        MeshInstance instance( instanceName, meshID, matID, transfoMat );
-        ioScene.AddMeshInstance(instance);
-      }
-    }
-    else if ( gltfNode.light >= 0 )
-    {
-
-    }
-    else if ( gltfNode.camera >= 0 )
-    {
-      const tinygltf::Camera & curCam = iGltfModel.cameras[gltfNode.camera];
-      if ( "perspective" == curCam.type )
-      {
-        float fov = 80.f;
-        float focalDist = -1.f;
-        float aperture = -1.f;
-        float nearPlane = (float)curCam.perspective.znear;
-        float farPlane = (float)curCam.perspective.zfar;
-
-        Vec3 forward = { transfoMat[2][0], transfoMat[2][1], transfoMat[2][2] };
-        Vec3 pos = { transfoMat[3][0], transfoMat[3][1], transfoMat[3][2] };
-        Vec3 lookAt = pos + forward;
-
-        Camera newCamera( pos, lookAt, fov );
-        if ( aperture >= 0 )
-          newCamera.SetAperture( aperture );
-        if ( focalDist >= 0 )
-          newCamera.SetFocalDist( focalDist );
-
-        if ( ( nearPlane > 0.f ) || ( farPlane > 0.f ) )
         {
-          float nNear, nFar;
-          newCamera.GetZNearFar( nNear, nFar );
-
-          if ( nearPlane > 0.f )
-            nNear = nearPlane;
-          if ( farPlane > 0.f )
-            nFar = farPlane;
-
-          newCamera.SetZNearFar( nNear, nFar );
+          aspectRatio = 1.f;
+          ioDiagnostics.Warn("camera aspect ratio is unavailable; using 1:1 to convert vertical FOV");
         }
+      }
+      const float fov = MathUtil::ToDegrees(2.f * atan(tan(static_cast<float>(curCam.perspective.yfov) * .5f) * aspectRatio));
+      float focalDist = -1.f;
+      float aperture = -1.f;
+      float nearPlane = (float)curCam.perspective.znear;
+      float farPlane = (float)curCam.perspective.zfar;
 
-        ioScene.SetCamera( newCamera );
-      }
-      else if ( "orthographic" == curCam.type )
+      Vec3 forward = { -transfoMat[2][0], -transfoMat[2][1], -transfoMat[2][2] };
+      Vec3 pos = { transfoMat[3][0], transfoMat[3][1], transfoMat[3][2] };
+      Vec3 lookAt = pos + forward;
+
+      Camera newCamera( pos, lookAt, fov );
+      if ( aperture >= 0 )
+        newCamera.SetAperture( aperture );
+      if ( focalDist >= 0 )
+        newCamera.SetFocalDist( focalDist );
+
+      if ( ( nearPlane > 0.f ) || ( farPlane > 0.f ) )
       {
-        // Not implemented
+        float nNear, nFar;
+        newCamera.GetZNearFar( nNear, nFar );
+
+        if ( nearPlane > 0.f )
+          nNear = nearPlane;
+        if ( farPlane > 0.f )
+          nFar = farPlane;
+
+        newCamera.SetZNearFar( nNear, nFar );
       }
+
+      ioScene.SetCamera( newCamera );
     }
-  }
-  else
-  {
-    // Traverse children
-    for ( size_t i = 0; i < gltfNode.children.size(); ++i )
+    else if ( "orthographic" == curCam.type )
     {
-      TraverseNodes( ioScene, iGltfModel, gltfNode.children[i], transfoMat );
+      ioDiagnostics.Warn("orthographic cameras are ignored");
     }
   }
+
+  for ( size_t i = 0; i < gltfNode.children.size(); ++i )
+  {
+    if ( !TraverseNodes(ioScene, iGltfModel, gltfNode.children[i], transfoMat, iRenderSettings, ioDiagnostics, ioAncestors) )
+      return false;
+  }
+
+  ioAncestors.erase(iNodeIdx);
+  return true;
 }
 
 // ----------------------------------------------------------------------------
 // GLTF loader : LoadInstances
 // ----------------------------------------------------------------------------
-bool LoadInstances( Scene & ioScene, tinygltf::Model & iGltfModel, const Mat4x4 & iTransfoMat )
+bool LoadInstances( Scene & ioScene, tinygltf::Model & iGltfModel, const Mat4x4 & iTransfoMat, const RenderSettings & iRenderSettings, GltfDiagnostics & ioDiagnostics )
 {
-  bool ret = false;
+  if ( iGltfModel.scenes.empty() ) return false;
+  const int sceneIndex = ( iGltfModel.defaultScene >= 0 ) ? iGltfModel.defaultScene : 0;
+  if ( !IsValidIndex(sceneIndex, iGltfModel.scenes.size()) )
+    return false;
 
-  if ( iGltfModel.defaultScene < 0 )
-    return ret;
-
-  const tinygltf::Scene gltfScene = iGltfModel.scenes[iGltfModel.defaultScene];
+  const tinygltf::Scene gltfScene = iGltfModel.scenes[sceneIndex];
 
   for ( int nodeIdx : gltfScene.nodes )
   {
-    TraverseNodes( ioScene, iGltfModel, nodeIdx, iTransfoMat );
+    std::set<int> ancestors;
+    if ( !TraverseNodes(ioScene, iGltfModel, nodeIdx, iTransfoMat, iRenderSettings, ioDiagnostics, ancestors) ) return false;
+  }
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// OBJ loader : ObjDiagnostics
+// ----------------------------------------------------------------------------
+class ObjDiagnostics
+{
+public:
+  void Warn( const std::string & iMessage )
+  {
+    if ( _Warnings.insert(iMessage).second )
+      std::cout << "OBJ warning: " << iMessage << std::endl;
+  }
+private:
+  std::set<std::string> _Warnings;
+};
+
+// ----------------------------------------------------------------------------
+// OBJ loader : ObjSubmesh
+// ----------------------------------------------------------------------------
+struct ObjSubmesh
+{
+  std::string               _Name;
+  int                       _MaterialIndex = -1;
+  std::vector<Vec3>         _Vertices;
+  std::vector<Vec3>         _Normals;
+  std::vector<Vec2>         _UVs;
+  std::vector<Vec3i>        _Indices;
+  std::vector<int>          _SourceVertexIndices;
+  std::vector<unsigned int> _SmoothingGroups;
+};
+
+// ----------------------------------------------------------------------------
+// OBJ loader : LoadObjTexture
+// ----------------------------------------------------------------------------
+bool LoadObjTexture( Scene & ioScene, const fs::path & iDirectory, const std::string & iFilename, float & oTextureID, ObjDiagnostics & ioDiagnostics )
+{
+  if ( iFilename.empty() ) return true;
+  const fs::path filepath = iDirectory / iFilename;
+  const int textureID = ioScene.AddTexture(filepath.string());
+  if ( textureID < 0 )
+  {
+    ioDiagnostics.Warn("unable to load MTL texture '" + filepath.string() + "'");
+    return true;
+  }
+  oTextureID = static_cast<float>(textureID);
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// OBJ loader : AddObjMaterial
+// ----------------------------------------------------------------------------
+int AddObjMaterial( Scene & ioScene, const tinyobj::material_t & iObjMaterial, const fs::path & iDirectory, const std::string & iPrefix, ObjDiagnostics & ioDiagnostics )
+{
+  const std::string materialName = iPrefix + iObjMaterial.name;
+  const int existingID = ioScene.FindMaterialID(materialName);
+  if ( existingID >= 0 ) return existingID;
+
+  Material material;
+  material._Albedo = Vec3(iObjMaterial.diffuse[0], iObjMaterial.diffuse[1], iObjMaterial.diffuse[2]);
+  material._Emission = Vec3(iObjMaterial.emission[0], iObjMaterial.emission[1], iObjMaterial.emission[2]);
+  material._Opacity = MathUtil::Clamp(iObjMaterial.dissolve, 0.f, 1.f);
+  material._AlphaMode = (float)(( material._Opacity < .999f ) ? AlphaMode::Blend : AlphaMode::Opaque);
+  material._IOR = std::max(1.f, static_cast<float>(iObjMaterial.ior));
+  material._Roughness = ( iObjMaterial.roughness > 0.f ) ? MathUtil::Clamp(iObjMaterial.roughness, 0.f, 1.f) : powf(2.f / std::max(2.f, static_cast<float>(iObjMaterial.shininess) + 2.f), 0.25f);
+  material._Metallic = MathUtil::Clamp(iObjMaterial.metallic, 0.f, 1.f);
+
+  LoadObjTexture(ioScene, iDirectory, iObjMaterial.diffuse_texname, material._BaseColorTexId, ioDiagnostics);
+  LoadObjTexture(ioScene, iDirectory, iObjMaterial.emissive_texname, material._EmissionMapTexID, ioDiagnostics);
+  const std::string normalMap = !iObjMaterial.normal_texname.empty() ? iObjMaterial.normal_texname : iObjMaterial.bump_texname;
+  LoadObjTexture(ioScene, iDirectory, normalMap, material._NormalMapTexID, ioDiagnostics);
+
+  if ( !iObjMaterial.specular_texname.empty() || !iObjMaterial.specular_highlight_texname.empty() || !iObjMaterial.reflection_texname.empty() )
+    ioDiagnostics.Warn("specular and reflection maps are ignored");
+  if ( !iObjMaterial.displacement_texname.empty() || !iObjMaterial.alpha_texname.empty() )
+    ioDiagnostics.Warn("displacement and alpha maps are ignored");
+  if ( !iObjMaterial.metallic_texname.empty() || !iObjMaterial.roughness_texname.empty() )
+    ioDiagnostics.Warn("separate metallic and roughness maps are ignored");
+  if ( !iObjMaterial.unknown_parameter.empty() )
+    ioDiagnostics.Warn("unsupported MTL parameters are ignored");
+
+  return ioScene.AddMaterial(material, materialName);
+}
+
+// ----------------------------------------------------------------------------
+// OBJ loader : BuildObjSubmeshes
+// ----------------------------------------------------------------------------
+bool BuildObjSubmeshes( const std::string & iFilename, std::vector<tinyobj::material_t> & oMaterials, std::vector<ObjSubmesh> & oSubmeshes, ObjDiagnostics & ioDiagnostics )
+{
+  tinyobj::attrib_t attrib;
+  std::vector<tinyobj::shape_t> shapes;
+  std::string warning, error;
+  const fs::path filepath = iFilename;
+  const std::string baseDir = filepath.parent_path().string();
+  if ( !tinyobj::LoadObj(&attrib, &shapes, &oMaterials, &warning, &error, iFilename.c_str(), baseDir.c_str(), true) )
+  {
+    std::cout << "OBJ error: " << error << std::endl;
+    return false;
+  }
+  if ( !warning.empty() ) ioDiagnostics.Warn(warning);
+
+  for ( size_t shapeIndex = 0; shapeIndex < shapes.size(); ++shapeIndex )
+  {
+    const tinyobj::mesh_t & shape = shapes[shapeIndex].mesh;
+    std::map<int, ObjSubmesh> materialGroups;
+    size_t indexOffset = 0;
+    for ( size_t face = 0; face < shape.num_face_vertices.size(); ++face )
+    {
+      const int vertexCount = shape.num_face_vertices[face];
+      const int materialIndex = ( face < shape.material_ids.size() ) ? shape.material_ids[face] : -1;
+      if ( 3 != vertexCount )
+      {
+        ioDiagnostics.Warn("non-triangle faces are ignored");
+        indexOffset += vertexCount;
+        continue;
+      }
+      if ( ( materialIndex >= static_cast<int>(oMaterials.size()) ) || ( materialIndex < -1 ) ) return false;
+
+      ObjSubmesh & submesh = materialGroups[materialIndex];
+      submesh._MaterialIndex = materialIndex;
+      const unsigned int smoothingGroup = ( face < shape.smoothing_group_ids.size() ) ? shape.smoothing_group_ids[face] : 0;
+      submesh._SmoothingGroups.push_back(smoothingGroup);
+      for ( int corner = 0; corner < 3; ++corner )
+      {
+        if ( ( indexOffset + corner ) >= shape.indices.size() )
+          return false;
+        const tinyobj::index_t & index = shape.indices[indexOffset + corner];
+        if ( ( index.vertex_index < 0 ) || ( 3 * index.vertex_index + 2 >= static_cast<int>(attrib.vertices.size()) ) )
+          return false;
+        submesh._Vertices.emplace_back(attrib.vertices[3 * index.vertex_index], attrib.vertices[3 * index.vertex_index + 1], attrib.vertices[3 * index.vertex_index + 2]);
+        const int vertexIndex = static_cast<int>(submesh._Vertices.size() - 1);
+        submesh._SourceVertexIndices.push_back(index.vertex_index);
+
+        int normalIndex = -1;
+        if ( index.normal_index >= 0 )
+        {
+          if ( 3 * index.normal_index + 2 >= static_cast<int>(attrib.normals.size()) ) return false;
+          submesh._Normals.emplace_back(attrib.normals[3 * index.normal_index], attrib.normals[3 * index.normal_index + 1], attrib.normals[3 * index.normal_index + 2]);
+          normalIndex = static_cast<int>(submesh._Normals.size() - 1);
+        }
+
+        int uvIndex = -1;
+        if ( index.texcoord_index >= 0 )
+        {
+          if ( 2 * index.texcoord_index + 1 >= static_cast<int>(attrib.texcoords.size()) ) return false;
+          submesh._UVs.emplace_back(attrib.texcoords[2 * index.texcoord_index], 1.f - attrib.texcoords[2 * index.texcoord_index + 1]);
+          uvIndex = static_cast<int>(submesh._UVs.size() - 1);
+        }
+        submesh._Indices.emplace_back(vertexIndex, normalIndex, uvIndex);
+      }
+      indexOffset += vertexCount;
+    }
+
+    for ( auto & group : materialGroups )
+    {
+      ObjSubmesh & submesh = group.second;
+      if ( submesh._Indices.empty() )
+        continue;
+
+      bool missingNormals = false;
+      for ( const Vec3i & index : submesh._Indices )
+      {
+        if ( index.y < 0 )
+        {
+          missingNormals = true;
+          break;
+        }
+      }
+      if ( missingNormals )
+      {
+        ioDiagnostics.Warn("missing OBJ normals are generated");
+        std::map<std::pair<int, int>, Vec3> accumulatedNormals;
+        for ( size_t i = 0; i + 2 < submesh._Indices.size(); i += 3 )
+        {
+          const Vec3 normal = glm::cross(submesh._Vertices[submesh._Indices[i + 1].x] - submesh._Vertices[submesh._Indices[i].x], submesh._Vertices[submesh._Indices[i + 2].x] - submesh._Vertices[submesh._Indices[i].x]);
+          const unsigned int smoothingGroup = submesh._SmoothingGroups[i / 3];
+          for ( int corner = 0; corner < 3; ++corner )
+          {
+            const int vertexIndex = submesh._Indices[i + corner].x;
+            const int groupKey = ( smoothingGroup > 0 ) ? static_cast<int>(smoothingGroup) : -static_cast<int>(i / 3 + 1);
+            accumulatedNormals[{ submesh._SourceVertexIndices[vertexIndex], groupKey }] += normal;
+          }
+        }
+        submesh._Normals.clear();
+        std::map<std::pair<int, int>, int> normalIndices;
+        for ( const auto & normal : accumulatedNormals )
+        {
+          const Vec3 normalized = ( glm::dot(normal.second, normal.second) > 0.f ) ? glm::normalize(normal.second) : Vec3(0.f, 1.f, 0.f);
+          normalIndices[normal.first] = static_cast<int>(submesh._Normals.size());
+          submesh._Normals.push_back(normalized);
+        }
+        for ( size_t i = 0; i < submesh._Indices.size(); ++i )
+        {
+          const unsigned int smoothingGroup = submesh._SmoothingGroups[i / 3];
+          const int groupKey = ( smoothingGroup > 0 ) ? static_cast<int>(smoothingGroup) : -static_cast<int>(i / 3 + 1);
+          submesh._Indices[i].y = normalIndices[{ submesh._SourceVertexIndices[submesh._Indices[i].x], groupKey }];
+        }
+      }
+      const std::string shapeName = shapes[shapeIndex].name.empty() ? ( "Shape_" + std::to_string(shapeIndex) ) : shapes[shapeIndex].name;
+      const std::string materialName = ( group.first >= 0 ) ? oMaterials[group.first].name : "Default";
+      submesh._Name = shapeName + "_" + materialName;
+      oSubmeshes.push_back(std::move(submesh));
+    }
   }
 
-  ret = true;
+  return !oSubmeshes.empty();
+}
 
-  return ret;
+// ----------------------------------------------------------------------------
+// LoadFromOBJ
+// ----------------------------------------------------------------------------
+bool Loader::LoadFromOBJ(const std::string & iObjFilename, const Mat4x4 & iTransfoMat, Scene & ioScene, const std::string & iInstanceName, int iMaterialOverride)
+{
+  ObjDiagnostics diagnostics;
+  std::vector<tinyobj::material_t> objMaterials;
+  std::vector<ObjSubmesh> submeshes;
+  if ( !BuildObjSubmeshes(iObjFilename, objMaterials, submeshes, diagnostics) )
+    return false;
+
+  if ( ioScene.FindMaterialID("Default Material") < 0 )
+  {
+    Material defaultMaterial;
+    ioScene.AddMaterial(defaultMaterial, "Default Material");
+  }
+
+  const fs::path filepath = iObjFilename;
+  const std::string materialPrefix = "OBJ_" + filepath.stem().string() + "_";
+  std::vector<int> materialIDs(objMaterials.size(), -1);
+  for ( size_t i = 0; i < objMaterials.size(); ++i )
+    materialIDs[i] = AddObjMaterial(ioScene, objMaterials[i], filepath.parent_path(), materialPrefix, diagnostics);
+
+  for ( size_t i = 0; i < submeshes.size(); ++i )
+  {
+    ObjSubmesh & submesh = submeshes[i];
+    const std::string meshName = filepath.string() + "#" + submesh._Name;
+    int meshID = ioScene.FindMeshID(meshName);
+    if ( meshID < 0 )
+    {
+      Mesh * mesh = new Mesh(meshName, submesh._Vertices, submesh._Normals, submesh._UVs, submesh._Indices);
+      meshID = ioScene.AddMesh(mesh);
+      if ( meshID < 0 )
+      { delete mesh; return false; }
+    }
+    int materialID = iMaterialOverride;
+    if ( materialID < 0 )
+      materialID = ( submesh._MaterialIndex >= 0 ) ? materialIDs[submesh._MaterialIndex] : ioScene.FindMaterialID("Default Material");
+    if ( materialID < 0 )
+      return false;
+    const std::string instanceName = iInstanceName.empty() ? ( filepath.filename().string() + "_" + submesh._Name ) : ( iInstanceName + "_" + submesh._Name );
+    MeshInstance instance(instanceName, meshID, materialID, iTransfoMat);
+    ioScene.AddMeshInstance(instance);
+  }
+  return true;
 }
 
 // ----------------------------------------------------------------------------
@@ -611,6 +1273,8 @@ bool Loader::LoadScene(const std::string & iFilename, Scene & oScene, RenderSett
     return Loader::LoadFromGLTF(iFilename, Mat4x4{1.f}, oScene, oRenderSettings);
   else if ( ".glb" == filepath.extension() )
     return Loader::LoadFromGLTF(iFilename, Mat4x4{ 1.f }, oScene, oRenderSettings, true);
+  else if ( ".obj" == filepath.extension() )
+    return Loader::LoadFromOBJ(iFilename, Mat4x4{ 1.f }, oScene);
 
   return false;
 }
@@ -634,173 +1298,141 @@ bool Loader::LoadFromSceneFile(const std::string & iFilename, Scene & oScene, Re
 
   printf("Loading Scene...\n");
 
-  int parsingError = 0;
-  State curState = State::ExpectNewBlock;
+  SceneDiagnostics diagnostics(iFilename);
 
   std::string line;
-  while( std::getline( file, line ) && !parsingError )
+  int lineNumber = 0;
+  while( std::getline( file, line ) )
   {
+    ++lineNumber;
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
-    if ( State::ExpectNewBlock != curState )
+
+    if ( '}' == tokens[0][0] )
     {
-      parsingError++;
-      continue;
-    }
-    if ( ( '}' == tokens[0][0] ) || ( '}' == tokens[0][0] ) )
-    {
-      parsingError++;
+      diagnostics.Error(lineNumber, "unexpected closing bracket");
       continue;
     }
 
-    //--------------------------------------------
-    // Material - START
     if ( ( 2 == nbTokens ) && ( IsEqual("material", tokens[0]) ) )
     {
       std::cout << "New material : " << tokens[1] << std::endl;
-
-      std::string materialName = tokens[1];
-
-      parsingError += Loader::ParseMaterial(file, path, materialName, oScene);
-
-      if ( !parsingError )
-        curState = State::ExpectNewBlock;
+      try
+      {
+        Loader::ParseMaterial(file, path, tokens[1], oScene, diagnostics, lineNumber);
+      }
+      catch ( const std::exception & error )
+      {
+        diagnostics.Error(lineNumber, "unable to parse material block '" + tokens[1] + "': " + error.what());
+      }
     }
-    // Material - END
-    //--------------------------------------------
-
-
-    //--------------------------------------------
-    // Mesh - START
-    if ( IsEqual("mesh", tokens[0]) )
+    else if ( IsEqual("mesh", tokens[0]) )
     {
       std::cout << "New mesh" << std::endl;
-
-      parsingError += Loader::ParseMeshData(file, path, oScene);
-
-      if ( !parsingError )
-        curState = State::ExpectNewBlock;
+      try
+      {
+        Loader::ParseMeshData(file, path, oScene, diagnostics, lineNumber);
+      }
+      catch ( const std::exception & error )
+      {
+        diagnostics.Warn(lineNumber, "mesh block was skipped: " + std::string(error.what()));
+      }
     }
-    // Mesh - END
-    //--------------------------------------------
-
-
-    //--------------------------------------------
-    // Sphere - START
-    if ( IsEqual("sphere", tokens[0]) )
+    else if ( IsEqual("sphere", tokens[0]) )
     {
       std::cout << "New sphere" << std::endl;
-
-      parsingError += Loader::ParseSphere(file, oScene);
-
-      if ( !parsingError )
-        curState = State::ExpectNewBlock;
+      try
+      {
+        Loader::ParseSphere(file, oScene, diagnostics, lineNumber);
+      }
+      catch ( const std::exception & error )
+      {
+        diagnostics.Error(lineNumber, "unable to parse sphere block: " + std::string(error.what()));
+      }
     }
-    // Sphere - END
-    //--------------------------------------------
-
-
-    //--------------------------------------------
-    // Box - START
-    if ( IsEqual("box", tokens[0]) )
+    else if ( IsEqual("box", tokens[0]) )
     {
       std::cout << "New box" << std::endl;
-
-      parsingError += Loader::ParseBox(file, oScene);
-
-      if ( !parsingError )
-        curState = State::ExpectNewBlock;
+      try
+      {
+        Loader::ParseBox(file, oScene, diagnostics, lineNumber);
+      }
+      catch ( const std::exception & error )
+      {
+        diagnostics.Error(lineNumber, "unable to parse box block: " + std::string(error.what()));
+      }
     }
-    // Box - END
-    //--------------------------------------------
-
-
-    //--------------------------------------------
-    // Plane - START
-    if ( IsEqual("plane", tokens[0]) )
+    else if ( IsEqual("plane", tokens[0]) )
     {
       std::cout << "New plane" << std::endl;
-
-      parsingError += Loader::ParsePlane(file, oScene);
-
-      if ( !parsingError )
-        curState = State::ExpectNewBlock;
+      try
+      {
+        Loader::ParsePlane(file, oScene, diagnostics, lineNumber);
+      }
+      catch ( const std::exception & error )
+      {
+        diagnostics.Error(lineNumber, "unable to parse plane block: " + std::string(error.what()));
+      }
     }
-    // Plane - END
-    //--------------------------------------------
-
-
-    //--------------------------------------------
-    // Light - START
-    if ( IsEqual("light", tokens[0]) )
+    else if ( IsEqual("light", tokens[0]) )
     {
       std::cout << "New light" << std::endl;
-
-      parsingError += Loader::ParseLight(file, oScene);
-
-      if ( !parsingError )
-        curState = State::ExpectNewBlock;
+      try
+      {
+        Loader::ParseLight(file, oScene, diagnostics, lineNumber);
+      }
+      catch ( const std::exception & error )
+      {
+        diagnostics.Error(lineNumber, "unable to parse light block: " + std::string(error.what()));
+      }
     }
-    // Light - END
-    //--------------------------------------------
-
-
-    //--------------------------------------------
-    // Camera - START
-    if ( IsEqual("camera", tokens[0]) )
+    else if ( IsEqual("camera", tokens[0]) )
     {
       std::cout << "New camera" << std::endl;
-
-      parsingError += Loader::ParseCamera(file, oScene);
-
-      if ( !parsingError )
-        curState = State::ExpectNewBlock;
+      try
+      {
+        Loader::ParseCamera(file, oScene, diagnostics, lineNumber);
+      }
+      catch ( const std::exception & error )
+      {
+        diagnostics.Error(lineNumber, "unable to parse camera block: " + std::string(error.what()));
+      }
     }
-    // Camera - END
-    //--------------------------------------------
-
-
-    //--------------------------------------------
-    // Renderer - START
-    if ( IsEqual("renderer", tokens[0]) )
+    else if ( IsEqual("renderer", tokens[0]) )
     {
       std::cout << "New renderer" << std::endl;
 
       RenderSettings settings;
-      parsingError += Loader::ParseRenderSettings(file, path, settings, oScene);
-
-      if ( !parsingError )
+      try
       {
-        oRenderSettings = settings;
-
-        curState = State::ExpectNewBlock;
+        if ( !Loader::ParseRenderSettings(file, path, settings, oScene, diagnostics, lineNumber) )
+          oRenderSettings = settings;
+      }
+      catch ( const std::exception & error )
+      {
+        diagnostics.Warn(lineNumber, "renderer settings block was ignored: " + std::string(error.what()));
       }
     }
-    // Renderer - END
-    //--------------------------------------------
-
-
-    //--------------------------------------------
-    // GLTF - START
-    if ( IsEqual("gltf", tokens[0]) )
+    else if ( IsEqual("gltf", tokens[0]) )
     {
       std::cout << "New gltf model" << std::endl;
-
-      parsingError += Loader::ParseGLTF(file, path, oScene, oRenderSettings);
-
-      if ( !parsingError )
-        curState = State::ExpectNewBlock;
+      try
+      {
+        Loader::ParseGLTF(file, path, oScene, oRenderSettings, diagnostics, lineNumber);
+      }
+      catch ( const std::exception & error )
+      {
+        diagnostics.Warn(lineNumber, "glTF block was skipped: " + std::string(error.what()));
+      }
     }
-    // GLTF - END
-    //--------------------------------------------
-   
-
+    else
+      diagnostics.Warn(lineNumber, "unknown scene directive '" + tokens[0] + "' is ignored");
   }
 
-  if ( parsingError )
+  if ( diagnostics.HasErrors() )
   {
     printf("ERROR\n");
     oScene.Clear();
@@ -844,13 +1476,19 @@ bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTra
 
     printf("Loading Scene from gltf...\n");
 
-    ret = LoadTextures(ioScene, gltfModel);
+    GltfDiagnostics diagnostics;
+    if ( !gltfModel.animations.empty() )
+      diagnostics.Warn("animations are ignored");
+    if ( !gltfModel.skins.empty() )
+      diagnostics.Warn("skins are ignored");
+
+    ret = LoadTextures(ioScene, gltfModel, diagnostics);
     if ( ret )
-      ret = LoadMaterials(ioScene, gltfModel);
+      ret = LoadMaterials(ioScene, gltfModel, diagnostics);
     if ( ret )
-      ret = LoadMeshes(ioScene, gltfModel);
+      ret = LoadMeshes(ioScene, gltfModel, diagnostics);
     if ( ret )
-      ret = LoadInstances(ioScene, gltfModel, iTransfoMat);
+      ret = LoadInstances(ioScene, gltfModel, iTransfoMat, ioRenderSettings, diagnostics);
 
     if ( !ret )
     {
@@ -866,9 +1504,10 @@ bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTra
 // ----------------------------------------------------------------------------
 // ParseMaterial
 // ----------------------------------------------------------------------------
-int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, const std::string & iMaterialName, Scene & ioScene )
+int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, const std::string & iMaterialName, Scene & ioScene, SceneDiagnostics & ioDiagnostics, int iStartLine )
 {
   int parsingError = 0;
+  SceneBlockDiagnostics blockDiagnostics(ioDiagnostics, "material '" + iMaterialName + "'", iStartLine, false);
 
   Material newMaterial;
 
@@ -883,11 +1522,14 @@ int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, cons
   std::string line;
   while( std::getline( iStr, line ) && !parsingError )
   {
+    blockDiagnostics.NextLine();
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+      blockDiagnostics.SetDirective(tokens[0]);
 
     if ( State::ExpectOpenBracket == curState )
     {
@@ -1081,6 +1723,8 @@ int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, cons
         parsingError++;
     }
   }
+  if ( parsingError && State::ExpectNewBlock != curState )
+    ConsumeMalformedSceneBlock(iStr, curState, blockDiagnostics);
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
@@ -1112,15 +1756,17 @@ int Loader::ParseMaterial( std::ifstream & iStr, const std::string & iPath, cons
      ioScene.AddMaterial(newMaterial, iMaterialName);
   }
 
+  blockDiagnostics.ReportFailure( 0 != parsingError );
   return parsingError;
 }
 
 // ----------------------------------------------------------------------------
 // ParseLight
 // ----------------------------------------------------------------------------
-int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
+int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene, SceneDiagnostics & ioDiagnostics, int iStartLine )
 {
   int parsingError = 0;
+  SceneBlockDiagnostics blockDiagnostics(ioDiagnostics, "light", iStartLine, false);
 
   Light newLight;
   Vec3 v1, v2;
@@ -1129,11 +1775,14 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
   std::string line;
   while( std::getline( iStr, line ) && !parsingError )
   {
+    blockDiagnostics.NextLine();
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+      blockDiagnostics.SetDirective(tokens[0]);
 
     if ( State::ExpectOpenBracket == curState )
     {
@@ -1163,7 +1812,10 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
       if ( 4 == nbTokens )
         newLight._Pos = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
+      {
+        blockDiagnostics.ExpectedArgumentCount(3, nbTokens - 1);
         parsingError++;
+      }
     }
     else if ( IsEqual("emission", tokens[0]) )
     {
@@ -1174,35 +1826,50 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
         newLight._Emission = glm::min( emission, Vec3(1.f) );
       }
       else
+      {
+        blockDiagnostics.ExpectedArgumentCount(3, nbTokens - 1);
         parsingError++;
+      }
     }
     else if ( IsEqual("intensity", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newLight._Intensity = std::max(0.f, std::stof(tokens[1]));
       else
+      {
+        blockDiagnostics.ExpectedArgumentCount(1, nbTokens - 1);
         parsingError++;
+      }
     }
     else if ( IsEqual("v1", tokens[0]) )
     {
       if ( 4 == nbTokens )
         v1 = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
+      {
+        blockDiagnostics.ExpectedArgumentCount(3, nbTokens - 1);
         parsingError++;
+      }
     }
     else if ( IsEqual("v2", tokens[0]) )
     {
       if ( 4 == nbTokens )
         v2 = Vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
       else
+      {
+        blockDiagnostics.ExpectedArgumentCount(3, nbTokens - 1);
         parsingError++;
+      }
     }
     else if ( IsEqual("radius", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newLight._Radius = std::stof(tokens[1]);
       else
+      {
+        blockDiagnostics.ExpectedArgumentCount(1, nbTokens - 1);
         parsingError++;
+      }
     }
     else if ( IsEqual("castshadow", tokens[0]) )
     {
@@ -1213,17 +1880,26 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
         else if ( IsEqual("false", tokens[1]) || IsEqual("0", tokens[1]) )
           newLight._CastShadow = false;
         else
+        {
+          blockDiagnostics.InvalidValue("must be true, false, 1, or 0");
           parsingError++;
+        }
       }
       else
+      {
+        blockDiagnostics.ExpectedArgumentCount(1, nbTokens - 1);
         parsingError++;
+      }
     }
     else if ( IsEqual("shadowradius", tokens[0]) )
     {
       if ( 2 == nbTokens )
         newLight._ShadowRadius = std::max(0.f, std::stof(tokens[1]));
       else
+      {
+        blockDiagnostics.ExpectedArgumentCount(1, nbTokens - 1);
         parsingError++;
+      }
     }
     else if ( IsEqual("type", tokens[0]) )
     {
@@ -1236,12 +1912,20 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
         else if ( IsEqual("distant", tokens[1]) )
           newLight._Type = (float) LightType::DistantLight;
         else
+        {
+          blockDiagnostics.InvalidValue("must be quad, sphere, or distant");
           parsingError++;
+        }
       }
       else
+      {
+        blockDiagnostics.ExpectedArgumentCount(1, nbTokens - 1);
         parsingError++;
+      }
     }
   }
+  if ( parsingError && State::ExpectNewBlock != curState )
+    ConsumeMalformedSceneBlock(iStr, curState, blockDiagnostics);
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
@@ -1265,15 +1949,17 @@ int Loader::ParseLight( std::ifstream & iStr, Scene & ioScene )
     ioScene.AddLight(newLight);
   }
 
+  blockDiagnostics.ReportFailure( 0 != parsingError );
   return parsingError;
 }
 
 // ----------------------------------------------------------------------------
 // ParseCamera
 // ----------------------------------------------------------------------------
-int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
+int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene, SceneDiagnostics & ioDiagnostics, int iStartLine )
 {
   int parsingError = 0;
+  SceneBlockDiagnostics blockDiagnostics(ioDiagnostics, "camera", iStartLine, false);
 
   Vec3 pos({0.f, 0.f, -1.f});
   Vec3 lookAt({0.f, 0.f, 0.f});
@@ -1290,11 +1976,14 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
   std::string line;
   while( std::getline( iStr, line ) && !parsingError )
   {
+    blockDiagnostics.NextLine();
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+      blockDiagnostics.SetDirective(tokens[0]);
 
     if ( State::ExpectOpenBracket == curState )
     {
@@ -1395,6 +2084,8 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
     }
 
   }
+  if ( parsingError && State::ExpectNewBlock != curState )
+    ConsumeMalformedSceneBlock(iStr, curState, blockDiagnostics);
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
@@ -1429,15 +2120,17 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene )
     ioScene.SetCamera(newCamera);
   }
 
+  blockDiagnostics.ReportFailure( 0 != parsingError );
   return parsingError;
 }
 
 // ----------------------------------------------------------------------------
 // ParseRenderSettings
 // ----------------------------------------------------------------------------
-int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath, RenderSettings & oSettings, Scene & ioScene )
+int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath, RenderSettings & oSettings, Scene & ioScene, SceneDiagnostics & ioDiagnostics, int iStartLine )
 {
   int parsingError = 0;
+  SceneBlockDiagnostics blockDiagnostics(ioDiagnostics, "renderer", iStartLine, true);
 
   bool hasRenderResolution = false;
   bool hasWindowResolution = false;
@@ -1448,11 +2141,14 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath
   std::string line;
   while( std::getline( iStr, line ) && !parsingError )
   {
+    blockDiagnostics.NextLine();
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+      blockDiagnostics.SetDirective(tokens[0]);
 
     if ( State::ExpectOpenBracket == curState )
     {
@@ -1600,6 +2296,8 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath
         parsingError++;
     }
   }
+  if ( parsingError && State::ExpectNewBlock != curState )
+    ConsumeMalformedSceneBlock(iStr, curState, blockDiagnostics);
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
@@ -1627,15 +2325,17 @@ int Loader::ParseRenderSettings( std::ifstream & iStr, const std::string & iPath
       ioScene.LoadEnvMap(iPath + envMapFile);
   }
 
+  blockDiagnostics.ReportFailure( 0 != parsingError );
   return parsingError;
 }
 
 // ----------------------------------------------------------------------------
 // ParseSphere
 // ----------------------------------------------------------------------------
-int Loader::ParseSphere( std::ifstream & iStr, Scene & ioScene )
+int Loader::ParseSphere( std::ifstream & iStr, Scene & ioScene, SceneDiagnostics & ioDiagnostics, int iStartLine )
 {
   int parsingError = 0;
+  SceneBlockDiagnostics blockDiagnostics(ioDiagnostics, "sphere", iStartLine, false);
 
   std::string materialName;
   Mat4x4 transMat(1.f), rotMat(1.f), scaleMat(1.f);
@@ -1648,11 +2348,14 @@ int Loader::ParseSphere( std::ifstream & iStr, Scene & ioScene )
   std::string line;
   while( std::getline( iStr, line ) && !parsingError )
   {
+    blockDiagnostics.NextLine();
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+      blockDiagnostics.SetDirective(tokens[0]);
 
     if ( State::ExpectOpenBracket == curState )
     {
@@ -1754,6 +2457,8 @@ int Loader::ParseSphere( std::ifstream & iStr, Scene & ioScene )
         parsingError++;
     }
   }
+  if ( parsingError && State::ExpectNewBlock != curState )
+    ConsumeMalformedSceneBlock(iStr, curState, blockDiagnostics);
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
@@ -1778,15 +2483,17 @@ int Loader::ParseSphere( std::ifstream & iStr, Scene & ioScene )
     }
   }
 
+  blockDiagnostics.ReportFailure( 0 != parsingError );
   return parsingError;
 }
 
 // ----------------------------------------------------------------------------
 // ParseBox
 // ----------------------------------------------------------------------------
-int Loader::ParseBox( std::ifstream & iStr, Scene & ioScene )
+int Loader::ParseBox( std::ifstream & iStr, Scene & ioScene, SceneDiagnostics & ioDiagnostics, int iStartLine )
 {
   int parsingError = 0;
+  SceneBlockDiagnostics blockDiagnostics(ioDiagnostics, "box", iStartLine, false);
 
   std::string materialName;
   Mat4x4 transMat(1.f), rotMat(1.f), scaleMat(1.f);
@@ -1799,11 +2506,14 @@ int Loader::ParseBox( std::ifstream & iStr, Scene & ioScene )
   std::string line;
   while( std::getline( iStr, line ) && !parsingError )
   {
+    blockDiagnostics.NextLine();
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+      blockDiagnostics.SetDirective(tokens[0]);
 
     if ( State::ExpectOpenBracket == curState )
     {
@@ -1912,6 +2622,8 @@ int Loader::ParseBox( std::ifstream & iStr, Scene & ioScene )
         parsingError++;
     }
   }
+  if ( parsingError && State::ExpectNewBlock != curState )
+    ConsumeMalformedSceneBlock(iStr, curState, blockDiagnostics);
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
@@ -1936,15 +2648,17 @@ int Loader::ParseBox( std::ifstream & iStr, Scene & ioScene )
     }
   }
 
+  blockDiagnostics.ReportFailure( 0 != parsingError );
   return parsingError;
 }
 
 // ----------------------------------------------------------------------------
 // ParsePlane
 // ----------------------------------------------------------------------------
-int Loader::ParsePlane( std::ifstream & iStr, Scene & ioScene )
+int Loader::ParsePlane( std::ifstream & iStr, Scene & ioScene, SceneDiagnostics & ioDiagnostics, int iStartLine )
 {
   int parsingError = 0;
+  SceneBlockDiagnostics blockDiagnostics(ioDiagnostics, "plane", iStartLine, false);
 
   std::string materialName;
   Mat4x4 transMat(1.f), rotMat(1.f), scaleMat(1.f);
@@ -1957,11 +2671,14 @@ int Loader::ParsePlane( std::ifstream & iStr, Scene & ioScene )
   std::string line;
   while( std::getline( iStr, line ) && !parsingError )
   {
+    blockDiagnostics.NextLine();
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+      blockDiagnostics.SetDirective(tokens[0]);
 
     if ( State::ExpectOpenBracket == curState )
     {
@@ -2070,6 +2787,8 @@ int Loader::ParsePlane( std::ifstream & iStr, Scene & ioScene )
         parsingError++;
     }
   }
+  if ( parsingError && State::ExpectNewBlock != curState )
+    ConsumeMalformedSceneBlock(iStr, curState, blockDiagnostics);
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
@@ -2094,15 +2813,17 @@ int Loader::ParsePlane( std::ifstream & iStr, Scene & ioScene )
     }
   }
 
+  blockDiagnostics.ReportFailure( 0 != parsingError );
   return parsingError;
 }
 
 // ----------------------------------------------------------------------------
 // ParseMeshData
 // ----------------------------------------------------------------------------
-int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scene & ioScene )
+int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scene & ioScene, SceneDiagnostics & ioDiagnostics, int iStartLine )
 {
   int parsingError = 0;
+  SceneBlockDiagnostics blockDiagnostics(ioDiagnostics, "mesh", iStartLine, true);
 
   std::string meshName;
   std::string meshFileName;
@@ -2116,11 +2837,14 @@ int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scen
   std::string line;
   while( std::getline( iStr, line ) && !parsingError )
   {
+    blockDiagnostics.NextLine();
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+      blockDiagnostics.SetDirective(tokens[0]);
 
     if ( State::ExpectOpenBracket == curState )
     {
@@ -2155,7 +2879,10 @@ int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scen
     else if ( IsEqual("file", tokens[0]) )
     {
       if ( 2 == nbTokens )
+      {
         meshFileName = tokens[1];
+        blockDiagnostics.SetDirective("file '" + meshFileName + "'");
+      }
       else
         parsingError++;
     }
@@ -2229,45 +2956,48 @@ int Loader::ParseMeshData( std::ifstream & iStr, const std::string & iPath, Scen
         parsingError++;
     }
   }
+  if ( parsingError && State::ExpectNewBlock != curState )
+    ConsumeMalformedSceneBlock(iStr, curState, blockDiagnostics);
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
   if ( !parsingError && !meshFileName.empty() )
   {
-    int meshID = ioScene.AddMesh(iPath + meshFileName);
-    if ( meshID >= 0 )
+    if ( meshName.empty() )
     {
-      if ( meshName.empty() )
-      {
-        fs::path filepath = meshFileName;
-        meshName = filepath.filename().string();
-      }
-
-      int matID = -1;
-      if ( !materialName.empty() )
-      {
-        matID = ioScene.FindMaterialID(materialName);
-        if ( matID < 0 )
-          std::cout << "Loader : ERROR could not find material " << materialName << std::endl;
-      }
-
-      if ( !hasMatrix )
-        xform = transMat * rotMat * scaleMat;
-
-      MeshInstance instance(meshName, meshID, matID, xform);
-      ioScene.AddMeshInstance(instance);
+      fs::path filepath = meshFileName;
+      meshName = filepath.filename().string();
     }
+
+    int matID = -1;
+    if ( !materialName.empty() )
+    {
+      matID = ioScene.FindMaterialID(materialName);
+      if ( matID < 0 )
+      {
+        std::cout << "Loader : ERROR could not find material " << materialName << std::endl;
+        parsingError++;
+      }
+    }
+
+    if ( !hasMatrix )
+      xform = transMat * rotMat * scaleMat;
+
+    if ( !parsingError && !Loader::LoadFromOBJ(iPath + meshFileName, xform, ioScene, meshName, matID) )
+      parsingError++;
   }
 
+  blockDiagnostics.ReportFailure( 0 != parsingError );
   return parsingError;
 }
 
 // ----------------------------------------------------------------------------
 // ParseGLTF
 // ----------------------------------------------------------------------------
-int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & ioScene, RenderSettings & ioSettings )
+int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & ioScene, RenderSettings & ioSettings, SceneDiagnostics & ioDiagnostics, int iStartLine )
 {
   int parsingError = 0;
+  SceneBlockDiagnostics blockDiagnostics(ioDiagnostics, "glTF", iStartLine, true);
 
   fs::path filepath;
   Mat4x4 transMat(1.f), rotMat(1.f), scaleMat(1.f);
@@ -2279,11 +3009,15 @@ int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & 
   std::string line;
   while( std::getline( iStr, line ) && !parsingError )
   {
+    blockDiagnostics.NextLine();
     std::vector<std::string> tokens;
     Tokenize(line, tokens);
     int nbTokens = static_cast<int>(tokens.size());
     if ( !nbTokens || ( '#' == tokens[0][0] ) )
       continue;
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+    if ( "{" != tokens[0] && "}" != tokens[0] )
+      blockDiagnostics.SetDirective(tokens[0]);
 
     if ( State::ExpectOpenBracket == curState )
     {
@@ -2313,6 +3047,7 @@ int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & 
       if ( 2 == nbTokens )
       {
         filepath = iPath + tokens[1];
+        blockDiagnostics.SetDirective("file '" + tokens[1] + "'");
 
         if ( filepath.extension() == ".gltf" )
           isBinary = false;
@@ -2387,6 +3122,8 @@ int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & 
         parsingError++;
     }
   }
+  if ( parsingError && State::ExpectNewBlock != curState )
+    ConsumeMalformedSceneBlock(iStr, curState, blockDiagnostics);
   if ( State::ExpectNewBlock != curState )
     parsingError++;
 
@@ -2402,6 +3139,15 @@ int Loader::ParseGLTF( std::ifstream & iStr, const std::string & iPath, Scene & 
       printf("Unable to load gltf %s\n", filepath.string().c_str());
   }
 
+  if ( !parsingError && filepath.empty() )
+  {
+    blockDiagnostics.SetDirective("file");
+    parsingError++;
+  }
+  else if ( !parsingError && !fs::exists(filepath) )
+    parsingError++;
+
+  blockDiagnostics.ReportFailure( 0 != parsingError );
   return parsingError;
 }
 

@@ -20,6 +20,21 @@ namespace fs = std::filesystem;
 namespace RTRT
 {
 
+static constexpr GLint S_PathTracerNonTextureArraySamplers = 14;
+
+// ----------------------------------------------------------------------------
+// Texture arrays : ConfigureTextureBucketShader
+// ----------------------------------------------------------------------------
+static void ConfigureTextureBucketShader( ShaderSource & ioShaderSource, bool iUseTextureBuckets )
+{
+  if ( iUseTextureBuckets )
+    return;
+
+  const size_t versionEnd = ioShaderSource._Src.find('\n');
+  if ( versionEnd != std::string::npos )
+    ioShaderSource._Src.insert(versionEnd + 1, "#define USE_TEXTURE_BUCKETS 0\n");
+}
+
 // ----------------------------------------------------------------------------
 // METHODS
 // ----------------------------------------------------------------------------
@@ -30,6 +45,14 @@ namespace RTRT
 PathTracer::PathTracer( Scene & iScene, RenderSettings & iSettings )
 : Renderer(iScene, iSettings)
 {
+  GLint maxFragmentSamplers = 0;
+  glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &maxFragmentSamplers);
+  _UseTextureBuckets = maxFragmentSamplers >= ( S_PathTracerNonTextureArraySamplers + S_TextureBucketCount );
+  if ( !_UseTextureBuckets )
+    std::cout << "PathTracer : " << maxFragmentSamplers << " fragment samplers available; using a single texture array compatibility path." << std::endl;
+
+  for ( int i = 0; i < S_TextureBucketCount; ++i )
+    _TexArrayTEX[i] = { 0, GL_TEXTURE_2D_ARRAY, PathTracerTexSlot::_TexArray0 + static_cast<TextureSlot>(i), GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE };
   UpdateRenderResolution();
 }
 
@@ -41,7 +64,8 @@ PathTracer::~PathTracer()
   GLUtil::DeleteFBO(_RenderTargetFBO);
   GLUtil::DeleteFBO(_RenderTargetLowResFBO);
   GLUtil::DeleteFBO(_RenderTargetTileFBO);
-  GLUtil::DeleteFBO(_AccumulateFBO);
+  GLUtil::DeleteFBO(_AccumulateFBO[0]);
+  GLUtil::DeleteFBO(_AccumulateFBO[1]);
   GLUtil::DeleteFBO(_DenoiseFBO);
 
   UnloadScene( true );
@@ -55,6 +79,12 @@ int PathTracer::Initialize()
   if ( 0 != ReloadScene() )
   {
     std::cout << "PathTracer : Failed to load scene !" << std::endl;
+    return 1;
+  }
+
+  if ( 0 != ReloadEnvMap() )
+  {
+    std::cout << "PathTracer : Failed to load environment map !" << std::endl;
     return 1;
   }
 
@@ -411,7 +441,11 @@ int PathTracer::UpdatePathTraceUniforms()
     _PathTraceShader -> SetUniform("u_VtxUVTexture",                  (int)PathTracerTexSlot::_UVs);
     _PathTraceShader -> SetUniform("u_VtxIndTexture",                 (int)PathTracerTexSlot::_VertInd);
     _PathTraceShader -> SetUniform("u_TexIndTexture",                 (int)PathTracerTexSlot::_TexInd);
-    _PathTraceShader -> SetUniform("u_TexArrayTexture",               (int)PathTracerTexSlot::_TexArray);
+    const int textureArrayCount = _UseTextureBuckets ? S_TextureBucketCount : 1;
+    for ( int i = 0; i < textureArrayCount; ++i )
+      _PathTraceShader -> SetUniform("u_TexArrayTexture" + std::to_string(i), (int)( PathTracerTexSlot::_TexArray0 + i ));
+    if ( !_UseTextureBuckets )
+      _PathTraceShader -> SetUniform("u_TextureArraySize", _Scene.GetCompiledTextureBuckets()[0]._Size);
     _PathTraceShader -> SetUniform("u_MeshBBoxTexture",               (int)PathTracerTexSlot::_MeshBBox);
     _PathTraceShader -> SetUniform("u_MeshIDRangeTexture",            (int)PathTracerTexSlot::_MeshIdRange);
     _PathTraceShader -> SetUniform("u_MaterialsTexture",              (int)PathTracerTexSlot::_Materials);
@@ -460,18 +494,43 @@ int PathTracer::BindPathTraceTextures()
   GLUtil::ActivateTexture(_BLASPackedNormalsTBO._Tex);
   GLUtil::ActivateTexture(_BLASPackedUVsTBO._Tex);
 
-  GLUtil::ActivateTexture(_TexArrayTEX);
+  const int textureArrayCount = _UseTextureBuckets ? S_TextureBucketCount : 1;
+  for ( int i = 0; i < textureArrayCount; ++i )
+    GLUtil::ActivateTexture(_TexArrayTEX[i]);
 
   GLUtil::ActivateTexture(_MaterialsTEX);
   GLUtil::ActivateTexture(_TLASTransformsIDTEX);
   GLUtil::ActivateTexture(_EnvMapTEX);
   GLUtil::ActivateTexture(_EnvMapCDFTEX);
 
-  GLUtil::ActivateTextures(_RenderTargetLowResFBO);
-  GLUtil::ActivateTextures(_RenderTargetTileFBO);
-  GLUtil::ActivateTextures(_RenderTargetFBO);
-
   return 0;
+}
+
+// ----------------------------------------------------------------------------
+// CopyAccumulateBuffer
+// ----------------------------------------------------------------------------
+void PathTracer::CopyAccumulateBuffer( int iSourceIndex, int iDestinationIndex )
+{
+  static const GLenum colorAttachments[] =
+  {
+    GL_COLOR_ATTACHMENT0,
+    GL_COLOR_ATTACHMENT1,
+    GL_COLOR_ATTACHMENT2
+  };
+
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, _AccumulateFBO[iSourceIndex]._Handle);
+  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, _AccumulateFBO[iDestinationIndex]._Handle);
+
+  for ( GLenum attachment : colorAttachments )
+  {
+    glReadBuffer(attachment);
+    glDrawBuffer(attachment);
+    glBlitFramebuffer(0, 0, RenderWidth(), RenderHeight(),
+                      0, 0, RenderWidth(), RenderHeight(),
+                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+  }
+
+  glDrawBuffers(3, colorAttachments);
 }
 
 // ----------------------------------------------------------------------------
@@ -492,7 +551,7 @@ int PathTracer::BindAccumulateTextures()
     GLUtil::ActivateTextures(_RenderTargetFBO);
   }
 
-  GLUtil::ActivateTextures(_AccumulateFBO);
+  GLUtil::ActivateTexture(_AccumulateTEX[_AccumulateReadIndex][0]);
 
   return 0;
 }
@@ -570,7 +629,10 @@ int PathTracer::RenderToTexture()
   // Accumulate
   BeginTimer(_AccumulateTimeId);
 
-  glBindFramebuffer(GL_FRAMEBUFFER, _AccumulateFBO._Handle);
+  const int accumulateWriteIndex = 1 - _AccumulateReadIndex;
+  if ( TiledRendering() && !LowResPass() )
+    CopyAccumulateBuffer(_AccumulateReadIndex, accumulateWriteIndex);
+  glBindFramebuffer(GL_FRAMEBUFFER, _AccumulateFBO[accumulateWriteIndex]._Handle);
   if ( TiledRendering() && !LowResPass() )
     glViewport(_Settings._TileResolution.x * _CurTile.x, _Settings._TileResolution.y * _CurTile.y, _Settings._TileResolution.x, _Settings._TileResolution.y);
   else
@@ -579,6 +641,7 @@ int PathTracer::RenderToTexture()
   this -> BindAccumulateTextures();
 
   _Quad.Render(*_AccumulateShader);
+  _AccumulateReadIndex = accumulateWriteIndex;
 
   EndTimer(_AccumulateTimeId);
   _AccumulateTimerWritten = true;
@@ -665,7 +728,7 @@ int PathTracer::UpdateDenoiserUniforms()
 // ----------------------------------------------------------------------------
 int PathTracer::BindDenoiserTextures()
 {
-  GLUtil::ActivateTextures(_AccumulateFBO);
+  GLUtil::ActivateTextures(_AccumulateFBO[_AccumulateReadIndex]);
 
   return 0;
 }
@@ -675,11 +738,11 @@ int PathTracer::BindDenoiserTextures()
 // ----------------------------------------------------------------------------
 int PathTracer::BindDenoiserImageTextures()
 {
-  if ( 3 == _AccumulateFBO._Tex.size() )
+  if ( 3 == _AccumulateFBO[_AccumulateReadIndex]._Tex.size() )
   {
-    glBindImageTexture(0, _AccumulateTEX[0]._Handle, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-    glBindImageTexture(1, _AccumulateTEX[1]._Handle, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-    glBindImageTexture(2, _AccumulateTEX[2]._Handle, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+    glBindImageTexture(0, _AccumulateTEX[_AccumulateReadIndex][0]._Handle, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+    glBindImageTexture(1, _AccumulateTEX[_AccumulateReadIndex][1]._Handle, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+    glBindImageTexture(2, _AccumulateTEX[_AccumulateReadIndex][2]._Handle, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
   }
   glBindImageTexture(3, _DenoisedTEX._Handle, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
 
@@ -717,7 +780,7 @@ int PathTracer::BindRenderToScreenTextures()
   if ( Denoise() )
     GLUtil::ActivateTexture(_DenoisedTEX);
   else
-    GLUtil::ActivateTextures(_AccumulateFBO);
+    GLUtil::ActivateTexture(_AccumulateTEX[_AccumulateReadIndex][0]);
 
   return 0;
 }
@@ -747,7 +810,7 @@ int PathTracer::RenderToScreen()
 // ----------------------------------------------------------------------------
 int PathTracer::ReadbackFinalColor( RenderImage & oImage )
 {
-  const GLTexture & finalTexture = Denoise() ? _DenoisedTEX : _AccumulateTEX[0];
+  const GLTexture & finalTexture = Denoise() ? _DenoisedTEX : _AccumulateTEX[_AccumulateReadIndex][0];
   if ( !finalTexture._Handle || ( RenderWidth() <= 0 ) || ( RenderHeight() <= 0 ) )
     return 1;
 
@@ -852,7 +915,8 @@ int PathTracer::ResizeRenderTarget()
   GLUtil::ResizeFBO(_RenderTargetFBO,  RenderWidth(), RenderHeight());
   GLUtil::ResizeFBO(_RenderTargetTileFBO, TileWidth(), TileHeight());
   GLUtil::ResizeFBO(_RenderTargetLowResFBO, LowResRenderWidth(), LowResRenderHeight());
-  GLUtil::ResizeFBO(_AccumulateFBO, RenderWidth(), RenderHeight());
+  GLUtil::ResizeFBO(_AccumulateFBO[0], RenderWidth(), RenderHeight());
+  GLUtil::ResizeFBO(_AccumulateFBO[1], RenderWidth(), RenderHeight());
 
   GLUtil::ResizeTexture(_DenoisedTEX, RenderWidth(), RenderHeight());
   glBindFramebuffer(GL_FRAMEBUFFER, _DenoiseFBO._Handle);
@@ -903,16 +967,18 @@ int PathTracer::InitializeFrameBuffers()
   if ( !createTripleFBO(_RenderTargetTileTEX, _RenderTargetTileFBO) )
     return 1;
 
-  createRenderTexture(_RenderTargetLowResTEX, LowResRenderWidth(), LowResRenderHeight());
-  GLFrameBufferDesc lowResFBODesc;
-  lowResFBODesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_RenderTargetLowResTEX });
-  if ( !GLUtil::CreateFrameBuffer(lowResFBODesc, _RenderTargetLowResFBO) )
+  for ( int i = 0; i < 3; ++i )
+    createRenderTexture(_RenderTargetLowResTEX[i], LowResRenderWidth(), LowResRenderHeight());
+  if ( !createTripleFBO(_RenderTargetLowResTEX, _RenderTargetLowResFBO) )
     return 1;
 
-  for ( int i = 0; i < 3; ++i )
-    createRenderTexture(_AccumulateTEX[i], RenderWidth(), RenderHeight());
-  if ( !createTripleFBO(_AccumulateTEX, _AccumulateFBO) )
-    return 1;
+  for ( int buffer = 0; buffer < 2; ++buffer )
+  {
+    for ( int i = 0; i < 3; ++i )
+      createRenderTexture(_AccumulateTEX[buffer][i], RenderWidth(), RenderHeight());
+    if ( !createTripleFBO(_AccumulateTEX[buffer], _AccumulateFBO[buffer]) )
+      return 1;
+  }
 
   GLTextureDesc denoisedDesc;
   denoisedDesc._Target         = _DenoisedTEX._Target;
@@ -943,6 +1009,7 @@ int PathTracer::RecompileShaders()
 {
   ShaderSource vertexShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("vertex_Default.glsl"));
   ShaderSource fragmentShaderSrc = Shader::LoadShader(PathUtils::GetShaderPath("fragment_PathTracer.glsl"));
+  ConfigureTextureBucketShader(fragmentShaderSrc, _UseTextureBuckets);
 
   ShaderProgram * newShader = ShaderProgram::LoadShaders(vertexShaderSrc, fragmentShaderSrc);
   if ( !newShader )
@@ -1003,7 +1070,8 @@ int PathTracer::UnloadScene( bool iDeleteOutputTextures )
   GLUtil::DeleteTBO(_BLASPackedNormalsTBO);
   GLUtil::DeleteTBO(_BLASPackedUVsTBO);
 
-  GLUtil::DeleteTEX(_TexArrayTEX);
+  for ( GLTexture & texture : _TexArrayTEX )
+    GLUtil::DeleteTEX(texture);
   GLUtil::DeleteTEX(_MaterialsTEX);
   GLUtil::DeleteTEX(_TLASTransformsIDTEX);
 
@@ -1013,9 +1081,11 @@ int PathTracer::UnloadScene( bool iDeleteOutputTextures )
     {
       GLUtil::DeleteTEX(_RenderTargetTEX[i]);
       GLUtil::DeleteTEX(_RenderTargetTileTEX[i]);
-      GLUtil::DeleteTEX(_AccumulateTEX[i]);
+      GLUtil::DeleteTEX(_AccumulateTEX[0][i]);
+      GLUtil::DeleteTEX(_AccumulateTEX[1][i]);
     }
-    GLUtil::DeleteTEX(_RenderTargetLowResTEX);
+    for ( int i = 0; i < 3; ++i )
+      GLUtil::DeleteTEX(_RenderTargetLowResTEX[i]);
     GLUtil::DeleteTEX(_DenoisedTEX);
     GLUtil::DeleteTEX(_EnvMapTEX);
     GLUtil::DeleteTEX(_EnvMapCDFTEX);
@@ -1034,7 +1104,7 @@ int PathTracer::ReloadScene()
   UnloadScene();
 
   if ( ( _Settings._TextureSize.x > 0 ) && ( _Settings._TextureSize.y > 0 ) )
-    _Scene.CompileMeshData( _Settings._TextureSize, true, true );
+    _Scene.CompileMeshData( _Settings._TextureSize, true, true, _UseTextureBuckets );
   else
     return 1;
 
@@ -1053,23 +1123,32 @@ int PathTracer::ReloadScene()
     
     GLUtil::InitializeTBO(_VtxIndTBO, sizeof(Vec3i) * _Scene.GetIndices().size(), &_Scene.GetIndices()[0], GL_RGB32I);
     
-    if ( _Scene.GetTextureArrayIDs().size() )
-    {
-      GLUtil::InitializeTBO(_TexIndTBO, sizeof(int) * _Scene.GetTextureArrayIDs().size(), &_Scene.GetTextureArrayIDs()[0], GL_R32I);
+    const std::vector<TextureArrayMapping> & textureMappings = _Scene.GetTextureArrayMappings();
+    const std::array<CompiledTextureBucket, S_TextureBucketCount> & textureBuckets = _Scene.GetCompiledTextureBuckets();
+    if ( textureMappings.size() )
+      GLUtil::InitializeTBO(_TexIndTBO, sizeof(TextureArrayMapping) * textureMappings.size(), textureMappings.data(), GL_RGBA32I);
 
+    const int textureArrayCount = _UseTextureBuckets ? S_TextureBucketCount : 1;
+    static const unsigned char fallbackPixel[] = { 255, 255, 255, 255 };
+    for ( int i = 0; i < textureArrayCount; ++i )
+    {
+      const CompiledTextureBucket & bucket = textureBuckets[i];
+      const bool hasTextureLayers = bucket._LayerCount > 0;
+      GLTexture & texture = _TexArrayTEX[i];
       GLTextureDesc texArrayDesc;
-      texArrayDesc._Target         = _TexArrayTEX._Target;
-      texArrayDesc._Slot           = _TexArrayTEX._Slot;
-      texArrayDesc._Width          = _Settings._TextureSize.x;
-      texArrayDesc._Height         = _Settings._TextureSize.y;
-      texArrayDesc._Depth          = _Scene.GetNbCompiledTex();
-      texArrayDesc._InternalFormat = _TexArrayTEX._InternalFormat;
-      texArrayDesc._DataFormat     = _TexArrayTEX._DataFormat;
-      texArrayDesc._DataType       = _TexArrayTEX._DataType;
-      texArrayDesc._Data           = &_Scene.GetTextureArray()[0];
+      texArrayDesc._Target         = texture._Target;
+      texArrayDesc._Slot           = texture._Slot;
+      texArrayDesc._Width          = hasTextureLayers ? bucket._Size : 1;
+      texArrayDesc._Height         = hasTextureLayers ? bucket._Size : 1;
+      texArrayDesc._Depth          = hasTextureLayers ? bucket._LayerCount : 1;
+      texArrayDesc._InternalFormat = texture._InternalFormat;
+      texArrayDesc._DataFormat     = texture._DataFormat;
+      texArrayDesc._DataType       = texture._DataType;
+      texArrayDesc._Data           = hasTextureLayers ? bucket._Pixels.data() : fallbackPixel;
       texArrayDesc._MinFilter      = GL_LINEAR;
       texArrayDesc._MagFilter      = GL_LINEAR;
-      GLUtil::CreateTexture(texArrayDesc, _TexArrayTEX);
+      texArrayDesc._GenerateMipMap = false;
+      GLUtil::CreateTexture(texArrayDesc, texture);
     }
 
     GLUtil::InitializeTBO(_MeshBBoxTBO, sizeof(Vec3) * _Scene.GetMeshBBoxes().size(), &_Scene.GetMeshBBoxes()[0], GL_RGB32F);
@@ -1093,13 +1172,17 @@ int PathTracer::ReloadScene()
     if ( 0 != this -> UploadTLASData() )
       return 1;
 
-    GLUtil::InitializeTBO(_BLASNodesTBO, sizeof(GpuBvh::Node) * _Scene.GetBLASNode().size(), &_Scene.GetBLASNode()[0], GL_RGB32F);
-    GLUtil::InitializeTBO(_BLASNodesRangeTBO, sizeof(Vec2i) * _Scene.GetBLASNodeRange().size(), &_Scene.GetBLASNodeRange()[0], GL_RG32I);
-    GLUtil::InitializeTBO(_BLASPackedIndicesTBO, sizeof(Vec3i) * _Scene.GetBLASPackedIndices().size(), &_Scene.GetBLASPackedIndices()[0], GL_RGB32I);
-    GLUtil::InitializeTBO(_BLASPackedIndicesRangeTBO, sizeof(Vec2i) * _Scene.GetBLASPackedIndicesRange().size(), &_Scene.GetBLASPackedIndicesRange()[0], GL_RG32I);
-    GLUtil::InitializeTBO(_BLASPackedVerticesTBO, sizeof(Vec3) * _Scene.GetBLASPackedVertices().size(), &_Scene.GetBLASPackedVertices()[0], GL_RGB32F);
-    GLUtil::InitializeTBO(_BLASPackedNormalsTBO, sizeof(Vec3) * _Scene.GetBLASPackedNormals().size(), &_Scene.GetBLASPackedNormals()[0], GL_RGB32F);
-    GLUtil::InitializeTBO(_BLASPackedUVsTBO, sizeof(Vec2) * _Scene.GetBLASPackedUVs().size(), &_Scene.GetBLASPackedUVs()[0], GL_RG32F);
+    const auto uploadBLASTBO = [this]( GLTextureBuffer & ioTBO, const auto & iData, GLenum iFormat ) {
+      return UploadOrCreateTBO(ioTBO, static_cast<GLsizeiptr>(sizeof(iData[0]) * iData.size()), iData.empty() ? nullptr : iData.data(), iFormat);
+    };
+    if ( 0 != uploadBLASTBO(_BLASNodesTBO, _Scene.GetBLASNode(), GL_RGB32F)
+      || 0 != uploadBLASTBO(_BLASNodesRangeTBO, _Scene.GetBLASNodeRange(), GL_RG32I)
+      || 0 != uploadBLASTBO(_BLASPackedIndicesTBO, _Scene.GetBLASPackedIndices(), GL_RGB32I)
+      || 0 != uploadBLASTBO(_BLASPackedIndicesRangeTBO, _Scene.GetBLASPackedIndicesRange(), GL_RG32I)
+      || 0 != uploadBLASTBO(_BLASPackedVerticesTBO, _Scene.GetBLASPackedVertices(), GL_RGB32F)
+      || 0 != uploadBLASTBO(_BLASPackedNormalsTBO, _Scene.GetBLASPackedNormals(), GL_RGB32F)
+      || 0 != uploadBLASTBO(_BLASPackedUVsTBO, _Scene.GetBLASPackedUVs(), GL_RG32F) )
+      return 1;
   }
 
   //this -> ReloadEnvMap();
@@ -1258,7 +1341,37 @@ int PathTracer::ReloadEnvMap()
     GLUtil::CreateTexture(cdfDesc, _EnvMapCDFTEX);
   }
   else
+  {
     _Settings._EnableSkybox = false;
+
+    static const float fallbackColor[] = { 0.f, 0.f, 0.f };
+    GLTextureDesc envDesc;
+    envDesc._Target         = _EnvMapTEX._Target;
+    envDesc._Slot           = _EnvMapTEX._Slot;
+    envDesc._Width          = 1;
+    envDesc._Height         = 1;
+    envDesc._InternalFormat = _EnvMapTEX._InternalFormat;
+    envDesc._DataFormat     = _EnvMapTEX._DataFormat;
+    envDesc._DataType       = _EnvMapTEX._DataType;
+    envDesc._Data           = fallbackColor;
+    envDesc._MinFilter      = GL_LINEAR;
+    envDesc._MagFilter      = GL_LINEAR;
+    GLUtil::CreateTexture(envDesc, _EnvMapTEX);
+
+    static const float fallbackCDF[] = { 1.f };
+    GLTextureDesc cdfDesc;
+    cdfDesc._Target         = _EnvMapCDFTEX._Target;
+    cdfDesc._Slot           = _EnvMapCDFTEX._Slot;
+    cdfDesc._Width          = 1;
+    cdfDesc._Height         = 1;
+    cdfDesc._InternalFormat = _EnvMapCDFTEX._InternalFormat;
+    cdfDesc._DataFormat     = _EnvMapCDFTEX._DataFormat;
+    cdfDesc._DataType       = _EnvMapCDFTEX._DataType;
+    cdfDesc._Data           = fallbackCDF;
+    cdfDesc._MinFilter      = GL_NEAREST;
+    cdfDesc._MagFilter      = GL_NEAREST;
+    GLUtil::CreateTexture(cdfDesc, _EnvMapCDFTEX);
+  }
 
   return 0;
 }

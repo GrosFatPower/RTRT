@@ -1,0 +1,33 @@
+renderer
+{
+	resolution 850 720
+	windowresolution 850 720
+	maxdepth 2
+	tilewidth 256
+	tileheight 256
+	envMap HDR/artist_workshop_1k.hdr
+}
+
+camera
+{
+	position -0.25 0.12 0.15
+	lookat 0.0 0.0 0.0
+	fov 50
+	near 0.1
+}
+
+gltf
+{
+	file glass_bottle/glass_bottle.gltf
+}
+
+light
+{
+	type sphere
+	position -0.3 0.180 0.06
+	emission 1.0 1.0 1.0
+	intensity 30
+	radius 0.1
+	castshadow true
+	shadowradius 0.000
+}

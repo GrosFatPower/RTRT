@@ -7,6 +7,7 @@
 #include "FpsGameMap.h"
 #include "Mesh.h"
 #include "MeshInstance.h"
+#include "NativeFileDialog.h"
 #include "PathUtils.h"
 #include "PathTracer.h"
 #include "Renderer.h"
@@ -23,6 +24,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cfloat>
+#include <cmath>
 #include <cstring>
 #include <cstdio>
 #include <filesystem>
@@ -129,7 +131,43 @@ static bool EditorIsPropAssetPath( const std::filesystem::path & iPath )
 {
   std::string ext = iPath.extension().string();
   std::transform(ext.begin(), ext.end(), ext.begin(), []( unsigned char c ) { return static_cast<char>(std::tolower(c)); });
-  return ( ".gltf" == ext ) || ( ".glb" == ext );
+  return ( ".obj" == ext ) || ( ".gltf" == ext ) || ( ".glb" == ext );
+}
+
+static bool EditorIsMapPath( const std::filesystem::path & iPath )
+{
+  std::string ext = iPath.extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(), []( unsigned char c ) { return static_cast<char>(std::tolower(c)); });
+  return ".fpsmap" == ext;
+}
+
+static bool EditorNormalizeDialogFilePath( std::filesystem::path & ioPath )
+{
+  std::error_code ec;
+  ioPath = std::filesystem::absolute(ioPath, ec).lexically_normal();
+  return !ec && std::filesystem::is_regular_file(ioPath, ec) && !ec;
+}
+
+static bool EditorNormalizeDialogSavePath( std::filesystem::path & ioPath )
+{
+  std::error_code ec;
+  ioPath = std::filesystem::absolute(ioPath, ec).lexically_normal();
+  return !ec && !ioPath.filename().empty() && std::filesystem::is_directory(ioPath.parent_path(), ec) && !ec;
+}
+
+static Vec3 EditorNewPropPosition( const FpsGameEditorContext & iContext )
+{
+  const FpsPlayer & player = iContext._GameWorld.GetPlayer();
+  const float yawRad = MathUtil::ToRadians(player._Yaw);
+  const float pitchRad = MathUtil::ToRadians(player._Pitch);
+  Vec3 forward(std::cos(yawRad) * std::cos(pitchRad),
+               std::sin(pitchRad),
+               std::sin(yawRad) * std::cos(pitchRad));
+  if ( glm::length(forward) <= EPSILON )
+    forward = Vec3(0.f, 0.f, 1.f);
+  else
+    forward = glm::normalize(forward);
+  return player.EyePosition(iContext._GameSettings) + forward * 4.f;
 }
 
 static bool EditorPropAssetCombo( const char * iLabel, const std::vector<std::string> & iAssets, std::string & ioPath )
@@ -613,7 +651,6 @@ static void EditorDrawTransformedAABB( const AABB<Vec3> & iBox, const Mat4x4 & i
 void FpsGameEditor::SetPathBuffers( const std::string & iMapPath )
 {
   CopyPathToBuffer(_SavePath, sizeof(_SavePath), iMapPath);
-  CopyPathToBuffer(_LoadPath, sizeof(_LoadPath), iMapPath);
 }
 
 // ----------------------------------------------------------------------------
@@ -622,6 +659,112 @@ void FpsGameEditor::SetPathBuffers( const std::string & iMapPath )
 void FpsGameEditor::SetStatus( const std::string & iMessage )
 {
   _StatusMessage = iMessage;
+}
+
+// ----------------------------------------------------------------------------
+// SaveMapAsDialog
+// ----------------------------------------------------------------------------
+void FpsGameEditor::SaveMapAsDialog( FpsGameEditorContext & ioContext )
+{
+  const std::filesystem::path initialDirectory = _LastMapDialogDirectory.empty() ? std::filesystem::path(PathUtils::GetAssetPath("")) : _LastMapDialogDirectory;
+  std::filesystem::path selectedPath;
+  std::string error;
+  const NativeFileDialogResult result = SaveFileDialog("fpsmap", initialDirectory, selectedPath, error);
+  if ( NativeFileDialogResult::Cancelled == result )
+    return;
+  if ( NativeFileDialogResult::Error == result )
+  {
+    SetStatus("File dialog error: " + error);
+    return;
+  }
+
+  if ( selectedPath.extension().empty() )
+    selectedPath.replace_extension(".fpsmap");
+  if ( !EditorNormalizeDialogSavePath(selectedPath) || !EditorIsMapPath(selectedPath) )
+  {
+    SetStatus("Choose a valid .fpsmap save path.");
+    return;
+  }
+
+  SyncMapFromRuntimeSettings(ioContext);
+  if ( !FpsGameMapLoader::Save(selectedPath.string(), ioContext._Map) )
+  {
+    SetStatus("Save failed: " + selectedPath.string());
+    return;
+  }
+
+  ioContext._MapPath = selectedPath.string();
+  _LastMapDialogDirectory = selectedPath.parent_path();
+  SetPathBuffers(ioContext._MapPath);
+  _Dirty = false;
+  SetStatus("Saved " + ioContext._MapPath);
+}
+
+// ----------------------------------------------------------------------------
+// LoadMapFromDialog
+// ----------------------------------------------------------------------------
+void FpsGameEditor::LoadMapFromDialog( FpsGameEditorContext & ioContext )
+{
+  const std::filesystem::path initialDirectory = _LastMapDialogDirectory.empty() ? std::filesystem::path(PathUtils::GetAssetPath("")) : _LastMapDialogDirectory;
+  std::filesystem::path selectedPath;
+  std::string error;
+  const NativeFileDialogResult result = OpenFileDialog("fpsmap", initialDirectory, selectedPath, error);
+  if ( NativeFileDialogResult::Cancelled == result )
+    return;
+  if ( NativeFileDialogResult::Error == result )
+  {
+    SetStatus("File dialog error: " + error);
+    return;
+  }
+  if ( !EditorNormalizeDialogFilePath(selectedPath) || !EditorIsMapPath(selectedPath) )
+  {
+    SetStatus("Selected map file does not exist or is unsupported.");
+    return;
+  }
+
+  FpsGameMap loadedMap;
+  if ( !FpsGameMapLoader::Load(selectedPath.string(), loadedMap) )
+  {
+    SetStatus("Failed to load map: " + DroppedFileUtils::DisplayName(selectedPath));
+    return;
+  }
+
+  ioContext._Map = loadedMap;
+  ioContext._MapPath = selectedPath.string();
+  ioContext._MapLoaded = true;
+  _LastMapDialogDirectory = selectedPath.parent_path();
+  _ObjectInstanceVisible.clear();
+  _Selection = FpsEditorSelection();
+  _Dirty = false;
+  SetPathBuffers(ioContext._MapPath);
+  ioContext._ReloadScene = true;
+  SetStatus("Loaded " + ioContext._MapPath);
+}
+
+// ----------------------------------------------------------------------------
+// LoadPropFromDialog
+// ----------------------------------------------------------------------------
+void FpsGameEditor::LoadPropFromDialog( FpsGameEditorContext & ioContext )
+{
+  const std::filesystem::path initialDirectory = _LastPropDialogDirectory.empty() ? std::filesystem::path(PathUtils::GetAssetPath("")) : _LastPropDialogDirectory;
+  std::filesystem::path selectedPath;
+  std::string error;
+  const NativeFileDialogResult result = OpenFileDialog("obj,gltf,glb", initialDirectory, selectedPath, error);
+  if ( NativeFileDialogResult::Cancelled == result )
+    return;
+  if ( NativeFileDialogResult::Error == result )
+  {
+    SetStatus("File dialog error: " + error);
+    return;
+  }
+  if ( !EditorNormalizeDialogFilePath(selectedPath) || !EditorIsPropAssetPath(selectedPath) )
+  {
+    SetStatus("Selected prop file does not exist or is unsupported.");
+    return;
+  }
+
+  _LastPropDialogDirectory = selectedPath.parent_path();
+  AddDroppedProp(ioContext, selectedPath, EditorNewPropPosition(ioContext));
 }
 
 // ----------------------------------------------------------------------------
@@ -765,13 +908,23 @@ void FpsGameEditor::SyncMapFromRuntimeSettings( FpsGameEditorContext & ioContext
   renderSettings._SSRIntensity = ioContext._Settings._SSRIntensity;
   renderSettings._SSRMaxRoughness = ioContext._Settings._SSRMaxRoughness;
   renderSettings._SSRMaxSteps = ioContext._Settings._SSRMaxSteps;
-  renderSettings._SSRStepSize = ioContext._Settings._SSRStepSize;
+  renderSettings._SSRPixelStride = ioContext._Settings._SSRPixelStride;
+  renderSettings._SSRStartBias = ioContext._Settings._SSRStartBias;
   renderSettings._SSRMaxDistance = ioContext._Settings._SSRMaxDistance;
   renderSettings._SSRThickness = ioContext._Settings._SSRThickness;
   renderSettings._SSRFade = ioContext._Settings._SSRFade;
+  renderSettings._Transparency = ioContext._Settings._Transparency;
+  renderSettings._Refraction = ioContext._Settings._Refraction;
+  renderSettings._RefractionMaxSteps = ioContext._Settings._RefractionMaxSteps;
+  renderSettings._RefractionPixelStride = ioContext._Settings._RefractionPixelStride;
+  renderSettings._RefractionStartBias = ioContext._Settings._RefractionStartBias;
+  renderSettings._RefractionMaxDistance = ioContext._Settings._RefractionMaxDistance;
+  renderSettings._RefractionThickness = ioContext._Settings._RefractionThickness;
+  renderSettings._RefractionEdgeFade = ioContext._Settings._RefractionEdgeFade;
   renderSettings._PBRDirectLighting = ioContext._Settings._PBRDirectLighting;
   renderSettings._DirectLightIntensity = ioContext._Settings._DirectLightIntensity;
   renderSettings._SpecularIBLMaxRoughness = ioContext._Settings._SpecularIBLMaxRoughness;
+  renderSettings._ShadingType = ioContext._Settings._ShadingType;
   renderSettings._Bounces = ioContext._Settings._Bounces;
   renderSettings._NbSamplesPerPixel = ioContext._Settings._NbSamplesPerPixel;
   renderSettings._Denoise = ioContext._Settings._Denoise;
@@ -1401,27 +1554,14 @@ void FpsGameEditor::DrawScenePanel( FpsGameEditorContext & ioContext )
     else
       SetStatus("Save failed");
   }
+  ImGui::SameLine();
+  if ( ImGui::Button("Save as...") )
+    SaveMapAsDialog(ioContext);
 
-  ImGui::InputText("Load path", _LoadPath, sizeof(_LoadPath));
-  if ( ImGui::Button("Load") )
-  {
-    FpsGameMap loadedMap;
-    if ( FpsGameMapLoader::Load(_LoadPath, loadedMap) )
-    {
-      ioContext._Map = loadedMap;
-      ioContext._MapPath = _LoadPath;
-      ioContext._MapLoaded = true;
-      _ObjectInstanceVisible.clear();
-      _Selection = FpsEditorSelection();
-      _Dirty = false;
-      SetPathBuffers(ioContext._MapPath);
-      ioContext._ReloadScene = true;
-      SetStatus("Loaded " + ioContext._MapPath);
-    }
-    else
-      SetStatus("Load failed");
-  }
   ImGui::PopItemWidth();
+
+  if ( ImGui::Button("Load scene...") )
+    LoadMapFromDialog(ioContext);
 
   if ( ImGui::CollapsingHeader("Objects", ImGuiTreeNodeFlags_DefaultOpen) )
   {
@@ -1521,6 +1661,9 @@ void FpsGameEditor::DrawScenePanel( FpsGameEditorContext & ioContext )
     }
     else
       ImGui::TextUnformatted("No loadable props found in Assets");
+
+    if ( ImGui::Button("Load prop...") )
+      LoadPropFromDialog(ioContext);
 
     ImGui::BeginDisabled(!hasSelectedPropAsset);
     if ( ImGui::Button("Add prop") )
@@ -2402,13 +2545,39 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
         ioContext._Settings._SSRMaxSteps = std::max(4, std::min(128, ssrMaxSteps));
         notifyPersistedRenderSettingsChanged();
       }
-      if ( ImGui::SliderFloat("SSR step size", &ioContext._Settings._SSRStepSize, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
+      if ( ImGui::SliderFloat("SSR pixel stride", &ioContext._Settings._SSRPixelStride, 0.25f, 4.f, "%.2f", ImGuiSliderFlags_Logarithmic) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("SSR start bias", &ioContext._Settings._SSRStartBias, 0.25f, 8.f, "%.2f", ImGuiSliderFlags_Logarithmic) )
         notifyPersistedRenderSettingsChanged();
       if ( ImGui::SliderFloat("SSR max distance", &ioContext._Settings._SSRMaxDistance, 1.f, 100.f) )
         notifyPersistedRenderSettingsChanged();
       if ( ImGui::SliderFloat("SSR thickness", &ioContext._Settings._SSRThickness, 0.01f, 2.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
         notifyPersistedRenderSettingsChanged();
       if ( ImGui::SliderFloat("SSR edge fade", &ioContext._Settings._SSRFade, 0.01f, 0.5f) )
+        notifyPersistedRenderSettingsChanged();
+    }
+
+    if ( ImGui::CollapsingHeader("Transparency", ImGuiTreeNodeFlags_DefaultOpen) )
+    {
+      if ( ImGui::Checkbox("Transparency##Deferred", &ioContext._Settings._Transparency) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::Checkbox("Refraction", &ioContext._Settings._Refraction) )
+        notifyPersistedRenderSettingsChanged();
+      int refractionMaxSteps = ioContext._Settings._RefractionMaxSteps;
+      if ( ImGui::SliderInt("Refraction max steps", &refractionMaxSteps, 4, 128) )
+      {
+        ioContext._Settings._RefractionMaxSteps = std::max(4, std::min(128, refractionMaxSteps));
+        notifyPersistedRenderSettingsChanged();
+      }
+      if ( ImGui::SliderFloat("Refraction pixel stride", &ioContext._Settings._RefractionPixelStride, 0.25f, 4.f, "%.2f", ImGuiSliderFlags_Logarithmic) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("Refraction start bias", &ioContext._Settings._RefractionStartBias, 0.25f, 8.f, "%.2f", ImGuiSliderFlags_Logarithmic) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("Refraction max distance", &ioContext._Settings._RefractionMaxDistance, 1.f, 100.f) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("Refraction thickness", &ioContext._Settings._RefractionThickness, 0.01f, 2.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("Refraction edge fade", &ioContext._Settings._RefractionEdgeFade, 0.01f, 0.5f) )
         notifyPersistedRenderSettingsChanged();
     }
 
@@ -2469,6 +2638,16 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
       }
       if ( ImGui::Checkbox("Transparency", &ioContext._Settings._Transparency) )
         notifyPersistedRenderSettingsChanged();
+
+      static const char * shadingTypes[] = { "Flat", "Phong", "PBR" };
+      int shadingType = ( ShadingType::Flat == ioContext._Settings._ShadingType ) ? 0
+                      : ( ShadingType::PBR == ioContext._Settings._ShadingType ? 2 : 1 );
+      if ( ImGui::Combo("Lighting", &shadingType, shadingTypes, 3) )
+      {
+        ioContext._Settings._ShadingType = ( 0 == shadingType ) ? ShadingType::Flat
+                                       : ( 2 == shadingType ? ShadingType::PBR : ShadingType::Phong );
+        notifyPersistedRenderSettingsChanged();
+      }
     }
 
     if ( ImGui::CollapsingHeader("Software Debug") )

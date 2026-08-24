@@ -1,0 +1,51 @@
+renderer
+{
+	resolution 800 600
+	maxdepth 3
+	envMap HDR/alps_field_2k.hdr
+}
+
+camera
+{
+	position -2.5 1.25 -3.0
+	lookat -0.5 -0.5 0.0
+	fov 80
+}
+
+light
+{
+	type sphere
+	position 2 3 -3
+	emission 4. 4. 4.
+	radius .2
+}
+
+material red_plastic
+{
+	color 1.0 0.0 0.0
+	roughness 0.8
+}
+
+material glass
+{
+	spectrans 1.0
+	mediumtype absorb
+	mediumcolor 0.085 0.917 0.848
+	mediumdensity 100.0
+	roughness 0.02
+}
+
+mesh
+{
+	file misc/TexturedBox.obj
+	material glass
+	position -1 0 -1
+	scale 1 1 0.2
+}
+
+mesh
+{
+	file misc/TexturedBox.obj
+	material red_plastic
+	scale 1 1 0.2
+}

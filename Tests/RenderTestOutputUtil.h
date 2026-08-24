@@ -121,11 +121,11 @@ public:
   {
     if ( _Enabled )
     {
-      _OldCout = std::cout.rdbuf(_Output.rdbuf());
-      _OldCerr = std::cerr.rdbuf(_Output.rdbuf());
       _NullOutput = OpenNullOutput();
       if ( _NullOutput >= 0 )
         _Redirect = std::make_unique<ScopedOutputRedirect>(_NullOutput);
+      _OldCout = std::cout.rdbuf(_Output.rdbuf());
+      _OldCerr = std::cerr.rdbuf(_Output.rdbuf());
     }
   }
 

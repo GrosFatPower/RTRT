@@ -3,6 +3,7 @@
 
 #include "Renderer.h"
 #include "RenderSettings.h"
+#include "Scene.h"
 #include "QuadMesh.h"
 #include "GLUtil.h"
 #include "ShaderProgram.h"
@@ -29,17 +30,48 @@ struct DeferredTexSlot
   static constexpr TextureSlot _GEmission     = 5; // Reuses the lighting slot while the lighting target is not sampled.
   static constexpr TextureSlot _Lighting      = 5;
   static constexpr TextureSlot _TexInd        = 6;
-  static constexpr TextureSlot _TexArray      = 7;
-  static constexpr TextureSlot _Materials     = 8;
-  static constexpr TextureSlot _EnvMap        = 9;
+  static constexpr TextureSlot _TexArray0     = 7;
+  static constexpr TextureSlot _Materials     = 12;
+  static constexpr TextureSlot _EnvMap        = 13;
+  static constexpr TextureSlot _ShadowCubeMap = 14;
+  static constexpr TextureSlot _Shadow2DMap   = 15;
+  static constexpr TextureSlot _SSAO          = 16;
+  static constexpr TextureSlot _SSAOBlur      = 17;
+  static constexpr TextureSlot _SSAONoise     = 18;
+  static constexpr TextureSlot _SSR           = 18; // Reuses the SSAO noise slot outside the SSAO pass.
+  static constexpr TextureSlot _SSRSource     = 5;  // Reuses the lighting slot outside the lighting/composite passes.
+  static constexpr TextureSlot _BRDFLUT       = 19;
+};
+
+// Compact sampler bindings used while a particular deferred pass is active.
+// They intentionally differ from DeferredTexSlot so independent passes can
+// reuse low texture units without exceeding fragment sampler limits.
+struct DeferredMaterialPassTexSlot
+{
+  static constexpr TextureSlot _TextureIndices = 0;
+  static constexpr TextureSlot _TextureArray0  = 1;
+  static constexpr TextureSlot _Materials      = _TextureArray0 + S_TextureBucketCount;
+};
+
+struct DeferredLightingPassTexSlot
+{
+  static constexpr TextureSlot _SSAO          = 6;
+  static constexpr TextureSlot _SSR           = 7;
+  static constexpr TextureSlot _EnvMap        = 8;
+  static constexpr TextureSlot _BRDFLUT       = 9;
   static constexpr TextureSlot _ShadowCubeMap = 10;
   static constexpr TextureSlot _Shadow2DMap   = 11;
-  static constexpr TextureSlot _SSAO          = 12;
-  static constexpr TextureSlot _SSAOBlur      = 13;
-  static constexpr TextureSlot _SSAONoise     = 14;
-  static constexpr TextureSlot _SSR           = 14; // Reuses the SSAO noise slot outside the SSAO pass.
-  static constexpr TextureSlot _SSRSource     = 5;  // Reuses the lighting slot outside the lighting/composite passes.
-  static constexpr TextureSlot _BRDFLUT       = 15;
+};
+
+struct DeferredTransparentPassTexSlot
+{
+  static constexpr TextureSlot _EnvMap        = 7;
+  static constexpr TextureSlot _BRDFLUT       = 8;
+  static constexpr TextureSlot _ShadowCubeMap = 9;
+  static constexpr TextureSlot _Shadow2DMap   = 10;
+  static constexpr TextureSlot _SceneColor    = 11;
+  static constexpr TextureSlot _GDepth        = 12;
+  static constexpr TextureSlot _GPosition     = 13;
 };
 
 enum class DeferredDebugModes
@@ -75,9 +107,9 @@ public:
   virtual int ReadbackFinalColor( RenderImage & oImage ) override;
 
   void SetGenerateMipMaps(bool iGenerate);
-  bool GetGenerateMipMaps() const { return _GenerateMipMaps; }
+  bool GetGenerateMipMaps() const { return _Settings._GenerateMipMaps; }
   void SetAnisotropicLevel(int iLevel);
-  int GetAnisotropicLevel() const { return _AnisotropicLevel; }
+  int GetAnisotropicLevel() const { return _Settings._AnisotropicLevel; }
   float GetEffectiveShadowFar() const { return _ShadowFar; }
   virtual int GetRenderPassTimings( std::vector<RenderPassTiming> & oTimings ) const override;
 
@@ -103,7 +135,9 @@ protected:
   int BindGBufferTextures();
   int BindSSAOPassTextures();
   int BindSSRPassTextures();
+  int BindMaterialTextures();
   int BindLightingTextures();
+  int BindTransparentTextures();
   int BindRenderToScreenTextures();
 
   int UpdateUniforms();
@@ -112,7 +146,7 @@ protected:
   int RenderSSAO();
   int RenderSSR();
   int RenderTransparent();
-  int UpdateSSRSource();
+  int UpdateSceneColorSource( bool iGenerateMipMaps );
 
   void BuildDeferredDrawLists();
   void SortTransparentInstances();
@@ -179,9 +213,11 @@ protected:
 
   // Scene data
   GLTextureBuffer _TexIndTBO     = { 0, { 0, GL_TEXTURE_BUFFER, DeferredTexSlot::_TexInd } };
-  GLTexture       _TexArrayTEX   = { 0, GL_TEXTURE_2D_ARRAY, DeferredTexSlot::_TexArray, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE };
+  GLTexture       _TexArrayTEX[S_TextureBucketCount];
   GLTexture       _MaterialsTEX  = { 0, GL_TEXTURE_2D, DeferredTexSlot::_Materials, GL_RGBA32F, GL_RGBA, GL_FLOAT };
   GLTexture       _EnvMapTEX     = { 0, GL_TEXTURE_2D, DeferredTexSlot::_EnvMap, GL_RGB32F,  GL_RGB,  GL_FLOAT };
+
+  bool _UseTextureBuckets = true;
 
   // Shaders
   std::unique_ptr<ShaderProgram> _GeometryShader;
@@ -200,17 +236,18 @@ protected:
   unsigned int _FrameNum = 1;
 
   // GPU mesh resources (one entry per Scene::GetMeshes())
-  std::vector<GLuint> _MeshVAOs;
-  std::vector<GLuint> _MeshVBOs;
-  std::vector<GLuint> _MeshEBOs;
-  std::vector<int>    _MeshIndexCount;
+  std::vector<GLuint>                _MeshVAOs;
+  std::vector<GLuint>                _MeshVBOs;
+  std::vector<GLuint>                _MeshEBOs;
+  std::vector<int>                   _MeshIndexCount;
   std::vector<std::vector<uint32_t>> _TransparentMeshBaseIndices;
   std::vector<std::vector<Vec3>>     _TransparentMeshLocalTriCenters;
   std::vector<std::vector<uint32_t>> _TransparentMeshSortedIndices;
   std::vector<std::vector<int>>      _TransparentMeshSortedTriOrder;
   std::vector<std::vector<float>>    _TransparentMeshTriDepths;
-  std::vector<int>    _OpaqueMeshInstanceIDs;
-  std::vector<int>    _TransparentMeshInstanceIDs;
+  std::vector<int>                   _OpaqueMeshInstanceIDs;
+  std::vector<int>                   _TransparentMeshInstanceIDs;
+  bool                               _HasRefractiveInstances = false;
 
   // Scene bounds
   AABB<Vec3> _SceneBounds;
@@ -233,10 +270,6 @@ protected:
   // SSAO state
   std::array<Vec3, 32> _SSAOKernel;
 
-  // Textures filtering
-  bool _GenerateMipMaps = true;
-  int  _AnisotropicLevel = 16;
-
   enum TimingID
   {
     TimingShadowMap = 0,
@@ -244,6 +277,7 @@ protected:
     TimingSSAO,
     TimingSSR,
     TimingLighting,
+    TimingRefractionSourceCopy,
     TimingTransparency,
     TimingWireframe,
     TimingSSRSourceCopy,

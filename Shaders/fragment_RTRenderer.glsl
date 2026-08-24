@@ -108,11 +108,11 @@ vec3 DirectIllumination( in Ray iRay, in HitPoint iClosestHit, out Ray oScattere
   }
 
   // Reflect or refract ?
-  double sinTheta = 1.f;
+  float sinTheta = 1.f;
   float eta = 1.f;
   if ( mat._SpecTrans > EPSILON )
   {
-    double cosTheta = dot(-iRay._Dir, iClosestHit._Normal);
+    float cosTheta = dot(-iRay._Dir, iClosestHit._Normal);
     sinTheta = sqrt(1.f - cosTheta * cosTheta);
 
     if ( iClosestHit._FrontFace )

@@ -27,6 +27,21 @@
 namespace RTRT
 {
 
+static constexpr GLint S_DeferredNonTextureArraySamplers = 9;
+
+// ----------------------------------------------------------------------------
+// Texture arrays : ConfigureTextureBucketShader
+// ----------------------------------------------------------------------------
+static void ConfigureTextureBucketShader( ShaderSource & ioShaderSource, bool iUseTextureBuckets )
+{
+  if ( iUseTextureBuckets )
+    return;
+
+  const size_t versionEnd = ioShaderSource._Src.find('\n');
+  if ( versionEnd != std::string::npos )
+    ioShaderSource._Src.insert(versionEnd + 1, "#define USE_TEXTURE_BUCKETS 0\n");
+}
+
 static Vec3 S_WireColor = Vec3(1.f, 0.f, 0.f);
 static float S_WireWidth = 3.0f;
 // ----------------------------------------------------------------------------
@@ -68,7 +83,14 @@ struct IndexTripletHash
 DeferredRenderer::DeferredRenderer(Scene& iScene, RenderSettings& iSettings)
 : Renderer(iScene, iSettings)
 {
-  // Nothing heavy in ctor; real setup in Initialize()
+  GLint maxFragmentSamplers = 0;
+  glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &maxFragmentSamplers);
+  _UseTextureBuckets = maxFragmentSamplers >= ( S_DeferredNonTextureArraySamplers + S_TextureBucketCount );
+  if ( !_UseTextureBuckets )
+    std::cout << "DeferredRenderer : " << maxFragmentSamplers << " fragment samplers available; using a single texture array compatibility path." << std::endl;
+
+  for ( int i = 0; i < S_TextureBucketCount; ++i )
+    _TexArrayTEX[i] = { 0, GL_TEXTURE_2D_ARRAY, DeferredTexSlot::_TexArray0 + static_cast<TextureSlot>(i), GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE };
 }
 
 // ----------------------------------------------------------------------------
@@ -109,7 +131,8 @@ DeferredRenderer::~DeferredRenderer()
   GLUtil::DeleteTEX(_BRDFLUTTEX);
 
   GLUtil::DeleteTBO(_TexIndTBO);
-  GLUtil::DeleteTEX(_TexArrayTEX);
+  for ( GLTexture & texture : _TexArrayTEX )
+    GLUtil::DeleteTEX(texture);
   GLUtil::DeleteTEX(_MaterialsTEX);
   GLUtil::DeleteTEX(_EnvMapTEX);
 
@@ -352,6 +375,7 @@ int DeferredRenderer::GetRenderPassTimings( std::vector<RenderPassTiming> & oTim
   oTimings.push_back({ "SSAO", _PassTimes[TimingSSAO], true, _PassEnabled[TimingSSAO] });
   oTimings.push_back({ "SSR", _PassTimes[TimingSSR], true, _PassEnabled[TimingSSR] });
   oTimings.push_back({ "Lighting", _PassTimes[TimingLighting], true, _PassEnabled[TimingLighting] });
+  oTimings.push_back({ "Refraction source copy", _PassTimes[TimingRefractionSourceCopy], true, _PassEnabled[TimingRefractionSourceCopy] });
   oTimings.push_back({ "Transparency", _PassTimes[TimingTransparency], true, _PassEnabled[TimingTransparency] });
   oTimings.push_back({ "Wireframe", _PassTimes[TimingWireframe], true, _PassEnabled[TimingWireframe] });
   oTimings.push_back({ "SSR source copy", _PassTimes[TimingSSRSourceCopy], true, _PassEnabled[TimingSSRSourceCopy] });
@@ -365,6 +389,9 @@ int DeferredRenderer::GetRenderPassTimings( std::vector<RenderPassTiming> & oTim
 int DeferredRenderer::UnloadScene()
 {
   _FrameNum = 0;
+  GLUtil::DeleteTBO(_TexIndTBO);
+  for ( GLTexture & texture : _TexArrayTEX )
+    GLUtil::DeleteTEX(texture);
 
   const size_t nb = _MeshVAOs.size();
   for ( size_t i = 0; i < nb; ++i )
@@ -386,6 +413,7 @@ int DeferredRenderer::UnloadScene()
   _TransparentMeshTriDepths.clear();
   _OpaqueMeshInstanceIDs.clear();
   _TransparentMeshInstanceIDs.clear();
+  _HasRefractiveInstances = false;
 
   _HasShadowLight = false;
   _ShadowCasters.clear();
@@ -492,8 +520,10 @@ void DeferredRenderer::BuildDeferredDrawLists()
 {
   _OpaqueMeshInstanceIDs.clear();
   _TransparentMeshInstanceIDs.clear();
+  _HasRefractiveInstances = false;
 
   const std::vector<MeshInstance> & instances = _Scene.GetMeshInstances();
+  const std::vector<Material> & materials = _Scene.GetMaterials();
   _OpaqueMeshInstanceIDs.reserve(instances.size());
   _TransparentMeshInstanceIDs.reserve(instances.size());
 
@@ -504,7 +534,12 @@ void DeferredRenderer::BuildDeferredDrawLists()
       continue;
 
     if ( IsTransparentMaterial( inst._MaterialID ) )
+    {
       _TransparentMeshInstanceIDs.push_back(i);
+      if ( ( inst._MaterialID >= 0 ) && ( static_cast<size_t>(inst._MaterialID) < materials.size() )
+        && ( materials[inst._MaterialID]._SpecTrans > MATERIAL_TRANSMISSION_THRESHOLD ) )
+        _HasRefractiveInstances = true;
+    }
     else
       _OpaqueMeshInstanceIDs.push_back(i);
   }
@@ -1014,6 +1049,7 @@ int DeferredRenderer::InitializeSSR()
   ssrDesc._InternalFormat = _SSRSourceTEX._InternalFormat;
   ssrDesc._DataFormat     = _SSRSourceTEX._DataFormat;
   ssrDesc._DataType       = _SSRSourceTEX._DataType;
+  ssrDesc._GenerateMipMap = true;
   GLUtil::CreateTexture(ssrDesc, _SSRSourceTEX);
 
   GLFrameBufferDesc ssrSourceFBODesc;
@@ -1089,7 +1125,7 @@ int DeferredRenderer::ReloadScene()
   UnloadScene();
 
   if ( ( _Settings._TextureSize.x > 0 ) && ( _Settings._TextureSize.y > 0 ) )
-    _Scene.CompileMeshData( _Settings._TextureSize, true, false );
+    _Scene.CompileMeshData( _Settings._TextureSize, true, false, _UseTextureBuckets );
 
   const std::vector<Mesh*> & meshes = _Scene.GetMeshes();
   const size_t meshCount = meshes.size();
@@ -1193,27 +1229,37 @@ int DeferredRenderer::ReloadScene()
   ComputeSceneBounds(true);
 
   // Materials
-  if ( _Scene.GetTextureArrayIDs().size() )
+  const std::vector<TextureArrayMapping> & textureMappings = _Scene.GetTextureArrayMappings();
+  const std::array<CompiledTextureBucket, S_TextureBucketCount> & textureBuckets = _Scene.GetCompiledTextureBuckets();
+  if ( textureMappings.size() )
   {
-    GLUtil::InitializeTBO(_TexIndTBO, sizeof(int) * _Scene.GetTextureArrayIDs().size(), &_Scene.GetTextureArrayIDs()[0], GL_R32I);
+    GLUtil::InitializeTBO(_TexIndTBO, sizeof(TextureArrayMapping) * textureMappings.size(), textureMappings.data(), GL_RGBA32I);
+  }
 
+  const int textureArrayCount = _UseTextureBuckets ? S_TextureBucketCount : 1;
+  static const unsigned char fallbackPixel[] = { 255, 255, 255, 255 };
+  for ( int i = 0; i < textureArrayCount; ++i )
+  {
+    const CompiledTextureBucket & bucket = textureBuckets[i];
+    const bool hasTextureLayers = bucket._LayerCount > 0;
+    GLTexture & texture = _TexArrayTEX[i];
     GLTextureDesc texArrayDesc;
-    texArrayDesc._Target         = _TexArrayTEX._Target;
-    texArrayDesc._Slot           = _TexArrayTEX._Slot;
-    texArrayDesc._Width          = _Settings._TextureSize.x;
-    texArrayDesc._Height         = _Settings._TextureSize.y;
-    texArrayDesc._Depth          = _Scene.GetNbCompiledTex();
-    texArrayDesc._InternalFormat = _TexArrayTEX._InternalFormat;
-    texArrayDesc._DataFormat     = _TexArrayTEX._DataFormat;
-    texArrayDesc._DataType       = _TexArrayTEX._DataType;
-    texArrayDesc._Data           = &_Scene.GetTextureArray()[0];
-    texArrayDesc._MinFilter      = _GenerateMipMaps ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR;
+    texArrayDesc._Target         = texture._Target;
+    texArrayDesc._Slot           = texture._Slot;
+    texArrayDesc._Width          = hasTextureLayers ? bucket._Size : 1;
+    texArrayDesc._Height         = hasTextureLayers ? bucket._Size : 1;
+    texArrayDesc._Depth          = hasTextureLayers ? bucket._LayerCount : 1;
+    texArrayDesc._InternalFormat = texture._InternalFormat;
+    texArrayDesc._DataFormat     = texture._DataFormat;
+    texArrayDesc._DataType       = texture._DataType;
+    texArrayDesc._Data           = hasTextureLayers ? bucket._Pixels.data() : fallbackPixel;
+    texArrayDesc._MinFilter      = _Settings._GenerateMipMaps ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR;
     texArrayDesc._MagFilter      = GL_LINEAR;
-    texArrayDesc._GenerateMipMap = true;
-    GLUtil::CreateTexture(texArrayDesc, _TexArrayTEX);
+    texArrayDesc._GenerateMipMap = _Settings._GenerateMipMaps;
+    GLUtil::CreateTexture(texArrayDesc, texture);
 
-    if ( _GenerateMipMaps && _AnisotropicLevel )
-      GLUtil::EnableAnisotropyIfAvailable(_TexArrayTEX, (float)_AnisotropicLevel);
+    if ( _Settings._GenerateMipMaps && _Settings._AnisotropicLevel )
+      GLUtil::EnableAnisotropyIfAvailable(texture, (float)_Settings._AnisotropicLevel);
   }
 
   GLTextureDesc materialsDesc;
@@ -1229,6 +1275,7 @@ int DeferredRenderer::ReloadScene()
   materialsDesc._MagFilter      = GL_NEAREST;
   GLUtil::CreateTexture(materialsDesc, _MaterialsTEX);
 
+  BindMaterialTextures();
   BuildDeferredDrawLists();
 
   return 0;
@@ -1239,7 +1286,7 @@ int DeferredRenderer::ReloadScene()
 // ----------------------------------------------------------------------------
 void DeferredRenderer::SetGenerateMipMaps(bool iGenerate)
 {
-  _GenerateMipMaps = iGenerate;
+  _Settings._GenerateMipMaps = iGenerate;
   _DirtyStates |= (unsigned long)DirtyState::Textures;
 }
 
@@ -1248,7 +1295,7 @@ void DeferredRenderer::SetGenerateMipMaps(bool iGenerate)
 // ----------------------------------------------------------------------------
 void DeferredRenderer::SetAnisotropicLevel(int iLevel)
 {
-  _AnisotropicLevel = iLevel;
+  _Settings._AnisotropicLevel = std::max(0, iLevel);
   _DirtyStates |= (unsigned long)DirtyState::Textures;
 }
 
@@ -1280,7 +1327,23 @@ int DeferredRenderer::ReloadEnvMap()
     _Scene.GetEnvMap().SetHandle(_EnvMapTEX._Handle);
   }
   else
+  {
     _Settings._EnableSkybox = false;
+
+    static const float fallbackColor[] = { 0.f, 0.f, 0.f };
+    GLTextureDesc envDesc;
+    envDesc._Target         = _EnvMapTEX._Target;
+    envDesc._Slot           = _EnvMapTEX._Slot;
+    envDesc._Width          = 1;
+    envDesc._Height         = 1;
+    envDesc._InternalFormat = _EnvMapTEX._InternalFormat;
+    envDesc._DataFormat     = _EnvMapTEX._DataFormat;
+    envDesc._DataType       = _EnvMapTEX._DataType;
+    envDesc._Data           = fallbackColor;
+    envDesc._MinFilter      = GL_LINEAR;
+    envDesc._MagFilter      = GL_LINEAR;
+    GLUtil::CreateTexture(envDesc, _EnvMapTEX);
+  }
 
   return 0;
 }
@@ -1360,12 +1423,13 @@ int DeferredRenderer::InitializeFrameBuffers()
 
   GLFrameBufferDesc lightingDesc;
   lightingDesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_LightingTEX });
-  lightingDesc._Attachments.push_back({ GL_DEPTH_ATTACHMENT, &_GDepthTEX, GL_TEXTURE_2D, 0, false });
   if ( !GLUtil::CreateFrameBuffer(lightingDesc, _LightingFBO) )
   {
     std::cout << "DeferredRenderer : Lighting framebuffer not complete !" << std::endl;
     return 1;
   }
+
+  GLUtil::ActivateTextures(_GBufferFBO);
 
   return 0;
 }
@@ -1384,6 +1448,7 @@ int DeferredRenderer::ResizeRenderTarget()
   GLUtil::ResizeFBO(_SSAOBlurFBO, RenderWidth(), RenderHeight());
   GLUtil::ResizeFBO(_SSRFBO, RenderWidth(), RenderHeight());
   GLUtil::ResizeFBO(_SSRSourceFBO, RenderWidth(), RenderHeight());
+  GLUtil::ActivateTextures(_GBufferFBO);
 
   return 0;
 }
@@ -1395,6 +1460,7 @@ int DeferredRenderer::RecompileShaders()
   // Geometry pass shader (standard vertex + fragment that writes G-buffer)
   ShaderSource geomVert = Shader::LoadShader(PathUtils::GetShaderPath("vertex_DeferredGeometry.glsl"));
   ShaderSource geomFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_DeferredGeometry.glsl"));
+  ConfigureTextureBucketShader(geomFrag, _UseTextureBuckets);
   ShaderProgram* geomProg = ShaderProgram::LoadShaders(geomVert, geomFrag);
   if (!geomProg)
     return 1;
@@ -1461,6 +1527,7 @@ int DeferredRenderer::RecompileShaders()
   _ShadowDirectionalShader.reset(shadowDirProg);
 
   ShaderSource transparentFrag = Shader::LoadShader(PathUtils::GetShaderPath("fragment_DeferredTransparent.glsl"));
+  ConfigureTextureBucketShader(transparentFrag, _UseTextureBuckets);
   ShaderProgram* transparentProg = ShaderProgram::LoadShaders(geomVert, transparentFrag);
   if ( !transparentProg )
     return 1;
@@ -1484,8 +1551,10 @@ int DeferredRenderer::BindGBufferTextures()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::BindSSAOPassTextures()
 {
-  GLUtil::ActivateTextures(_GBufferFBO);
-  GLUtil::ActivateTexture(_SSAONoiseTEX);
+  GLUtil::ActivateTexture(_GNormalTEX, DeferredTexSlot::_GNormal);
+  GLUtil::ActivateTexture(_GPositionTEX, DeferredTexSlot::_GPosition);
+  GLUtil::ActivateTexture(_GDepthTEX, DeferredTexSlot::_GDepth);
+  GLUtil::ActivateTexture(_SSAONoiseTEX, DeferredTexSlot::_GEmission);
 
   return 0;
 }
@@ -1495,9 +1564,26 @@ int DeferredRenderer::BindSSAOPassTextures()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::BindSSRPassTextures()
 {
-  GLUtil::ActivateTextures(_GBufferFBO);
-  GLUtil::ActivateTexture(_SSRSourceTEX);
-  GLUtil::ActivateTexture(_EnvMapTEX);
+  GLUtil::ActivateTexture(_GNormalTEX, DeferredTexSlot::_GNormal);
+  GLUtil::ActivateTexture(_GPositionTEX, DeferredTexSlot::_GPosition);
+  GLUtil::ActivateTexture(_GMaterialTEX, DeferredTexSlot::_GMaterial);
+  GLUtil::ActivateTexture(_GDepthTEX, DeferredTexSlot::_GDepth);
+  GLUtil::ActivateTexture(_SSRSourceTEX, DeferredTexSlot::_GEmission);
+  GLUtil::ActivateTexture(_EnvMapTEX, DeferredTexSlot::_TexInd);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// BindMaterialTextures
+// ----------------------------------------------------------------------------
+int DeferredRenderer::BindMaterialTextures()
+{
+  GLUtil::ActivateTexture(_TexIndTBO._Tex, DeferredMaterialPassTexSlot::_TextureIndices);
+  const int textureArrayCount = _UseTextureBuckets ? S_TextureBucketCount : 1;
+  for ( int i = 0; i < textureArrayCount; ++i )
+    GLUtil::ActivateTexture(_TexArrayTEX[i], DeferredMaterialPassTexSlot::_TextureArray0 + i);
+  GLUtil::ActivateTexture(_MaterialsTEX, DeferredMaterialPassTexSlot::_Materials);
 
   return 0;
 }
@@ -1507,18 +1593,32 @@ int DeferredRenderer::BindSSRPassTextures()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::BindLightingTextures()
 {
-  GLUtil::ActivateTextures(_GBufferFBO); 
+  GLUtil::ActivateTextures(_GBufferFBO);
 
-  GLUtil::ActivateTexture(_TexIndTBO._Tex);
-  GLUtil::ActivateTexture(_TexArrayTEX);
-  GLUtil::ActivateTexture(_MaterialsTEX);
+  GLUtil::ActivateTexture(_EnvMapTEX, DeferredLightingPassTexSlot::_EnvMap);
+  GLUtil::ActivateTexture(_BRDFLUTTEX, DeferredLightingPassTexSlot::_BRDFLUT);
+  GLUtil::ActivateTexture(_ShadowCubeMapTEX, DeferredLightingPassTexSlot::_ShadowCubeMap);
+  GLUtil::ActivateTexture(_Shadow2DMapTEX, DeferredLightingPassTexSlot::_Shadow2DMap);
+  GLUtil::ActivateTexture(_SSAOBlurTEX, DeferredLightingPassTexSlot::_SSAO);
+  GLUtil::ActivateTexture(_SSRTEX, DeferredLightingPassTexSlot::_SSR);
 
-  GLUtil::ActivateTexture(_EnvMapTEX);
-  GLUtil::ActivateTexture(_BRDFLUTTEX);
-  GLUtil::ActivateTexture(_ShadowCubeMapTEX);
-  GLUtil::ActivateTexture(_Shadow2DMapTEX);
-  GLUtil::ActivateTexture(_SSAOBlurTEX);
-  GLUtil::ActivateTexture(_SSRTEX);
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// BindTransparentTextures
+// ----------------------------------------------------------------------------
+int DeferredRenderer::BindTransparentTextures()
+{
+  BindMaterialTextures();
+
+  GLUtil::ActivateTexture(_EnvMapTEX, DeferredTransparentPassTexSlot::_EnvMap);
+  GLUtil::ActivateTexture(_BRDFLUTTEX, DeferredTransparentPassTexSlot::_BRDFLUT);
+  GLUtil::ActivateTexture(_ShadowCubeMapTEX, DeferredTransparentPassTexSlot::_ShadowCubeMap);
+  GLUtil::ActivateTexture(_Shadow2DMapTEX, DeferredTransparentPassTexSlot::_Shadow2DMap);
+  GLUtil::ActivateTexture(_SSRSourceTEX, DeferredTransparentPassTexSlot::_SceneColor);
+  GLUtil::ActivateTexture(_GDepthTEX, DeferredTransparentPassTexSlot::_GDepth);
+  GLUtil::ActivateTexture(_GPositionTEX, DeferredTransparentPassTexSlot::_GPosition);
 
   return 0;
 }
@@ -1528,8 +1628,7 @@ int DeferredRenderer::BindLightingTextures()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::BindRenderToScreenTextures()
 {
-  GLUtil::ActivateTextures(_LightingFBO);
-  GLUtil::ActivateTexture(_EnvMapTEX);
+  GLUtil::ActivateTexture(_LightingTEX, 0);
 
   return 0;
 }
@@ -1575,9 +1674,13 @@ int DeferredRenderer::UpdateUniforms()
     _GeometryShader -> SetUniform("u_CameraPos", camPos);
     _GeometryShader -> SetUniform("u_View", V);
     _GeometryShader -> SetUniform("u_Proj", P);
-    _GeometryShader -> SetUniform("u_TexIndTexture",    (int)DeferredTexSlot::_TexInd);
-    _GeometryShader -> SetUniform("u_TexArrayTexture",  (int)DeferredTexSlot::_TexArray);
-    _GeometryShader -> SetUniform("u_MaterialsTexture", (int)DeferredTexSlot::_Materials);
+    _GeometryShader -> SetUniform("u_TexIndTexture",    (int)DeferredMaterialPassTexSlot::_TextureIndices);
+    const int textureArrayCount = _UseTextureBuckets ? S_TextureBucketCount : 1;
+    for ( int i = 0; i < textureArrayCount; ++i )
+      _GeometryShader -> SetUniform("u_TexArrayTexture" + std::to_string(i), (int)( DeferredMaterialPassTexSlot::_TextureArray0 + i ));
+    if ( !_UseTextureBuckets )
+      _GeometryShader -> SetUniform("u_TextureArraySize", _Scene.GetCompiledTextureBuckets()[0]._Size);
+    _GeometryShader -> SetUniform("u_MaterialsTexture", (int)DeferredMaterialPassTexSlot::_Materials);
     _GeometryShader -> StopUsing();
   }
 
@@ -1587,7 +1690,7 @@ int DeferredRenderer::UpdateUniforms()
     _SSAOShader -> SetUniform("u_GNormal", (int)DeferredTexSlot::_GNormal);
     _SSAOShader -> SetUniform("u_GPosition", (int)DeferredTexSlot::_GPosition);
     _SSAOShader -> SetUniform("u_GDepth", (int)DeferredTexSlot::_GDepth);
-    _SSAOShader -> SetUniform("u_SSAONoise", (int)DeferredTexSlot::_SSAONoise);
+    _SSAOShader -> SetUniform("u_SSAONoise", (int)DeferredTexSlot::_GEmission);
     _SSAOShader -> SetUniform("u_View", V);
     _SSAOShader -> SetUniform("u_Proj", P);
     if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
@@ -1606,7 +1709,7 @@ int DeferredRenderer::UpdateUniforms()
   if ( _SSAOBlurShader && ( _DirtyStates & (unsigned long)DirtyState::RenderSettings ) ) 
   {
     _SSAOBlurShader -> Use();
-    _SSAOBlurShader -> SetUniform("u_SSAOInput", (int)DeferredTexSlot::_SSAO);
+    _SSAOBlurShader -> SetUniform("u_SSAOInput", 0);
     _SSAOBlurShader -> SetUniform("u_GDepth", (int)DeferredTexSlot::_GDepth);
     _SSAOBlurShader -> SetUniform("u_GNormal", (int)DeferredTexSlot::_GNormal);
     _SSAOBlurShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
@@ -1621,8 +1724,8 @@ int DeferredRenderer::UpdateUniforms()
     _SSRShader -> SetUniform("u_GPosition", (int)DeferredTexSlot::_GPosition);
     _SSRShader -> SetUniform("u_GMaterial", (int)DeferredTexSlot::_GMaterial);
     _SSRShader -> SetUniform("u_GDepth", (int)DeferredTexSlot::_GDepth);
-    _SSRShader -> SetUniform("u_SSRSource", (int)DeferredTexSlot::_SSRSource);
-    _SSRShader -> SetUniform("u_EnvMap", (int)DeferredTexSlot::_EnvMap);
+    _SSRShader -> SetUniform("u_SSRSource", (int)DeferredTexSlot::_GEmission);
+    _SSRShader -> SetUniform("u_EnvMap", (int)DeferredTexSlot::_TexInd);
     _SSRShader -> SetUniform("u_View", V);
     _SSRShader -> SetUniform("u_Proj", P);
     _SSRShader -> SetUniform("u_Camera._Pos", camPos);
@@ -1635,7 +1738,8 @@ int DeferredRenderer::UpdateUniforms()
       _SSRShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
       _SSRShader -> SetUniform("u_EnableSSR", _Settings._SSR ? 1 : 0);
       _SSRShader -> SetUniform("u_SSRMaxSteps", std::min(std::max(_Settings._SSRMaxSteps, 4), 128));
-      _SSRShader -> SetUniform("u_SSRStepSize", _Settings._SSRStepSize);
+      _SSRShader -> SetUniform("u_SSRPixelStride", MathUtil::Clamp(_Settings._SSRPixelStride, 0.25f, 4.f));
+      _SSRShader -> SetUniform("u_SSRStartBias", MathUtil::Clamp(_Settings._SSRStartBias, 0.25f, 8.f));
       _SSRShader -> SetUniform("u_SSRMaxDistance", _Settings._SSRMaxDistance);
       _SSRShader -> SetUniform("u_SSRThickness", _Settings._SSRThickness);
       _SSRShader -> SetUniform("u_SSRMaxRoughness", _Settings._SSRMaxRoughness);
@@ -1671,16 +1775,16 @@ int DeferredRenderer::UpdateUniforms()
       _LightingShader -> SetUniform("u_GEmission", (int)DeferredTexSlot::_GEmission);
       _LightingShader -> SetUniform("u_GDepth",    (int)DeferredTexSlot::_GDepth);
 
-      _LightingShader -> SetUniform("u_SSAOMap", (int)DeferredTexSlot::_SSAOBlur);
+      _LightingShader -> SetUniform("u_SSAOMap", (int)DeferredLightingPassTexSlot::_SSAO);
       _LightingShader -> SetUniform("u_EnableSSAO", _Settings._SSAO ? 1 : 0);
       _LightingShader -> SetUniform("u_SSAOIntensity", _Settings._SSAOIntensity);
-      _LightingShader -> SetUniform("u_SSRMap", (int)DeferredTexSlot::_SSR);
+      _LightingShader -> SetUniform("u_SSRMap", (int)DeferredLightingPassTexSlot::_SSR);
       _LightingShader -> SetUniform("u_EnableSSR", _Settings._SSR ? 1 : 0);
       _LightingShader -> SetUniform("u_SSRIntensity", _Settings._SSRIntensity);
       _LightingShader -> SetUniform("u_SSRMaxRoughness", _Settings._SSRMaxRoughness);
 
-      _LightingShader -> SetUniform("u_ShadowCubeMaps", (int)DeferredTexSlot::_ShadowCubeMap);
-      _LightingShader -> SetUniform("u_Shadow2DMaps", (int)DeferredTexSlot::_Shadow2DMap);
+      _LightingShader -> SetUniform("u_ShadowCubeMaps", (int)DeferredLightingPassTexSlot::_ShadowCubeMap);
+      _LightingShader -> SetUniform("u_Shadow2DMaps", (int)DeferredLightingPassTexSlot::_Shadow2DMap);
       _LightingShader -> SetUniform("u_EnableShadowMapping", ( _Settings._ShadowMapping && _HasShadowLight ) ? ( 1 ) : ( 0 ));
       _LightingShader -> SetUniform("u_NbShadowCasters", static_cast<int>(_ShadowCasters.size()));
       _LightingShader -> SetUniform("u_ShadowBias", _Settings._ShadowBias);
@@ -1698,7 +1802,7 @@ int DeferredRenderer::UpdateUniforms()
           _LightingShader -> SetUniform(GLUtil::UniformArrayElementName("u_ShadowCasters", i, "_CubeViewProj[" + std::to_string(face) + "]"), caster._CubeViewProj[face]);
       }
 
-      _LightingShader -> SetUniform("u_BRDFLUT", (int)DeferredTexSlot::_BRDFLUT);
+      _LightingShader -> SetUniform("u_BRDFLUT", (int)DeferredLightingPassTexSlot::_BRDFLUT);
       _LightingShader -> SetUniform("u_EnableSpecularIBL", _Settings._SpecularIBL ? 1 : 0);
       _LightingShader -> SetUniform("u_SpecularIBLIntensity", _Settings._SpecularIBLIntensity);
       _LightingShader -> SetUniform("u_SpecularIBLMaxRoughness", _Settings._SpecularIBLMaxRoughness);
@@ -1740,7 +1844,7 @@ int DeferredRenderer::UpdateUniforms()
       _LightingShader -> SetUniform("u_EnableBackground" , (int)_Settings._EnableBackGround);
       _LightingShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
       _LightingShader -> SetUniform("u_EnvMapRes", (float)_Scene.GetEnvMap().GetWidth(), (float)_Scene.GetEnvMap().GetHeight());
-      _LightingShader -> SetUniform("u_EnvMap", (int)DeferredTexSlot::_EnvMap);
+      _LightingShader -> SetUniform("u_EnvMap", (int)DeferredLightingPassTexSlot::_EnvMap);
       float envMipCount = 1.f;
       if ( _Scene.GetEnvMap().GetWidth() > 0 && _Scene.GetEnvMap().GetHeight() > 0 )
       {
@@ -1776,10 +1880,13 @@ int DeferredRenderer::UpdateUniforms()
 
     _TransparentShader -> SetUniform("u_View", V);
     _TransparentShader -> SetUniform("u_Proj", P);
-    _TransparentShader -> SetUniform("u_TexIndTexture",    (int)DeferredTexSlot::_TexInd);
-    _TransparentShader -> SetUniform("u_TexArrayTexture",  (int)DeferredTexSlot::_TexArray);
-    _TransparentShader -> SetUniform("u_MaterialsTexture", (int)DeferredTexSlot::_Materials);
-    _TransparentShader -> SetUniform("u_GDepth", (int)DeferredTexSlot::_GDepth);
+    _TransparentShader -> SetUniform("u_TexIndTexture",    (int)DeferredMaterialPassTexSlot::_TextureIndices);
+    const int textureArrayCount = _UseTextureBuckets ? S_TextureBucketCount : 1;
+    for ( int i = 0; i < textureArrayCount; ++i )
+      _TransparentShader -> SetUniform("u_TexArrayTexture" + std::to_string(i), (int)( DeferredMaterialPassTexSlot::_TextureArray0 + i ));
+    if ( !_UseTextureBuckets )
+      _TransparentShader -> SetUniform("u_TextureArraySize", _Scene.GetCompiledTextureBuckets()[0]._Size);
+    _TransparentShader -> SetUniform("u_MaterialsTexture", (int)DeferredMaterialPassTexSlot::_Materials);
 
     if ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
     {
@@ -1808,13 +1915,25 @@ int DeferredRenderer::UpdateUniforms()
     if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
     {
       _TransparentShader -> SetUniform("u_EnvMapRes", (float)_Scene.GetEnvMap().GetWidth(), (float)_Scene.GetEnvMap().GetHeight());
-      _TransparentShader -> SetUniform("u_EnvMap", (int)DeferredTexSlot::_EnvMap);
-      _TransparentShader -> SetUniform("u_BRDFLUT", (int)DeferredTexSlot::_BRDFLUT);
+      _TransparentShader -> SetUniform("u_EnvMap", (int)DeferredTransparentPassTexSlot::_EnvMap);
+      _TransparentShader -> SetUniform("u_BRDFLUT", (int)DeferredTransparentPassTexSlot::_BRDFLUT);
       _TransparentShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
       _TransparentShader -> SetUniform("u_EnableEnvMap", (int)_Settings._EnableSkybox);
       _TransparentShader -> SetUniform("u_EnablePBRDirectLighting", _Settings._PBRDirectLighting ? 1 : 0);
       _TransparentShader -> SetUniform("u_DirectLightIntensity", _Settings._DirectLightIntensity);
       _TransparentShader -> SetUniform("u_SpecularIBLMaxRoughness", _Settings._SpecularIBLMaxRoughness);
+      _TransparentShader -> SetUniform("u_SceneColor", (int)DeferredTransparentPassTexSlot::_SceneColor);
+      _TransparentShader -> SetUniform("u_GDepth", (int)DeferredTransparentPassTexSlot::_GDepth);
+      _TransparentShader -> SetUniform("u_GPosition", (int)DeferredTransparentPassTexSlot::_GPosition);
+      _TransparentShader -> SetUniform("u_Resolution", (float)RenderWidth(), (float)RenderHeight());
+      _TransparentShader -> SetUniform("u_EnableRefraction", _Settings._Refraction ? 1 : 0);
+      _TransparentShader -> SetUniform("u_RefractionMaxSteps", std::min(std::max(_Settings._RefractionMaxSteps, 4), 128));
+      _TransparentShader -> SetUniform("u_RefractionPixelStride", MathUtil::Clamp(_Settings._RefractionPixelStride, 0.25f, 4.f));
+      _TransparentShader -> SetUniform("u_RefractionStartBias", MathUtil::Clamp(_Settings._RefractionStartBias, 0.25f, 8.f));
+      _TransparentShader -> SetUniform("u_RefractionMaxDistance", std::max(_Settings._RefractionMaxDistance, 0.001f));
+      _TransparentShader -> SetUniform("u_RefractionThickness", std::max(_Settings._RefractionThickness, 0.001f));
+      _TransparentShader -> SetUniform("u_RefractionEdgeFade", std::max(_Settings._RefractionEdgeFade, 0.001f));
+      _TransparentShader -> SetUniform("u_SceneColorMipCount", std::floor(std::log2((float)std::max(RenderWidth(), RenderHeight()))) + 1.f);
       float transparentEnvMipCount = 1.f;
       if ( _Scene.GetEnvMap().GetWidth() > 0 && _Scene.GetEnvMap().GetHeight() > 0 )
       {
@@ -1830,8 +1949,8 @@ int DeferredRenderer::UpdateUniforms()
       || ( _DirtyStates & (unsigned long)DirtyState::Textures )
       || ( _DirtyStates & (unsigned long)DirtyState::SceneInstances ) )
     {
-      _TransparentShader -> SetUniform("u_ShadowCubeMaps", (int)DeferredTexSlot::_ShadowCubeMap);
-      _TransparentShader -> SetUniform("u_Shadow2DMaps", (int)DeferredTexSlot::_Shadow2DMap);
+      _TransparentShader -> SetUniform("u_ShadowCubeMaps", (int)DeferredTransparentPassTexSlot::_ShadowCubeMap);
+      _TransparentShader -> SetUniform("u_Shadow2DMaps", (int)DeferredTransparentPassTexSlot::_Shadow2DMap);
       _TransparentShader -> SetUniform("u_EnableShadowMapping", ( _Settings._ShadowMapping && _HasShadowLight ) ? ( 1 ) : ( 0 ));
       _TransparentShader -> SetUniform("u_NbShadowCasters", static_cast<int>(_ShadowCasters.size()));
       _TransparentShader -> SetUniform("u_ShadowBias", _Settings._ShadowBias);
@@ -1857,7 +1976,7 @@ int DeferredRenderer::UpdateUniforms()
   {
     _CompositeShader -> Use();
 
-    _CompositeShader -> SetUniform("u_ScreenTexture", (int)DeferredTexSlot::_Lighting);
+    _CompositeShader -> SetUniform("u_ScreenTexture", 0);
     _CompositeShader -> SetUniform("u_RenderRes", static_cast<float>(_Settings._RenderResolution.x), static_cast<float>(_Settings._RenderResolution.y));
     _CompositeShader -> SetUniform("u_Gamma", _Settings._Gamma);
     _CompositeShader -> SetUniform("u_Exposure", _Settings._Exposure);
@@ -1984,9 +2103,9 @@ int DeferredRenderer::RenderSSAO()
   glClear(GL_COLOR_BUFFER_BIT);
 
   _SSAOBlurShader -> Use();
-  GLUtil::ActivateTexture(_SSAOTEX);
-  GLUtil::ActivateTexture(_GDepthTEX);
-  GLUtil::ActivateTexture(_GNormalTEX);
+  GLUtil::ActivateTexture(_SSAOTEX, 0);
+  GLUtil::ActivateTexture(_GDepthTEX, DeferredTexSlot::_GDepth);
+  GLUtil::ActivateTexture(_GNormalTEX, DeferredTexSlot::_GNormal);
   _Quad.Render(*_SSAOBlurShader);
   _SSAOBlurShader -> StopUsing();
 
@@ -2023,9 +2142,9 @@ int DeferredRenderer::RenderSSR()
 }
 
 // ----------------------------------------------------------------------------
-// UpdateSSRSource
+// UpdateSceneColorSource
 // ----------------------------------------------------------------------------
-int DeferredRenderer::UpdateSSRSource()
+int DeferredRenderer::UpdateSceneColorSource( bool iGenerateMipMaps )
 {
   if ( !_LightingFBO._Handle || !_SSRSourceFBO._Handle )
     return 1;
@@ -2038,6 +2157,14 @@ int DeferredRenderer::UpdateSSRSource()
                     0, 0, RenderWidth(), RenderHeight(),
                     GL_COLOR_BUFFER_BIT, GL_NEAREST);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  if ( iGenerateMipMaps )
+  {
+    glBindTexture(GL_TEXTURE_2D, _SSRSourceTEX._Handle);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
 
   return 0;
 }
@@ -2072,7 +2199,7 @@ int DeferredRenderer::RenderTransparent()
   glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
   _TransparentShader -> Use();
-  BindLightingTextures();
+  BindTransparentTextures();
 
   // Per-instance sorting is not enough for transparent shell meshes. Re-sorting
   // triangles back-to-front per draw stabilizes intra-mesh blending order.
@@ -2151,9 +2278,7 @@ int DeferredRenderer::RenderToTexture()
 
     _GeometryShader -> Use();
 
-    GLUtil::ActivateTexture(_TexIndTBO._Tex);
-    GLUtil::ActivateTexture(_TexArrayTEX);
-    GLUtil::ActivateTexture(_MaterialsTEX);
+    BindMaterialTextures();
 
     const std::vector<MeshInstance> & instances = _Scene.GetMeshInstances();
     for ( int instID : _OpaqueMeshInstanceIDs )
@@ -2218,6 +2343,7 @@ int DeferredRenderer::RenderToTexture()
     // Lighting pass: sample G-buffer and compute shading into lighting FBO
     glBindFramebuffer(GL_FRAMEBUFFER, _LightingFBO._Handle);
     glViewport(0, 0, RenderWidth(), RenderHeight());
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
 
     glClearColor(0.f, 0.f, 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -2237,9 +2363,25 @@ int DeferredRenderer::RenderToTexture()
     EndTimer(TimingLighting);
   }
 
+  const bool refractionPassEnabled = _Settings._Transparency && _Settings._Refraction && _HasRefractiveInstances;
+  if ( refractionPassEnabled )
+  {
+    BeginTimer(TimingRefractionSourceCopy);
+    UpdateSceneColorSource(true);
+    EndTimer(TimingRefractionSourceCopy);
+  }
+  else
+    SetTimingEnabled(TimingRefractionSourceCopy, false);
+
   BeginTimer(TimingTransparency);
   RenderTransparent();
   EndTimer(TimingTransparency);
+  if ( refractionPassEnabled )
+  {
+    glBindTexture(GL_TEXTURE_2D, _SSRSourceTEX._Handle);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
   if ( !_Settings._Transparency || _TransparentMeshInstanceIDs.empty() )
     SetTimingEnabled(TimingTransparency, false);
 
@@ -2265,8 +2407,6 @@ int DeferredRenderer::RenderToTexture()
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     _WireframeShader -> Use();
-
-    this -> BindLightingTextures();
 
     const std::vector<MeshInstance> & instances2 = _Scene.GetMeshInstances();
     for ( int instID : _OpaqueMeshInstanceIDs )
@@ -2307,7 +2447,7 @@ int DeferredRenderer::RenderToTexture()
   if ( 0 == ( _DebugMode & ~(int)DeferredDebugModes::Wires ) )
   {
     BeginTimer(TimingSSRSourceCopy);
-    UpdateSSRSource();
+    UpdateSceneColorSource(false);
     EndTimer(TimingSSRSourceCopy);
   }
 

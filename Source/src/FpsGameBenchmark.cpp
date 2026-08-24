@@ -439,6 +439,8 @@ bool FpsGameBenchmark::SaveResult( const FpsGameBenchmarkSaveContext & iContext 
   file << "    \"tiled_rendering\": " << ( settings._TiledRendering ? "true" : "false" ) << ",\n";
   file << "    \"nb_threads\": " << settings._NbThreads << ",\n";
   file << "    \"sampling\": " << (int)settings._Sampling << ",\n";
+  file << "    \"generate_mip_maps\": " << ( settings._GenerateMipMaps ? "true" : "false" ) << ",\n";
+  file << "    \"anisotropic_level\": " << settings._AnisotropicLevel << ",\n";
   file << "    \"shading_type\": " << (int)settings._ShadingType << ",\n";
   file << "    \"w_buffer\": " << ( settings._WBuffer ? "true" : "false" ) << ",\n";
   file << "    \"tone_mapping\": " << ( settings._ToneMapping ? "true" : "false" ) << ",\n";
