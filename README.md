@@ -10,7 +10,6 @@ Test3 : GPU Ray tracer
 A (poorly lit) ray tracer written in c++ and GLSL.
 
 | ![diningroom_RT](./Captures/RayTracer_diningroom.scene_4255frames.png) | ![BarberShopChair_RT](./Captures/RayTracer_BarberShopChair_01.scene_163frames.png) |
-| -------- | ------- |
 | ![mustang_red_RT](./Captures/RayTracer_mustang_red.scene_40frames.png) | ![spaceship_RT](./Captures/RayTracer_spaceship.scene_50frames.png) |
 
 Test4 : CPU Rasterizer
@@ -20,9 +19,7 @@ Software rasterizer running on the CPU.
 Basic phong reflecton model.
 
 | ![CashRegister](./Captures/Rasterizer_CashRegister_01_4k.gltf.png) | ![BarberShopChair](./Captures/Rasterizer_BarberShopChair_01.scene.png) |
-| -------- | ------- |
 | ![mustang_red](./Captures/Rasterizer_mustang_red.scene.png) | ![rank3police](./Captures/Rasterizer_rank3police.scene.png) |
-| -------- | ------- |
 | ![spaceship_Rast](./Captures/Rasterizer_spaceship.scene.png) | ![Sponza_Rast](./Captures/Rasterizer_Sponza.png) |
 
 
