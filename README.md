@@ -40,8 +40,8 @@ Test5 : Render lab (GPU Path tracer / CPU Rasterizer / GPU Deferred renderer)
 Test6 : (Very) Basic FPS game
 --------
 
-| -------- | ------- | ------- |
 | ![FPSGame_PT](./Captures/Test6_FPSGame_PathTracer.png) | ![FPSGame_Rast](./Captures/Test6_FPSGame_Software.png) | ![FPSGame_GPU](./Captures/Test6_FPSGame_Deferred.png) |
+| -------- | ------- | ------- |
 
 References/Credits
 --------
