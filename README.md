@@ -30,17 +30,18 @@ Test5 : Render lab (GPU Path tracer / CPU Rasterizer / GPU Deferred renderer)
 
 | Path tracer | Software rasterizer | Deferred renderer |
 | -------- | ------- | ------- |
-| ![mustang_white_PT](./Captures/PathTracer_ABeautifulGame.png) | ![mustang_white_PT](./Captures/Rasterizer__Phong_ABeautifulGame.png) | ![mustang_white_PT](./Captures/Deferred_ABeautifulGame.png) |
+| ![ABeautifulGame_PT](./Captures/PathTracer_ABeautifulGame.png) | ![ABeautifulGame_Rast](./Captures/Rasterizer__Phong_ABeautifulGame.png) | ![ABeautifulGame_GPU](./Captures/Deferred_ABeautifulGame.png) |
+| ![ToyCar_PT](./Captures/PathTracer_ToyCar.png) | ![ToyCar_Rast](./Captures/Rasterizer_Phong_ToyCar.png) | ![ToyCar_GPU](./Captures/Deferred_ToyCar.png) |
+
+![DragonAttenuation_PT](./Captures/PathTracer_DragonAttenuation.png)
+
+![Mustang_PT](./Captures/PathTracer_mustang.scene_70717frames.png)
 
 Test6 : (Very) Basic FPS game
 --------
 
-![FPSGame_PT](./Captures/Test6_FPSGame_PathTracer.png)
-
-![FPSGame_Rast](./Captures/Test6_FPSGame_Software.png)
-
-![FPSGame_GPU](./Captures/Test6_FPSGame_Deferred.png)
-
+| -------- | ------- | ------- |
+| ![FPSGame_PT](./Captures/Test6_FPSGame_PathTracer.png) | ![FPSGame_Rast](./Captures/Test6_FPSGame_Software.png) | ![FPSGame_GPU](./Captures/Test6_FPSGame_Deferred.png) |
 
 References/Credits
 --------
