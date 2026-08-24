@@ -25,39 +25,12 @@ Basic phong reflecton model.
 | ![spaceship_Rast](./Captures/Rasterizer_spaceship.scene.png) | ![Sponza_Rast](./Captures/Rasterizer_Sponza.png) |
 
 
-Test5 : GPU Path tracer / CPU Rasterizer / GPU Deferred renderer
+Test5 : Render lab (GPU Path tracer / CPU Rasterizer / GPU Deferred renderer)
 --------
 
-![mustang_white_PT](./Captures/PathTracer_mustang.scene_70717frames.png)
-
-![mustang_white_Rast](./Captures/Rasterizer_mustang.scene_72165frames.png)
-
-![mustang_white_GPU](./Captures/Deferred_mustang.scene_73088frames.png)
-
-![Sponza_PT](./Captures/PathTracer_Sponza.gltf_114067frames.png)
-
-![Sponza_Rast](./Captures/Rasterizer_Sponza.gltf_111413frames.png)
-
-![Sponza_GPU](./Captures/Deferred_Sponza.gltf_110780frames.png)
-
-![spaceship_PT](./Captures/PathTracer_spaceship.scene_92106frames.png)
-
-![spaceship_Rast](./Captures/Rasterizer_spaceship.scene_92020frames.png)
-
-![spaceship_GPU](./Captures/Deferred_spaceship.scene_90674frames.png)
-
-![CoffeeCart_PT](./Captures/PathTracer_CoffeeCart_192890frames.png)
-
-![Teapot_PT](./Captures/PathTracer_renderman_teapot_all_45844frames.png)
-
-![slum_house_PT](./Captures/PathTracer_slum_house.gltf_16578frames.png)
-
-![Teapot_Rast](./Captures/Rasterizer_renderman_teapot_all.png)
-
-![Bedroom_Rast](./Captures/Rasterizer_Bedroom.png)
-
-![Jinx_GPU](./Captures/Deferred_Jinx.png)
-
+| Path tracer | Software rasterizer | Deferred renderer |
+| -------- | ------- | ------- |
+| ![mustang_white_PT](./Captures/PathTracer_ABeautifulGame.png) | ![mustang_white_PT](./Captures/Rasterizer__Phong_ABeautifulGame.png) | ![mustang_white_PT](./Captures/Deferred_ABeautifulGame.png) |
 
 Test6 : (Very) Basic FPS game
 --------
