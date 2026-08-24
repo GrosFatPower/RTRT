@@ -37,6 +37,8 @@ Test5 : Render lab (GPU Path tracer / CPU Rasterizer / GPU Deferred renderer)
 
 ![Mustang_PT](./Captures/PathTracer_mustang.scene_70717frames.png)
 
+![Sponza_PT](./Captures/PathTracer_Sponza_28606frames.png)
+
 Test6 : (Very) Basic FPS game
 --------
 
