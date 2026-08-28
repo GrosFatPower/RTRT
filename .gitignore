@@ -35,7 +35,6 @@ VertexShader_*.glsl
 FragmentShader_*.glsl
 ComputeShader_*.glsl
 Assets/ajax/
-Assets/Figurine/
 Assets/bedroom/
 Assets/Mustang/
 Assets/panther/
