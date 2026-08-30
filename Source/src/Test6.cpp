@@ -172,7 +172,28 @@ void Test6::KeyCallback( GLFWwindow * iWindow, const int iKey, const int iScanco
     return;
 
   if ( ( GLFW_PRESS == iAction ) || ( GLFW_RELEASE == iAction ) )
+  {
     this_ -> _KeyInput.AddEvent(iKey, iAction, iMods);
+
+    const bool isAltKey = ( GLFW_KEY_LEFT_ALT == iKey ) || ( GLFW_KEY_RIGHT_ALT == iKey );
+    if ( isAltKey && ( GLFW_PRESS == iAction ) )
+      this_ -> _AltMenuToggleArmed = true;
+    else if ( !isAltKey && ( GLFW_PRESS == iAction )
+      && ( this_ -> _KeyInput.IsKeyDown(GLFW_KEY_LEFT_ALT) || this_ -> _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_ALT) ) )
+    {
+      this_ -> _AltMenuToggleArmed = false;
+    }
+    else if ( isAltKey && ( GLFW_RELEASE == iAction ) )
+    {
+      if ( this_ -> _AltMenuToggleArmed
+        && !this_ -> _KeyInput.IsKeyDown(GLFW_KEY_LEFT_ALT)
+        && !this_ -> _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_ALT) )
+      {
+        this_ -> _ShowMenuBar = !this_ -> _ShowMenuBar;
+      }
+      this_ -> _AltMenuToggleArmed = false;
+    }
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -612,6 +633,22 @@ FpsGameHudContext Test6::MakeHudContext() const
 }
 
 // ----------------------------------------------------------------------------
+// SetEditorMode
+// ----------------------------------------------------------------------------
+bool Test6::SetEditorMode( bool iEnabled )
+{
+  FpsGameEditorContext editorContext = MakeEditorContext();
+  if ( !_Editor.SetMode(editorContext, iEnabled) )
+    return false;
+
+  _HasLastMousePos = false;
+  if ( _Editor.IsEnabled() )
+    SetMouseCaptured(false);
+
+  return true;
+}
+
+// ----------------------------------------------------------------------------
 // InitializeScene
 // ----------------------------------------------------------------------------
 int Test6::InitializeScene()
@@ -918,15 +955,7 @@ int Test6::ProcessInput()
     _GameSettings._FreeLook = !_GameSettings._FreeLook;
 
   if ( !ImGui::GetIO().WantCaptureKeyboard && _KeyInput.IsKeyReleased(GLFW_KEY_F3) )
-  {
-    FpsGameEditorContext editorContext = MakeEditorContext();
-    if ( _Editor.SetMode(editorContext, !_Editor.IsEnabled()) )
-    {
-      _HasLastMousePos = false;
-      if ( _Editor.IsEnabled() )
-        SetMouseCaptured(false);
-    }
-  }
+    SetEditorMode(!_Editor.IsEnabled());
 
   if ( _Editor.IsEnabled() )
   {
@@ -1263,6 +1292,138 @@ int Test6::UpdateBoids()
 }
 
 // ----------------------------------------------------------------------------
+// DrawMainMenuBar
+// ----------------------------------------------------------------------------
+int Test6::DrawMainMenuBar()
+{
+  if ( !ImGui::BeginMainMenuBar() )
+    return 0;
+
+  if ( ImGui::BeginMenu("File") )
+  {
+    FpsGameEditorContext editorContext = MakeEditorContext();
+    if ( ImGui::MenuItem(_Editor.IsEnabled() ? "Exit editor" : "Enter editor", "F3") )
+      SetEditorMode(!_Editor.IsEnabled());
+
+    ImGui::Separator();
+    if ( ImGui::MenuItem("Open map...") )
+      _Editor.LoadMapFromDialog(editorContext);
+
+    if ( _Editor.IsEnabled() )
+    {
+      ImGui::Separator();
+      if ( ImGui::MenuItem("Save") )
+        _Editor.SaveMap(editorContext);
+      if ( ImGui::MenuItem("Save as...") )
+        _Editor.SaveMapAsDialog(editorContext);
+      if ( ImGui::MenuItem("Load prop...") )
+        _Editor.LoadPropFromDialog(editorContext);
+    }
+
+    ImGui::Separator();
+    if ( ImGui::MenuItem("Exit") )
+      _ExitToTestSelection = true;
+    ImGui::EndMenu();
+  }
+
+  if ( ImGui::BeginMenu("View") )
+  {
+    ImGui::MenuItem("FPS Debug", nullptr, &_ShowDebugPanel);
+    ImGui::MenuItem("Render Settings", nullptr, &_ShowRenderSettingsPanel);
+    ImGui::MenuItem("Rendering Stats", nullptr, &_ShowRenderStatsPanel);
+
+    if ( _Editor.IsEnabled() )
+    {
+      ImGui::Separator();
+      _Editor.DrawViewMenuItems();
+    }
+    ImGui::EndMenu();
+  }
+
+  if ( ImGui::BeginMenu("Render") )
+  {
+    if ( ImGui::MenuItem("Deferred", nullptr, FpsRendererMode::Deferred == _GameSettings._RendererMode)
+      && ( FpsRendererMode::Deferred != _GameSettings._RendererMode ) )
+    {
+      _GameSettings._RendererMode = FpsRendererMode::Deferred;
+      CaptureMapRenderSettings(_Map, _GameSettings, _Settings);
+      _ReloadRenderer = true;
+      if ( _Editor.IsEnabled() )
+        _Editor.MarkDirty();
+    }
+    if ( ImGui::MenuItem("Software", nullptr, FpsRendererMode::Software == _GameSettings._RendererMode)
+      && ( FpsRendererMode::Software != _GameSettings._RendererMode ) )
+    {
+      _GameSettings._RendererMode = FpsRendererMode::Software;
+      CaptureMapRenderSettings(_Map, _GameSettings, _Settings);
+      _ReloadRenderer = true;
+      if ( _Editor.IsEnabled() )
+        _Editor.MarkDirty();
+    }
+    if ( ImGui::MenuItem("Photo Path Tracer", nullptr, FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode)
+      && ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode ) )
+    {
+      _GameSettings._RendererMode = FpsRendererMode::PhotoPathTracer;
+      CaptureMapRenderSettings(_Map, _GameSettings, _Settings);
+      _ReloadRenderer = true;
+      if ( _Editor.IsEnabled() )
+        _Editor.MarkDirty();
+    }
+
+    ImGui::Separator();
+    if ( ImGui::MenuItem("Capture image") )
+    {
+      _CaptureOutputPath = "./Test6_" + std::to_string(_NbRenderedFrames) + "frames.png";
+      _RenderToFile = true;
+    }
+    ImGui::EndMenu();
+  }
+
+  if ( ImGui::BeginMenu("Help") )
+  {
+    if ( ImGui::MenuItem("About & Controls...") )
+      _ShowHelpDialog = true;
+    ImGui::EndMenu();
+  }
+
+  ImGui::EndMainMenuBar();
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawHelpUI
+// ----------------------------------------------------------------------------
+int Test6::DrawHelpUI()
+{
+  if ( _ShowHelpDialog )
+  {
+    ImGui::OpenPopup("Test6 Help");
+    _ShowHelpDialog = false;
+  }
+
+  if ( ImGui::BeginPopupModal("Test6 Help", nullptr, ImGuiWindowFlags_AlwaysAutoResize) )
+  {
+    ImGui::TextWrapped("Test6 is the FPS game and map-editing workbench.");
+    ImGui::Separator();
+    ImGui::Text("Gameplay");
+    ImGui::BulletText("F1 toggles FPS Debug; F2 toggles free look; F3 toggles editor mode.");
+    ImGui::BulletText("J, K, and L select Deferred, Software, and Photo Path Tracer.");
+    ImGui::BulletText("Escape releases the mouse, then returns to test selection.");
+    ImGui::Text("Editor");
+    ImGui::BulletText("Left click selects; right mouse moves the editor camera; Delete removes selection.");
+    ImGui::BulletText("Drag .obj, .gltf, or .glb props into the editor to add them.");
+    ImGui::BulletText("Alt toggles the menu bar. File > Open map loads .fpsmap files.");
+
+    ImGui::Separator();
+    if ( ImGui::Button("Close") )
+      ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
 // DrawUI
 // ----------------------------------------------------------------------------
 int Test6::DrawUI()
@@ -1272,17 +1433,24 @@ int Test6::DrawUI()
   ImGui::NewFrame();
   ImGuizmo::BeginFrame();
 
+  if ( _ShowMenuBar )
+    DrawMainMenuBar();
+
+  if ( _Editor.IsEnabled() )
+    _Editor.DrawDockspace();
+  else
+    ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+
   if ( _ShowDebugPanel )
-  {
     DrawDebugPanel();
-    DrawRenderStatsUI();
+  if ( _ShowRenderSettingsPanel )
     DrawRenderSettingsUI();
-  }
+  if ( _ShowRenderStatsPanel )
+    DrawRenderStatsUI();
 
   if ( _Editor.IsEnabled() )
   {
     FpsGameEditorContext editorContext = MakeEditorContext();
-    _Editor.DrawDockspace();
     _Editor.DrawPanels(editorContext);
     _Editor.DrawOverlays(editorContext);
     _Editor.DrawGizmo(editorContext);
@@ -1291,9 +1459,11 @@ int Test6::DrawUI()
   else
     _Hud.Draw(MakeHudContext());
 
+  DrawHelpUI();
+
   ImGui::Render();
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-  return 0;
+  return _ExitToTestSelection ? 1 : 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -1301,20 +1471,10 @@ int Test6::DrawUI()
 // ----------------------------------------------------------------------------
 void Test6::DrawDebugPanel()
 {
-  ImGui::Begin("Test6 FPS", nullptr, ImGuiWindowFlags_NoDocking);
-
-  static const char * Renderers[] = { "Deferred", "Software", "Photo Path Tracer" };
-  int rendererMode = (int)_GameSettings._RendererMode;
-  if ( ImGui::Combo("Renderer", &rendererMode, Renderers, 3) )
+  if ( !ImGui::Begin("Test6 FPS", &_ShowDebugPanel) )
   {
-    if ( rendererMode != (int)_GameSettings._RendererMode )
-    {
-      _GameSettings._RendererMode = (FpsRendererMode)rendererMode;
-      CaptureMapRenderSettings(_Map, _GameSettings, _Settings);
-      _ReloadRenderer = true;
-      if ( _Editor.IsEnabled() )
-        _Editor.MarkDirty();
-    }
+    ImGui::End();
+    return;
   }
 
   if ( FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode )
@@ -1347,13 +1507,6 @@ void Test6::DrawDebugPanel()
       _Renderer -> Notify(DirtyState::SceneCamera);
       _Renderer -> Notify(DirtyState::SceneInstances);
     }
-  }
-
-  ImGui::SameLine();
-  if ( ImGui::Button("Capture image") )
-  {
-    _CaptureOutputPath = "./Test6_" + std::to_string(_NbRenderedFrames) + "frames.png";
-    _RenderToFile = true;
   }
 
   DrawBenchmarkUI();
@@ -1587,7 +1740,11 @@ int Test6::DrawGameSettingsUI()
 // ----------------------------------------------------------------------------
 int Test6::DrawRenderSettingsUI()
 {
-  ImGui::Begin("Test6 Render Settings", nullptr, ImGuiWindowFlags_NoDocking);
+  if ( !ImGui::Begin("Test6 Render Settings", &_ShowRenderSettingsPanel) )
+  {
+    ImGui::End();
+    return 0;
+  }
 
   FpsGameEditorContext editorContext = MakeEditorContext();
   _Editor.DrawRenderSettingsUI(editorContext);
@@ -1601,7 +1758,11 @@ int Test6::DrawRenderSettingsUI()
 // ----------------------------------------------------------------------------
 int Test6::DrawRenderStatsUI()
 {
-  ImGui::Begin("Test6 Rendering Stats", nullptr, ImGuiWindowFlags_NoDocking);
+  if ( !ImGui::Begin("Test6 Rendering Stats", &_ShowRenderStatsPanel) )
+  {
+    ImGui::End();
+    return 0;
+  }
 
   FpsGameEditorContext editorContext = MakeEditorContext();
   _Editor.DrawPerformanceUI(editorContext);
@@ -1746,7 +1907,11 @@ int Test6::Run()
       _Renderer -> Done();
 
       BeginCpuTiming(CpuDrawUI);
-      DrawUI();
+      if ( 0 != DrawUI() )
+      {
+        EndCpuTiming(CpuDrawUI);
+        break;
+      }
       EndCpuTiming(CpuDrawUI);
 
       BeginCpuTiming(CpuSwapBuffers);

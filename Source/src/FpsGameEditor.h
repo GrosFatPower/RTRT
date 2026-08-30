@@ -130,6 +130,9 @@ public:
   void DrawSettingsPanel( FpsGameEditorContext & ioContext );
   void DrawRenderSettingsPanel( FpsGameEditorContext & ioContext );
   void DrawPerformancePanel( FpsGameEditorContext & ioContext );
+  void DrawViewMenuItems();
+  void RequestResetDockLayout();
+  void SaveMap( FpsGameEditorContext & ioContext );
   void SaveMapAsDialog( FpsGameEditorContext & ioContext );
   void LoadMapFromDialog( FpsGameEditorContext & ioContext );
   void LoadPropFromDialog( FpsGameEditorContext & ioContext );

@@ -662,6 +662,48 @@ void FpsGameEditor::SetStatus( const std::string & iMessage )
 }
 
 // ----------------------------------------------------------------------------
+// SaveMap
+// ----------------------------------------------------------------------------
+void FpsGameEditor::SaveMap( FpsGameEditorContext & ioContext )
+{
+  SyncMapFromRuntimeSettings(ioContext);
+  if ( FpsGameMapLoader::Save(_SavePath, ioContext._Map) )
+  {
+    ioContext._MapPath = _SavePath;
+    SetPathBuffers(ioContext._MapPath);
+    _Dirty = false;
+    SetStatus("Saved " + ioContext._MapPath);
+  }
+  else
+    SetStatus("Save failed");
+}
+
+// ----------------------------------------------------------------------------
+// DrawViewMenuItems
+// ----------------------------------------------------------------------------
+void FpsGameEditor::DrawViewMenuItems()
+{
+  ImGui::MenuItem("Editor Scene", nullptr, &_ShowScenePanel);
+  ImGui::MenuItem("Editor Inspector", nullptr, &_ShowInspectorPanel);
+  ImGui::MenuItem("Editor Materials", nullptr, &_ShowMaterialsPanel);
+  ImGui::MenuItem("Editor Settings", nullptr, &_ShowSettingsPanel);
+  ImGui::MenuItem("Editor Render Settings", nullptr, &_ShowRenderSettingsPanel);
+  ImGui::MenuItem("Editor Performance", nullptr, &_ShowPerformancePanel);
+
+  ImGui::Separator();
+  if ( ImGui::MenuItem("Reset editor layout") )
+    RequestResetDockLayout();
+}
+
+// ----------------------------------------------------------------------------
+// RequestResetDockLayout
+// ----------------------------------------------------------------------------
+void FpsGameEditor::RequestResetDockLayout()
+{
+  _ResetDockLayout = true;
+}
+
+// ----------------------------------------------------------------------------
 // SaveMapAsDialog
 // ----------------------------------------------------------------------------
 void FpsGameEditor::SaveMapAsDialog( FpsGameEditorContext & ioContext )
@@ -1457,8 +1499,7 @@ void FpsGameEditor::DrawDockspace()
 {
   const ImGuiViewport * viewport = ImGui::GetMainViewport();
 
-  ImGuiWindowFlags windowFlags = ImGuiWindowFlags_MenuBar
-                               | ImGuiWindowFlags_NoDocking
+  ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoDocking
                                | ImGuiWindowFlags_NoTitleBar
                                | ImGuiWindowFlags_NoCollapse
                                | ImGuiWindowFlags_NoResize
@@ -1500,24 +1541,10 @@ void FpsGameEditor::DrawDockspace()
     ImGui::DockBuilderDockWindow("Editor Settings", rightBottomID);
     ImGui::DockBuilderDockWindow("Editor Render Settings", rightBottomID);
     ImGui::DockBuilderDockWindow("Editor Performance", rightBottomID);
+    ImGui::DockBuilderDockWindow("Test6 FPS", rightBottomID);
+    ImGui::DockBuilderDockWindow("Test6 Render Settings", rightBottomID);
+    ImGui::DockBuilderDockWindow("Test6 Rendering Stats", rightBottomID);
     ImGui::DockBuilderFinish(dockspaceID);
-  }
-
-  if ( ImGui::BeginMenuBar() )
-  {
-    if ( ImGui::BeginMenu("Panels") )
-    {
-      ImGui::MenuItem("Scene", nullptr, &_ShowScenePanel);
-      ImGui::MenuItem("Inspector", nullptr, &_ShowInspectorPanel);
-      ImGui::MenuItem("Materials", nullptr, &_ShowMaterialsPanel);
-      ImGui::MenuItem("Settings", nullptr, &_ShowSettingsPanel);
-      ImGui::MenuItem("Render Settings", nullptr, &_ShowRenderSettingsPanel);
-      ImGui::MenuItem("Performance", nullptr, &_ShowPerformancePanel);
-      ImGui::EndMenu();
-    }
-    if ( ImGui::MenuItem("Reset editor layout") )
-      _ResetDockLayout = true;
-    ImGui::EndMenuBar();
   }
 
   ImGui::DockSpace(dockspaceID, ImVec2(0.f, 0.f), dockspaceFlags);
@@ -1542,18 +1569,7 @@ void FpsGameEditor::DrawScenePanel( FpsGameEditorContext & ioContext )
   ImGui::PushItemWidth(-FLT_MIN);
   ImGui::InputText("Save path", _SavePath, sizeof(_SavePath));
   if ( ImGui::Button("Save") )
-  {
-    SyncMapFromRuntimeSettings(ioContext);
-    if ( FpsGameMapLoader::Save(_SavePath, ioContext._Map) )
-    {
-      ioContext._MapPath = _SavePath;
-      SetPathBuffers(ioContext._MapPath);
-      _Dirty = false;
-      SetStatus("Saved " + ioContext._MapPath);
-    }
-    else
-      SetStatus("Save failed");
-  }
+    SaveMap(ioContext);
   ImGui::SameLine();
   if ( ImGui::Button("Save as...") )
     SaveMapAsDialog(ioContext);

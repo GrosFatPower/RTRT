@@ -61,6 +61,8 @@ protected:
   int UpdateCPUTime();
 
   int DrawUI();
+  int DrawMainMenuBar();
+  int DrawHelpUI();
   void DrawDebugPanel();
   int DrawGameSettingsUI();
   int DrawRenderSettingsUI();
@@ -69,6 +71,7 @@ protected:
 
   void SyncFramebufferResolution( bool iNotifyRenderer = false );
 
+  bool SetEditorMode( bool iEnabled );
   void SetMouseCaptured( bool iCaptured );
   void HandleDroppedFiles( int iCount, const char ** iPaths );
   void ApplyBenchmarkPose();
@@ -110,7 +113,13 @@ protected:
   MouseInput                _MouseInput;
 
   bool                      _MouseCaptured = false;
+  bool                      _ExitToTestSelection = false;
+  bool                      _ShowMenuBar = true;
+  bool                      _AltMenuToggleArmed = false;
   bool                      _ShowDebugPanel = true;
+  bool                      _ShowRenderSettingsPanel = true;
+  bool                      _ShowRenderStatsPanel = true;
+  bool                      _ShowHelpDialog = false;
   bool                      _HasLastMousePos = false;
   double                    _LastMouseX = 0.;
   double                    _LastMouseY = 0.;
