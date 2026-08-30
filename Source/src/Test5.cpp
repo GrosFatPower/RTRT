@@ -51,7 +51,28 @@ void Test5::KeyCallback(GLFWwindow* iWindow, const int iKey, const int iScancode
     return;
 
   if ( (iAction == GLFW_PRESS ) ||  (iAction == GLFW_RELEASE ) )
+  {
     this_ -> _KeyInput.AddEvent(iKey, iAction, iMods);
+
+    const bool isAltKey = ( GLFW_KEY_LEFT_ALT == iKey ) || ( GLFW_KEY_RIGHT_ALT == iKey );
+    if ( isAltKey && ( GLFW_PRESS == iAction ) )
+      this_ -> _AltMenuToggleArmed = true;
+    else if ( !isAltKey && ( GLFW_PRESS == iAction )
+      && ( this_ -> _KeyInput.IsKeyDown(GLFW_KEY_LEFT_ALT) || this_ -> _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_ALT) ) )
+    {
+      this_ -> _AltMenuToggleArmed = false;
+    }
+    else if ( isAltKey && ( GLFW_RELEASE == iAction ) )
+    {
+      if ( this_ -> _AltMenuToggleArmed
+        && !this_ -> _KeyInput.IsKeyDown(GLFW_KEY_LEFT_ALT)
+        && !this_ -> _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_ALT) )
+      {
+        this_ -> _ShowMenuBar = !this_ -> _ShowMenuBar;
+      }
+      this_ -> _AltMenuToggleArmed = false;
+    }
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -344,6 +365,7 @@ int Test5::InitializeUI()
   ImGuiIO & io = ImGui::GetIO(); (void)io;
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+  io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
   // Setup Dear ImGui style
   ImGui::StyleColorsDark();
@@ -360,72 +382,216 @@ int Test5::InitializeUI()
 }
 
 // ----------------------------------------------------------------------------
-// DrawUI
+// DrawMainMenuBar
 // ----------------------------------------------------------------------------
-int Test5::DrawUI()
+int Test5::DrawMainMenuBar()
 {
-  // Start the Dear ImGui frame
-  ImGui_ImplOpenGL3_NewFrame();
-  ImGui_ImplGlfw_NewFrame();
-  ImGui::NewFrame();
-  ImGuizmo::BeginFrame();
+  if ( !ImGui::BeginMainMenuBar() )
+    return 0;
 
+  if ( ImGui::BeginMenu("File") )
   {
-    ImGui::Begin("Test 5 : Viewer");
+    if ( ImGui::MenuItem("Open scene/model...") )
+      LoadSceneFromDialog();
 
-    // Renderer selection
+    ImGui::Separator();
+    if ( ImGui::MenuItem("Exit") )
+      _ExitToTestSelection = true;
+
+    ImGui::EndMenu();
+  }
+
+  if ( ImGui::BeginMenu("View") )
+  {
+    ImGui::MenuItem("Scene", nullptr, &_ShowScenePanel);
+    ImGui::MenuItem("Settings", nullptr, &_ShowSettingsPanel);
+    ImGui::MenuItem("Camera", nullptr, &_ShowCameraPanel);
+    ImGui::MenuItem("Mesh Instances", nullptr, &_ShowMeshPanel);
+    ImGui::MenuItem("Boids", nullptr, &_ShowBoidsPanel);
+    ImGui::MenuItem("Background", nullptr, &_ShowBackgroundPanel);
+    ImGui::MenuItem("Materials", nullptr, &_ShowMaterialsPanel);
+    ImGui::MenuItem("Lights", nullptr, &_ShowLightsPanel);
+    ImGui::MenuItem("Rendering Stats", nullptr, &_ShowRenderStatsPanel);
+    ImGui::EndMenu();
+  }
+
+  if ( ImGui::BeginMenu("Renderer") )
+  {
+    if ( ImGui::MenuItem("PathTracer", nullptr, RendererType::PathTracer == _RendererType)
+      && ( RendererType::PathTracer != _RendererType ) )
     {
-      static const char * Renderers[] = {"PathTracer", "SoftwareRasterizer", "OpenGLRasterizer"};
-      //_RendererType
-      int selectedRenderer = (int)_RendererType;
-      if ( ImGui::Combo( "Renderer", &selectedRenderer, Renderers, 3 ) )
-      {
-        _RendererType = (RendererType) selectedRenderer;
-        _ReloadRenderer = true;
-      }
+      _RendererType = RendererType::PathTracer;
+      _ReloadRenderer = true;
+    }
+    if ( ImGui::MenuItem("Software Rasterizer", nullptr, RendererType::SoftwareRasterizer == _RendererType)
+      && ( RendererType::SoftwareRasterizer != _RendererType ) )
+    {
+      _RendererType = RendererType::SoftwareRasterizer;
+      _ReloadRenderer = true;
+    }
+    if ( ImGui::MenuItem("OpenGL Rasterizer", nullptr, RendererType::OpenGLRasterizer == _RendererType)
+      && ( RendererType::OpenGLRasterizer != _RendererType ) )
+    {
+      _RendererType = RendererType::OpenGLRasterizer;
+      _ReloadRenderer = true;
     }
 
-    // Scene selection
-    {
-      int selectedSceneId = _CurSceneId;
-      if ( ImGui::Combo("Scene selection", &selectedSceneId, &_SceneNames[0], static_cast<int>(_SceneNames.size())) )
-      {
-        if ( selectedSceneId != _CurSceneId )
-        {
-          _CurSceneId = selectedSceneId;
-          _SceneLoadError.clear();
-          _ReloadScene = true;
-        }
-      }
-
-      if ( ImGui::Button("Load scene...") )
-        LoadSceneFromDialog();
-
-      if ( !_SceneLoadError.empty() )
-        ImGui::TextColored(ImVec4(1.f, .35f, .35f, 1.f), "%s", _SceneLoadError.c_str());
-    }
-
-    ImGui::Checkbox("Show rendering stats", &_ShowRenderStatsPanel);
-
-    if ( ImGui::Button( "Capture image" ) )
+    ImGui::Separator();
+    const bool canCapture = ( _CurSceneId >= 0 ) && ( _CurSceneId < static_cast<int>(_SceneNames.size()) );
+    if ( ImGui::MenuItem("Capture image", nullptr, false, canCapture) )
     {
       const std::string sceneName = std::string(_SceneNames[_CurSceneId]);
       _CaptureOutputPath = "./" + sceneName + "_" + std::to_string( _NbRenderedFrames ) + "frames.png";
       _RenderToFile = true;
     }
+    ImGui::EndMenu();
+  }
 
-    DrawSettingsUI();
-    DrawCameraUI();
-    DrawMeshInstanceUI();
-    DrawBoidsUI();
-    DrawBackgroundUI();
-    DrawMaterialsUI();
-    DrawLightsUI();
+  if ( ImGui::BeginMenu("Help") )
+  {
+    if ( ImGui::MenuItem("About & Controls...") )
+      _ShowHelpDialog = true;
+    ImGui::EndMenu();
+  }
 
+  ImGui::EndMainMenuBar();
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawSceneUI
+// ----------------------------------------------------------------------------
+int Test5::DrawSceneUI()
+{
+  if ( !_SceneNames.empty() )
+  {
+    int selectedSceneId = _CurSceneId;
+    if ( ImGui::Combo("Scene selection", &selectedSceneId, _SceneNames.data(), static_cast<int>(_SceneNames.size())) )
+    {
+      if ( selectedSceneId != _CurSceneId )
+      {
+        _CurSceneId = selectedSceneId;
+        _SceneLoadError.clear();
+        _ReloadScene = true;
+      }
+    }
+  }
+  else
+    ImGui::TextDisabled("No scene files found.");
+
+  if ( ImGui::Button("Load scene...") )
+    LoadSceneFromDialog();
+
+  if ( !_SceneLoadError.empty() )
+    ImGui::TextColored(ImVec4(1.f, .35f, .35f, 1.f), "%s", _SceneLoadError.c_str());
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawHelpUI
+// ----------------------------------------------------------------------------
+int Test5::DrawHelpUI()
+{
+  if ( _ShowHelpDialog )
+  {
+    ImGui::OpenPopup("Test5 Help");
+    _ShowHelpDialog = false;
+  }
+
+  if ( ImGui::BeginPopupModal("Test5 Help", nullptr, ImGuiWindowFlags_AlwaysAutoResize) )
+  {
+    ImGui::TextWrapped("Test5 is the renderer viewer and scene-editing workbench.");
+    ImGui::Separator();
+    ImGui::Text("Controls");
+    ImGui::BulletText("Right mouse: free-look camera rotation.");
+    ImGui::BulletText("Middle mouse: orbit, pan, or zoom the camera.");
+    ImGui::BulletText("Mouse wheel or W/S: zoom; W/A/S/D with right mouse: free-look movement.");
+    ImGui::BulletText("Ctrl + left click: select the nearest mesh instance.");
+    ImGui::BulletText("Drag and drop .scene, .obj, .gltf, or .glb files to load them.");
+    ImGui::BulletText("Escape or File > Exit: return to test selection.");
+
+    ImGui::Separator();
+    if ( ImGui::Button("Close") )
+      ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawUI
+// ----------------------------------------------------------------------------
+int Test5::DrawUI()
+{
+  ImGui_ImplOpenGL3_NewFrame();
+  ImGui_ImplGlfw_NewFrame();
+  ImGui::NewFrame();
+  ImGuizmo::BeginFrame();
+
+  if ( _ShowMenuBar )
+    DrawMainMenuBar();
+  ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+
+  if ( _ShowScenePanel )
+  {
+    if ( ImGui::Begin("Scene", &_ShowScenePanel) )
+      DrawSceneUI();
+    ImGui::End();
+  }
+
+  if ( _ShowSettingsPanel )
+  {
+    if ( ImGui::Begin("Settings", &_ShowSettingsPanel) )
+      DrawSettingsUI();
+    ImGui::End();
+  }
+
+  if ( _ShowCameraPanel )
+  {
+    if ( ImGui::Begin("Camera", &_ShowCameraPanel) )
+      DrawCameraUI();
+    ImGui::End();
+  }
+
+  if ( _ShowMeshPanel )
+  {
+    if ( ImGui::Begin("Mesh Instances", &_ShowMeshPanel) )
+      DrawMeshInstanceUI();
+    ImGui::End();
+  }
+
+  if ( _ShowBoidsPanel )
+  {
+    if ( ImGui::Begin("Boids", &_ShowBoidsPanel) )
+      DrawBoidsUI();
+    ImGui::End();
+  }
+
+  if ( _ShowBackgroundPanel )
+  {
+    if ( ImGui::Begin("Background", &_ShowBackgroundPanel) )
+      DrawBackgroundUI();
+    ImGui::End();
+  }
+
+  if ( _ShowMaterialsPanel )
+  {
+    if ( ImGui::Begin("Materials", &_ShowMaterialsPanel) )
+      DrawMaterialsUI();
+    ImGui::End();
+  }
+
+  if ( _ShowLightsPanel )
+  {
+    if ( ImGui::Begin("Lights", &_ShowLightsPanel) )
+      DrawLightsUI();
     ImGui::End();
   }
 
   DrawRenderStatsUI();
+  DrawHelpUI();
 
   if ( _SelectedLightID >= 0 )
     DrawLightGizmo();
@@ -445,7 +611,7 @@ int Test5::DrawUI()
 
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-  return 0;
+  return _ExitToTestSelection ? 1 : 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -542,7 +708,7 @@ int Test5::DrawRenderStatsUI()
   if ( !_ShowRenderStatsPanel )
     return 0;
 
-  if ( !ImGui::Begin("Test5 Rendering Stats", &_ShowRenderStatsPanel) )
+  if ( !ImGui::Begin("Rendering Stats", &_ShowRenderStatsPanel) )
   {
     ImGui::End();
     return 0;
@@ -564,8 +730,6 @@ int Test5::DrawRenderStatsUI()
 // ----------------------------------------------------------------------------
 int Test5::DrawSettingsUI()
 {
-  if (ImGui::CollapsingHeader("Settings"))
-  {
     static const char * YESorNO[] = { "No", "Yes" };
 
     static bool vSync = false;
@@ -969,7 +1133,6 @@ int Test5::DrawSettingsUI()
     }
 
     _Renderer -> SetDebugMode(g_DebugMode);
-  }
 
   return 0;
 }
@@ -979,8 +1142,6 @@ int Test5::DrawSettingsUI()
 // ----------------------------------------------------------------------------
 int Test5::DrawCameraUI()
 {
-  if ( ImGui::CollapsingHeader("Camera") )
-  {
     ImGui::Text("Position : %f, %f, %f", _Scene -> GetCamera().GetPos().x, _Scene -> GetCamera().GetPos().y, _Scene -> GetCamera().GetPos().z);
     ImGui::Text("Pivot    : %f, %f, %f", _Scene -> GetCamera().GetPivot().x, _Scene -> GetCamera().GetPivot().y, _Scene -> GetCamera().GetPivot().z);
     ImGui::Text("Radius   : %f", _Scene -> GetCamera().GetRadius());
@@ -1038,7 +1199,6 @@ int Test5::DrawCameraUI()
       _Scene -> SetCamera(_DefaultCam);
       _Renderer -> Notify(DirtyState::SceneCamera);
     }
-  }
 
   return 0;
 }
@@ -1057,8 +1217,6 @@ int Test5::DrawMeshInstanceUI()
   if ( _BoidsBinding.ContainsInstanceID(_SelectedMeshInstanceID) )
     _SelectedMeshInstanceID = -1;
 
-  if ( ImGui::CollapsingHeader("Mesh Instances") )
-  {
     ImGui::Checkbox("Enable gizmo", &_MeshGizmoEnabled);
     ImGui::Checkbox("Show bounding box", &_ShowSelectedMeshBBox);
 
@@ -1131,8 +1289,7 @@ int Test5::DrawMeshInstanceUI()
       }
     }
 
-    ImGui::Text("Ctrl + Left Click selects the nearest mesh instance.");
-  }
+  ImGui::Text("Ctrl + Left Click selects the nearest mesh instance.");
 
   return 0;
 }
@@ -1145,8 +1302,6 @@ int Test5::DrawBoidsUI()
   if ( !_Scene )
     return 0;
 
-  if ( ImGui::CollapsingHeader("Boids") )
-  {
     bool enabled = _BoidsEnabled;
     if ( ImGui::Checkbox("Enable boids", &enabled) )
     {
@@ -1241,7 +1396,6 @@ int Test5::DrawBoidsUI()
       _BoidsBinding.SyncTransforms(*_Scene, _BoidsSimulation, _BoidsSettings);
       NotifyBoidsInstancesEdited();
     }
-  }
 
   return 0;
 }
@@ -1251,8 +1405,6 @@ int Test5::DrawBoidsUI()
 // ----------------------------------------------------------------------------
 int Test5::DrawBackgroundUI()
 {
-  if ( ImGui::CollapsingHeader("Background") )
-  {
     if ( ImGui::Checkbox( "Show background", &_Settings._EnableBackGround ) )
       _Renderer -> Notify(DirtyState::RenderSettings);
 
@@ -1298,7 +1450,6 @@ int Test5::DrawBackgroundUI()
         ImGui::Image(texture, ImVec2(128, 128));
       }
     }
-  }
 
   return 0;
 }
@@ -1308,8 +1459,6 @@ int Test5::DrawBackgroundUI()
 // ----------------------------------------------------------------------------
 int Test5::DrawMaterialsUI()
 {
-  if (ImGui::CollapsingHeader("Materials"))
-  {
     std::vector<Material>& Materials = _Scene -> GetMaterials();
     std::vector<Texture*>& Textures = _Scene -> GetTextures();
 
@@ -1518,7 +1667,6 @@ int Test5::DrawMaterialsUI()
         }
       }
     }
-  }
 
   return 0;
 }
@@ -1534,8 +1682,6 @@ int Test5::DrawLightsUI()
   if ( _SelectedLightID >= _Scene -> GetNbLights() )
     _SelectedLightID = -1;
 
-  if ( ImGui::CollapsingHeader("Lights") )
-  {
     if ( ImGui::Checkbox("Show lights", &_Settings._ShowLights) )
       NotifyLightEdited();
 
@@ -1676,7 +1822,6 @@ int Test5::DrawLightsUI()
         }
       }
     }
-  }
 
   return 0;
 }
@@ -2440,7 +2585,8 @@ int Test5::Run()
 
       _Renderer -> Done();
 
-      DrawUI();
+      if ( 0 != DrawUI() )
+        break;
 
       glfwSwapBuffers( _MainWindow.get() );
 

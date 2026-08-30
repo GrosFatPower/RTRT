@@ -55,6 +55,9 @@ protected:
 
   int InitializeUI();
   int DrawUI();
+  int DrawMainMenuBar();
+  int DrawSceneUI();
+  int DrawHelpUI();
   int DrawRenderStatsUI();
   int DrawSettingsUI();
   int DrawCameraUI();
@@ -124,7 +127,19 @@ protected:
   int                        _CurBackgroundId  = -1;
   bool                       _ReloadScene      = false;
   bool                       _ReloadBackground = false;
+  bool                       _ExitToTestSelection = false;
+  bool                       _ShowMenuBar          = true;
+  bool                       _AltMenuToggleArmed   = false;
+  bool                       _ShowScenePanel       = true;
+  bool                       _ShowSettingsPanel    = true;
+  bool                       _ShowCameraPanel      = true;
+  bool                       _ShowMeshPanel        = true;
+  bool                       _ShowBoidsPanel       = true;
+  bool                       _ShowBackgroundPanel  = true;
+  bool                       _ShowMaterialsPanel   = true;
+  bool                       _ShowLightsPanel      = true;
   bool                       _ShowRenderStatsPanel = true;
+  bool                       _ShowHelpDialog       = false;
   RenderStatsUIState         _RenderStatsState;
   GLTexture                  _AlbedoTEX        = { 0, GL_TEXTURE_2D, 31, GL_RGBA32F, GL_RGBA, GL_FLOAT };
   GLTexture                  _MetalRoughTEX    = { 0, GL_TEXTURE_2D, 31, GL_RGBA32F, GL_RGBA, GL_FLOAT };
