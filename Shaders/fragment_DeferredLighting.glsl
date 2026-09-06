@@ -46,6 +46,9 @@ uniform float u_DirectLightIntensity = 1.0;
 
 vec3 GetCameraRayDir()
 {
+  if ( 1 == u_Camera._Projection )
+    return u_Camera._Forward;
+
   vec2 centeredUV = fragUV * 2.0 - 1.0;
 
   float scale = tan(u_Camera._FOV * .5);
@@ -53,6 +56,23 @@ vec3 GetCameraRayDir()
   centeredUV.y *= ( u_Resolution.y / u_Resolution.x ) * scale;
 
   return normalize(u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward);
+}
+
+vec3 GetCameraRayOrigin()
+{
+  if ( 0 == u_Camera._Projection )
+    return u_Camera._Pos;
+
+  vec2 centeredUV = fragUV * 2.0 - 1.0;
+  float halfHeight = u_Camera._OrthographicHeight * .5;
+  return u_Camera._Pos
+    + u_Camera._Right * centeredUV.x * halfHeight * ( u_Resolution.x / u_Resolution.y )
+    + u_Camera._Up * centeredUV.y * halfHeight;
+}
+
+vec3 GetCameraViewDir( in vec3 iPosition )
+{
+  return ( 1 == u_Camera._Projection ) ? -u_Camera._Forward : normalize(u_Camera._Pos - iPosition);
 }
 
 vec2 EnvMapUV( in vec3 iDir )
@@ -126,6 +146,7 @@ void main()
   vec4 ssrSample = texture(u_SSRMap, fragUV);
 
   vec3 cameraRayDir = GetCameraRayDir();
+  vec3 cameraRayOrigin = GetCameraRayOrigin();
 
   if ( depth >= 1.0 )
   {
@@ -137,7 +158,7 @@ void main()
 
     if ( u_ShowLights != 0 )
     {
-      Ray lightRay = Ray( u_Camera._Pos, cameraRayDir );
+      Ray lightRay = Ray( cameraRayOrigin, cameraRayDir );
       vec3 lightColor = vec3(0.0);
       if ( TraceVisibleLight( lightRay, 1e20, lightColor ) )
       {
@@ -171,10 +192,10 @@ void main()
     return;
   }
 
-  float sceneDist = length(pos - u_Camera._Pos);
+  float sceneDist = length(pos - cameraRayOrigin);
   if ( u_ShowLights != 0 )
   {
-    Ray lightRay = Ray( u_Camera._Pos, cameraRayDir );
+    Ray lightRay = Ray( cameraRayOrigin, cameraRayDir );
     vec3 lightColor = vec3(0.0);
     if ( TraceVisibleLight( lightRay, sceneDist, lightColor ) )
     {
@@ -183,7 +204,7 @@ void main()
     }
   }
 
-  vec3 V = normalize(u_Camera._Pos - pos);
+  vec3 V = GetCameraViewDir(pos);
   float NdotV = max(dot(N, V), 0.0);
   vec3 F0 = mix(vec3(0.16 * reflectance * reflectance), albedo, metallic);
   PBRSurface pbrSurface = MakePBRSurface(albedo, roughness, metallic, reflectance);

@@ -63,6 +63,8 @@ static void ApplyMapRenderSettings( const FpsGameMap & iMap, FpsGameSettings & i
   ioGameSettings._CameraZNear = std::max(0.001f, settings._CameraZNear);
   ioGameSettings._CameraZFar = std::max(ioGameSettings._CameraZNear + 0.001f, settings._CameraZFar);
   ioGameSettings._CameraFOV = MathUtil::Clamp(settings._CameraFOV, 30.f, 140.f);
+  ioGameSettings._CameraOrthographic = settings._CameraOrthographic;
+  ioGameSettings._CameraOrthographicHeight = std::max(0.001f, settings._CameraOrthographicHeight);
 
   ioRenderSettings._RenderScale = MathUtil::Clamp(settings._RenderScale, 25, 150);
   ioRenderSettings._ShowLights = settings._ShowLights;
@@ -121,6 +123,8 @@ static void CaptureMapRenderSettings( FpsGameMap & ioMap, const FpsGameSettings 
   settings._CameraZNear = iGameSettings._CameraZNear;
   settings._CameraZFar = iGameSettings._CameraZFar;
   settings._CameraFOV = iGameSettings._CameraFOV;
+  settings._CameraOrthographic = iGameSettings._CameraOrthographic;
+  settings._CameraOrthographicHeight = iGameSettings._CameraOrthographicHeight;
   settings._RenderScale = iRenderSettings._RenderScale;
   settings._ShowLights = iRenderSettings._ShowLights;
   settings._ToneMapping = iRenderSettings._ToneMapping;
@@ -525,7 +529,7 @@ void Test6::ApplyBenchmarkPose()
   _GameWorld.ClearProjectiles();
   if ( _Scene )
   {
-    _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings);
+    _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings, _Editor.IsEnabled());
     _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings);
   }
 
@@ -1044,7 +1048,7 @@ int Test6::ProcessInput()
       }
 
       if ( _Scene )
-        _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings);
+        _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings, _Editor.IsEnabled());
       if ( _Renderer )
         _Renderer -> Notify(DirtyState::SceneCamera);
     }
@@ -1137,7 +1141,7 @@ int Test6::ProcessInput()
     if ( 0 != _GameWorld.Update(static_cast<float>(_DeltaTime), input, _GameSettings) )
       return 1;
 
-    if ( 0 != _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings) )
+    if ( 0 != _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings, _Editor.IsEnabled()) )
       return 1;
 
     if ( _Renderer )
@@ -1500,7 +1504,7 @@ void Test6::DrawDebugPanel()
   if ( ImGui::Button("Reset player") )
   {
     _GameWorld.Reset(_GameSettings);
-    _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings);
+    _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings, _Editor.IsEnabled());
     _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings);
     if ( _Renderer )
     {

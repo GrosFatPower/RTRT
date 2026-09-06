@@ -66,6 +66,8 @@ struct Camera
   vec3  _Forward;
   vec3  _Pos;
   float _FOV;
+  int   _Projection;
+  float _OrthographicHeight;
   float _FocalDist;
   float _LensRadius;
 };

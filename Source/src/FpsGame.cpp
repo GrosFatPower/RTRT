@@ -584,12 +584,14 @@ int FpsGameSceneBinding::Attach( Scene & iScene, const FpsGameWorld & iWorld, co
 // ----------------------------------------------------------------------------
 // SyncCamera
 // ----------------------------------------------------------------------------
-int FpsGameSceneBinding::SyncCamera( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings )
+int FpsGameSceneBinding::SyncCamera( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, bool iAllowOrthographic )
 {
   Camera & camera = iScene.GetCamera();
   const FpsPlayer & player = iWorld.GetPlayer();
   camera.SetFreeLookPose(player.ViewPosition(iSettings), player._Yaw, player._Pitch);
   camera.SetFOVInDegrees(MathUtil::Clamp(iSettings._CameraFOV, 30.f, 140.f));
+  camera.SetProjection(( iAllowOrthographic && iSettings._CameraOrthographic ) ? CameraProjection::Orthographic : CameraProjection::Perspective);
+  camera.SetOrthographicHeight(std::max(0.001f, iSettings._CameraOrthographicHeight));
   const float zNear = std::max(0.001f, iSettings._CameraZNear);
   const float zFar = std::max(zNear + 0.001f, iSettings._CameraZFar);
   camera.SetZNearFar(zNear, zFar);

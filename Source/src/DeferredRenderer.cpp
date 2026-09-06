@@ -1644,13 +1644,15 @@ int DeferredRenderer::UpdateUniforms()
   float ratio = RenderWidth() / float(RenderHeight());
   float top, right;
   Mat4x4 P;
-  _Scene.GetCamera().ComputePerspectiveProjMatrix(ratio, P, &top, &right);
+  _Scene.GetCamera().ComputeProjMatrix(ratio, P, &top, &right);
 
   Vec3 camPos = _Scene.GetCamera().GetPos();
   Vec3 camUp = _Scene.GetCamera().GetUp();
   Vec3 camRight = _Scene.GetCamera().GetRight();
   Vec3 camForward = _Scene.GetCamera().GetForward();
   float camFov = _Scene.GetCamera().GetFOV();
+  int camProjection = _Scene.GetCamera().IsOrthographic() ? 1 : 0;
+  float camOrthographicHeight = _Scene.GetCamera().GetOrthographicHeight();
 
   if ( _DirtyStates & (unsigned long)DirtyState::SceneMaterials )
   {
@@ -1733,6 +1735,8 @@ int DeferredRenderer::UpdateUniforms()
     _SSRShader -> SetUniform("u_Camera._Right", camRight);
     _SSRShader -> SetUniform("u_Camera._Forward", camForward);
     _SSRShader -> SetUniform("u_Camera._FOV", camFov);
+    _SSRShader -> SetUniform("u_Camera._Projection", camProjection);
+    _SSRShader -> SetUniform("u_Camera._OrthographicHeight", camOrthographicHeight);
     if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
     {
       _SSRShader -> SetUniform("u_Resolution", float(RenderWidth()), float(RenderHeight()));
@@ -1759,6 +1763,8 @@ int DeferredRenderer::UpdateUniforms()
     _LightingShader -> SetUniform("u_Camera._Right", camRight);
     _LightingShader -> SetUniform("u_Camera._Forward", camForward);
     _LightingShader -> SetUniform("u_Camera._FOV", camFov);
+    _LightingShader -> SetUniform("u_Camera._Projection", camProjection);
+    _LightingShader -> SetUniform("u_Camera._OrthographicHeight", camOrthographicHeight);
 
     if ( ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
       || ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
@@ -1877,6 +1883,8 @@ int DeferredRenderer::UpdateUniforms()
     _TransparentShader -> SetUniform("u_Camera._Right", camRight);
     _TransparentShader -> SetUniform("u_Camera._Forward", camForward);
     _TransparentShader -> SetUniform("u_Camera._FOV", camFov);
+    _TransparentShader -> SetUniform("u_Camera._Projection", camProjection);
+    _TransparentShader -> SetUniform("u_Camera._OrthographicHeight", camOrthographicHeight);
 
     _TransparentShader -> SetUniform("u_View", V);
     _TransparentShader -> SetUniform("u_Proj", P);

@@ -581,6 +581,16 @@ protected:
         if ( !ParseFloat(tokens[1], settings._CameraFOV) )
           return Error("invalid render cameraFOV");
       }
+      else if ( IsEqual(tokens[0], "cameraorthographic") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseBool(tokens[1], settings._CameraOrthographic) )
+          return Error("invalid render cameraOrthographic");
+      }
+      else if ( IsEqual(tokens[0], "cameraorthographicheight") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], settings._CameraOrthographicHeight) )
+          return Error("invalid render cameraOrthographicHeight");
+      }
       else if ( IsEqual(tokens[0], "renderscale") && ( 2 == static_cast<int>(tokens.size()) ) )
       {
         if ( !ParseInt(tokens[1], settings._RenderScale) )
@@ -1419,6 +1429,8 @@ bool FpsGameMapLoader::Save( const std::string & iFilename, const FpsGameMap & i
     file << "  cameraZNear " << settings._CameraZNear << "\n";
     file << "  cameraZFar " << settings._CameraZFar << "\n";
     file << "  cameraFOV " << settings._CameraFOV << "\n";
+    file << "  cameraOrthographic " << ( settings._CameraOrthographic ? "true" : "false" ) << "\n";
+    file << "  cameraOrthographicHeight " << settings._CameraOrthographicHeight << "\n";
     file << "  renderScale " << settings._RenderScale << "\n";
     file << "  showLights " << ( settings._ShowLights ? "true" : "false" ) << "\n";
     file << "  toneMapping " << ( settings._ToneMapping ? "true" : "false" ) << "\n";

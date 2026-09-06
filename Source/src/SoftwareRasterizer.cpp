@@ -523,7 +523,7 @@ int SoftwareRasterizer::UpdateImageBuffer()
 
   float top, right;
   Mat4x4 P;
-  _Scene.GetCamera().ComputePerspectiveProjMatrix(ratio, P, &top, &right);
+  _Scene.GetCamera().ComputeProjMatrix(ratio, P, &top, &right);
 
   ResetTiles();
   _PassTimes[TimingFrameClear] = glfwGetTime() - clearStartTime;
@@ -1575,11 +1575,12 @@ int SoftwareRasterizer::RenderUncoveredBackground(float iTop, float iRight)
   float zNear, zFar;
   _Scene.GetCamera().GetZNearFar(zNear, zFar);
   const Vec4 backgroundColor(_Settings._BackgroundColor.x, _Settings._BackgroundColor.y, _Settings._BackgroundColor.z, 1.f);
+  const bool orthographic = _Scene.GetCamera().IsOrthographic();
   const Vec3 bottomLeft = _Scene.GetCamera().GetForward() * zNear - iRight * _Scene.GetCamera().GetRight() - iTop * _Scene.GetCamera().GetUp();
   const Vec3 dX = _Scene.GetCamera().GetRight() * (2 * iRight / width);
   const Vec3 dY = _Scene.GetCamera().GetUp() * (2 * iTop / height);
 
-  const auto renderTiles = [this, bottomLeft, dX, dY, backgroundColor](unsigned int iBegin, unsigned int iEnd) {
+  const auto renderTiles = [this, bottomLeft, dX, dY, backgroundColor, orthographic](unsigned int iBegin, unsigned int iEnd) {
     for ( unsigned int tileIndex = iBegin; tileIndex < iEnd; ++tileIndex )
     {
       const rd::Tile & tile = _Tiles[tileIndex];
@@ -1594,7 +1595,7 @@ int SoftwareRasterizer::RenderUncoveredBackground(float iTop, float iRight)
           const int globalX = tile._X + x;
           if ( _Settings._EnableBackGround )
           {
-            const Vec3 worldP = glm::normalize(bottomLeft + dX * static_cast<float>(globalX) + dY * static_cast<float>(globalY));
+            const Vec3 worldP = orthographic ? _Scene.GetCamera().GetForward() : glm::normalize(bottomLeft + dX * static_cast<float>(globalX) + dY * static_cast<float>(globalY));
             _ImageBuffer._ColorBuffer[globalX + RenderWidth() * globalY] = SampleEnvMap(worldP);
           }
           else
@@ -1621,7 +1622,7 @@ void SoftwareRasterizer::RenderBackgroundRows(int iStartY, int iEndY, Vec3 iBott
   {
     for (int x = 0; x < width; ++x)
     {
-      Vec3 worldP = glm::normalize(iBottomLeft + iDX * (float)x + iDY * (float)y);
+      Vec3 worldP = _Scene.GetCamera().IsOrthographic() ? _Scene.GetCamera().GetForward() : glm::normalize(iBottomLeft + iDX * (float)x + iDY * (float)y);
       _ImageBuffer._ColorBuffer[x + width * y] = this->SampleEnvMap(worldP);
     }
   }
@@ -1644,7 +1645,7 @@ void SoftwareRasterizer::RenderBackground(Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY, 
     Vec3 rowStart = base + iDY * (float)y;
     for (int x = 0; x < width; ++x)
     {
-      Vec3 worldP = glm::normalize(rowStart + iDX * (float)x);
+      Vec3 worldP = _Scene.GetCamera().IsOrthographic() ? _Scene.GetCamera().GetForward() : glm::normalize(rowStart + iDX * (float)x);
       ioTile._LocalFB._ColorBuffer[x + width * y] = SampleEnvMap(worldP);
     }
   }
@@ -1714,7 +1715,7 @@ int SoftwareRasterizer::ProcessVertices()
   float ratio = RenderWidth() / float(RenderHeight());
   float top, right;
   Mat4x4 P;
-  _Scene.GetCamera().ComputePerspectiveProjMatrix(ratio, P, &top, &right);
+  _Scene.GetCamera().ComputeProjMatrix(ratio, P, &top, &right);
 
   int nbVertices = static_cast<int>(_VertexBuffer.size());
   _ProjVerticesBuf.resize(nbVertices);
@@ -2961,6 +2962,8 @@ int SoftwareRasterizer::ProcessFragments()
 {
   rd::DefaultUniform uniforms;
   uniforms._CameraPos = _Scene.GetCamera().GetPos();
+  uniforms._CameraForward = _Scene.GetCamera().GetForward();
+  uniforms._Orthographic = _Scene.GetCamera().IsOrthographic();
   uniforms._Sampling = _Settings._Sampling;
   uniforms._Materials = &_Scene.GetMaterials();
   uniforms._Textures = &_Scene.GetTextures();
@@ -3009,6 +3012,8 @@ int SoftwareRasterizer::ProcessTransparentFragments()
 {
   rd::DefaultUniform uniforms;
   uniforms._CameraPos = _Scene.GetCamera().GetPos();
+  uniforms._CameraForward = _Scene.GetCamera().GetForward();
+  uniforms._Orthographic = _Scene.GetCamera().IsOrthographic();
   uniforms._Sampling = _Settings._Sampling;
   uniforms._Materials = &_Scene.GetMaterials();
   uniforms._Textures = &_Scene.GetTextures();

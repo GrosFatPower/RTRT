@@ -931,6 +931,8 @@ void FpsGameEditor::SyncMapFromRuntimeSettings( FpsGameEditorContext & ioContext
   renderSettings._CameraZNear = ioContext._GameSettings._CameraZNear;
   renderSettings._CameraZFar = ioContext._GameSettings._CameraZFar;
   renderSettings._CameraFOV = ioContext._GameSettings._CameraFOV;
+  renderSettings._CameraOrthographic = ioContext._GameSettings._CameraOrthographic;
+  renderSettings._CameraOrthographicHeight = ioContext._GameSettings._CameraOrthographicHeight;
   renderSettings._RenderScale = ioContext._Settings._RenderScale;
   renderSettings._ShowLights = ioContext._Settings._ShowLights;
   renderSettings._ToneMapping = ioContext._Settings._ToneMapping;
@@ -998,7 +1000,7 @@ bool FpsGameEditor::SetMode( FpsGameEditorContext & ioContext, bool iEnabled )
 
   if ( ioContext._Scene )
   {
-    ioContext._SceneBinding.SyncCamera(*ioContext._Scene, ioContext._GameWorld, ioContext._GameSettings);
+    ioContext._SceneBinding.SyncCamera(*ioContext._Scene, ioContext._GameWorld, ioContext._GameSettings, _Enabled);
     ioContext._SceneBinding.SyncTransforms(*ioContext._Scene, ioContext._GameWorld, ioContext._GameSettings);
   }
 
@@ -1358,7 +1360,7 @@ bool FpsGameEditor::BuildPickingRay( const FpsGameEditorContext & iContext, doub
   Mat4x4 proj(1.f);
   Camera & camera = iContext._Scene -> GetCamera();
   camera.ComputeLookAtMatrix(view);
-  camera.ComputePerspectiveProjMatrix(static_cast<float>(iContext._Settings._WindowResolution.x) / static_cast<float>(iContext._Settings._WindowResolution.y), proj);
+  camera.ComputeProjMatrix(static_cast<float>(iContext._Settings._WindowResolution.x) / static_cast<float>(iContext._Settings._WindowResolution.y), proj);
 
   Mat4x4 invViewProj = glm::inverse(proj * view);
   Vec4 nearPoint = invViewProj * Vec4(ndcX, ndcY, -1.f, 1.f);
@@ -1368,8 +1370,8 @@ bool FpsGameEditor::BuildPickingRay( const FpsGameEditorContext & iContext, doub
   if ( farPoint.w != 0.f )
     farPoint /= farPoint.w;
 
-  oRayOrigin = camera.GetPos();
-  oRayDir = glm::normalize(Vec3(farPoint) - oRayOrigin);
+  oRayOrigin = camera.IsOrthographic() ? Vec3(nearPoint) : camera.GetPos();
+  oRayDir = camera.IsOrthographic() ? camera.GetForward() : glm::normalize(Vec3(farPoint) - oRayOrigin);
 
   return glm::length(oRayDir) > 0.f;
 }
@@ -2473,17 +2475,39 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
     ioContext._GameSettings._CameraZFar = std::max(ioContext._GameSettings._CameraZNear + 0.001f, zFar);
     cameraDirty = true;
   }
-  float fov = ioContext._GameSettings._CameraFOV;
-  if ( ImGui::SliderFloat("FOV", &fov, 30.f, 140.f, "%.1f") )
+  if ( _Enabled )
   {
-    ioContext._GameSettings._CameraFOV = MathUtil::Clamp(fov, 30.f, 140.f);
-    cameraDirty = true;
+    int projection = ioContext._GameSettings._CameraOrthographic ? 1 : 0;
+    if ( ImGui::Combo("Projection", &projection, "Perspective\0Orthographic\0") )
+    {
+      ioContext._GameSettings._CameraOrthographic = ( 1 == projection );
+      cameraDirty = true;
+    }
+
+    if ( ioContext._GameSettings._CameraOrthographic )
+    {
+      float height = std::max(0.001f, ioContext._GameSettings._CameraOrthographicHeight);
+      if ( ImGui::SliderFloat("View height", &height, 0.1f, 1000.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
+      {
+        ioContext._GameSettings._CameraOrthographicHeight = std::max(0.001f, height);
+        cameraDirty = true;
+      }
+    }
+    else
+    {
+      float fov = ioContext._GameSettings._CameraFOV;
+      if ( ImGui::SliderFloat("FOV", &fov, 30.f, 140.f, "%.1f") )
+      {
+        ioContext._GameSettings._CameraFOV = MathUtil::Clamp(fov, 30.f, 140.f);
+        cameraDirty = true;
+      }
+    }
   }
 
   if ( cameraDirty )
   {
     if ( ioContext._Scene )
-      ioContext._SceneBinding.SyncCamera(*ioContext._Scene, ioContext._GameWorld, ioContext._GameSettings);
+      ioContext._SceneBinding.SyncCamera(*ioContext._Scene, ioContext._GameWorld, ioContext._GameSettings, _Enabled);
     ioContext._Renderer -> Notify(DirtyState::SceneCamera);
     MarkDirty();
   }
@@ -2759,7 +2783,7 @@ int FpsGameEditor::DrawOverlays( FpsGameEditorContext & ioContext )
 
   const float width  = static_cast<float>(std::max(1, ioContext._Settings._WindowResolution.x));
   const float height = static_cast<float>(std::max(1, ioContext._Settings._WindowResolution.y));
-  camera.ComputePerspectiveProjMatrix(width / height, proj);
+  camera.ComputeProjMatrix(width / height, proj);
 
   ImGuiIO & io = ImGui::GetIO();
   ImDrawList * drawList = ImGui::GetForegroundDrawList();
@@ -2889,12 +2913,12 @@ int FpsGameEditor::DrawGizmo( FpsGameEditorContext & ioContext )
 
   const float width  = static_cast<float>(std::max(1, ioContext._Settings._WindowResolution.x));
   const float height = static_cast<float>(std::max(1, ioContext._Settings._WindowResolution.y));
-  camera.ComputePerspectiveProjMatrix(width / height, proj);
+  camera.ComputeProjMatrix(width / height, proj);
 
   ImGuiIO & io = ImGui::GetIO();
   ImGuizmo::SetDrawlist(ImGui::GetForegroundDrawList());
   ImGuizmo::SetRect(0.f, 0.f, io.DisplaySize.x, io.DisplaySize.y);
-  ImGuizmo::SetOrthographic(false);
+  ImGuizmo::SetOrthographic(camera.IsOrthographic());
   const bool scaleMode = ioContext._KeyInput.IsKeyDown(GLFW_KEY_LEFT_ALT) || ioContext._KeyInput.IsKeyDown(GLFW_KEY_RIGHT_ALT);
   const bool rotateMode = ioContext._KeyInput.IsKeyDown(GLFW_KEY_LEFT_SHIFT) || ioContext._KeyInput.IsKeyDown(GLFW_KEY_RIGHT_SHIFT);
   const ImGuizmo::OPERATION operation = scaleMode ? ImGuizmo::SCALE : ( rotateMode ? ImGuizmo::ROTATE : ImGuizmo::TRANSLATE );

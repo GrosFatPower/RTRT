@@ -95,7 +95,7 @@ void main()
 
   vec3 pos = texture(u_GPosition, fragUV).xyz;
   vec3 N = normalize(texture(u_GNormal, fragUV).xyz * 2.0 - 1.0);
-  vec3 V = normalize(u_Camera._Pos - pos);
+  vec3 V = ( 1 == u_Camera._Projection ) ? -u_Camera._Forward : normalize(u_Camera._Pos - pos);
   vec3 R = normalize(reflect(-V, N));
 
   if ( dot(R, N) <= 0.0001 )

@@ -12,6 +12,12 @@ enum class CameraMode
   FreeLook
 };
 
+enum class CameraProjection
+{
+  Perspective,
+  Orthographic
+};
+
 class Camera
 {
 public:
@@ -39,6 +45,13 @@ public:
   void SetFOVInDegrees( float iFOV );
   float GetFOVInDegrees() const;
 
+  void SetProjection( CameraProjection iProjection ) { _Projection = iProjection; }
+  CameraProjection GetProjection() const { return _Projection; }
+  bool IsOrthographic() const { return CameraProjection::Orthographic == _Projection; }
+
+  void SetOrthographicHeight( float iHeight );
+  float GetOrthographicHeight() const { return _OrthographicHeight; }
+
   void SetZNearFar( float iZNear, float iZFar);
   void GetZNearFar( float & oZNear, float & oZFar) const;
 
@@ -62,6 +75,12 @@ public:
 
   // Perspective projection matrix, column-major / RH / vertival fov in degrees / Z [-1,1]
   void ComputePerspectiveProjMatrix( float iAspectRatio, Mat4x4 & oM, float * oTop = nullptr, float * oRight = nullptr );
+
+  // Active projection matrix, column-major / RH / Z [-1,1]
+  void ComputeProjMatrix( float iAspectRatio, Mat4x4 & oM, float * oTop = nullptr, float * oRight = nullptr );
+
+  // Orthographic projection matrix, column-major / RH / Z [-1,1]
+  void ComputeOrthographicProjMatrix( float iAspectRatio, Mat4x4 & oM, float * oTop = nullptr, float * oRight = nullptr );
 
   // Frustum matrix, column-major / RH / vertival fov in degrees / Z [-1,1]
   void ComputeFrustum( float iLeft, float iRight, float iBottom, float iTop, float iZNear, float iZFar, Mat4x4 & oM );
@@ -92,15 +111,17 @@ private:
 
   float _FocalDist = 5.f;
   float _Aperture  = 0.f;
+  float _OrthographicHeight = 10.f;
 
   float _ZNear = 1.f;
   float _ZFar  = 1000.f;
 
   CameraMode _Mode = CameraMode::Orbit;
+  CameraProjection _Projection = CameraProjection::Perspective;
 };
 
 inline void Camera::SetZNearFar( float iZNear, float iZFar) {
-  _ZNear = iZNear; _ZFar = iZFar; }
+  _ZNear = std::max(iZNear, 0.001f); _ZFar = std::max(iZFar, _ZNear + 0.001f); }
 
 inline void Camera::GetZNearFar( float & oZNear, float & oZFar) const {
   oZNear = _ZNear; oZFar = _ZFar; }

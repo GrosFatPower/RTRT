@@ -116,6 +116,25 @@
       }
     },
     {
+      "name": "software_textured_box_orthographic",
+      "profile": "software",
+      "scene": "TexturedBox_Orthographic.scene",
+      "diagnostic_only": true
+    },
+    {
+      "name": "deferred_textured_box_orthographic",
+      "profile": "deferred",
+      "scene": "TexturedBox_Orthographic.scene",
+      "diagnostic_only": true
+    },
+    {
+      "name": "pathtracer_textured_box_orthographic",
+      "profile": "pathtracer",
+      "scene": "TexturedBox_Orthographic.scene",
+      "frames": 60,
+      "diagnostic_only": true
+    },
+    {
       "name": "software_transparency",
       "profile": "software",
       "scene": "SoftwareTransparency.scene",

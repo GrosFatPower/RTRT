@@ -4,6 +4,7 @@
 #include "RenderTestGLTFUtil.h"
 
 #include "DroppedFileUtils.h"
+#include "Camera.h"
 #include "RenderSettings.h"
 #include "Scene.h"
 #include "PathUtils.h"
@@ -439,6 +440,27 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
 
   if ( !RunUnitTest("gltf_static_import", [iQuiet]() { return GLTFTestUtil::CheckStaticImport(iQuiet); }) )
     return 1;
+  if ( !RunUnitTest("camera_projection", []() {
+    Camera camera(Vec3(0.f, 0.f, -1.f), Vec3(0.f), 80.f);
+    camera.SetZNearFar(1.f, 101.f);
+    camera.SetProjection(CameraProjection::Orthographic);
+    camera.SetOrthographicHeight(10.f);
+
+    Mat4x4 projection(1.f);
+    float top = 0.f;
+    float right = 0.f;
+    camera.ComputeProjMatrix(2.f, projection, &top, &right);
+    const float epsilon = 0.00001f;
+    if ( ( fabs(top - 5.f) > epsilon ) || ( fabs(right - 10.f) > epsilon )
+      || ( fabs(projection[0][0] - .1f) > epsilon ) || ( fabs(projection[1][1] - .2f) > epsilon )
+      || ( fabs(projection[2][2] + .02f) > epsilon ) || ( fabs(projection[3][2] + 1.02f) > epsilon ) )
+      return false;
+
+    camera.SetProjection(CameraProjection::Perspective);
+    camera.ComputeProjMatrix(2.f, projection);
+    return ( fabs(projection[2][3] + 1.f) <= epsilon ) && ( fabs(projection[3][3]) <= epsilon );
+  }) )
+    return 1;
   if ( !RunUnitTest("obj_static_import", [iQuiet]() { return GLTFTestUtil::CheckObjImport(iQuiet); }) )
     return 1;
   if ( !RunUnitTest("scene_optional_mesh_warning", [&iArtifactsDir, iQuiet]() {
@@ -475,6 +497,29 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
       loaded = Loader::LoadScene(scenePath.string(), scene, settings);
     }
     return !loaded && ( 0 == scene.GetNbLights() );
+  }) )
+    return 1;
+  if ( !RunUnitTest("scene_camera_projection", [&iArtifactsDir, iQuiet]() {
+    std::error_code errorCode;
+    std::filesystem::create_directories(iArtifactsDir, errorCode);
+    const std::filesystem::path scenePath = iArtifactsDir / "orthographic_camera.scene";
+    std::ofstream file(scenePath);
+    file << "camera\n{\n  position 0 0 -5\n  lookat 0 0 0\n  type orthographic\n  orthographicHeight 12\n  near 0.25\n  far 75\n}\n";
+    file.close();
+
+    Scene scene;
+    RenderSettings settings;
+    bool loaded = false;
+    {
+      ScopedOutputSilencer outputSilencer(iQuiet);
+      loaded = Loader::LoadScene(scenePath.string(), scene, settings);
+    }
+    float nearPlane = 0.f;
+    float farPlane = 0.f;
+    scene.GetCamera().GetZNearFar(nearPlane, farPlane);
+    return loaded && scene.GetCamera().IsOrthographic()
+      && ( fabs(scene.GetCamera().GetOrthographicHeight() - 12.f) < 0.00001f )
+      && ( fabs(nearPlane - .25f) < 0.00001f ) && ( fabs(farPlane - 75.f) < 0.00001f );
   }) )
     return 1;
   if ( !RunUnitTest("external_prop_file_filter", []() {

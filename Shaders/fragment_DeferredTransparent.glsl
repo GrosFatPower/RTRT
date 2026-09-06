@@ -151,7 +151,7 @@ void main()
     alpha = baseAlpha * ( 1.0 - clamp(mat._SpecTrans, 0.0, 1.0) );
 
   vec3 N = normalize(hitPoint._Normal);
-  vec3 V = normalize(u_Camera._Pos - hitPoint._Pos);
+  vec3 V = ( 1 == u_Camera._Projection ) ? -u_Camera._Forward : normalize(u_Camera._Pos - hitPoint._Pos);
   float roughness = clamp(mat._Roughness, 0.001, 1.0);
   float metallic = clamp(mat._Metallic, 0.0, 1.0);
   float reflectance = clamp(mat._Reflectance, 0.0, 1.0);

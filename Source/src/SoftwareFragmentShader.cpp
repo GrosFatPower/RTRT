@@ -30,6 +30,11 @@ bool IsFinite( const Vec3 & iValue )
   return std::isfinite(iValue.r) && std::isfinite(iValue.g) && std::isfinite(iValue.b);
 }
 
+Vec3 CameraViewDir( const rd::DefaultUniform & iUniforms, const Vec3 & iPosition )
+{
+  return iUniforms._Orthographic ? -iUniforms._CameraForward : glm::normalize(iUniforms._CameraPos - iPosition);
+}
+
 // ----------------------------------------------------------------------------
 // PBR Utilities : DistributionGGX
 // GGX/Trowbridge-Reitz : Normal Distribution Function
@@ -357,7 +362,7 @@ Vec4 BlinnPhongFragmentShader::Process(const RasterData::Fragment& iFrag, const 
     Vec3 dirToLight = glm::normalize(light._Pos - iFrag._Attrib._WorldPos);
     diffuse = std::max(0.f, glm::dot(normal, dirToLight));
 
-    Vec3 viewDir = glm::normalize(_Uniforms._CameraPos - iFrag._Attrib._WorldPos);
+    Vec3 viewDir = CameraViewDir(_Uniforms, iFrag._Attrib._WorldPos);
     Vec3 reflectDir = glm::reflect(-dirToLight, normal);
 
     static float specularStrength = 0.5f;
@@ -392,7 +397,7 @@ TransparentShadingResult BlinnPhongFragmentShader::ProcessTransparent(const rd::
 
   const float specTrans = MathUtil::Clamp(mat._SpecTrans, 0.f, 1.f);
   result._Alpha = MathUtil::Clamp(mat._Opacity, 0.f, 1.f) * ( 1.f - specTrans );
-  const Vec3 V = glm::normalize(_Uniforms._CameraPos - iFrag._Attrib._WorldPos);
+  const Vec3 V = CameraViewDir(_Uniforms, iFrag._Attrib._WorldPos);
   Vec3 diffuse(0.f);
   Vec3 specular(0.f);
   for ( const Light & light : _Uniforms._Lights )
@@ -435,7 +440,7 @@ Vec4 PBRFragmentShader::Process(const RasterData::Fragment& iFrag, const RasterD
 
   // Direct lighting
   float ambientStrength = .1f;
-  Vec3 V = normalize(_Uniforms._CameraPos - iFrag._Attrib._WorldPos);
+  Vec3 V = CameraViewDir(_Uniforms, iFrag._Attrib._WorldPos);
   for (const auto& light : _Uniforms._Lights)
   {
     Vec3 L = glm::normalize(light._Pos - iFrag._Attrib._WorldPos);
@@ -493,7 +498,7 @@ TransparentShadingResult PBRFragmentShader::ProcessTransparent(const rd::Fragmen
   result._Alpha = MathUtil::Clamp(mat._Opacity, 0.f, 1.f) * ( 1.f - specTrans );
   const Vec3 dielectricF0(TransmissionF0(mat._IOR));
   const Vec3 F0 = glm::mix(dielectricF0, mat._Albedo, MathUtil::Clamp(mat._Metallic, 0.f, 1.f));
-  const Vec3 V = glm::normalize(_Uniforms._CameraPos - iFrag._Attrib._WorldPos);
+  const Vec3 V = CameraViewDir(_Uniforms, iFrag._Attrib._WorldPos);
   Vec3 directDiffuse(0.f);
   Vec3 directSpecular(0.f);
   for ( const Light & light : _Uniforms._Lights )

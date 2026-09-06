@@ -99,25 +99,32 @@ Ray GetRay( in vec2 iCoordUV )
 
   vec2 centeredUV = ( 2. * iCoordUV - 1. ) + jitter;
 
-  float scale = tan(u_Camera._FOV * .5);
-  centeredUV.x *= scale;
-  centeredUV.y *= ( u_Resolution.y / u_Resolution.x ) * scale;
-
-  if ( u_Camera._LensRadius > EPSILON )
+  if ( 1 == u_Camera._Projection )
   {
-    // FocalDist/Aperture
-    vec2 randDisk = u_Camera._LensRadius * RandomInUnitDisk();
-    vec3 randOffset = u_Camera._Right * randDisk.x + u_Camera._Up * randDisk.y;
-
-    vec3 focalPoint = u_Camera._Pos + u_Camera._FocalDist * ( u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward );
-    //vec3 focalPoint = u_Camera._Pos + u_Camera._FocalDist * normalize( u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward );
-    ray._Orig = u_Camera._Pos + randOffset;
-    ray._Dir = normalize(focalPoint - ray._Orig);
+    float halfHeight = u_Camera._OrthographicHeight * .5;
+    ray._Orig = u_Camera._Pos
+      + u_Camera._Right * centeredUV.x * halfHeight * ( u_Resolution.x / u_Resolution.y )
+      + u_Camera._Up * centeredUV.y * halfHeight;
+    ray._Dir = u_Camera._Forward;
   }
   else
   {
-    ray._Orig = u_Camera._Pos;
-    ray._Dir = normalize(u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward);
+    float scale = tan(u_Camera._FOV * .5);
+    centeredUV.x *= scale;
+    centeredUV.y *= ( u_Resolution.y / u_Resolution.x ) * scale;
+    if ( u_Camera._LensRadius > EPSILON )
+    {
+      vec2 randDisk = u_Camera._LensRadius * RandomInUnitDisk();
+      vec3 randOffset = u_Camera._Right * randDisk.x + u_Camera._Up * randDisk.y;
+      vec3 focalPoint = u_Camera._Pos + u_Camera._FocalDist * ( u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward );
+      ray._Orig = u_Camera._Pos + randOffset;
+      ray._Dir = normalize(focalPoint - ray._Orig);
+    }
+    else
+    {
+      ray._Orig = u_Camera._Pos;
+      ray._Dir = normalize(u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward);
+    }
   }
 
   return ray;

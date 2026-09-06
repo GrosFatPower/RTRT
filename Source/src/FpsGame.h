@@ -51,6 +51,8 @@ struct FpsGameSettings
   float           _CameraZNear = 0.05f;
   float           _CameraZFar = 200.f;
   float           _CameraFOV = 85.f;
+  bool            _CameraOrthographic = false;
+  float           _CameraOrthographicHeight = 10.f;
   float           _PlayerHeight = 1.8f;
   float           _PlayerRadius = 0.35f;
   float           _EyeHeight    = 1.62f;
@@ -165,7 +167,7 @@ class FpsGameSceneBinding
 public:
   int Attach( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
   int Attach( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, const FpsGameMap & iMap );
-  int SyncCamera( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
+  int SyncCamera( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, bool iAllowOrthographic = false );
   int SyncTransforms( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
   int SyncProp( Scene & iScene, const FpsGameMap & iMap, int iPropIndex );
   int LoadProp( Scene & iScene, const FpsGameMap & iMap, int iPropIndex );

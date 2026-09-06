@@ -83,6 +83,11 @@ float Camera::GetFOVInDegrees() const
   return MathUtil::ToDegrees(_FOV);
 }
 
+void Camera::SetOrthographicHeight( float iHeight )
+{
+  _OrthographicHeight = std::max(iHeight, 0.001f);
+}
+
 void Camera::SetRadius( float iRadius )
 {
   _Radius = iRadius;
@@ -198,6 +203,34 @@ void Camera::ComputePerspectiveProjMatrix( float iAspectRatio, Mat4x4 & oM, floa
   float right = top * iAspectRatio;
 
   ComputeFrustum(-right, right, -top, top, _ZNear, _ZFar, oM);
+
+  if ( oTop )
+    *oTop = top;
+  if ( oRight )
+    *oRight = right;
+}
+
+void Camera::ComputeProjMatrix( float iAspectRatio, Mat4x4 & oM, float * oTop, float * oRight )
+{
+  if ( IsOrthographic() )
+    ComputeOrthographicProjMatrix(iAspectRatio, oM, oTop, oRight);
+  else
+    ComputePerspectiveProjMatrix(iAspectRatio, oM, oTop, oRight);
+}
+
+void Camera::ComputeOrthographicProjMatrix( float iAspectRatio, Mat4x4 & oM, float * oTop, float * oRight )
+{
+  const float top = _OrthographicHeight * .5f;
+  const float right = top * std::max(iAspectRatio, 0.001f);
+  const float width = 2.f * right;
+  const float height = 2.f * top;
+  const float depth = _ZFar - _ZNear;
+
+  oM = Mat4x4(1.f);
+  oM[0][0] = 2.f / width;
+  oM[1][1] = 2.f / height;
+  oM[2][2] = -2.f / depth;
+  oM[3][2] = -(_ZFar + _ZNear) / depth;
 
   if ( oTop )
     *oTop = top;

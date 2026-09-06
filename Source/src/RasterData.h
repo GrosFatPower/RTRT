@@ -147,6 +147,8 @@ namespace RasterData
     const std::vector<Texture*>* _Textures = nullptr;
     std::vector<Light>           _Lights;
     Vec3                         _CameraPos = { 0.f, 0.f, 0.f };
+    Vec3                         _CameraForward = { 0.f, 0.f, 1.f };
+    bool                         _Orthographic = false;
     SamplingMode                 _Sampling = SamplingMode::Bilinear;
   };
 
@@ -157,6 +159,8 @@ namespace RasterData
     const EnvMap*                _EnvMap = nullptr;
     std::vector<Light>           _Lights;
     Vec3                         _CameraPos = { 0.f, 0.f, 0.f };
+    Vec3                         _CameraForward = { 0.f, 0.f, 1.f };
+    bool                         _Orthographic = false;
     SamplingMode                 _Sampling = SamplingMode::Bilinear;
     float                        _EnvMapRotation = 0.f;
     float                        _SpecularIBLIntensity = 1.f;

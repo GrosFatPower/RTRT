@@ -1146,11 +1146,31 @@ int Test5::DrawCameraUI()
     ImGui::Text("Pivot    : %f, %f, %f", _Scene -> GetCamera().GetPivot().x, _Scene -> GetCamera().GetPivot().y, _Scene -> GetCamera().GetPivot().z);
     ImGui::Text("Radius   : %f", _Scene -> GetCamera().GetRadius());
 
-    float fov = _Scene -> GetCamera().GetFOVInDegrees();
-    if ( ImGui::SliderFloat( "FOV", &fov, 5.f, 150.f ) )
+    Camera & camera = _Scene -> GetCamera();
+    int projection = camera.IsOrthographic() ? 1 : 0;
+    if ( ImGui::Combo("Projection", &projection, "Perspective\0Orthographic\0") )
     {
-      _Scene -> GetCamera().SetFOVInDegrees(fov);
+      camera.SetProjection(projection ? CameraProjection::Orthographic : CameraProjection::Perspective);
       _Renderer -> Notify(DirtyState::SceneCamera);
+    }
+
+    if ( camera.IsOrthographic() )
+    {
+      float height = camera.GetOrthographicHeight();
+      if ( ImGui::SliderFloat("View height", &height, 0.1f, 1000.f, "%.3f", ImGuiSliderFlags_Logarithmic) )
+      {
+        camera.SetOrthographicHeight(height);
+        _Renderer -> Notify(DirtyState::SceneCamera);
+      }
+    }
+    else
+    {
+      float fov = camera.GetFOVInDegrees();
+      if ( ImGui::SliderFloat( "FOV", &fov, 5.f, 150.f ) )
+      {
+        camera.SetFOVInDegrees(fov);
+        _Renderer -> Notify(DirtyState::SceneCamera);
+      }
     }
 
     if ((RendererType::SoftwareRasterizer == _RendererType) || ( RendererType::OpenGLRasterizer == _RendererType ) )
@@ -1859,7 +1879,7 @@ int Test5::DrawSelectedMeshInstanceBBox()
 
   const float width  = static_cast<float>(std::max(1, _Settings._WindowResolution.x));
   const float height = static_cast<float>(std::max(1, _Settings._WindowResolution.y));
-  cam.ComputePerspectiveProjMatrix(width / height, proj);
+  cam.ComputeProjMatrix(width / height, proj);
 
   Vec3 localCorners[8];
   mesh -> GetBoundingBox().Corners(localCorners);
@@ -1922,12 +1942,12 @@ int Test5::DrawMeshInstanceGizmo()
 
   const float width  = static_cast<float>(std::max(1, _Settings._WindowResolution.x));
   const float height = static_cast<float>(std::max(1, _Settings._WindowResolution.y));
-  cam.ComputePerspectiveProjMatrix(width / height, proj);
+  cam.ComputeProjMatrix(width / height, proj);
 
   ImGuiIO & io = ImGui::GetIO();
   ImGuizmo::SetDrawlist(ImGui::GetForegroundDrawList());
   ImGuizmo::SetRect(0.f, 0.f, io.DisplaySize.x, io.DisplaySize.y);
-  ImGuizmo::SetOrthographic(false);
+  ImGuizmo::SetOrthographic(cam.IsOrthographic());
 
   ImGuizmo::OPERATION operation = ( 0 == _MeshGizmoOperation ) ? ImGuizmo::TRANSLATE : ImGuizmo::ROTATE;
   ImGuizmo::MODE mode = ( 0 == _MeshGizmoMode ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
@@ -1975,12 +1995,12 @@ int Test5::DrawLightGizmo()
 
   const float width  = static_cast<float>(std::max(1, _Settings._WindowResolution.x));
   const float height = static_cast<float>(std::max(1, _Settings._WindowResolution.y));
-  cam.ComputePerspectiveProjMatrix(width / height, proj);
+  cam.ComputeProjMatrix(width / height, proj);
 
   ImGuiIO & io = ImGui::GetIO();
   ImGuizmo::SetDrawlist(ImGui::GetForegroundDrawList());
   ImGuizmo::SetRect(0.f, 0.f, io.DisplaySize.x, io.DisplaySize.y);
-  ImGuizmo::SetOrthographic(false);
+  ImGuizmo::SetOrthographic(cam.IsOrthographic());
 
   float snap[3] = { _LightGizmoTranslateSnap, _LightGizmoTranslateSnap, _LightGizmoTranslateSnap };
   const float * snapPtr = _LightGizmoSnap ? snap : nullptr;
@@ -2023,7 +2043,7 @@ bool Test5::BuildPickingRay( double iMouseX, double iMouseY, Vec3 & oRayOrigin, 
   Mat4x4 proj(1.f);
   Camera & cam = const_cast<Scene*>(_Scene.get()) -> GetCamera();
   cam.ComputeLookAtMatrix(view);
-  cam.ComputePerspectiveProjMatrix(static_cast<float>(_Settings._WindowResolution.x) / static_cast<float>(_Settings._WindowResolution.y), proj);
+  cam.ComputeProjMatrix(static_cast<float>(_Settings._WindowResolution.x) / static_cast<float>(_Settings._WindowResolution.y), proj);
 
   Mat4x4 invViewProj = glm::inverse(proj * view);
   Vec4 nearPoint = invViewProj * Vec4(ndcX, ndcY, -1.f, 1.f);
@@ -2033,8 +2053,8 @@ bool Test5::BuildPickingRay( double iMouseX, double iMouseY, Vec3 & oRayOrigin, 
   if ( farPoint.w != 0.f )
     farPoint /= farPoint.w;
 
-  oRayOrigin = cam.GetPos();
-  oRayDir = glm::normalize(Vec3(farPoint) - oRayOrigin);
+  oRayOrigin = cam.IsOrthographic() ? Vec3(nearPoint) : cam.GetPos();
+  oRayDir = cam.IsOrthographic() ? cam.GetForward() : glm::normalize(Vec3(farPoint) - oRayOrigin);
 
   return glm::length(oRayDir) > 0.f;
 }

@@ -973,7 +973,27 @@ bool TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx,
     }
     else if ( "orthographic" == curCam.type )
     {
-      ioDiagnostics.Warn("orthographic cameras are ignored");
+      Vec3 forward = { -transfoMat[2][0], -transfoMat[2][1], -transfoMat[2][2] };
+      Vec3 pos = { transfoMat[3][0], transfoMat[3][1], transfoMat[3][2] };
+      Camera newCamera( pos, pos + forward, 80.f );
+      newCamera.SetProjection(CameraProjection::Orthographic);
+
+      float height = 2.f * static_cast<float>(curCam.orthographic.ymag);
+      if ( height <= 0.f )
+      {
+        height = 2.f * static_cast<float>(curCam.orthographic.xmag);
+        ioDiagnostics.Warn("orthographic camera has no vertical magnification; using horizontal magnification as the view height");
+      }
+      newCamera.SetOrthographicHeight(height);
+
+      const float nearPlane = static_cast<float>(curCam.orthographic.znear);
+      const float farPlane = static_cast<float>(curCam.orthographic.zfar);
+      if ( ( nearPlane > 0.f ) && ( farPlane > nearPlane ) )
+        newCamera.SetZNearFar(nearPlane, farPlane);
+      else
+        ioDiagnostics.Warn("orthographic camera has an invalid clipping range; using default clipping planes");
+
+      ioScene.SetCamera( newCamera );
     }
   }
 
@@ -1968,6 +1988,8 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene, SceneDiagnostics
   float aperture  = -1.f;
   float nearPlane = -1.f;
   float farPlane  = -1.f;
+  std::string projectionType = "perspective";
+  float orthographicHeight = 10.f;
 
   Mat4x4 xform;
   bool hasMatrix = false;
@@ -2043,6 +2065,20 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene, SceneDiagnostics
       else
         parsingError++;
     }
+    else if ( IsEqual("type", tokens[0]) )
+    {
+      if ( 2 == nbTokens )
+        projectionType = tokens[1];
+      else
+        parsingError++;
+    }
+    else if ( IsEqual("orthographicheight", tokens[0]) || IsEqual("orthoheight", tokens[0]) )
+    {
+      if ( 2 == nbTokens )
+        orthographicHeight = std::stof(tokens[1]);
+      else
+        parsingError++;
+    }
     else if ( IsEqual("near", tokens[0]) )
     {
       if ( 2 == nbTokens )
@@ -2099,6 +2135,17 @@ int Loader::ParseCamera( std::ifstream & iStr, Scene & ioScene, SceneDiagnostics
     }
 
     Camera newCamera(pos, lookAt, fov);
+    if ( IsEqual("orthographic", projectionType) )
+    {
+      newCamera.SetProjection(CameraProjection::Orthographic);
+      newCamera.SetOrthographicHeight(orthographicHeight);
+    }
+    else if ( !IsEqual("perspective", projectionType) )
+    {
+      ioDiagnostics.Error(iStartLine, "camera type must be perspective or orthographic");
+      blockDiagnostics.ReportFailure(true);
+      return 1;
+    }
     if ( aperture >= 0 )
       newCamera.SetAperture(aperture);
     if ( focalDist >= 0 )

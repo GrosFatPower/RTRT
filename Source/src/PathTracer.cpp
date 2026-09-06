@@ -339,6 +339,8 @@ int PathTracer::UpdatePathTraceUniforms()
     _PathTraceShader -> SetUniform("u_Camera._Forward", cam.GetForward());
     _PathTraceShader -> SetUniform("u_Camera._Pos", cam.GetPos());
     _PathTraceShader -> SetUniform("u_Camera._FOV", cam.GetFOV());
+    _PathTraceShader -> SetUniform("u_Camera._Projection", cam.IsOrthographic() ? 1 : 0);
+    _PathTraceShader -> SetUniform("u_Camera._OrthographicHeight", cam.GetOrthographicHeight());
     _PathTraceShader -> SetUniform("u_Camera._FocalDist", cam.GetFocalDist());
     _PathTraceShader -> SetUniform("u_Camera._LensRadius", cam.GetAperture() * .5f);
   }

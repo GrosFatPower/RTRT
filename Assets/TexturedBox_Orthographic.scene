@@ -1,0 +1,32 @@
+renderer
+{
+	resolution 800 600
+	envMap HDR/alps_field_2k.hdr
+}
+
+camera
+{
+	position 0.0 0.0 -5.0
+	lookat 0.0 0.0 0.0
+	type orthographic
+	orthographicHeight 3.0
+}
+
+light
+{
+	type sphere
+	position 2 3 -3
+	emission 4. 4. 4.
+	radius .2
+}
+
+material textured_box
+{
+	albedotexture misc/textures/box.jpg
+}
+
+mesh
+{
+	file misc/TexturedBox.obj
+	material textured_box
+}
