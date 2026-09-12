@@ -2199,12 +2199,18 @@ int Test5::ProcessInput()
 
     if ( _MouseInput.IsScrolled(mouseX, mouseY) )
     {
-      float newRadius = _Scene -> GetCamera().GetRadius() + MouseSensitivity[4] * static_cast<float>(mouseY);
-      if ( newRadius > 0.f )
+      Camera & camera = _Scene -> GetCamera();
+      if ( camera.IsOrthographic() )
       {
-        _Scene -> GetCamera().SetRadius(newRadius);
-        _Renderer -> Notify(DirtyState::SceneCamera);
+        camera.SetOrthographicHeight(camera.GetOrthographicHeight() + MouseSensitivity[4] * static_cast<float>(mouseY));
       }
+      else
+      {
+        float newRadius = camera.GetRadius() + MouseSensitivity[4] * static_cast<float>(mouseY);
+        if ( newRadius > 0.f )
+          camera.SetRadius(newRadius);
+      }
+      _Renderer -> Notify(DirtyState::SceneCamera);
     }
   }
 
@@ -2226,9 +2232,15 @@ int Test5::ProcessInput()
         _Scene -> GetCamera().Walk(static_cast<float>(_DeltaTime * Velocity[0]));
       else
       {
-        float newRadius = static_cast<float>(_Scene -> GetCamera().GetRadius() - _DeltaTime);
-        if ( newRadius > 0.f )
-          _Scene -> GetCamera().SetRadius(newRadius);
+        Camera & camera = _Scene -> GetCamera();
+        if ( camera.IsOrthographic() )
+          camera.SetOrthographicHeight(camera.GetOrthographicHeight() - _DeltaTime * 2.f);
+        else
+        {
+          float newRadius = static_cast<float>(camera.GetRadius() - _DeltaTime);
+          if ( newRadius > 0.f )
+            camera.SetRadius(newRadius);
+        }
       }
       _Renderer -> Notify(DirtyState::SceneCamera);
     }
@@ -2239,9 +2251,15 @@ int Test5::ProcessInput()
         _Scene -> GetCamera().Walk(static_cast<float>(-_DeltaTime * Velocity[0]));
       else
       {
-        float newRadius = static_cast<float>(_Scene -> GetCamera().GetRadius() + _DeltaTime);
-        if ( newRadius > 0.f )
-          _Scene -> GetCamera().SetRadius(newRadius);
+        Camera & camera = _Scene -> GetCamera();
+        if ( camera.IsOrthographic() )
+          camera.SetOrthographicHeight(camera.GetOrthographicHeight() + _DeltaTime * 2.f);
+        else
+        {
+          float newRadius = static_cast<float>(camera.GetRadius() + _DeltaTime);
+          if ( newRadius > 0.f )
+            camera.SetRadius(newRadius);
+        }
       }
       _Renderer -> Notify(DirtyState::SceneCamera);
     }
