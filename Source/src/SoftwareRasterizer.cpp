@@ -525,6 +525,10 @@ int SoftwareRasterizer::UpdateImageBuffer()
   Mat4x4 P;
   _Scene.GetCamera().ComputeProjMatrix(ratio, P, &top, &right);
 
+  float bgTop, bgRight;
+  Mat4x4 dummyM;
+  _Scene.GetCamera().ComputePerspectiveProjMatrix(ratio, dummyM, &bgTop, &bgRight);
+
   ResetTiles();
   _PassTimes[TimingFrameClear] = glfwGetTime() - clearStartTime;
 
@@ -533,7 +537,7 @@ int SoftwareRasterizer::UpdateImageBuffer()
   {
     const double backgroundStartTime = glfwGetTime();
     _PassEnabled[TimingBackground] = true;
-    RenderBackground(top, right);
+    RenderBackground(bgTop, bgRight);
     _PassTimes[TimingBackground] = glfwGetTime() - backgroundStartTime;
   }
 
@@ -543,7 +547,7 @@ int SoftwareRasterizer::UpdateImageBuffer()
   {
     const double backgroundStartTime = glfwGetTime();
     _PassEnabled[TimingBackground] = true;
-    RenderUncoveredBackground(top, right);
+    RenderUncoveredBackground(bgTop, bgRight);
     _PassTimes[TimingBackground] = glfwGetTime() - backgroundStartTime;
   }
 
@@ -1595,7 +1599,7 @@ int SoftwareRasterizer::RenderUncoveredBackground(float iTop, float iRight)
           const int globalX = tile._X + x;
           if ( _Settings._EnableBackGround )
           {
-            const Vec3 worldP = orthographic ? _Scene.GetCamera().GetForward() : glm::normalize(bottomLeft + dX * static_cast<float>(globalX) + dY * static_cast<float>(globalY));
+            const Vec3 worldP = glm::normalize(bottomLeft + dX * static_cast<float>(globalX) + dY * static_cast<float>(globalY));
             _ImageBuffer._ColorBuffer[globalX + RenderWidth() * globalY] = SampleEnvMap(worldP);
           }
           else
@@ -1622,7 +1626,7 @@ void SoftwareRasterizer::RenderBackgroundRows(int iStartY, int iEndY, Vec3 iBott
   {
     for (int x = 0; x < width; ++x)
     {
-      Vec3 worldP = _Scene.GetCamera().IsOrthographic() ? _Scene.GetCamera().GetForward() : glm::normalize(iBottomLeft + iDX * (float)x + iDY * (float)y);
+      Vec3 worldP = glm::normalize(iBottomLeft + iDX * (float)x + iDY * (float)y);
       _ImageBuffer._ColorBuffer[x + width * y] = this->SampleEnvMap(worldP);
     }
   }
@@ -1645,7 +1649,7 @@ void SoftwareRasterizer::RenderBackground(Vec3 iBottomLeft, Vec3 iDX, Vec3 iDY, 
     Vec3 rowStart = base + iDY * (float)y;
     for (int x = 0; x < width; ++x)
     {
-      Vec3 worldP = _Scene.GetCamera().IsOrthographic() ? _Scene.GetCamera().GetForward() : glm::normalize(rowStart + iDX * (float)x);
+      Vec3 worldP = glm::normalize(rowStart + iDX * (float)x);
       ioTile._LocalFB._ColorBuffer[x + width * y] = SampleEnvMap(worldP);
     }
   }

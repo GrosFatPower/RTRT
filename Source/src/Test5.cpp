@@ -2234,7 +2234,7 @@ int Test5::ProcessInput()
       {
         Camera & camera = _Scene -> GetCamera();
         if ( camera.IsOrthographic() )
-          camera.SetOrthographicHeight(camera.GetOrthographicHeight() - _DeltaTime * 2.f);
+          camera.SetOrthographicHeight(camera.GetOrthographicHeight() - static_cast<float>(_DeltaTime * 2.f));
         else
         {
           float newRadius = static_cast<float>(camera.GetRadius() - _DeltaTime);
@@ -2253,7 +2253,7 @@ int Test5::ProcessInput()
       {
         Camera & camera = _Scene -> GetCamera();
         if ( camera.IsOrthographic() )
-          camera.SetOrthographicHeight(camera.GetOrthographicHeight() + _DeltaTime * 2.f);
+          camera.SetOrthographicHeight(camera.GetOrthographicHeight() + static_cast<float>(_DeltaTime * 2.f));
         else
         {
           float newRadius = static_cast<float>(camera.GetRadius() + _DeltaTime);

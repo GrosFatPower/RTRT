@@ -227,7 +227,7 @@ bool Scatter( in Ray iRay, in HitPoint iClosestHit, in Material iMat, in float i
 // ----------------------------------------------------------------------------
 // PathSample
 // ----------------------------------------------------------------------------
-vec3 PathSample( in Ray iStartRay )
+vec3 PathSample( in Ray iStartRay, in vec2 iCoordUV )
 {
   // Ray cast
   vec3 radiance = vec3(0.f);
@@ -265,7 +265,16 @@ vec3 PathSample( in Ray iStartRay )
       {
         if ( u_EnableEnvMap > 0 )
         {
-          vec4 envMapColPdf = SampleEnvMap(ray._Dir, u_EnvMap, u_EnvMapRotation , u_EnvMapRes, u_EnvMapTotalWeight);
+          vec3 bgDir = ray._Dir;
+          if ( 1 == u_Camera._Projection )
+          {
+            vec2 centeredUV = ( 2. * iCoordUV - 1. );
+            float scale = tan(u_Camera._FOV * .5);
+            centeredUV.x *= scale;
+            centeredUV.y *= ( u_Resolution.y / u_Resolution.x ) * scale;
+            bgDir = normalize(u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward);
+          }
+          vec4 envMapColPdf = SampleEnvMap(bgDir, u_EnvMap, u_EnvMapRotation , u_EnvMapRes, u_EnvMapTotalWeight);
 
           float misWeight = 1.;
           // Gather radiance from envmap and use scatterSample.pdf from previous bounce for MIS
@@ -376,7 +385,7 @@ void main()
   for ( int i = 0; i < u_NbSamplesPerPixel; ++i )
   {
     Ray ray = GetRay(coordUV);
-    radiance += PathSample(ray);
+    radiance += PathSample(ray, coordUV);
   }
   radiance /= u_NbSamplesPerPixel;
 

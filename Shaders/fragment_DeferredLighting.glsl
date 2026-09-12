@@ -58,6 +58,17 @@ vec3 GetCameraRayDir()
   return normalize(u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward);
 }
 
+vec3 GetPerspectiveRayDir()
+{
+  vec2 centeredUV = fragUV * 2.0 - 1.0;
+
+  float scale = tan(u_Camera._FOV * .5);
+  centeredUV.x *= scale;
+  centeredUV.y *= ( u_Resolution.y / u_Resolution.x ) * scale;
+
+  return normalize(u_Camera._Right * centeredUV.x + u_Camera._Up * centeredUV.y + u_Camera._Forward);
+}
+
 vec3 GetCameraRayOrigin()
 {
   if ( 0 == u_Camera._Projection )
@@ -168,7 +179,7 @@ void main()
     }
 
     if ( u_EnableEnvMap > 0 )
-      fragColor = vec4(SampleEnvMapNoSeamLod(cameraRayDir, 0.0), 1.);
+      fragColor = vec4(SampleEnvMapNoSeamLod(GetPerspectiveRayDir(), 0.0), 1.);
     else if ( u_EnableBackground > 0 )
       fragColor = vec4(u_BackgroundColor, 1.);
     else
