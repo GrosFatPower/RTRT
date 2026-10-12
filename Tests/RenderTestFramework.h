@@ -25,6 +25,44 @@ struct ImageMetrics
   size_t _MismatchCount = 0;
 };
 
+struct WhiteFurnaceProbe
+{
+  std::string _Name;
+  float _RectX = 0.f;
+  float _RectY = 0.f;
+  float _RectW = 0.f;
+  float _RectH = 0.f;
+  bool  _HasExpected = false;
+  Vec3  _Expected = Vec3(0.f);
+  float _Tolerance = 0.f;
+};
+
+struct WhiteFurnaceConfig
+{
+  bool  _Enabled = false;
+  float _MaxChannel = 1.05f;
+  float _MinChannel = -0.001f;
+  std::vector<WhiteFurnaceProbe> _Probes;
+};
+
+struct WhiteFurnaceProbeResult
+{
+  std::string _Name;
+  Vec3  _MeanRGB = Vec3(0.f);
+  float _MeanLuminance = 0.f;
+  bool  _Passed = true;
+  std::string _Violation;
+};
+
+struct WhiteFurnaceResult
+{
+  float _GlobalMinChannel = 0.f;
+  float _GlobalMaxChannel = 0.f;
+  bool  _GlobalBoundsPassed = true;
+  std::vector<WhiteFurnaceProbeResult> _ProbeResults;
+  bool  _Passed = true;
+};
+
 struct RenderTestCase
 {
   std::string     _Name;
@@ -77,6 +115,11 @@ struct RenderTestCase
   float           _RefractionMaxDistance = 35.f;
   float           _RefractionThickness = 0.25f;
   float           _RefractionEdgeFade = 0.18f;
+  float           _SpecularIBLIntensity = 0.5f;
+  float           _SpecularIBLMaxRoughness = 0.5f;
+  bool            _Shadows = true;
+  bool            _PBRDirectLighting = true;
+  WhiteFurnaceConfig _WhiteFurnace;
 
   void ApplySettings( RenderSettings & ioSettings ) const;
   bool ApplyScene( Scene & ioScene ) const;
@@ -88,6 +131,8 @@ bool WriteDiagnosticPNG( const std::filesystem::path & iPath, const RenderImage 
 bool WriteDiffPNG( const std::filesystem::path & iPath, const RenderImage & iActual, const RenderImage & iExpected );
 bool CompareImages( const RenderImage & iActual, const RenderImage & iExpected, float iPixelErrorThreshold, ImageMetrics & oMetrics );
 bool MatchesThresholds( const ImageMetrics & iMetrics, const RenderTestCase & iTestCase );
+WhiteFurnaceResult EvaluateWhiteFurnace( const RenderImage & iImage, const WhiteFurnaceConfig & iConfig );
+bool WriteWhiteFurnaceMetrics( const std::filesystem::path & iPath, const WhiteFurnaceResult & iResult );
 
 bool LoadRenderTestCases( const std::filesystem::path & iPath, std::vector<RenderTestCase> & oTestCases, std::string & oError );
 bool ParseRenderTestCases( const std::string & iContents, std::vector<RenderTestCase> & oTestCases, std::string & oError );

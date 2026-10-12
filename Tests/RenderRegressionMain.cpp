@@ -237,6 +237,25 @@ RenderCaseOutcome RunRenderCase( const RTRT::Tests::RenderTestCase & iTestCase, 
   if ( 0 != result )
     return outcome;
 
+  if ( iTestCase._WhiteFurnace._Enabled )
+  {
+    const fs::path artifactPath = iArtifactsDir / iTestCase._Name;
+    RTRT::Tests::WritePFM(artifactPath / "actual.pfm", actual);
+    RTRT::Tests::WriteDiagnosticPNG(artifactPath / "actual.png", actual);
+
+    RTRT::Tests::WhiteFurnaceResult furnaceResult = RTRT::Tests::EvaluateWhiteFurnace(actual, iTestCase._WhiteFurnace);
+    RTRT::Tests::WriteWhiteFurnaceMetrics(artifactPath / "furnace_metrics.txt", furnaceResult);
+
+    if ( furnaceResult._Passed )
+    {
+      outcome._Status = RenderCaseStatus::Passed;
+      outcome._Reason = "white furnace passed";
+    }
+    else
+      outcome._Reason = "white furnace energy violation";
+    return outcome;
+  }
+
   if ( iTestCase._DiagnosticOnly )
   {
     const fs::path artifactPath = iArtifactsDir / iTestCase._Name;

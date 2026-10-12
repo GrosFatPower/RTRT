@@ -1,0 +1,198 @@
+renderer
+{
+	resolution 512 384
+	enablebackground true
+	enableskybox true
+	envMap HDR/white_furnace_64x32.hdr
+	enableuniformlight false
+}
+
+camera
+{
+	position 0.0 0.0 -10.0
+	lookat 0.0 0.0 0.0
+	type orthographic
+	orthographicHeight 7.5
+	near 0.1
+	far 50.0
+}
+
+# Row 1: Diffuse probes
+
+material diffuse_black
+{
+	color 0.0 0.0 0.0
+	roughness 0.5
+	metallic 0.0
+}
+
+material diffuse_02
+{
+	color 0.2 0.2 0.2
+	roughness 0.5
+	metallic 0.0
+}
+
+material diffuse_05
+{
+	color 0.5 0.5 0.5
+	roughness 0.5
+	metallic 0.0
+}
+
+material diffuse_10
+{
+	color 1.0 1.0 1.0
+	roughness 0.5
+	metallic 0.0
+}
+
+# Row 2: White dielectric probes
+
+material dielectric_r005
+{
+	color 1.0 1.0 1.0
+	roughness 0.05
+	metallic 0.0
+}
+
+material dielectric_r025
+{
+	color 1.0 1.0 1.0
+	roughness 0.25
+	metallic 0.0
+}
+
+material dielectric_r050
+{
+	color 1.0 1.0 1.0
+	roughness 0.5
+	metallic 0.0
+}
+
+material dielectric_r100
+{
+	color 1.0 1.0 1.0
+	roughness 1.0
+	metallic 0.0
+}
+
+# Row 3: White metallic probes
+
+material metallic_r005
+{
+	color 1.0 1.0 1.0
+	roughness 0.05
+	metallic 1.0
+}
+
+material metallic_r025
+{
+	color 1.0 1.0 1.0
+	roughness 0.25
+	metallic 1.0
+}
+
+material metallic_r050
+{
+	color 1.0 1.0 1.0
+	roughness 0.5
+	metallic 1.0
+}
+
+material metallic_r100
+{
+	color 1.0 1.0 1.0
+	roughness 1.0
+	metallic 1.0
+}
+
+# Row 1 mesh instances (Y=2.5)
+
+mesh
+{
+	file furnace/sphere.obj
+	material diffuse_black
+	position -3.75 2.5 0.0
+}
+
+mesh
+{
+	file furnace/sphere.obj
+	material diffuse_02
+	position -1.25 2.5 0.0
+}
+
+mesh
+{
+	file furnace/sphere.obj
+	material diffuse_05
+	position 1.25 2.5 0.0
+}
+
+mesh
+{
+	file furnace/sphere.obj
+	material diffuse_10
+	position 3.75 2.5 0.0
+}
+
+# Row 2 mesh instances (Y=0)
+
+mesh
+{
+	file furnace/sphere.obj
+	material dielectric_r005
+	position -3.75 0.0 0.0
+}
+
+mesh
+{
+	file furnace/sphere.obj
+	material dielectric_r025
+	position -1.25 0.0 0.0
+}
+
+mesh
+{
+	file furnace/sphere.obj
+	material dielectric_r050
+	position 1.25 0.0 0.0
+}
+
+mesh
+{
+	file furnace/sphere.obj
+	material dielectric_r100
+	position 3.75 0.0 0.0
+}
+
+# Row 3 mesh instances (Y=-2.5)
+
+mesh
+{
+	file furnace/sphere.obj
+	material metallic_r005
+	position -3.75 -2.5 0.0
+}
+
+mesh
+{
+	file furnace/sphere.obj
+	material metallic_r025
+	position -1.25 -2.5 0.0
+}
+
+mesh
+{
+	file furnace/sphere.obj
+	material metallic_r050
+	position 1.25 -2.5 0.0
+}
+
+mesh
+{
+	file furnace/sphere.obj
+	material metallic_r100
+	position 3.75 -2.5 0.0
+}

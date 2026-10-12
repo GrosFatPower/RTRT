@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "profiles": {
+    "deferred_furnace": {
+      "backend": "deferred",
+      "resolution": [512, 384],
+      "frames": 1,
+      "thresholds": {
+        "mean_absolute_error": 0.0,
+        "max_absolute_error": 0.0,
+        "pixel_error": 0.0,
+        "mismatch_ratio": 0.0
+      },
+      "settings": {
+        "specular_ibl": true,
+        "specular_ibl_intensity": 1.0,
+        "specular_ibl_max_roughness": 1.0,
+        "ssr": false,
+        "ssao": false,
+        "background": true,
+        "uniform_light": false,
+        "shadows": false,
+        "transparency": false,
+        "pbr_direct_lighting": false
+      }
+    },
+    "pathtracer_furnace": {
+      "backend": "pathtracer",
+      "resolution": [512, 384],
+      "frames": 256,
+      "thresholds": {
+        "mean_absolute_error": 0.0,
+        "max_absolute_error": 0.0,
+        "pixel_error": 0.0,
+        "mismatch_ratio": 0.0
+      },
+      "settings": {
+        "background": true,
+        "uniform_light": false,
+        "accumulate": true,
+        "auto_scale": false,
+        "tiled_rendering": false,
+        "denoise": false,
+        "bounces": 2,
+        "samples_per_pixel": 1
+      }
+    }
+  },
+  "tests": [
+    {
+      "name": "deferred_white_furnace",
+      "profile": "deferred_furnace",
+      "scene": "WhiteFurnace.scene",
+      "environment_map": "HDR/white_furnace_64x32.hdr",
+      "white_furnace": {
+        "max_channel": 1.05,
+        "min_channel": -0.001,
+        "probes": {
+          "diffuse_black":      { "rect": [0.100, 0.808, 0.050, 0.050], "expected": [0.0, 0.0, 0.0], "tolerance": 0.02 },
+          "diffuse_0_2":        { "rect": [0.350, 0.808, 0.050, 0.050], "expected": [0.2, 0.2, 0.2], "tolerance": 0.05 },
+          "diffuse_0_5":        { "rect": [0.600, 0.808, 0.050, 0.050], "expected": [0.5, 0.5, 0.5], "tolerance": 0.08 },
+          "diffuse_1_0":        { "rect": [0.850, 0.808, 0.050, 0.050], "expected": [1.0, 1.0, 1.0], "tolerance": 0.10 },
+          "dielectric_r005":    { "rect": [0.100, 0.475, 0.050, 0.050] },
+          "dielectric_r025":    { "rect": [0.350, 0.475, 0.050, 0.050] },
+          "dielectric_r050":    { "rect": [0.600, 0.475, 0.050, 0.050] },
+          "dielectric_r100":    { "rect": [0.850, 0.475, 0.050, 0.050] },
+          "metallic_r005":      { "rect": [0.100, 0.142, 0.050, 0.050] },
+          "metallic_r025":      { "rect": [0.350, 0.142, 0.050, 0.050] },
+          "metallic_r050":      { "rect": [0.600, 0.142, 0.050, 0.050] },
+          "metallic_r100":      { "rect": [0.850, 0.142, 0.050, 0.050] }
+        }
+      }
+    },
+    {
+      "name": "pathtracer_white_furnace",
+      "profile": "pathtracer_furnace",
+      "scene": "WhiteFurnace.scene",
+      "environment_map": "HDR/white_furnace_64x32.hdr",
+      "white_furnace": {
+        "max_channel": 1.05,
+        "min_channel": -0.001,
+        "probes": {
+          "diffuse_black":      { "rect": [0.100, 0.808, 0.050, 0.050], "expected": [0.0, 0.0, 0.0], "tolerance": 0.02 },
+          "diffuse_0_2":        { "rect": [0.350, 0.808, 0.050, 0.050], "expected": [0.2, 0.2, 0.2], "tolerance": 0.05 },
+          "diffuse_0_5":        { "rect": [0.600, 0.808, 0.050, 0.050], "expected": [0.5, 0.5, 0.5], "tolerance": 0.08 },
+          "diffuse_1_0":        { "rect": [0.850, 0.808, 0.050, 0.050], "expected": [1.0, 1.0, 1.0], "tolerance": 0.10 },
+          "dielectric_r005":    { "rect": [0.100, 0.475, 0.050, 0.050] },
+          "dielectric_r025":    { "rect": [0.350, 0.475, 0.050, 0.050] },
+          "dielectric_r050":    { "rect": [0.600, 0.475, 0.050, 0.050] },
+          "dielectric_r100":    { "rect": [0.850, 0.475, 0.050, 0.050] },
+          "metallic_r005":      { "rect": [0.100, 0.142, 0.050, 0.050] },
+          "metallic_r025":      { "rect": [0.350, 0.142, 0.050, 0.050] },
+          "metallic_r050":      { "rect": [0.600, 0.142, 0.050, 0.050] },
+          "metallic_r100":      { "rect": [0.850, 0.142, 0.050, 0.050] }
+        }
+      }
+    }
+  ]
+}

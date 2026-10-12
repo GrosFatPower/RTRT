@@ -66,6 +66,10 @@ void RenderTestCase::ApplySettings( RenderSettings & ioSettings ) const
     ioSettings._RefractionMaxDistance = std::max(0.001f, _RefractionMaxDistance);
     ioSettings._RefractionThickness = std::max(0.001f, _RefractionThickness);
     ioSettings._RefractionEdgeFade = std::max(0.001f, _RefractionEdgeFade);
+    ioSettings._SpecularIBLIntensity = _SpecularIBLIntensity;
+    ioSettings._SpecularIBLMaxRoughness = _SpecularIBLMaxRoughness;
+    ioSettings._ShadowMapping = _Shadows;
+    ioSettings._PBRDirectLighting = _PBRDirectLighting;
   }
   else if ( RendererBackend::PathTracer == _Backend )
   {
@@ -148,6 +152,16 @@ bool ReadNonNegativeInt( const Json & iObject, const char * iName, int & oValue,
   if ( !iObject[iName].is_number_integer() || ( iObject[iName].get<int>() < 0 ) )
     return SetManifestError(oError, std::string("'") + iName + "' must be a non-negative integer.");
   oValue = iObject[iName].get<int>();
+  return true;
+}
+
+bool ReadNonNegativeFloat( const Json & iObject, const char * iName, float & oValue, std::string & oError )
+{
+  if ( !iObject.contains(iName) )
+    return true;
+  if ( !iObject[iName].is_number() || ( iObject[iName].get<float>() < 0.f ) )
+    return SetManifestError(oError, std::string("'") + iName + "' must be a non-negative number.");
+  oValue = iObject[iName].get<float>();
   return true;
 }
 
@@ -241,7 +255,11 @@ bool ReadSettings( const Json & iObject, RenderTestCase & ioTestCase, std::strin
       && ReadPositiveFloat(settings, "refraction_edge_fade", ioTestCase._RefractionEdgeFade, oError)
       && ReadBool(settings, "denoise", ioTestCase._Denoise, oError)
       && ReadPositiveInt(settings, "samples_per_pixel", ioTestCase._SamplesPerPixel, oError, false)
-      && ReadPositiveInt(settings, "bounces", ioTestCase._Bounces, oError, false) ) )
+      && ReadPositiveInt(settings, "bounces", ioTestCase._Bounces, oError, false)
+      && ReadNonNegativeFloat(settings, "specular_ibl_intensity", ioTestCase._SpecularIBLIntensity, oError)
+      && ReadNonNegativeFloat(settings, "specular_ibl_max_roughness", ioTestCase._SpecularIBLMaxRoughness, oError)
+      && ReadBool(settings, "shadows", ioTestCase._Shadows, oError)
+      && ReadBool(settings, "pbr_direct_lighting", ioTestCase._PBRDirectLighting, oError) ) )
     return false;
 
   float legacySSRStep = 0.18f;
@@ -368,6 +386,69 @@ bool ParseRenderTestCases( const std::string & iContents, std::vector<RenderTest
         }
       }
 
+      if ( test.contains("white_furnace") )
+      {
+        const Json & furnace = test["white_furnace"];
+        if ( !furnace.is_object() )
+          return SetManifestError(oError, "'white_furnace' must be an object.");
+        testCase._WhiteFurnace._Enabled = true;
+        if ( furnace.contains("max_channel") )
+        {
+          if ( !furnace["max_channel"].is_number() )
+            return SetManifestError(oError, "'white_furnace.max_channel' must be a number.");
+          testCase._WhiteFurnace._MaxChannel = furnace["max_channel"].get<float>();
+        }
+        if ( furnace.contains("min_channel") )
+        {
+          if ( !furnace["min_channel"].is_number() )
+            return SetManifestError(oError, "'white_furnace.min_channel' must be a number.");
+          testCase._WhiteFurnace._MinChannel = furnace["min_channel"].get<float>();
+        }
+        if ( testCase._WhiteFurnace._MaxChannel <= testCase._WhiteFurnace._MinChannel )
+          return SetManifestError(oError, "'white_furnace.max_channel' must be greater than 'min_channel'.");
+        if ( furnace.contains("probes") )
+        {
+          const Json & probes = furnace["probes"];
+          if ( !probes.is_object() )
+            return SetManifestError(oError, "'white_furnace.probes' must be an object.");
+          for ( auto it = probes.begin(); it != probes.end(); ++it )
+          {
+            WhiteFurnaceProbe probe;
+            probe._Name = it.key();
+            const Json & probeJson = it.value();
+            if ( !probeJson.is_object() || !probeJson.contains("rect") )
+              return SetManifestError(oError, "Probe '" + probe._Name + "' must have a 'rect'.");
+            const Json & rect = probeJson["rect"];
+            if ( !rect.is_array() || ( 4 != rect.size() ) || !rect[0].is_number() || !rect[1].is_number() || !rect[2].is_number() || !rect[3].is_number() )
+              return SetManifestError(oError, "Probe '" + probe._Name + "' rect must contain four numbers.");
+            probe._RectX = rect[0].get<float>();
+            probe._RectY = rect[1].get<float>();
+            probe._RectW = rect[2].get<float>();
+            probe._RectH = rect[3].get<float>();
+            if ( ( probe._RectX < 0.f ) || ( probe._RectY < 0.f ) || ( probe._RectW <= 0.f ) || ( probe._RectH <= 0.f )
+              || ( probe._RectX + probe._RectW > 1.f ) || ( probe._RectY + probe._RectH > 1.f ) )
+              return SetManifestError(oError, "Probe '" + probe._Name + "' rect must be a normalized rectangle inside [0,1].");
+            if ( probeJson.contains("expected") )
+            {
+              const Json & expected = probeJson["expected"];
+              if ( !expected.is_array() || ( 3 != expected.size() ) || !expected[0].is_number() || !expected[1].is_number() || !expected[2].is_number() )
+                return SetManifestError(oError, "Probe '" + probe._Name + "' expected must contain three numbers.");
+              probe._Expected = Vec3(expected[0].get<float>(), expected[1].get<float>(), expected[2].get<float>());
+              if ( !std::isfinite(probe._Expected.x) || !std::isfinite(probe._Expected.y) || !std::isfinite(probe._Expected.z)
+                || ( probe._Expected.x < 0.f ) || ( probe._Expected.y < 0.f ) || ( probe._Expected.z < 0.f ) )
+                return SetManifestError(oError, "Probe '" + probe._Name + "' expected must be finite and non-negative.");
+              probe._HasExpected = true;
+              if ( !probeJson.contains("tolerance") || !probeJson["tolerance"].is_number() || ( probeJson["tolerance"].get<float>() < 0.f ) )
+                return SetManifestError(oError, "Probe '" + probe._Name + "' requires a non-negative 'tolerance' when 'expected' is set.");
+              probe._Tolerance = probeJson["tolerance"].get<float>();
+              if ( !std::isfinite(probe._Tolerance) )
+                return SetManifestError(oError, "Probe '" + probe._Name + "' tolerance must be finite.");
+            }
+            testCase._WhiteFurnace._Probes.push_back(probe);
+          }
+        }
+      }
+
       oTestCases.push_back(testCase);
     }
   }
@@ -390,6 +471,127 @@ bool LoadRenderTestCases( const std::filesystem::path & iPath, std::vector<Rende
 
   const std::string contents((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
   return ParseRenderTestCases(contents, oTestCases, oError);
+}
+
+// ----------------------------------------------------------------------------
+// EvaluateWhiteFurnace
+// ----------------------------------------------------------------------------
+WhiteFurnaceResult EvaluateWhiteFurnace( const RenderImage & iImage, const WhiteFurnaceConfig & iConfig )
+{
+  WhiteFurnaceResult result;
+  result._Passed = true;
+  result._GlobalMinChannel = std::numeric_limits<float>::max();
+  result._GlobalMaxChannel = -std::numeric_limits<float>::max();
+
+  for ( size_t i = 0; i < (size_t)iImage._Width * (size_t)iImage._Height; ++i )
+  {
+    for ( int ch = 0; ch < 3; ++ch )
+    {
+      float value = iImage._Pixels[i * 4u + (size_t)ch];
+      if ( value < result._GlobalMinChannel )
+        result._GlobalMinChannel = value;
+      if ( value > result._GlobalMaxChannel )
+        result._GlobalMaxChannel = value;
+    }
+  }
+
+  if ( ( result._GlobalMinChannel < iConfig._MinChannel ) || ( result._GlobalMaxChannel > iConfig._MaxChannel ) )
+  {
+    result._GlobalBoundsPassed = false;
+    result._Passed = false;
+  }
+
+  for ( const WhiteFurnaceProbe & probe : iConfig._Probes )
+  {
+    WhiteFurnaceProbeResult probeResult;
+    probeResult._Name = probe._Name;
+
+    int x0 = std::max(0, (int)( probe._RectX * iImage._Width ));
+    int y0 = std::max(0, (int)( probe._RectY * iImage._Height ));
+    int x1 = std::min(iImage._Width, (int)( ( probe._RectX + probe._RectW ) * iImage._Width ));
+    int y1 = std::min(iImage._Height, (int)( ( probe._RectY + probe._RectH ) * iImage._Height ));
+
+    Vec3 sum(0.f);
+    int count = 0;
+    for ( int y = y0; y < y1; ++y )
+    {
+      for ( int x = x0; x < x1; ++x )
+      {
+        size_t idx = ( (size_t)y * (size_t)iImage._Width + (size_t)x ) * 4u;
+        sum += Vec3(iImage._Pixels[idx], iImage._Pixels[idx + 1u], iImage._Pixels[idx + 2u]);
+        ++count;
+      }
+    }
+
+    if ( count > 0 )
+    {
+      probeResult._MeanRGB = sum / (float)count;
+      probeResult._MeanLuminance = MathUtil::Luminance(probeResult._MeanRGB);
+    }
+
+    if ( probe._HasExpected )
+    {
+      Vec3 diff = glm::abs(probeResult._MeanRGB - probe._Expected);
+      if ( ( diff.x > probe._Tolerance ) || ( diff.y > probe._Tolerance ) || ( diff.z > probe._Tolerance ) )
+      {
+        probeResult._Passed = false;
+        probeResult._Violation = "target mismatch";
+        result._Passed = false;
+      }
+    }
+
+    if ( ( probeResult._MeanRGB.x < iConfig._MinChannel ) || ( probeResult._MeanRGB.y < iConfig._MinChannel ) || ( probeResult._MeanRGB.z < iConfig._MinChannel ) )
+    {
+      if ( probeResult._Passed )
+      {
+        probeResult._Passed = false;
+        probeResult._Violation = "negative output";
+        result._Passed = false;
+      }
+    }
+    else if ( ( probeResult._MeanRGB.x > iConfig._MaxChannel ) || ( probeResult._MeanRGB.y > iConfig._MaxChannel ) || ( probeResult._MeanRGB.z > iConfig._MaxChannel ) )
+    {
+      if ( probeResult._Passed )
+      {
+        probeResult._Passed = false;
+        probeResult._Violation = "over-unity output";
+        result._Passed = false;
+      }
+    }
+
+    result._ProbeResults.push_back(probeResult);
+  }
+
+  return result;
+}
+
+// ----------------------------------------------------------------------------
+// WriteWhiteFurnaceMetrics
+// ----------------------------------------------------------------------------
+bool WriteWhiteFurnaceMetrics( const std::filesystem::path & iPath, const WhiteFurnaceResult & iResult )
+{
+  std::error_code error;
+  std::filesystem::create_directories(iPath.parent_path(), error);
+  std::ofstream output(iPath);
+  if ( !output )
+    return false;
+
+  output << "Global channel range: [" << iResult._GlobalMinChannel << ", " << iResult._GlobalMaxChannel << "]\n";
+  output << "Global bounds: " << ( iResult._GlobalBoundsPassed ? "PASS" : "FAIL" ) << "\n\n";
+
+  for ( const WhiteFurnaceProbeResult & probe : iResult._ProbeResults )
+  {
+    output << "Probe: " << probe._Name << "\n";
+    output << "  Mean RGB: (" << probe._MeanRGB.x << ", " << probe._MeanRGB.y << ", " << probe._MeanRGB.z << ")\n";
+    output << "  Mean luminance: " << probe._MeanLuminance << "\n";
+    output << "  Status: " << ( probe._Passed ? "PASS" : "FAIL" );
+    if ( !probe._Violation.empty() )
+      output << " - " << probe._Violation;
+    output << "\n\n";
+  }
+
+  output << "Overall: " << ( iResult._Passed ? "PASS" : "FAIL" ) << "\n";
+  return output.good();
 }
 
 // ----------------------------------------------------------------------------
@@ -686,6 +888,148 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
         return false;
       }
     }
+    return true;
+  }) )
+    return 1;
+
+  const std::string validFurnaceManifest = R"({
+    "version": 1,
+    "profiles": {
+      "test": {
+        "backend": "deferred",
+        "resolution": [64, 32],
+        "frames": 1,
+        "thresholds": { "mean_absolute_error": 0.0, "max_absolute_error": 0.0, "pixel_error": 0.0, "mismatch_ratio": 0.0 }
+      }
+    },
+    "tests": [
+      {
+        "name": "furnace_test",
+        "profile": "test",
+        "scene": "test.scene",
+        "white_furnace": {
+          "max_channel": 1.05,
+          "min_channel": -0.001,
+          "probes": {
+            "center": { "rect": [0.25, 0.25, 0.5, 0.5], "expected": [0.5, 0.5, 0.5], "tolerance": 0.1 },
+            "energy": { "rect": [0.1, 0.1, 0.1, 0.1] }
+          }
+        }
+      }
+    ]
+  })";
+  if ( !RunUnitTest("white_furnace_manifest_valid", [&validFurnaceManifest, &parsedCases, &parseError]() {
+    if ( ParseRenderTestCases(validFurnaceManifest, parsedCases, parseError) && ( 1u == parsedCases.size() )
+      && parsedCases[0]._WhiteFurnace._Enabled && ( 2u == parsedCases[0]._WhiteFurnace._Probes.size() )
+      && ( std::abs(parsedCases[0]._WhiteFurnace._MaxChannel - 1.05f) < 1e-6f )
+      && parsedCases[0]._WhiteFurnace._Probes[0]._HasExpected
+      && !parsedCases[0]._WhiteFurnace._Probes[1]._HasExpected )
+      return true;
+    std::cerr << "Unit test failed: valid white-furnace manifest. " << parseError << std::endl;
+    return false;
+  }) )
+    return 1;
+
+  const std::string invalidFurnaceManifests[] =
+  {
+    // Out of bounds rect
+    R"({ "version": 1, "profiles": { "test": { "backend": "deferred", "resolution": [64, 32], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "white_furnace": { "probes": { "bad": { "rect": [0.9, 0.9, 0.2, 0.2] } } } }] })",
+    // Negative tolerance
+    R"({ "version": 1, "profiles": { "test": { "backend": "deferred", "resolution": [64, 32], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "white_furnace": { "probes": { "bad": { "rect": [0.1, 0.1, 0.1, 0.1], "expected": [0.5, 0.5, 0.5], "tolerance": -0.1 } } } }] })",
+    // max_channel <= min_channel
+    R"({ "version": 1, "profiles": { "test": { "backend": "deferred", "resolution": [64, 32], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "white_furnace": { "max_channel": 0.5, "min_channel": 1.0, "probes": {} } }] })",
+    // Expected without tolerance
+    R"({ "version": 1, "profiles": { "test": { "backend": "deferred", "resolution": [64, 32], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "white_furnace": { "probes": { "bad": { "rect": [0.1, 0.1, 0.1, 0.1], "expected": [0.5, 0.5, 0.5] } } } }] })"
+  };
+  if ( !RunUnitTest("white_furnace_manifest_validation", [&invalidFurnaceManifests, &parsedCases, &parseError]() {
+    for ( const std::string & m : invalidFurnaceManifests )
+    {
+      if ( ParseRenderTestCases(m, parsedCases, parseError) )
+      {
+        std::cerr << "Unit test failed: invalid white-furnace manifest accepted." << std::endl;
+        return false;
+      }
+    }
+    return true;
+  }) )
+    return 1;
+
+  if ( !RunUnitTest("white_furnace_evaluator", []() {
+    RenderImage testImage;
+    testImage._Width = 4;
+    testImage._Height = 4;
+    testImage._Pixels.assign(4 * 4 * 4, 0.f);
+    for ( size_t i = 0; i < 4 * 4; ++i )
+    {
+      testImage._Pixels[i * 4 + 0] = 0.5f;
+      testImage._Pixels[i * 4 + 1] = 0.5f;
+      testImage._Pixels[i * 4 + 2] = 0.5f;
+      testImage._Pixels[i * 4 + 3] = 1.f;
+    }
+
+    WhiteFurnaceConfig config;
+    config._Enabled = true;
+    config._MaxChannel = 1.05f;
+    config._MinChannel = -0.001f;
+    WhiteFurnaceProbe probe;
+    probe._Name = "center";
+    probe._RectX = 0.25f;
+    probe._RectY = 0.25f;
+    probe._RectW = 0.5f;
+    probe._RectH = 0.5f;
+    probe._HasExpected = true;
+    probe._Expected = Vec3(0.5f);
+    probe._Tolerance = 0.01f;
+    config._Probes.push_back(probe);
+
+    WhiteFurnaceResult result = EvaluateWhiteFurnace(testImage, config);
+    if ( !result._Passed || !result._GlobalBoundsPassed || ( 1u != result._ProbeResults.size() ) || !result._ProbeResults[0]._Passed )
+    {
+      std::cerr << "Unit test failed: white-furnace evaluator (pass case)." << std::endl;
+      return false;
+    }
+
+    // Mismatch case: change expected to something different
+    config._Probes[0]._Expected = Vec3(0.9f);
+    result = EvaluateWhiteFurnace(testImage, config);
+    if ( result._Passed || result._ProbeResults[0]._Passed )
+    {
+      std::cerr << "Unit test failed: white-furnace evaluator (mismatch case)." << std::endl;
+      return false;
+    }
+
+    // Over-unity case: image has pixels > max_channel
+    for ( size_t i = 0; i < 4 * 4; ++i )
+    {
+      testImage._Pixels[i * 4 + 0] = 1.2f;
+      testImage._Pixels[i * 4 + 1] = 1.2f;
+      testImage._Pixels[i * 4 + 2] = 1.2f;
+    }
+    config._Probes[0]._Expected = Vec3(1.2f);
+    config._Probes[0]._Tolerance = 0.01f;
+    result = EvaluateWhiteFurnace(testImage, config);
+    if ( result._Passed || result._GlobalBoundsPassed )
+    {
+      std::cerr << "Unit test failed: white-furnace evaluator (over-unity case)." << std::endl;
+      return false;
+    }
+
+    // Negative case: image has negative pixels
+    for ( size_t i = 0; i < 4 * 4; ++i )
+    {
+      testImage._Pixels[i * 4 + 0] = -0.1f;
+      testImage._Pixels[i * 4 + 1] = -0.1f;
+      testImage._Pixels[i * 4 + 2] = -0.1f;
+    }
+    config._Probes[0]._Expected = Vec3(0.f);
+    config._Probes[0]._Tolerance = 0.2f;
+    result = EvaluateWhiteFurnace(testImage, config);
+    if ( result._Passed || result._GlobalBoundsPassed )
+    {
+      std::cerr << "Unit test failed: white-furnace evaluator (negative case)." << std::endl;
+      return false;
+    }
+
     return true;
   }) )
     return 1;

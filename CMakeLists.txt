@@ -260,6 +260,13 @@ if(RTRT_BUILD_RENDER_REGRESSION_TESTS)
   target_link_libraries(RenderRegression RTRTCore nlohmann_json::nlohmann_json)
   ConfigureRTRTTarget(RenderRegression)
 
+  add_custom_target(RenderWhiteFurnace
+    COMMAND $<TARGET_FILE:RenderRegression> --manifest ${CMAKE_SOURCE_DIR}/Tests/RenderTests.WhiteFurnace.json --all
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    DEPENDS RenderRegression
+    COMMENT "Running white furnace energy-conservation suite"
+  )
+
   if(BUILD_TESTING)
     set(RENDER_TEST_MANIFEST ${CMAKE_SOURCE_DIR}/Tests/RenderTests.json)
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${RENDER_TEST_MANIFEST})

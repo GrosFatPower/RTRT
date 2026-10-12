@@ -164,6 +164,33 @@ Example:
 ctest --test-dir Build -C Debug -R Render_deferred_example --output-on-failure
 ```
 
+## White Furnace Energy-Conservation Suite
+
+A separate white-furnace manifest diagnoses energy conservation in the deferred and path-traced renderers. It is **not** included in normal `--all` or CTest regression runs.
+
+Build and run it through the dedicated CMake target:
+
+```powershell
+cmake --build Build --config Debug --target RenderRegression
+cmake --build Build --config Debug --target RenderWhiteFurnace
+```
+
+Or run the manifest directly:
+
+```powershell
+.\Build\Debug\RenderRegression.exe --manifest Tests\RenderTests.WhiteFurnace.json --all
+```
+
+Each furnace case renders a calibrated sphere grid under a constant linear-white environment and measures the HDR output numerically. The runner always writes these artifacts, on both pass and failure:
+
+- `actual.pfm`: rendered linear image.
+- `actual.png`: tone-mapped preview.
+- `furnace_metrics.txt`: per-probe measured RGB, luminance, and the specific failed bound.
+
+Diffuse probes with known albedos verify that reflected radiance matches the expected linear albedo within a documented tolerance. Dielectric and metallic probes verify that output remains non-negative and does not exceed the global white-furnace energy limit.
+
+Furnace failures diagnose energy behavior in the renderer. They do **not** imply an automatic renderer correction; the suite establishes a measurement baseline for later improvement work.
+
 ## Determinism Notes
 
 - Software tests use very strict tolerances and should be stable.

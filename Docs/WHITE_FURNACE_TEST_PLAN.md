@@ -8,7 +8,7 @@ Add an explicit, non-default white-furnace suite for the deferred renderer and p
 
 - Add a committed `64x32` linear Radiance HDR asset containing constant `(1,1,1)` radiance. Use the existing environment-map loader; no production environment API changes are needed.
 - Add `Assets/WhiteFurnace.scene`, auto-discovered by Test5:
-  - Orthographic `4x3` sphere grid, black primary-ray background, no local lights.
+  - Orthographic `4x3` sphere grid, visible white environment background (physical furnace walls), no local lights.
   - Row 1: diffuse black, `0.2`, `0.5`, and `1.0` albedo probes.
   - Row 2: white dielectric probes at roughness `0.05`, `0.25`, `0.5`, `1.0`.
   - Row 3: white metallic probes at the same roughness values.
@@ -16,7 +16,7 @@ Add an explicit, non-default white-furnace suite for the deferred renderer and p
 - Add `Tests/RenderTests.WhiteFurnace.json`, separate from `RenderTests.json`:
   - `deferred_white_furnace`: one frame at `512x384`.
   - `pathtracer_white_furnace`: `256` accumulated frames at `512x384`, one sample per pixel, two bounces, no denoising, auto-scaling, or tile rendering.
-  - Both cases load the white environment while disabling visible background, uniform ambient light, direct lighting, SSAO, SSR, shadows, transparency, and tone mapping.
+  - Both cases load the white environment and show it as the visible background, while disabling uniform ambient light, direct lighting, SSAO, SSR, shadows, transparency, and tone mapping.
   - Deferred explicitly uses full IBL settings: specular IBL enabled, intensity `1.0`, and no roughness cutoff.
 
 ## Numeric Furnace Assertions
