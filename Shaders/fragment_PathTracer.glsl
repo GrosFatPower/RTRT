@@ -266,7 +266,7 @@ vec3 PathSample( in Ray iStartRay, in vec2 iCoordUV )
         if ( u_EnableEnvMap > 0 )
         {
           vec3 bgDir = ray._Dir;
-          if ( 1 == u_Camera._Projection )
+          if ( ( 0 == depth ) && ( 1 == u_Camera._Projection ) )
           {
             vec2 centeredUV = ( 2. * iCoordUV - 1. );
             float scale = tan(u_Camera._FOV * .5);
@@ -337,6 +337,7 @@ vec3 PathSample( in Ray iStartRay, in vec2 iCoordUV )
         break;
 
       throughput *= scatterSample._Attenuation / ( scatterSample._P + EPSILON );
+      throughput = min(throughput, vec3(1.f));
     }
     else
     {
@@ -395,7 +396,7 @@ void main()
     radiance = GammaCorrection( radiance );
   }
   else
-    radiance = clamp(radiance, 0.f, 1.f);
+    radiance = max(radiance, 0.f);
 
   fragColor = vec4(radiance, 1.f);
 }

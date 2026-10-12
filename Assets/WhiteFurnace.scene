@@ -9,7 +9,7 @@ renderer
 
 camera
 {
-	position 0.0 0.0 -10.0
+	position 0.0 0.0 10.0
 	lookat 0.0 0.0 0.0
 	type orthographic
 	orthographicHeight 7.5
@@ -22,29 +22,33 @@ camera
 material diffuse_black
 {
 	color 0.0 0.0 0.0
-	roughness 0.5
+	roughness 0.0
 	metallic 0.0
+	ior 1.0
 }
 
 material diffuse_02
 {
 	color 0.2 0.2 0.2
-	roughness 0.5
+	roughness 0.0
 	metallic 0.0
+	ior 1.0
 }
 
 material diffuse_05
 {
 	color 0.5 0.5 0.5
-	roughness 0.5
+	roughness 0.0
 	metallic 0.0
+	ior 1.0
 }
 
 material diffuse_10
 {
 	color 1.0 1.0 1.0
-	roughness 0.5
+	roughness 0.0
 	metallic 0.0
+	ior 1.0
 }
 
 # Row 2: White dielectric probes

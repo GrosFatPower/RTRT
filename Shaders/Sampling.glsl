@@ -314,10 +314,11 @@ vec4 SampleEnvMap( in vec3 iRayDir, in sampler2D iEnvMap, in float iRotation, in
   
   vec3 color = texture(iEnvMap, uv).rgb;
   float pdf = 0.;
-  if ( sin( theta ) != 0. )
+  if ( iTotalWeight > 0.f )
   {
+    float sinTheta = max(sin(theta), 1e-4f);
     pdf = Luminance(color) / iTotalWeight;
-    pdf *= ( iEnvMapRes.x * iEnvMapRes.y ) / ( TWO_PI * PI * sin(theta) );
+    pdf *= ( iEnvMapRes.x * iEnvMapRes.y ) / ( TWO_PI * PI * sinTheta );
   }
   
   return vec4(color, pdf);
@@ -355,7 +356,7 @@ vec2 BinarySearch( in float iValue, in sampler2D iEnvMap, in vec2 iEnvMapRes, in
 
   int x = clamp( lower, 0, envMapRes.x - 1 );
 
-  return vec2( x, y ) / iEnvMapRes;
+  return ( vec2( x, y ) + 0.5f ) / iEnvMapRes;
 }
 
 // ----------------------------------------------------------------------------
@@ -374,10 +375,11 @@ vec4 SampleEnvMap( in sampler2D iEnvMap, in float iRotation, in vec2 iEnvMapRes,
   vec3 color = texture(iEnvMap, uv).rgb;
 
   float pdf = 0.;
-  if ( sin( theta ) != 0. )
+  if ( iTotalWeight > 0.f )
   {
+    float sinTheta = max(sin(theta), 1e-4f);
     pdf = Luminance(color) / iTotalWeight;
-    pdf *= ( iEnvMapRes.x * iEnvMapRes.y ) / ( TWO_PI * PI * sin(theta) );
+    pdf *= ( iEnvMapRes.x * iEnvMapRes.y ) / ( TWO_PI * PI * sinTheta );
   }
 
   return vec4(color, pdf);

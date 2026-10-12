@@ -53,7 +53,7 @@ float DisneyFresnel( in Material iMat, in float iEta, in float iLDotH, in float 
 // ----------------------------------------------------------------------------
 // EvalDiffuse
 // ----------------------------------------------------------------------------
-vec3 EvalDiffuse( in Material iMat, in vec3 iCsheen, in vec3 iV, in vec3 iL, in vec3 iH, out float oPdf )
+vec3 EvalDiffuse( in Material iMat, in float iEta, in vec3 iCsheen, in vec3 iV, in vec3 iL, in vec3 iH, out float oPdf )
 {
   oPdf = 0.f;
   if ( iL.z <= 0.f )
@@ -64,7 +64,7 @@ vec3 EvalDiffuse( in Material iMat, in vec3 iCsheen, in vec3 iV, in vec3 iL, in 
   float FV = SchlickFresnel(iV.z);
   float FH = SchlickFresnel(dot(iL, iH));
   float Fd90 = .5f + 2.f * dot(iL, iH) * dot(iL, iH) * iMat._Roughness;
-  float Fd = mix(1.f, Fd90, FL) * mix(1.f, Fd90, FV);
+  float Fd = min(mix(1.f, Fd90, FL) * mix(1.f, Fd90, FV), 1.f);
 
   // Fake Subsurface
   float Fss90 = dot(iL, iH) * dot(iL, iH) * iMat._Roughness;
@@ -74,8 +74,12 @@ vec3 EvalDiffuse( in Material iMat, in vec3 iCsheen, in vec3 iV, in vec3 iL, in 
   // Sheen
   vec3 Fsheen = FH * iMat._Sheen * iCsheen;
 
+  float transV = 1.f - DielectricFresnel(max(iV.z, 0.f), iEta);
+  float transL = 1.f - DielectricFresnel(max(iL.z, 0.f), iEta);
+  float energyConservation = mix(transV * transL, 1.f - SchlickFresnel(dot(iL, iH)), iMat._Metallic);
+
   oPdf = iL.z * INV_PI;
-  return (1.f - iMat._Metallic) * (1.f - iMat._SpecTrans) * (INV_PI * mix(Fd, ss, iMat._Subsurface) * iMat._Albedo + Fsheen);
+  return (1.f - iMat._Metallic) * (1.f - iMat._SpecTrans) * energyConservation * (INV_PI * mix(Fd, ss, iMat._Subsurface) * iMat._Albedo + Fsheen);
 }
 
 // ----------------------------------------------------------------------------
@@ -172,14 +176,19 @@ vec3 EvalSpecReflection( in Material iMat, in float iEta, in vec3 iSpecCol, in v
   if ( iL.z <= 0.f )
     return vec3(0.f);
 
-  float FM = DisneyFresnel(iMat, iEta, dot(iL, iH), dot(iV, iH));
-  vec3 F = mix(iSpecCol, vec3(1.f), FM);
+  float VdotH = max(dot(iV, iH), 0.f);
+  float LdotH = max(dot(iL, iH), 0.f);
+  vec3 dielectricF = vec3(DielectricFresnel(VdotH, iEta));
+  vec3 metallicF = mix(iSpecCol, vec3(1.f), SchlickFresnel(LdotH));
+  vec3 F = mix(dielectricF, metallicF, iMat._Metallic);
+
   float D = GTR2Aniso(iH.z, iH.x, iH.y, iMat._Ax, iMat._Ay);
   float G1 = SmithGAniso(abs(iV.z), iV.x, iV.y, iMat._Ax, iMat._Ay);
   float G2 = G1 * SmithGAniso(abs(iL.z), iL.x, iL.y, iMat._Ax, iMat._Ay);
 
-  oPdf = G1 * D / (4.f * iV.z);
-  return F * D * G2 / (4.f * iL.z * iV.z);
+  float denom = 4.f * max(iL.z, 1e-4f) * max(iV.z, 1e-4f);
+  oPdf = max(G1 * D / (4.f * max(iV.z, 1e-4f)), 0.f);
+  return F * D * G2 / denom;
 }
 
 // ----------------------------------------------------------------------------
@@ -196,13 +205,15 @@ vec3 EvalSpecRefraction( in Material iMat, in float iEta, in vec3 iV, in vec3 iL
   float G1 = SmithGAniso(abs(iV.z), iV.x, iV.y, iMat._Ax, iMat._Ay);
   float G2 = G1 * SmithGAniso(abs(iL.z), iL.x, iL.y, iMat._Ax, iMat._Ay);
   float denom = dot(iL, iH) + dot(iV, iH) * iEta;
-  denom *= denom;
+  denom = max(denom * denom, 1e-5f);
   float eta2 = iEta * iEta;
   float jacobian = abs(dot(iL, iH)) / denom;
 
-  oPdf = G1 * max(0.f, dot(iV, iH)) * D * jacobian / iV.z;
+  float Vz = max(abs(iV.z), 1e-4f);
+  float Lz = max(abs(iL.z), 1e-4f);
+  oPdf = max(G1 * max(0.f, dot(iV, iH)) * D * jacobian / Vz, 0.f);
 
-  return pow(iMat._Albedo, vec3(.5f)) * (1.f - iMat._Metallic) * iMat._SpecTrans * (1.f - F) * D * G2 * abs(dot(iV, iH)) * jacobian * eta2 / abs(iL.z * iV.z);
+  return pow(iMat._Albedo, vec3(.5f)) * (1.f - iMat._Metallic) * iMat._SpecTrans * (1.f - F) * D * G2 * abs(dot(iV, iH)) * jacobian * eta2 / (Lz * Vz);
 }
 
 // ----------------------------------------------------------------------------
@@ -218,10 +229,10 @@ vec3 EvalClearcoat( in Material iMat, in vec3 iV, in vec3 iL, in vec3 iH, out fl
   float F = mix(.04f, 1.f, FH);
   float D = GTR1(iH.z, iMat._ClearcoatRoughness);
   float G = SmithG(iL.z, .25f) * SmithG(iV.z, .25f);
-  float jacobian = 1.f / (4.f * dot(iV, iH));
+  float jacobian = 1.f / (4.f * max(dot(iV, iH), 1e-4f));
 
-  oPdf = D * iH.z * jacobian;
-  return vec3(.25f) * iMat._Clearcoat * F * D * G / (4.f * iL.z * iV.z);
+  oPdf = max(D * iH.z * jacobian, 0.f);
+  return vec3(.25f) * iMat._Clearcoat * F * D * G / (4.f * max(iL.z, 1e-4f) * max(iV.z, 1e-4f));
 }
 
 // ----------------------------------------------------------------------------
@@ -239,18 +250,25 @@ void GetSpecColor( in Material iMat, in float iEta, out vec3 oSpecCol, out vec3 
 // ----------------------------------------------------------------------------
 // GetLobeProbabilities
 // ----------------------------------------------------------------------------
-void GetLobeProbabilities( in Material iMat, in float iEta, in vec3 iSpecCol, in float iApproxFresnel, out float oDiffuseWeight, out float oSpecReflectWeight, out float oSpecRefractWeight, out float oClearcoatWeight )
+void GetLobeProbabilities( in Material iMat, in float iEta, in vec3 iSpecCol, in float iCosTheta, out float oDiffuseWeight, out float oSpecReflectWeight, out float oSpecRefractWeight, out float oClearcoatWeight )
 {
-  oDiffuseWeight     = Luminance(iMat._Albedo) * (1.f - iMat._Metallic) * (1.f - iMat._SpecTrans);
-  oSpecReflectWeight = Luminance(mix(iSpecCol, vec3(1.f), iApproxFresnel));
-  oSpecRefractWeight = (1.f - iApproxFresnel) * (1.f - iMat._Metallic) * iMat._SpecTrans * Luminance(iMat._Albedo);
+  float dielectricF = DielectricFresnel(max(iCosTheta, 0.f), iEta);
+  float metallicF = SchlickFresnel(max(iCosTheta, 0.f));
+  float F = mix(dielectricF, metallicF, iMat._Metallic);
+
+  oDiffuseWeight     = (1.f - F) * Luminance(iMat._Albedo) * (1.f - iMat._Metallic) * (1.f - iMat._SpecTrans);
+  oSpecReflectWeight = mix(dielectricF, Luminance(mix(iSpecCol, vec3(1.f), metallicF)), iMat._Metallic);
+  oSpecRefractWeight = (1.f - F) * (1.f - iMat._Metallic) * iMat._SpecTrans * Luminance(iMat._Albedo);
   oClearcoatWeight   = .25f * iMat._Clearcoat * (1.f - iMat._Metallic);
   float totalWeight = oDiffuseWeight + oSpecReflectWeight + oSpecRefractWeight + oClearcoatWeight;
 
-  oDiffuseWeight     /= totalWeight;
-  oSpecReflectWeight /= totalWeight;
-  oSpecRefractWeight /= totalWeight;
-  oClearcoatWeight   /= totalWeight;
+  if ( totalWeight > 0.f )
+  {
+    oDiffuseWeight     /= totalWeight;
+    oSpecReflectWeight /= totalWeight;
+    oSpecRefractWeight /= totalWeight;
+    oClearcoatWeight   /= totalWeight;
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -274,8 +292,7 @@ vec3 DisneySample( in HitPoint iHP, in Material iMat, in float iEta, in vec3 iV,
 
   // Lobe weights
   float diffuseWeight, specReflectWeight, specRefractWeight, clearcoatWeight;
-  float approxFresnel = DisneyFresnel(iMat, iEta, iV.z, iV.z); // Note: Fresnel is approx and based on N and not H since H isn't available at this stage.
-  GetLobeProbabilities(iMat, iEta, specCol, approxFresnel, diffuseWeight, specReflectWeight, specRefractWeight, clearcoatWeight);
+  GetLobeProbabilities(iMat, iEta, specCol, max(iV.z, 0.f), diffuseWeight, specReflectWeight, specRefractWeight, clearcoatWeight);
 
   // CDF for picking a lobe
   float cdf[4];
@@ -292,7 +309,7 @@ vec3 DisneySample( in HitPoint iHP, in Material iMat, in float iEta, in vec3 iV,
 
     vec3 H = normalize(oL + iV);
 
-    f = EvalDiffuse(iMat, sheenCol, iV, oL, H, oPdf);
+    f = EvalDiffuse(iMat, iEta, sheenCol, iV, oL, H, oPdf);
     oPdf *= diffuseWeight;
   }
   else if ( r1 < cdf[1] ) // Clearcoat Lobe
@@ -371,15 +388,14 @@ vec3 DisneyEval( in HitPoint iHP, in Material iMat, in float iEta, in vec3 iV, i
 
   // Lobe weights
   float diffuseWeight, specReflectWeight, specRefractWeight, clearcoatWeight;
-  float fresnel = DisneyFresnel(iMat, iEta, dot(iL, H), dot(iV, H));
-  GetLobeProbabilities(iMat, iEta, specCol, fresnel, diffuseWeight, specReflectWeight, specRefractWeight, clearcoatWeight);
+  GetLobeProbabilities(iMat, iEta, specCol, max(iV.z, 0.f), diffuseWeight, specReflectWeight, specRefractWeight, clearcoatWeight);
 
   float pdf = 0.f;
 
   // Diffuse
   if ( ( diffuseWeight > 0.f ) && ( iL.z > 0.f ) )
   {
-    f += EvalDiffuse(iMat, sheenCol, iV, iL, H, pdf);
+    f += EvalDiffuse(iMat, iEta, sheenCol, iV, iL, H, pdf);
     oPdf += pdf * diffuseWeight;
   }
 
