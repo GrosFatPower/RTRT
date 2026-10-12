@@ -59,6 +59,7 @@ Assets/*.glb
 Assets/*.bin
 Assets/ball*
 Assets/helmet*
+Assets/HDR/industrial_wooden_attic_4k.hdr
 
 # Files
 *.vcxproj
@@ -66,4 +67,3 @@ Assets/helmet*
 *.vcxproj.filters
 *.sln
 *.ods\#
-
