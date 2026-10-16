@@ -24,18 +24,19 @@ Add an explicit, non-default white-furnace suite for the deferred renderer and p
 
 - Extend the render-test manifest with optional `material` and `white_furnace` objects:
   - `material`: inline overrides for `name`, `albedo`/`color`, `emission`, `roughness`, `metallic`, `reflectance`, `ior`, and additional PBR lobes.
-  - `max_channel`: global upper bound for the HDR image, set to `1.05`.
-  - `min_channel`: lower bound, set to `-0.001`.
-  - Named normalized probe rectangle (`[0.40, 0.40, 0.20, 0.20]` at the sphere center) with optional expected RGB values and absolute tolerances.
+  - `max_channel`: global upper bound for the HDR image (`1.01`–`1.05` for `PathTracer`, `1.05` for `DeferredRenderer`).
+  - `min_channel`: global lower bound across the image, tightened per preset (`0.95` for white `PathTracer` probes, `0.80`–`0.85` for white `DeferredRenderer` probes) so silhouette/rim darkening is caught.
+  - Two named normalized probe rectangles per test case:
+    - `<preset>` (`[0.40, 0.40, 0.20, 0.20]` at the sphere center, normal incidence).
+    - `<preset>_rim` (`[0.14, 0.45, 0.08, 0.10]` near the sphere's grazing rim).
 - Add white-furnace and material-override data types to `RenderTestCase`, parser validation, and a CPU evaluator:
   - Validate finite, non-negative expected colors and tolerances.
   - Validate normalized rectangles lie inside the rendered image.
-  - Compute the probe's mean RGB/luminance and the global HDR channel range.
-  - Fail the explicitly run case when a diffuse reference target or energy bound is violated.
-- Define center patch checks for each preset:
-  - Diffuse black must remain near `0`.
-  - Diffuse `0.2`, `0.5`, and `1.0` probes target their respective linear albedos with documented tolerances.
-  - Dielectric and metallic probes are coverage/energy probes: they must remain non-negative and not exceed the global white-furnace limit.
+  - Compute each probe's mean RGB/luminance and the global HDR channel range.
+  - Fail the explicitly run case when a probe target or global energy bound is violated.
+- Define center and rim patch checks for each preset:
+  - Diffuse black (`0.0`), `0.2`, `0.5`, and `1.0` probes target their respective linear albedos (`0.005`–`0.02` tolerance for `PathTracer`, `0.02`–`0.10` for `DeferredRenderer`).
+  - Dielectric (`r005..r100`) and metallic (`r005..r100`) white probes explicitly target `[1.0, 1.0, 1.0]` at both center and rim (`0.02` tolerance for `PathTracer`, `0.10` center / `0.15` rim for `DeferredRenderer`).
 - Always write `actual.pfm`, preview PNG, and `furnace_metrics.txt` for these cases, on both pass and failure. Metrics list the probe's measured RGB/luminance and the exact failed bound.
 
 ## Runner and Documentation

@@ -57,7 +57,8 @@
         "max_channel": 1.05,
         "min_channel": -0.001,
         "probes": {
-          "diffuse_black": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [0.0, 0.0, 0.0], "tolerance": 0.02 }
+          "diffuse_black": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [0.0, 0.0, 0.0], "tolerance": 0.02 },
+          "diffuse_black_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [0.0, 0.0, 0.0], "tolerance": 0.02 }
         }
       }
     },
@@ -69,9 +70,10 @@
       "material": { "albedo": [0.2, 0.2, 0.2], "roughness": 0.0, "metallic": 0.0, "ior": 1.0 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.15,
         "probes": {
-          "diffuse_0_2": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [0.2, 0.2, 0.2], "tolerance": 0.05 }
+          "diffuse_0_2": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [0.2, 0.2, 0.2], "tolerance": 0.05 },
+          "diffuse_0_2_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [0.2, 0.2, 0.2], "tolerance": 0.05 }
         }
       }
     },
@@ -83,9 +85,10 @@
       "material": { "albedo": [0.5, 0.5, 0.5], "roughness": 0.0, "metallic": 0.0, "ior": 1.0 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.42,
         "probes": {
-          "diffuse_0_5": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [0.5, 0.5, 0.5], "tolerance": 0.08 }
+          "diffuse_0_5": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [0.5, 0.5, 0.5], "tolerance": 0.08 },
+          "diffuse_0_5_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [0.5, 0.5, 0.5], "tolerance": 0.08 }
         }
       }
     },
@@ -97,9 +100,10 @@
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 0.0, "metallic": 0.0, "ior": 1.0 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.85,
         "probes": {
-          "diffuse_1_0": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.10 }
+          "diffuse_1_0": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.10 },
+          "diffuse_1_0_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [1.0, 1.0, 1.0], "tolerance": 0.10 }
         }
       }
     },
@@ -111,9 +115,10 @@
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 0.05, "metallic": 0.0, "ior": 1.5 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.80,
         "probes": {
-          "dielectric_r005": { "rect": [0.40, 0.40, 0.20, 0.20] }
+          "dielectric_r005": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.10 },
+          "dielectric_r005_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [1.0, 1.0, 1.0], "tolerance": 0.15 }
         }
       }
     },
@@ -125,9 +130,10 @@
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 0.25, "metallic": 0.0, "ior": 1.5 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.80,
         "probes": {
-          "dielectric_r025": { "rect": [0.40, 0.40, 0.20, 0.20] }
+          "dielectric_r025": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.10 },
+          "dielectric_r025_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [1.0, 1.0, 1.0], "tolerance": 0.15 }
         }
       }
     },
@@ -139,9 +145,10 @@
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 0.5, "metallic": 0.0, "ior": 1.5 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.80,
         "probes": {
-          "dielectric_r050": { "rect": [0.40, 0.40, 0.20, 0.20] }
+          "dielectric_r050": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.10 },
+          "dielectric_r050_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [1.0, 1.0, 1.0], "tolerance": 0.15 }
         }
       }
     },
@@ -153,9 +160,10 @@
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 1.0, "metallic": 0.0, "ior": 1.5 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.80,
         "probes": {
-          "dielectric_r100": { "rect": [0.40, 0.40, 0.20, 0.20] }
+          "dielectric_r100": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.10 },
+          "dielectric_r100_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [1.0, 1.0, 1.0], "tolerance": 0.15 }
         }
       }
     },
@@ -167,9 +175,10 @@
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 0.05, "metallic": 1.0, "ior": 1.5 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.80,
         "probes": {
-          "metallic_r005": { "rect": [0.40, 0.40, 0.20, 0.20] }
+          "metallic_r005": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.10 },
+          "metallic_r005_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [1.0, 1.0, 1.0], "tolerance": 0.15 }
         }
       }
     },
@@ -181,9 +190,10 @@
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 0.25, "metallic": 1.0, "ior": 1.5 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.80,
         "probes": {
-          "metallic_r025": { "rect": [0.40, 0.40, 0.20, 0.20] }
+          "metallic_r025": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.10 },
+          "metallic_r025_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [1.0, 1.0, 1.0], "tolerance": 0.15 }
         }
       }
     },
@@ -195,9 +205,10 @@
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 0.5, "metallic": 1.0, "ior": 1.5 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.80,
         "probes": {
-          "metallic_r050": { "rect": [0.40, 0.40, 0.20, 0.20] }
+          "metallic_r050": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.10 },
+          "metallic_r050_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [1.0, 1.0, 1.0], "tolerance": 0.15 }
         }
       }
     },
@@ -209,9 +220,10 @@
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 1.0, "metallic": 1.0, "ior": 1.5 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.80,
         "probes": {
-          "metallic_r100": { "rect": [0.40, 0.40, 0.20, 0.20] }
+          "metallic_r100": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.10 },
+          "metallic_r100_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [1.0, 1.0, 1.0], "tolerance": 0.15 }
         }
       }
     },
@@ -222,10 +234,11 @@
       "environment_map": "HDR/white_furnace_64x32.hdr",
       "material": { "albedo": [0.0, 0.0, 0.0], "roughness": 0.0, "metallic": 0.0, "ior": 1.0 },
       "white_furnace": {
-        "max_channel": 1.05,
+        "max_channel": 1.01,
         "min_channel": -0.001,
         "probes": {
-          "diffuse_black": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [0.0, 0.0, 0.0], "tolerance": 0.02 }
+          "diffuse_black": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [0.0, 0.0, 0.0], "tolerance": 0.005 },
+          "diffuse_black_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [0.0, 0.0, 0.0], "tolerance": 0.005 }
         }
       }
     },
@@ -236,10 +249,11 @@
       "environment_map": "HDR/white_furnace_64x32.hdr",
       "material": { "albedo": [0.2, 0.2, 0.2], "roughness": 0.0, "metallic": 0.0, "ior": 1.0 },
       "white_furnace": {
-        "max_channel": 1.05,
-        "min_channel": -0.001,
+        "max_channel": 1.01,
+        "min_channel": 0.18,
         "probes": {
-          "diffuse_0_2": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [0.2, 0.2, 0.2], "tolerance": 0.05 }
+          "diffuse_0_2": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [0.2, 0.2, 0.2], "tolerance": 0.01 },
+          "diffuse_0_2_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [0.2, 0.2, 0.2], "tolerance": 0.01 }
         }
       }
     },
@@ -250,10 +264,11 @@
       "environment_map": "HDR/white_furnace_64x32.hdr",
       "material": { "albedo": [0.5, 0.5, 0.5], "roughness": 0.0, "metallic": 0.0, "ior": 1.0 },
       "white_furnace": {
-        "max_channel": 1.05,
-        "min_channel": -0.001,
+        "max_channel": 1.01,
+        "min_channel": 0.47,
         "probes": {
-          "diffuse_0_5": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [0.5, 0.5, 0.5], "tolerance": 0.08 }
+          "diffuse_0_5": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [0.5, 0.5, 0.5], "tolerance": 0.015 },
+          "diffuse_0_5_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [0.5, 0.5, 0.5], "tolerance": 0.015 }
         }
       }
     },
@@ -264,10 +279,11 @@
       "environment_map": "HDR/white_furnace_64x32.hdr",
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 0.0, "metallic": 0.0, "ior": 1.0 },
       "white_furnace": {
-        "max_channel": 1.05,
-        "min_channel": -0.001,
+        "max_channel": 1.02,
+        "min_channel": 0.95,
         "probes": {
-          "diffuse_1_0": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.10 }
+          "diffuse_1_0": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.015 },
+          "diffuse_1_0_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [1.0, 1.0, 1.0], "tolerance": 0.02 }
         }
       }
     },
@@ -279,9 +295,10 @@
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 0.05, "metallic": 0.0, "ior": 1.5 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.95,
         "probes": {
-          "dielectric_r005": { "rect": [0.40, 0.40, 0.20, 0.20] }
+          "dielectric_r005": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.02 },
+          "dielectric_r005_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [1.0, 1.0, 1.0], "tolerance": 0.02 }
         }
       }
     },
@@ -293,9 +310,10 @@
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 0.25, "metallic": 0.0, "ior": 1.5 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.95,
         "probes": {
-          "dielectric_r025": { "rect": [0.40, 0.40, 0.20, 0.20] }
+          "dielectric_r025": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.02 },
+          "dielectric_r025_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [1.0, 1.0, 1.0], "tolerance": 0.02 }
         }
       }
     },
@@ -307,9 +325,10 @@
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 0.5, "metallic": 0.0, "ior": 1.5 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.95,
         "probes": {
-          "dielectric_r050": { "rect": [0.40, 0.40, 0.20, 0.20] }
+          "dielectric_r050": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.02 },
+          "dielectric_r050_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [1.0, 1.0, 1.0], "tolerance": 0.02 }
         }
       }
     },
@@ -321,9 +340,10 @@
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 1.0, "metallic": 0.0, "ior": 1.5 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.95,
         "probes": {
-          "dielectric_r100": { "rect": [0.40, 0.40, 0.20, 0.20] }
+          "dielectric_r100": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.02 },
+          "dielectric_r100_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [1.0, 1.0, 1.0], "tolerance": 0.02 }
         }
       }
     },
@@ -335,9 +355,10 @@
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 0.05, "metallic": 1.0, "ior": 1.5 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.95,
         "probes": {
-          "metallic_r005": { "rect": [0.40, 0.40, 0.20, 0.20] }
+          "metallic_r005": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.02 },
+          "metallic_r005_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [1.0, 1.0, 1.0], "tolerance": 0.02 }
         }
       }
     },
@@ -349,9 +370,10 @@
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 0.25, "metallic": 1.0, "ior": 1.5 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.95,
         "probes": {
-          "metallic_r025": { "rect": [0.40, 0.40, 0.20, 0.20] }
+          "metallic_r025": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.02 },
+          "metallic_r025_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [1.0, 1.0, 1.0], "tolerance": 0.02 }
         }
       }
     },
@@ -363,9 +385,10 @@
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 0.5, "metallic": 1.0, "ior": 1.5 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.95,
         "probes": {
-          "metallic_r050": { "rect": [0.40, 0.40, 0.20, 0.20] }
+          "metallic_r050": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.02 },
+          "metallic_r050_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [1.0, 1.0, 1.0], "tolerance": 0.02 }
         }
       }
     },
@@ -377,9 +400,10 @@
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 1.0, "metallic": 1.0, "ior": 1.5 },
       "white_furnace": {
         "max_channel": 1.05,
-        "min_channel": -0.001,
+        "min_channel": 0.95,
         "probes": {
-          "metallic_r100": { "rect": [0.40, 0.40, 0.20, 0.20] }
+          "metallic_r100": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.02 },
+          "metallic_r100_rim": { "rect": [0.14, 0.45, 0.08, 0.10], "expected": [1.0, 1.0, 1.0], "tolerance": 0.02 }
         }
       }
     }
