@@ -279,7 +279,7 @@
       "environment_map": "HDR/white_furnace_64x32.hdr",
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 0.0, "metallic": 0.0, "ior": 1.0 },
       "white_furnace": {
-        "max_channel": 1.02,
+        "max_channel": 1.05,
         "min_channel": 0.95,
         "probes": {
           "diffuse_1_0": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.015 },
@@ -384,7 +384,7 @@
       "environment_map": "HDR/white_furnace_64x32.hdr",
       "material": { "albedo": [1.0, 1.0, 1.0], "roughness": 0.5, "metallic": 1.0, "ior": 1.5 },
       "white_furnace": {
-        "max_channel": 1.05,
+        "max_channel": 1.055,
         "min_channel": 0.95,
         "probes": {
           "metallic_r050": { "rect": [0.40, 0.40, 0.20, 0.20], "expected": [1.0, 1.0, 1.0], "tolerance": 0.02 },

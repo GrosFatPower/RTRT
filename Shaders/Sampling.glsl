@@ -301,6 +301,25 @@ vec3 SampleSkybox( in vec3 iRayDir, in sampler2D iSkyboxTex, in float iSkyboxRot
 }
 
 // ----------------------------------------------------------------------------
+// EnvMapTexelPdf
+// Solid-angle pdf of the texel containing iUV, matching EnvMap::BuildCDF
+// (texel luminance * sin(theta_row), uniform in solid angle within a texel)
+// ----------------------------------------------------------------------------
+float EnvMapTexelPdf( in vec2 iUV, in sampler2D iEnvMap, in vec2 iEnvMapRes, in float iTotalWeight )
+{
+  if ( iTotalWeight <= 0.f )
+    return 0.f;
+
+  ivec2 res = ivec2(iEnvMapRes);
+  ivec2 texel = ivec2(floor(vec2(fract(iUV.x), clamp(iUV.y, 0.f, 0.999999f)) * iEnvMapRes));
+  texel = clamp(texel, ivec2(0), res - 1);
+
+  float halfRowAngle = PI / ( 2.f * iEnvMapRes.y );
+  float lum = Luminance(texelFetch(iEnvMap, texel, 0).rgb);
+  return lum / iTotalWeight * iEnvMapRes.x / ( 4.f * PI * sin(halfRowAngle) );
+}
+
+// ----------------------------------------------------------------------------
 // SampleEnvMap
 // UV mapping : https://en.wikipedia.org/wiki/UV_mapping
 // iRayDir should be normalized
@@ -308,18 +327,12 @@ vec3 SampleSkybox( in vec3 iRayDir, in sampler2D iSkyboxTex, in float iSkyboxRot
 // ----------------------------------------------------------------------------
 vec4 SampleEnvMap( in vec3 iRayDir, in sampler2D iEnvMap, in float iRotation, in vec2 iEnvMapRes, float iTotalWeight )
 {
-  float theta = acos(iRayDir.y);
+  float theta = acos(clamp(iRayDir.y, -1.f, 1.f));
   float phi   = atan(iRayDir.z, iRayDir.x);
   vec2 uv = vec2((PI + phi) * INV_TWO_PI, theta * INV_PI) + vec2(iRotation, 0.0);
   
   vec3 color = texture(iEnvMap, uv).rgb;
-  float pdf = 0.;
-  if ( iTotalWeight > 0.f )
-  {
-    float sinTheta = max(sin(theta), 1e-4f);
-    pdf = Luminance(color) / iTotalWeight;
-    pdf *= ( iEnvMapRes.x * iEnvMapRes.y ) / ( TWO_PI * PI * sinTheta );
-  }
+  float pdf = EnvMapTexelPdf(uv, iEnvMap, iEnvMapRes, iTotalWeight);
   
   return vec4(color, pdf);
 }
@@ -327,28 +340,33 @@ vec4 SampleEnvMap( in vec3 iRayDir, in sampler2D iEnvMap, in float iRotation, in
 // ----------------------------------------------------------------------------
 // BinarySearch
 // ----------------------------------------------------------------------------
-vec2 BinarySearch( in float iValue, in sampler2D iEnvMap, in vec2 iEnvMapRes, in sampler2D iEnvMapCDF )
+vec2 BinarySearch( in vec2 iRand, in float iTotalWeight, in sampler2D iEnvMap, in vec2 iEnvMapRes, in sampler2D iEnvMapCDF )
 {
   ivec2 envMapRes = ivec2(iEnvMapRes);
+  float targetY = iRand.x * iTotalWeight;
 
   int lower = 0;
   int upper = envMapRes.y - 1;
   while ( lower < upper )
   {
     int mid = ( lower + upper ) >> 1;
-    if ( iValue < texelFetch( iEnvMapCDF, ivec2( envMapRes.x - 1, mid ), 0 ).r )
+    if ( targetY < texelFetch( iEnvMapCDF, ivec2( envMapRes.x - 1, mid ), 0 ).r )
       upper = mid;
     else
       lower = mid + 1;
   }
   int y = clamp( lower, 0, envMapRes.y - 1 );
 
+  float rowStart = ( y > 0 ) ? texelFetch( iEnvMapCDF, ivec2( envMapRes.x - 1, y - 1 ), 0 ).r : 0.f;
+  float rowEnd   = texelFetch( iEnvMapCDF, ivec2( envMapRes.x - 1, y ), 0 ).r;
+  float targetX  = mix( rowStart, rowEnd, iRand.y );
+
   lower = 0;
   upper = envMapRes.x - 1;
   while ( lower < upper )
   {
     int mid = ( lower + upper ) >> 1;
-    if ( iValue < texelFetch( iEnvMapCDF, ivec2( mid, y ), 0 ).r )
+    if ( targetX < texelFetch( iEnvMapCDF, ivec2( mid, y ), 0 ).r )
       upper = mid;
     else
       lower = mid + 1;
@@ -356,7 +374,12 @@ vec2 BinarySearch( in float iValue, in sampler2D iEnvMap, in vec2 iEnvMapRes, in
 
   int x = clamp( lower, 0, envMapRes.x - 1 );
 
-  return ( vec2( x, y ) + 0.5f ) / iEnvMapRes;
+  float cellStart = ( x > 0 ) ? texelFetch( iEnvMapCDF, ivec2( x - 1, y ), 0 ).r : rowStart;
+  float cellEnd   = texelFetch( iEnvMapCDF, ivec2( x, y ), 0 ).r;
+  float subX      = ( cellEnd > cellStart ) ? clamp( ( targetX - cellStart ) / ( cellEnd - cellStart ), 0.f, 0.999999f ) : 0.5f;
+  float subY      = ( rowEnd > rowStart ) ? clamp( ( targetY - rowStart ) / ( rowEnd - rowStart ), 0.f, 0.999999f ) : 0.5f;
+
+  return ( vec2( float(x) + subX, float(y) + subY ) ) / iEnvMapRes;
 }
 
 // ----------------------------------------------------------------------------
@@ -364,23 +387,22 @@ vec2 BinarySearch( in float iValue, in sampler2D iEnvMap, in vec2 iEnvMapRes, in
 // ----------------------------------------------------------------------------
 vec4 SampleEnvMap( in sampler2D iEnvMap, in float iRotation, in vec2 iEnvMapRes, in sampler2D iEnvMapCDF, in float iTotalWeight, out vec3 oDir )
 {
-  vec2 uv = BinarySearch(rand() * iTotalWeight, iEnvMap, iEnvMapRes, iEnvMapCDF);
+  vec2 uv = BinarySearch(vec2(rand(), rand()), iTotalWeight, iEnvMap, iEnvMapRes, iEnvMapCDF);
   
+  float rowY = floor(uv.y * iEnvMapRes.y);
+  float subY = clamp(uv.y * iEnvMapRes.y - rowY, 0.f, 1.f);
+  float theta0 = ( rowY / iEnvMapRes.y ) * PI;
+  float theta1 = ( ( rowY + 1.f ) / iEnvMapRes.y ) * PI;
+  float cosTheta = mix(cos(theta0), cos(theta1), subY);
+  float sinTheta = sqrt(max(0.f, 1.f - cosTheta * cosTheta));
   float phi = ( uv.x - iRotation ) * TWO_PI;
-  float theta = uv.y * PI;
-  oDir.x = -sin(theta) * cos(phi);
-  oDir.y = cos(theta);
-  oDir.z = -sin(theta) * sin(phi);
+  oDir.x = -sinTheta * cos(phi);
+  oDir.y = cosTheta;
+  oDir.z = -sinTheta * sin(phi);
 
-  vec3 color = texture(iEnvMap, uv).rgb;
-
-  float pdf = 0.;
-  if ( iTotalWeight > 0.f )
-  {
-    float sinTheta = max(sin(theta), 1e-4f);
-    pdf = Luminance(color) / iTotalWeight;
-    pdf *= ( iEnvMapRes.x * iEnvMapRes.y ) / ( TWO_PI * PI * sinTheta );
-  }
+  vec2 texUV = vec2(uv.x, ( rowY + 0.5f ) / iEnvMapRes.y);
+  vec3 color = texture(iEnvMap, texUV).rgb;
+  float pdf = EnvMapTexelPdf(texUV, iEnvMap, iEnvMapRes, iTotalWeight);
 
   return vec4(color, pdf);
 }

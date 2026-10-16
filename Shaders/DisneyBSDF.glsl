@@ -51,20 +51,127 @@ float DisneyFresnel( in Material iMat, in float iEta, in float iLDotH, in float 
 }
 
 // ----------------------------------------------------------------------------
+// GGXDirectionalAlbedoCoeffs
+// Piecewise-linear polynomial coefficients in u = sqrt(cosTheta) for the
+// single-scattering GGX directional albedo E0 (F=1), E1 ((1-VdotH)^5), and
+// Ediel (DielectricFresnel at IOR=1.5).
+// ----------------------------------------------------------------------------
+void GGXDirectionalAlbedoCoeffs( in float iRoughness, in float iEta, out float oC0[6], out float oC1[6], out float oCd[6] )
+{
+  const float rKnots[8] = float[8]( 0.0f, 0.05f, 0.15f, 0.25f, 0.375f, 0.50f, 0.75f, 1.00f );
+
+  const float c0Table[48] = float[48](
+    0.983025f,  0.177360f, -0.680226f,  1.215425f, -1.024522f,  0.329166f,
+    0.891995f,  1.109645f, -4.205850f,  7.450774f, -6.240130f,  1.994898f,
+    0.913979f, -0.778497f,  6.356089f, -14.830786f, 14.327348f, -4.992685f,
+    1.093668f, -2.577747f, 10.463347f, -17.243378f, 12.906570f, -3.649855f,
+    0.911925f,  0.392541f, -4.447142f, 12.398763f, -12.905666f,  4.626786f,
+    0.863185f,  0.609349f, -3.916299f,  7.688230f, -5.929355f,  1.599765f,
+    0.789910f,  0.002438f, -0.484328f, -0.073741f,  0.746420f, -0.353908f,
+    0.611976f,  0.032272f, -0.817378f,  0.563827f, -0.020454f, -0.063452f
+  );
+
+  const float c1Table[48] = float[48](
+    0.907012f,  1.474168f, -13.300937f, 20.881095f, -12.147096f,  2.182726f,
+    0.798754f,  2.558008f, -17.348647f, 27.987280f, -18.063889f,  4.066699f,
+    0.426632f,  3.506480f, -15.021402f, 17.701283f, -6.204770f, -0.414929f,
+    0.430963f,  0.202737f,   1.071950f, -11.502676f, 17.165532f, -7.375587f,
+    0.283875f, -0.314856f,   2.300399f, -8.899015f, 10.839371f, -4.211449f,
+    0.160419f, -0.122712f,   0.742561f, -3.308640f,  4.100395f, -1.572253f,
+    0.052501f, -0.002260f,  -0.092161f, -0.212337f,  0.454430f, -0.200184f,
+    0.019263f,  0.009213f,  -0.131276f,  0.159891f, -0.056390f, -0.000686f
+  );
+
+  const float cdTable[48] = float[48](
+    0.939694f,  1.046371f, -13.039773f, 24.468160f, -18.534768f,  5.160894f,
+    0.830092f,  2.144563f, -17.140626f, 31.664613f, -24.523781f,  7.066961f,
+    0.434506f,  3.399553f, -15.976567f, 23.291420f, -14.109386f,  2.997377f,
+    0.429679f,  0.355101f,  -0.746918f, -5.016568f,  9.108552f, -4.094516f,
+    0.290600f, -0.070721f,   0.572928f, -3.911482f,  5.178574f, -2.021399f,
+    0.183668f,  0.010990f,  -0.095226f, -1.045651f,  1.620861f, -0.637734f,
+    0.087437f,  0.006162f,  -0.160460f, -0.042625f,  0.252365f, -0.117202f,
+    0.047542f,  0.009960f,  -0.163386f,  0.177391f, -0.058691f, -0.000132f
+  );
+
+  float r = clamp(iRoughness, 0.f, 1.f);
+  int seg = 0;
+  for ( int i = 0; i < 6; ++i )
+  {
+    if ( r >= rKnots[i + 1] )
+      seg = i + 1;
+  }
+  float t = clamp(( r - rKnots[seg] ) / max(rKnots[seg + 1] - rKnots[seg], 1e-5f), 0.f, 1.f);
+
+  float f0 = ( 1.f - iEta ) / ( 1.f + iEta );
+  f0 = f0 * f0;
+
+  int base0 = seg * 6;
+  int base1 = ( seg + 1 ) * 6;
+  for ( int k = 0; k < 6; ++k )
+  {
+    oC0[k] = mix(c0Table[base0 + k], c0Table[base1 + k], t);
+    oC1[k] = mix(c1Table[base0 + k], c1Table[base1 + k], t);
+    float cd15 = mix(cdTable[base0 + k], cdTable[base1 + k], t);
+    if ( f0 <= 0.04f )
+      oCd[k] = cd15 * ( f0 / 0.04f );
+    else
+      oCd[k] = mix(cd15, oC0[k], ( f0 - 0.04f ) / 0.96f);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// EvalAlbedoPoly
+// ----------------------------------------------------------------------------
+float EvalAlbedoPoly( in float iC[6], in float iCosTheta )
+{
+  float u = sqrt(clamp(iCosTheta, 0.f, 1.f));
+  float u2 = u * u;
+  float u3 = u2 * u;
+  float u4 = u2 * u2;
+  float u5 = u4 * u;
+  return clamp(iC[0] + iC[1] * u + iC[2] * u2 + iC[3] * u3 + iC[4] * u4 + iC[5] * u5, 0.f, 1.f);
+}
+
+// ----------------------------------------------------------------------------
+// EvalAlbedoPolyAvg
+// Exact hemispherical average 2 * int_0^1 E(mu) * mu d(mu)
+// ----------------------------------------------------------------------------
+float EvalAlbedoPolyAvg( in float iC[6] )
+{
+  float avg = iC[0]
+    + ( 4.f / 5.f ) * iC[1]
+    + ( 4.f / 6.f ) * iC[2]
+    + ( 4.f / 7.f ) * iC[3]
+    + ( 4.f / 8.f ) * iC[4]
+    + ( 4.f / 9.f ) * iC[5];
+  return clamp(avg, 0.f, 0.999f);
+}
+
+// ----------------------------------------------------------------------------
 // EvalDiffuse
 // ----------------------------------------------------------------------------
-vec3 EvalDiffuse( in Material iMat, in float iEta, in vec3 iCsheen, in vec3 iV, in vec3 iL, in vec3 iH, out float oPdf )
+vec3 EvalDiffuse( in Material iMat, in float iEta, in vec3 iSpecCol, in vec3 iCsheen, in vec3 iV, in vec3 iL, in vec3 iH, out float oPdf )
 {
   oPdf = 0.f;
   if ( iL.z <= 0.f )
     return vec3(0.f);
 
+  float c0[6], c1[6], cd[6];
+  GGXDirectionalAlbedoCoeffs(iMat._Roughness, iEta, c0, c1, cd);
+
+  float E0_V = EvalAlbedoPoly(c0, iV.z);
+  float E0_L = EvalAlbedoPoly(c0, iL.z);
+  float E0_avg = EvalAlbedoPolyAvg(c0);
+
+  float Ed_V = EvalAlbedoPoly(cd, iV.z);
+  float Ed_L = EvalAlbedoPoly(cd, iL.z);
+  float Ed_avg = EvalAlbedoPolyAvg(cd);
+
   // Diffuse
   float FL = SchlickFresnel(iL.z);
   float FV = SchlickFresnel(iV.z);
   float FH = SchlickFresnel(dot(iL, iH));
-  float Fd90 = .5f + 2.f * dot(iL, iH) * dot(iL, iH) * iMat._Roughness;
-  float Fd = min(mix(1.f, Fd90, FL) * mix(1.f, Fd90, FV), 1.f);
+  float Fd = ( 1.f - Ed_V ) * ( 1.f - Ed_L ) / max(1.f - Ed_avg, 1e-4f);
 
   // Fake Subsurface
   float Fss90 = dot(iL, iH) * dot(iL, iH) * iMat._Roughness;
@@ -74,12 +181,18 @@ vec3 EvalDiffuse( in Material iMat, in float iEta, in vec3 iCsheen, in vec3 iV, 
   // Sheen
   vec3 Fsheen = FH * iMat._Sheen * iCsheen;
 
-  float transV = 1.f - DielectricFresnel(max(iV.z, 0.f), iEta);
-  float transL = 1.f - DielectricFresnel(max(iL.z, 0.f), iEta);
-  float energyConservation = mix(transV * transL, 1.f - SchlickFresnel(dot(iL, iH)), iMat._Metallic);
+  vec3 dielectricDiff = ( 1.f - iMat._Metallic ) * ( 1.f - iMat._SpecTrans ) * ( INV_PI * mix(Fd, ss, iMat._Subsurface) * iMat._Albedo + Fsheen );
+
+  // Kulla-Conty metallic multiple-scattering compensation lobe
+  vec3 F_avg = iSpecCol + ( vec3(1.f) - iSpecCol ) * ( 1.f / 21.f );
+  vec3 F_ms = iSpecCol * F_avg * E0_avg / max(vec3(1.f) - F_avg * ( 1.f - E0_avg ), vec3(1e-4f));
+  // When iSpecCol == 1, F_avg == 1 and F_ms == 1
+  F_ms = mix(F_ms, vec3(1.f), step(vec3(0.999f), iSpecCol));
+  float msFactor = ( 1.f - E0_V ) * ( 1.f - E0_L ) / max(1.f - E0_avg, 1e-4f);
+  vec3 metallicMS = iMat._Metallic * F_ms * ( INV_PI * msFactor );
 
   oPdf = iL.z * INV_PI;
-  return (1.f - iMat._Metallic) * (1.f - iMat._SpecTrans) * energyConservation * (INV_PI * mix(Fd, ss, iMat._Subsurface) * iMat._Albedo + Fsheen);
+  return dielectricDiff + metallicMS;
 }
 
 // ----------------------------------------------------------------------------
@@ -118,12 +231,12 @@ float GTR1( in float iNDotH, in float iA )
 // ----------------------------------------------------------------------------
 // GTR1
 // ----------------------------------------------------------------------------
-vec3 SampleGTR1( in float iRoughness , in float iR1 )
+vec3 SampleGTR1( in float iRoughness, in float iR1, in float iR2 )
 {
   float a = max(RESOLUTION, iRoughness);
   float a2 = a * a;
 
-  float phi = iR1 * TWO_PI;
+  float phi = iR2 * TWO_PI;
 
   float cosTheta = sqrt( (1.f - pow(a2, 1.f - iR1) ) / ( 1.f - a2 ) );
   float sinTheta = clamp(sqrt(1.f - (cosTheta * cosTheta)), 0.f, 1.f);
@@ -252,12 +365,20 @@ void GetSpecColor( in Material iMat, in float iEta, out vec3 oSpecCol, out vec3 
 // ----------------------------------------------------------------------------
 void GetLobeProbabilities( in Material iMat, in float iEta, in vec3 iSpecCol, in float iCosTheta, out float oDiffuseWeight, out float oSpecReflectWeight, out float oSpecRefractWeight, out float oClearcoatWeight )
 {
+  float c0[6], c1[6], cd[6];
+  GGXDirectionalAlbedoCoeffs(iMat._Roughness, iEta, c0, c1, cd);
+  float E0_V = EvalAlbedoPoly(c0, iCosTheta);
+  float Ed_V = EvalAlbedoPoly(cd, iCosTheta);
+
   float dielectricF = DielectricFresnel(max(iCosTheta, 0.f), iEta);
   float metallicF = SchlickFresnel(max(iCosTheta, 0.f));
   float F = mix(dielectricF, metallicF, iMat._Metallic);
 
-  oDiffuseWeight     = (1.f - F) * Luminance(iMat._Albedo) * (1.f - iMat._Metallic) * (1.f - iMat._SpecTrans);
-  oSpecReflectWeight = mix(dielectricF, Luminance(mix(iSpecCol, vec3(1.f), metallicF)), iMat._Metallic);
+  float dielDiffWeight = (1.f - Ed_V) * Luminance(iMat._Albedo) * (1.f - iMat._Metallic) * (1.f - iMat._SpecTrans);
+  float metalMSWeight  = (1.f - E0_V) * Luminance(iSpecCol) * iMat._Metallic;
+
+  oDiffuseWeight     = dielDiffWeight + metalMSWeight;
+  oSpecReflectWeight = mix(Ed_V, E0_V * Luminance(mix(iSpecCol, vec3(1.f), metallicF)), iMat._Metallic);
   oSpecRefractWeight = (1.f - F) * (1.f - iMat._Metallic) * iMat._SpecTrans * Luminance(iMat._Albedo);
   oClearcoatWeight   = .25f * iMat._Clearcoat * (1.f - iMat._Metallic);
   float totalWeight = oDiffuseWeight + oSpecReflectWeight + oSpecRefractWeight + oClearcoatWeight;
@@ -269,95 +390,6 @@ void GetLobeProbabilities( in Material iMat, in float iEta, in vec3 iSpecCol, in
     oSpecRefractWeight /= totalWeight;
     oClearcoatWeight   /= totalWeight;
   }
-}
-
-// ----------------------------------------------------------------------------
-// DisneySample
-// ----------------------------------------------------------------------------
-vec3 DisneySample( in HitPoint iHP, in Material iMat, in float iEta, in vec3 iV, out vec3 oL, out float oPdf )
-{
-  oPdf = 0.f;
-  vec3 f = vec3(0.f);
-
-  float r1 = rand();
-  float r2 = rand();
-
-  vec3 T, BT;
-  ComputeOnB(iHP._Normal, T, BT);
-  iV = ToLocal(T, BT, iHP._Normal, iV);
-
-  // Specular and sheen color
-  vec3 specCol, sheenCol;
-  GetSpecColor(iMat, iEta, specCol, sheenCol);
-
-  // Lobe weights
-  float diffuseWeight, specReflectWeight, specRefractWeight, clearcoatWeight;
-  GetLobeProbabilities(iMat, iEta, specCol, max(iV.z, 0.f), diffuseWeight, specReflectWeight, specRefractWeight, clearcoatWeight);
-
-  // CDF for picking a lobe
-  float cdf[4];
-  cdf[0] = diffuseWeight;
-  cdf[1] = cdf[0] + clearcoatWeight;
-  cdf[2] = cdf[1] + specReflectWeight;
-  cdf[3] = cdf[2] + specRefractWeight;
-
-  if ( r1 < cdf[0] ) // Diffuse Reflection Lobe
-  {
-    r1 /= cdf[0];
-    oL = CosineSampleHemisphere(r1, r2);
-    //oL = UniformSampleHemisphere(r1, r2);
-
-    vec3 H = normalize(oL + iV);
-
-    f = EvalDiffuse(iMat, iEta, sheenCol, iV, oL, H, oPdf);
-    oPdf *= diffuseWeight;
-  }
-  else if ( r1 < cdf[1] ) // Clearcoat Lobe
-  {
-    r1 = ( r1 - cdf[0] ) / ( cdf[1] - cdf[0] );
-
-    vec3 H = SampleGTR1(iMat._ClearcoatRoughness, r1);
-
-    if ( H.z < 0.f )
-      H = -H;
-
-    oL = normalize(reflect(-iV, H));
-
-    f = EvalClearcoat(iMat, iV, oL, H, oPdf);
-    oPdf *= clearcoatWeight;
-  }
-  else  // Specular Reflection/Refraction Lobes
-  {
-    r1 = ( r1 - cdf[1] ) / ( 1.0 - cdf[1] );
-    vec3 H = SampleGGXVNDF(iV, iMat._Ax, iMat._Ay, r1, r2);
-
-    if ( H.z < 0.f )
-      H = -H;
-
-    float VdotH = dot(iV, H);
-    float fresnel = DisneyFresnel(iMat, iEta, VdotH, VdotH); // TODO: Refactor into metallic BRDF and specular BSDF
-    float F = 1.f - ((1.f - fresnel) * iMat._SpecTrans * (1.f - iMat._Metallic));
-
-    if ( rand() < F )
-    {
-      oL = normalize(reflect(-iV, H));
-
-      f = EvalSpecReflection(iMat, iEta, specCol, iV, oL, H, oPdf);
-      oPdf *= F;
-    }
-    else
-    {
-      oL = normalize(refract(-iV, H, iEta));
-
-      f = EvalSpecRefraction(iMat, iEta, iV, oL, H, oPdf);
-      oPdf *= 1.f - F;
-    }
-
-    oPdf *= specReflectWeight + specRefractWeight;
-  }
-
-  oL = ToWorld(T, BT, iHP._Normal, oL);
-  return f * abs(dot(iHP._Normal, oL));
 }
 
 // ----------------------------------------------------------------------------
@@ -395,7 +427,7 @@ vec3 DisneyEval( in HitPoint iHP, in Material iMat, in float iEta, in vec3 iV, i
   // Diffuse
   if ( ( diffuseWeight > 0.f ) && ( iL.z > 0.f ) )
   {
-    f += EvalDiffuse(iMat, iEta, sheenCol, iV, iL, H, pdf);
+    f += EvalDiffuse(iMat, iEta, specCol, sheenCol, iV, iL, H, pdf);
     oPdf += pdf * diffuseWeight;
   }
 
@@ -421,6 +453,80 @@ vec3 DisneyEval( in HitPoint iHP, in Material iMat, in float iEta, in vec3 iV, i
   }
 
   return f * abs(iL.z);
+}
+
+// ----------------------------------------------------------------------------
+// DisneySample
+// ----------------------------------------------------------------------------
+vec3 DisneySample( in HitPoint iHP, in Material iMat, in float iEta, in vec3 iV, out vec3 oL, out float oPdf )
+{
+  oPdf = 0.f;
+  oL = vec3(0.f);
+
+  float r1 = rand();
+  float r2 = rand();
+
+  vec3 T, BT;
+  ComputeOnB(iHP._Normal, T, BT);
+  vec3 localV = ToLocal(T, BT, iHP._Normal, iV);
+
+  // Specular and sheen color
+  vec3 specCol, sheenCol;
+  GetSpecColor(iMat, iEta, specCol, sheenCol);
+
+  // Lobe weights
+  float diffuseWeight, specReflectWeight, specRefractWeight, clearcoatWeight;
+  GetLobeProbabilities(iMat, iEta, specCol, max(localV.z, 0.f), diffuseWeight, specReflectWeight, specRefractWeight, clearcoatWeight);
+
+  float totalWeight = diffuseWeight + clearcoatWeight + specReflectWeight + specRefractWeight;
+  if ( totalWeight <= 0.f )
+    return vec3(0.f);
+
+  // CDF for picking a lobe
+  float cdf[4];
+  cdf[0] = diffuseWeight;
+  cdf[1] = cdf[0] + clearcoatWeight;
+  cdf[2] = cdf[1] + specReflectWeight;
+  cdf[3] = cdf[2] + specRefractWeight;
+
+  vec3 localL = vec3(0.f);
+
+  if ( r1 < cdf[0] ) // Diffuse Reflection Lobe
+  {
+    r1 /= max(cdf[0], EPSILON);
+    localL = CosineSampleHemisphere(r1, r2);
+  }
+  else if ( r1 < cdf[1] ) // Clearcoat Lobe
+  {
+    r1 = ( r1 - cdf[0] ) / max(cdf[1] - cdf[0], EPSILON);
+    vec3 H = SampleGTR1(iMat._ClearcoatRoughness, r1, r2);
+    if ( H.z < 0.f )
+      H = -H;
+    localL = normalize(reflect(-localV, H));
+  }
+  else if ( r1 < cdf[2] ) // Specular Reflection Lobe
+  {
+    r1 = ( r1 - cdf[1] ) / max(cdf[2] - cdf[1], EPSILON);
+    vec3 H = SampleGGXVNDF(localV, iMat._Ax, iMat._Ay, r1, r2);
+    if ( H.z < 0.f )
+      H = -H;
+    localL = normalize(reflect(-localV, H));
+  }
+  else // Specular Refraction Lobe
+  {
+    r1 = ( r1 - cdf[2] ) / max(cdf[3] - cdf[2], EPSILON);
+    vec3 H = SampleGGXVNDF(localV, iMat._Ax, iMat._Ay, r1, r2);
+    if ( H.z < 0.f )
+      H = -H;
+    vec3 refracted = refract(-localV, H, iEta);
+    if ( dot(refracted, refracted) > 0.f )
+      localL = normalize(refracted);
+    else
+      localL = normalize(reflect(-localV, H));
+  }
+
+  oL = ToWorld(T, BT, iHP._Normal, localL);
+  return DisneyEval(iHP, iMat, iEta, iV, oL, oPdf);
 }
 
 #endif

@@ -62,10 +62,11 @@ void EnvMap::BuildCDF()
   weights.resize(_Width * _Height);
   for ( int y = 0; y < _Height; ++y )
   {
+    float sinTheta = std::sin(static_cast<float>(M_PI) * ( static_cast<float>(y) + 0.5f ) / static_cast<float>(_Height));
     for ( int x = 0; x < _Width; ++x )
     {
       int index = x + y * _Width;
-      weights[index] = MathUtil::Luminance(Vec3(_RawData[index * 3 + 0], _RawData[index * 3 + 1], _RawData[index * 3 + 2]));
+      weights[index] = MathUtil::Luminance(Vec3(_RawData[index * 3 + 0], _RawData[index * 3 + 1], _RawData[index * 3 + 2])) * sinTheta;
     }
   }
 

@@ -337,7 +337,6 @@ vec3 PathSample( in Ray iStartRay, in vec2 iCoordUV )
         break;
 
       throughput *= scatterSample._Attenuation / ( scatterSample._P + EPSILON );
-      throughput = min(throughput, vec3(1.f));
     }
     else
     {
@@ -347,7 +346,8 @@ vec3 PathSample( in Ray iStartRay, in vec2 iCoordUV )
     }
 
     // NEXT RAY
-    ray._Orig = closestHit._Pos + scatterSample._Dir * RESOLUTION;
+    vec3 offsetNormal = ( dot(scatterSample._Dir, closestHit._Normal) >= 0.f ) ? closestHit._Normal : -closestHit._Normal;
+    ray._Orig = closestHit._Pos + offsetNormal * RESOLUTION;
     ray._Dir = scatterSample._Dir;
 
     if ( depth >= u_NbBounces )
@@ -375,9 +375,6 @@ vec3 PathSample( in Ray iStartRay, in vec2 iCoordUV )
 // ----------------------------------------------------------------------------
 void main()
 {
-  // Initialization
-  InitRNG(gl_FragCoord.xy, u_FrameNum);
-
   vec2 coordUV = fragUV;
   if( 1 == u_TiledRendering )
     coordUV = mix(u_TileOffset, u_TileOffset + u_InvNbTiles, fragUV);
@@ -385,6 +382,9 @@ void main()
   vec3 radiance = vec3(0.f);
   for ( int i = 0; i < u_NbSamplesPerPixel; ++i )
   {
+    // One Sobol index per sample: frame * spp + i
+    InitRNG(gl_FragCoord.xy, max(u_FrameNum, 0) * u_NbSamplesPerPixel + i);
+
     Ray ray = GetRay(coordUV);
     radiance += PathSample(ray, coordUV);
   }
