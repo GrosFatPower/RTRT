@@ -103,6 +103,53 @@ bool RenderTestCase::ApplyScene( Scene & ioScene ) const
     ioScene.GetCamera().SetZNearFar(_CameraNear, _CameraFar);
   }
 
+  if ( _Material._Enabled )
+  {
+    std::vector<Material> & materials = ioScene.GetMaterials();
+    if ( materials.empty() )
+      return false;
+
+    int materialID = 0;
+    if ( !_Material._Name.empty() )
+    {
+      materialID = ioScene.FindMaterialID(_Material._Name);
+      if ( ( materialID < 0 ) || ( materialID >= static_cast<int>(materials.size()) ) )
+        return false;
+    }
+
+    Material & material = materials[materialID];
+    if ( _Material._HasAlbedo )
+      material._Albedo = _Material._Albedo;
+    if ( _Material._HasEmission )
+      material._Emission = _Material._Emission;
+    if ( _Material._HasMetallic )
+      material._Metallic = _Material._Metallic;
+    if ( _Material._HasRoughness )
+      material._Roughness = _Material._Roughness;
+    if ( _Material._HasReflectance )
+      material._Reflectance = _Material._Reflectance;
+    if ( _Material._HasSubsurface )
+      material._Subsurface = _Material._Subsurface;
+    if ( _Material._HasSpecTint )
+      material._SpecTint = _Material._SpecTint;
+    if ( _Material._HasAnisotropic )
+      material._Anisotropic = _Material._Anisotropic;
+    if ( _Material._HasSheen )
+      material._Sheen = _Material._Sheen;
+    if ( _Material._HasSheenTint )
+      material._SheenTint = _Material._SheenTint;
+    if ( _Material._HasClearcoat )
+      material._Clearcoat = _Material._Clearcoat;
+    if ( _Material._HasClearcoatGloss )
+      material._ClearcoatGloss = _Material._ClearcoatGloss;
+    if ( _Material._HasSpecTrans )
+      material._SpecTrans = _Material._SpecTrans;
+    if ( _Material._HasIOR )
+      material._IOR = _Material._IOR;
+    if ( _Material._HasOpacity )
+      material._Opacity = _Material._Opacity;
+  }
+
   return true;
 }
 
@@ -279,6 +326,75 @@ bool ReadSettings( const Json & iObject, RenderTestCase & ioTestCase, std::strin
   return true;
 }
 
+bool ReadUnitIntervalFloat( const Json & iObject, const char * iName, bool & oHasValue, float & oValue, std::string & oError )
+{
+  if ( !iObject.contains(iName) )
+    return true;
+  if ( !iObject[iName].is_number() )
+    return SetManifestError(oError, std::string("'material.") + iName + "' must be a number.");
+  const float value = iObject[iName].get<float>();
+  if ( !std::isfinite(value) || ( value < 0.f ) || ( value > 1.f ) )
+    return SetManifestError(oError, std::string("'material.") + iName + "' must be in [0, 1].");
+  oHasValue = true;
+  oValue = value;
+  return true;
+}
+
+bool ReadNonNegativeVec3( const Json & iObject, const char * iName, bool & oHasValue, Vec3 & oValue, std::string & oError )
+{
+  if ( !iObject.contains(iName) )
+    return true;
+  if ( !ReadVec3(iObject[iName], ( std::string("material.") + iName ).c_str(), oValue, oError) )
+    return false;
+  if ( !std::isfinite(oValue.x) || !std::isfinite(oValue.y) || !std::isfinite(oValue.z)
+    || ( oValue.x < 0.f ) || ( oValue.y < 0.f ) || ( oValue.z < 0.f ) )
+    return SetManifestError(oError, std::string("'material.") + iName + "' must be finite and non-negative.");
+  oHasValue = true;
+  return true;
+}
+
+bool ReadMaterialOverride( const Json & iTest, MaterialOverride & ioMaterial, std::string & oError )
+{
+  if ( !iTest.contains("material") )
+    return true;
+  const Json & material = iTest["material"];
+  if ( !material.is_object() )
+    return SetManifestError(oError, "'material' must be an object.");
+
+  ioMaterial._Enabled = true;
+  if ( !ReadString(material, "name", ioMaterial._Name, oError, false)
+    || !ReadNonNegativeVec3(material, "color", ioMaterial._HasAlbedo, ioMaterial._Albedo, oError)
+    || !ReadNonNegativeVec3(material, "albedo", ioMaterial._HasAlbedo, ioMaterial._Albedo, oError)
+    || !ReadNonNegativeVec3(material, "emission", ioMaterial._HasEmission, ioMaterial._Emission, oError)
+    || !ReadUnitIntervalFloat(material, "metallic", ioMaterial._HasMetallic, ioMaterial._Metallic, oError)
+    || !ReadUnitIntervalFloat(material, "roughness", ioMaterial._HasRoughness, ioMaterial._Roughness, oError)
+    || !ReadUnitIntervalFloat(material, "reflectance", ioMaterial._HasReflectance, ioMaterial._Reflectance, oError)
+    || !ReadUnitIntervalFloat(material, "subsurface", ioMaterial._HasSubsurface, ioMaterial._Subsurface, oError)
+    || !ReadUnitIntervalFloat(material, "specular_tint", ioMaterial._HasSpecTint, ioMaterial._SpecTint, oError)
+    || !ReadUnitIntervalFloat(material, "anisotropic", ioMaterial._HasAnisotropic, ioMaterial._Anisotropic, oError)
+    || !ReadUnitIntervalFloat(material, "sheen", ioMaterial._HasSheen, ioMaterial._Sheen, oError)
+    || !ReadUnitIntervalFloat(material, "sheen_tint", ioMaterial._HasSheenTint, ioMaterial._SheenTint, oError)
+    || !ReadUnitIntervalFloat(material, "clearcoat", ioMaterial._HasClearcoat, ioMaterial._Clearcoat, oError)
+    || !ReadUnitIntervalFloat(material, "clearcoat_gloss", ioMaterial._HasClearcoatGloss, ioMaterial._ClearcoatGloss, oError)
+    || !ReadUnitIntervalFloat(material, "transmission", ioMaterial._HasSpecTrans, ioMaterial._SpecTrans, oError)
+    || !ReadUnitIntervalFloat(material, "spec_trans", ioMaterial._HasSpecTrans, ioMaterial._SpecTrans, oError)
+    || !ReadUnitIntervalFloat(material, "opacity", ioMaterial._HasOpacity, ioMaterial._Opacity, oError) )
+    return false;
+
+  if ( material.contains("ior") )
+  {
+    if ( !material["ior"].is_number() )
+      return SetManifestError(oError, "'material.ior' must be a number.");
+    const float ior = material["ior"].get<float>();
+    if ( !std::isfinite(ior) || ( ior < 1.f ) )
+      return SetManifestError(oError, "'material.ior' must be >= 1.0.");
+    ioMaterial._HasIOR = true;
+    ioMaterial._IOR = ior;
+  }
+
+  return true;
+}
+
 bool ReadBackend( const Json & iProfile, RenderTestCase & ioTestCase, std::string & oError )
 {
   std::string backend;
@@ -347,7 +463,8 @@ bool ParseRenderTestCases( const std::string & iContents, std::vector<RenderTest
         || !ReadBool(test, "clamp_comparison", testCase._ClampComparison, oError)
         || !ReadBool(test, "software_optimized", testCase._SoftwareOptimized, oError)
         || !ReadBool(test, "software_simd", testCase._SoftwareSIMD, oError)
-        || !ReadBool(test, "software_fallback", testCase._SoftwareFallback, oError) )
+        || !ReadBool(test, "software_fallback", testCase._SoftwareFallback, oError)
+        || !ReadMaterialOverride(test, testCase._Material, oError) )
         return false;
 
       std::string baseline;
@@ -907,6 +1024,13 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
         "name": "furnace_test",
         "profile": "test",
         "scene": "test.scene",
+        "material": {
+          "name": "furnace_probe",
+          "albedo": [0.2, 0.2, 0.2],
+          "roughness": 0.25,
+          "metallic": 1.0,
+          "ior": 1.5
+        },
         "white_furnace": {
           "max_channel": 1.05,
           "min_channel": -0.001,
@@ -919,14 +1043,31 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
     ]
   })";
   if ( !RunUnitTest("white_furnace_manifest_valid", [&validFurnaceManifest, &parsedCases, &parseError]() {
-    if ( ParseRenderTestCases(validFurnaceManifest, parsedCases, parseError) && ( 1u == parsedCases.size() )
-      && parsedCases[0]._WhiteFurnace._Enabled && ( 2u == parsedCases[0]._WhiteFurnace._Probes.size() )
-      && ( std::abs(parsedCases[0]._WhiteFurnace._MaxChannel - 1.05f) < 1e-6f )
-      && parsedCases[0]._WhiteFurnace._Probes[0]._HasExpected
-      && !parsedCases[0]._WhiteFurnace._Probes[1]._HasExpected )
-      return true;
-    std::cerr << "Unit test failed: valid white-furnace manifest. " << parseError << std::endl;
-    return false;
+    if ( !ParseRenderTestCases(validFurnaceManifest, parsedCases, parseError) || ( 1u != parsedCases.size() )
+      || !parsedCases[0]._Material._Enabled || ( "furnace_probe" != parsedCases[0]._Material._Name )
+      || !parsedCases[0]._Material._HasAlbedo || ( std::abs(parsedCases[0]._Material._Albedo.x - 0.2f) >= 1e-6f )
+      || !parsedCases[0]._Material._HasRoughness || ( std::abs(parsedCases[0]._Material._Roughness - 0.25f) >= 1e-6f )
+      || !parsedCases[0]._Material._HasMetallic || ( std::abs(parsedCases[0]._Material._Metallic - 1.f) >= 1e-6f )
+      || !parsedCases[0]._Material._HasIOR || ( std::abs(parsedCases[0]._Material._IOR - 1.5f) >= 1e-6f )
+      || !parsedCases[0]._WhiteFurnace._Enabled || ( 2u != parsedCases[0]._WhiteFurnace._Probes.size() )
+      || ( std::abs(parsedCases[0]._WhiteFurnace._MaxChannel - 1.05f) >= 1e-6f )
+      || !parsedCases[0]._WhiteFurnace._Probes[0]._HasExpected
+      || parsedCases[0]._WhiteFurnace._Probes[1]._HasExpected )
+    {
+      std::cerr << "Unit test failed: valid white-furnace manifest. " << parseError << std::endl;
+      return false;
+    }
+
+    Scene scene;
+    Material mat;
+    scene.AddMaterial(mat, "furnace_probe");
+    if ( !parsedCases[0].ApplyScene(scene) )
+      return false;
+    const Material & applied = scene.GetMaterials()[0];
+    return ( std::abs(applied._Albedo.x - 0.2f) < 1e-6f )
+      && ( std::abs(applied._Roughness - 0.25f) < 1e-6f )
+      && ( std::abs(applied._Metallic - 1.f) < 1e-6f )
+      && ( std::abs(applied._IOR - 1.5f) < 1e-6f );
   }) )
     return 1;
 
@@ -939,7 +1080,11 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
     // max_channel <= min_channel
     R"({ "version": 1, "profiles": { "test": { "backend": "deferred", "resolution": [64, 32], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "white_furnace": { "max_channel": 0.5, "min_channel": 1.0, "probes": {} } }] })",
     // Expected without tolerance
-    R"({ "version": 1, "profiles": { "test": { "backend": "deferred", "resolution": [64, 32], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "white_furnace": { "probes": { "bad": { "rect": [0.1, 0.1, 0.1, 0.1], "expected": [0.5, 0.5, 0.5] } } } }] })"
+    R"({ "version": 1, "profiles": { "test": { "backend": "deferred", "resolution": [64, 32], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "white_furnace": { "probes": { "bad": { "rect": [0.1, 0.1, 0.1, 0.1], "expected": [0.5, 0.5, 0.5] } } } }] })",
+    // Invalid material roughness > 1
+    R"({ "version": 1, "profiles": { "test": { "backend": "deferred", "resolution": [64, 32], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "material": { "roughness": 1.5 } }] })",
+    // Invalid material IOR < 1
+    R"({ "version": 1, "profiles": { "test": { "backend": "deferred", "resolution": [64, 32], "frames": 1, "thresholds": { "mean_absolute_error": 0, "max_absolute_error": 0, "pixel_error": 0, "mismatch_ratio": 0 } } }, "tests": [{ "name": "test", "profile": "test", "scene": "test.scene", "material": { "ior": 0.8 } }] })"
   };
   if ( !RunUnitTest("white_furnace_manifest_validation", [&invalidFurnaceManifests, &parsedCases, &parseError]() {
     for ( const std::string & m : invalidFurnaceManifests )

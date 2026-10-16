@@ -134,7 +134,7 @@ Then inspect the resulting PNG output, run the relevant comparison again, and st
 
 Required test fields are `name`, `profile`, and `scene`. Names must be unique and profiles must exist. Omitting `baseline` uses `Tests/Baselines/<name>.pfm`.
 
-Supported optional test fields are `resolution`, `frames`, `thresholds`, `environment_map`, `camera`, `baseline`, `debug_mode`, and `diagnostic_only`. Software cases also support `software_optimized`, `software_simd`, `software_fallback`, and settings overrides for `tiled_rendering` and `w_buffer`; `transparency` applies to deferred and software cases. Resolution values and frame counts must be positive. A camera requires three-number `position` and `pivot` arrays plus a positive `fov`; `near` is positive and `far` must be greater than `near`.
+Supported optional test fields are `resolution`, `frames`, `thresholds`, `environment_map`, `camera`, `material`, `baseline`, `debug_mode`, and `diagnostic_only`. Software cases also support `software_optimized`, `software_simd`, `software_fallback`, and settings overrides for `tiled_rendering` and `w_buffer`; `transparency` applies to deferred and software cases. Resolution values and frame counts must be positive. A camera requires three-number `position` and `pivot` arrays plus a positive `fov`; `near` is positive and `far` must be greater than `near`. A `material` object can override the first material in the scene (or a named material via `name`) with `albedo` (or `color`), `emission`, `roughness`, `metallic`, `reflectance`, `ior`, and additional PBR lobe parameters.
 
 `software_optimized` enables the retained optimized software paths. `software_simd` explicitly selects the available platform SIMD path. `software_fallback` keeps tiled rendering but disables compact hits and direct color writes, allowing those paths to share a visual baseline. `transparency` controls blended geometry; alpha-masked materials remain active when it is disabled. Deferred cases also accept `ssr_max_steps`, `ssr_pixel_stride`, `ssr_start_bias`, `ssr_max_distance`, `ssr_thickness`, `refraction`, `refraction_max_steps`, `refraction_pixel_stride`, `refraction_start_bias`, `refraction_max_distance`, `refraction_thickness`, and `refraction_edge_fade`. The deprecated `ssr_step_size` and `refraction_step_size` aliases are converted relative to the former `0.18` default; new pixel-stride keys take precedence.
 
@@ -166,7 +166,7 @@ ctest --test-dir Build -C Debug -R Render_deferred_example --output-on-failure
 
 ## White Furnace Energy-Conservation Suite
 
-A separate white-furnace manifest diagnoses energy conservation in the deferred and path-traced renderers. It is **not** included in normal `--all` or CTest regression runs.
+A separate white-furnace manifest diagnoses energy conservation in the deferred and path-traced renderers using a single isolated probe sphere per test case (`Assets/WhiteFurnace.scene`) with inline `material` overrides (`12` material presets per backend). It is **not** included in normal `--all` or CTest regression runs.
 
 Build and run it through the dedicated CMake target:
 
@@ -175,13 +175,14 @@ cmake --build Build --config Debug --target RenderRegression
 cmake --build Build --config Debug --target RenderWhiteFurnace
 ```
 
-Or run the manifest directly:
+Or run the manifest or a single probe case directly:
 
 ```powershell
 .\Build\Debug\RenderRegression.exe --manifest Tests\RenderTests.WhiteFurnace.json --all
+.\Build\Debug\RenderRegression.exe --manifest Tests\RenderTests.WhiteFurnace.json --case pathtracer_white_furnace_metallic_r025
 ```
 
-Each furnace case renders a calibrated sphere grid under a constant linear-white environment and measures the HDR output numerically. The runner always writes these artifacts, on both pass and failure:
+Each furnace case renders a single centered sphere under a constant linear-white environment and measures the HDR output numerically. The runner always writes these artifacts, on both pass and failure:
 
 - `actual.pfm`: rendered linear image.
 - `actual.png`: tone-mapped preview.

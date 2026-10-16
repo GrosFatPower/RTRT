@@ -2,39 +2,41 @@
 
 ## Summary
 
-Add an explicit, non-default white-furnace suite for the deferred renderer and path tracer. It will render a calibrated sphere grid under a uniform linear-white environment, measure HDR output numerically, and report energy violations without changing any renderer or shader behavior.
+Add an explicit, non-default white-furnace suite for the deferred renderer and path tracer. It renders a single calibrated sphere probe under a uniform linear-white environment with per-test inline material overrides, measures HDR output numerically, and reports energy violations without inter-probe reflection or occlusion.
 
 ## Implementation Changes
 
 - Add a committed `64x32` linear Radiance HDR asset containing constant `(1,1,1)` radiance. Use the existing environment-map loader; no production environment API changes are needed.
 - Add `Assets/WhiteFurnace.scene`, auto-discovered by Test5:
-  - Orthographic `4x3` sphere grid, visible white environment background (physical furnace walls), no local lights.
-  - Row 1: diffuse black, `0.2`, `0.5`, and `1.0` albedo probes.
-  - Row 2: white dielectric probes at roughness `0.05`, `0.25`, `0.5`, `1.0`.
-  - Row 3: white metallic probes at the same roughness values.
-  - No textures, emission, transmission, clearcoat, or anisotropy.
+  - Orthographic camera (`orthographicHeight 2.5`) framing a single centered sphere at `(0, 0, 0)`, visible white environment background (physical furnace walls), no local lights.
+  - Default `furnace_probe` material overridden per test case in the manifest.
 - Add `Tests/RenderTests.WhiteFurnace.json`, separate from `RenderTests.json`:
-  - `deferred_white_furnace`: one frame at `512x384`.
-  - `pathtracer_white_furnace`: `256` accumulated frames at `512x384`, one sample per pixel, two bounces, no denoising, auto-scaling, or tile rendering.
-  - Both cases load the white environment and show it as the visible background, while disabling uniform ambient light, direct lighting, SSAO, SSR, shadows, transparency, and tone mapping.
+  - `12` `deferred_white_furnace_*` cases: one frame at `256x256`.
+  - `12` `pathtracer_white_furnace_*` cases: `256` accumulated frames at `256x256`, one sample per pixel, two bounces, no denoising, auto-scaling, or tile rendering.
+  - Presets per backend:
+    - Diffuse black, `0.2`, `0.5`, and `1.0` albedo probes (`roughness 0.0`, `metallic 0.0`, `ior 1.0`).
+    - White dielectric probes at roughness `0.05`, `0.25`, `0.5`, `1.0` (`metallic 0.0`, `ior 1.5`).
+    - White metallic probes at roughness `0.05`, `0.25`, `0.5`, `1.0` (`metallic 1.0`, `ior 1.5`).
+  - All cases load the white environment and show it as the visible background, while disabling uniform ambient light, direct lighting, SSAO, SSR, shadows, transparency, and tone mapping.
   - Deferred explicitly uses full IBL settings: specular IBL enabled, intensity `1.0`, and no roughness cutoff.
 
 ## Numeric Furnace Assertions
 
-- Extend the render-test manifest with an optional `white_furnace` object:
+- Extend the render-test manifest with optional `material` and `white_furnace` objects:
+  - `material`: inline overrides for `name`, `albedo`/`color`, `emission`, `roughness`, `metallic`, `reflectance`, `ior`, and additional PBR lobes.
   - `max_channel`: global upper bound for the HDR image, set to `1.05`.
   - `min_channel`: lower bound, set to `-0.001`.
-  - Named normalized probe rectangles with optional expected RGB values and absolute tolerances.
-- Add white-furnace data types to `RenderTestCase`, parser validation, and a CPU evaluator:
+  - Named normalized probe rectangle (`[0.40, 0.40, 0.20, 0.20]` at the sphere center) with optional expected RGB values and absolute tolerances.
+- Add white-furnace and material-override data types to `RenderTestCase`, parser validation, and a CPU evaluator:
   - Validate finite, non-negative expected colors and tolerances.
   - Validate normalized rectangles lie inside the rendered image.
-  - Compute each probe's mean RGB/luminance and the global HDR channel range.
+  - Compute the probe's mean RGB/luminance and the global HDR channel range.
   - Fail the explicitly run case when a diffuse reference target or energy bound is violated.
-- Define fixed center patches for all twelve spheres:
+- Define center patch checks for each preset:
   - Diffuse black must remain near `0`.
   - Diffuse `0.2`, `0.5`, and `1.0` probes target their respective linear albedos with documented tolerances.
   - Dielectric and metallic probes are coverage/energy probes: they must remain non-negative and not exceed the global white-furnace limit.
-- Always write `actual.pfm`, preview PNG, and `furnace_metrics.txt` for these cases, on both pass and failure. Metrics list each probe's measured RGB/luminance and the exact failed bound.
+- Always write `actual.pfm`, preview PNG, and `furnace_metrics.txt` for these cases, on both pass and failure. Metrics list the probe's measured RGB/luminance and the exact failed bound.
 
 ## Runner and Documentation
 

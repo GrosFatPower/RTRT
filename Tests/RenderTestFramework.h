@@ -63,6 +63,42 @@ struct WhiteFurnaceResult
   bool  _Passed = true;
 };
 
+struct MaterialOverride
+{
+  bool        _Enabled = false;
+  std::string _Name;
+  bool        _HasAlbedo = false;
+  Vec3        _Albedo = Vec3(1.f);
+  bool        _HasEmission = false;
+  Vec3        _Emission = Vec3(0.f);
+  bool        _HasMetallic = false;
+  float       _Metallic = 0.f;
+  bool        _HasRoughness = false;
+  float       _Roughness = 0.5f;
+  bool        _HasReflectance = false;
+  float       _Reflectance = 0.5f;
+  bool        _HasSubsurface = false;
+  float       _Subsurface = 0.f;
+  bool        _HasSpecTint = false;
+  float       _SpecTint = 0.f;
+  bool        _HasAnisotropic = false;
+  float       _Anisotropic = 0.f;
+  bool        _HasSheen = false;
+  float       _Sheen = 0.f;
+  bool        _HasSheenTint = false;
+  float       _SheenTint = 0.f;
+  bool        _HasClearcoat = false;
+  float       _Clearcoat = 0.f;
+  bool        _HasClearcoatGloss = false;
+  float       _ClearcoatGloss = 0.f;
+  bool        _HasSpecTrans = false;
+  float       _SpecTrans = 0.f;
+  bool        _HasIOR = false;
+  float       _IOR = 1.5f;
+  bool        _HasOpacity = false;
+  float       _Opacity = 1.f;
+};
+
 struct RenderTestCase
 {
   std::string     _Name;
@@ -119,6 +155,7 @@ struct RenderTestCase
   float           _SpecularIBLMaxRoughness = 0.5f;
   bool            _Shadows = true;
   bool            _PBRDirectLighting = true;
+  MaterialOverride   _Material;
   WhiteFurnaceConfig _WhiteFurnace;
 
   void ApplySettings( RenderSettings & ioSettings ) const;
