@@ -430,6 +430,21 @@ int main( int iArgc, char ** iArgv )
       std::cerr << "Failed to load render-test manifest '" << manifestPath << "': " << manifestError << std::endl;
       return 1;
     }
+
+    if ( !customManifest )
+    {
+      const fs::path furnaceManifestPath = fs::path(RTRT::PathUtils::GetAssetPath("..")) / "Tests/RenderTests.WhiteFurnace.json";
+      std::vector<RTRT::Tests::RenderTestCase> furnaceCases;
+      if ( fs::exists(furnaceManifestPath) )
+      {
+        if ( !RTRT::Tests::LoadRenderTestCases(furnaceManifestPath, furnaceCases, manifestError) )
+        {
+          std::cerr << "Failed to load white-furnace manifest '" << furnaceManifestPath << "': " << manifestError << std::endl;
+          return 1;
+        }
+        allTestCases.insert(allTestCases.end(), furnaceCases.begin(), furnaceCases.end());
+      }
+    }
   }
 
   if ( listCases )

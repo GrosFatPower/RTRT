@@ -166,9 +166,9 @@ ctest --test-dir Build -C Debug -R Render_deferred_example --output-on-failure
 
 ## White Furnace Energy-Conservation Suite
 
-A separate white-furnace manifest diagnoses energy conservation in the deferred and path-traced renderers using a single isolated probe sphere per test case (`Assets/WhiteFurnace.scene`) with inline `material` overrides (`12` material presets per backend). It is **not** included in normal `--all` or CTest regression runs.
+A separate white-furnace manifest diagnoses energy conservation in the deferred and path-traced renderers using a single isolated probe sphere per test case (`Assets/WhiteFurnace.scene`) with inline `material` overrides (`12` material presets per backend).
 
-Build and run it through the dedicated CMake target:
+`RenderRegression --all` replays all test cases including the white furnace suite. You can also run the white furnace suite in isolation through the dedicated CMake target:
 
 ```powershell
 cmake --build Build --config Debug --target RenderRegression
