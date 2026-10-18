@@ -67,3 +67,5 @@ Assets/HDR/industrial_wooden_attic_4k.hdr
 *.vcxproj.filters
 *.sln
 *.ods\#
+__pycache__/
+*.pyc

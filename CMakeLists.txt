@@ -267,6 +267,15 @@ if(RTRT_BUILD_RENDER_REGRESSION_TESTS)
     COMMENT "Running white furnace energy-conservation suite"
   )
 
+  find_package(Python3 COMPONENTS Interpreter QUIET)
+  if(Python3_FOUND)
+    add_custom_target(GenerateBlenderReferences
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/Tools/render_test_reference.py --all --compare
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+      COMMENT "Generating Blender Cycles ground truth references for regression tests"
+    )
+  endif()
+
   if(BUILD_TESTING)
     set(RENDER_TEST_MANIFEST ${CMAKE_SOURCE_DIR}/Tests/RenderTests.json)
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${RENDER_TEST_MANIFEST})

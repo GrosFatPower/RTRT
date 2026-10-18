@@ -346,6 +346,7 @@
       "profile": "pathtracer",
       "scene": "boy.scene",
       "resolution": [640, 480],
+      "frames": 24,
       "thresholds": {
         "max_absolute_error": 0.5
       },
@@ -503,6 +504,7 @@
       "profile": "pathtracer",
       "scene": "cornell_box.scene",
       "resolution": [720, 720],
+      "frames": 64,
       "camera": {
         "position": [0.276, 0.265, -0.75],
         "pivot": [0.276, 0.265, 0.1],
@@ -514,6 +516,7 @@
       "name": "pathtracer_diningroom",
       "profile": "pathtracer",
       "scene": "diningroom.scene",
+      "frames": 16,
       "thresholds": {
         "max_absolute_error": 0.5
       }
