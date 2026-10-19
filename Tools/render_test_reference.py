@@ -512,42 +512,50 @@ def import_mesh_instances(scene, mesh_blocks, bpy_materials, repo_root):
 
         ext = os.path.splitext(filename)[1].lower()
         if ext == ".obj":
+            before_objs = set(scene.objects)
             bpy.ops.wm.obj_import(filepath=mesh_file, forward_axis='Y', up_axis='Z')
-            obj = bpy.context.selected_objects[0]
-            obj.name = os.path.basename(filename)
+            new_objs = [o for o in scene.objects if o not in before_objs]
+            if not new_objs:
+                continue
 
-            # Assign material
             mat_name = mb.get("material")
-            if mat_name and mat_name in bpy_materials:
-                obj.data.materials.clear()
-                obj.data.materials.append(bpy_materials[mat_name])
-
-            # Apply scale and position
             scale = mb.get_vec3("scale", [1.0, 1.0, 1.0])
-            obj.scale = (scale[0], scale[1], scale[2])
-
             pos = mb.get_vec3("position", [0.0, 0.0, 0.0])
-            obj.location = (pos[0], pos[1], pos[2])
 
-            # Apply rotation quaternion: RTRT (x, y, z, s) -> Blender (w, x, y, z)
             rot_str = mb.get("rotation")
+            rot_quat = None
             if rot_str:
                 tokens = [float(x) for x in rot_str.split()]
                 if len(tokens) == 4:
-                    obj.rotation_mode = 'QUATERNION'
-                    obj.rotation_quaternion = (tokens[3], tokens[0], tokens[1], tokens[2])
+                    rot_quat = (tokens[3], tokens[0], tokens[1], tokens[2])
 
-            # Apply 16-element column-major transform matrix
             matrix_str = mb.get("matrix")
+            mat_world = None
             if matrix_str:
                 m_tokens = [float(x) for x in matrix_str.split()]
                 if len(m_tokens) == 16:
-                    obj.matrix_world = Matrix([
+                    mat_world = Matrix([
                         [m_tokens[0], m_tokens[4], m_tokens[8],  m_tokens[12]],
                         [m_tokens[1], m_tokens[5], m_tokens[9],  m_tokens[13]],
                         [m_tokens[2], m_tokens[6], m_tokens[10], m_tokens[14]],
                         [m_tokens[3], m_tokens[7], m_tokens[11], m_tokens[15]]
                     ])
+
+            for obj in new_objs:
+                # Assign material to every imported mesh object
+                if mat_name and mat_name in bpy_materials:
+                    obj.data.materials.clear()
+                    obj.data.materials.append(bpy_materials[mat_name])
+
+                # Apply transform
+                if mat_world is not None:
+                    obj.matrix_world = mat_world
+                else:
+                    obj.scale = (scale[0], scale[1], scale[2])
+                    obj.location = (pos[0], pos[1], pos[2])
+                    if rot_quat is not None:
+                        obj.rotation_mode = 'QUATERNION'
+                        obj.rotation_quaternion = rot_quat
 
 
 def import_gltf_instances(scene, gltf_blocks, repo_root):
