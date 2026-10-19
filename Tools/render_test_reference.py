@@ -624,7 +624,7 @@ def create_quad_light(scene, idx, light_block, calc_intensity, final_emission):
     light_obj = bpy.data.objects.new(f"QuadLight_{idx}", mesh_data)
     scene.collection.objects.link(light_obj)
 
-    # Two-sided emission with transparent backface so ceiling rays are not blocked
+    # Light shader: emit for diffuse and shadow rays, but transparent for camera, glossy, transmission, and backfacing
     l_mat = bpy.data.materials.new(name=f"LightEmission_{idx}")
     if hasattr(l_mat, "use_nodes"):
         l_mat.use_nodes = True
@@ -632,6 +632,28 @@ def create_quad_light(scene, idx, light_block, calc_intensity, final_emission):
     lnodes.clear()
 
     geom_node = lnodes.new(type='ShaderNodeNewGeometry')
+    path_node = lnodes.new(type='ShaderNodeLightPath')
+
+    m1 = lnodes.new(type='ShaderNodeMath')
+    m1.operation = 'MAXIMUM'
+    l_mat.node_tree.links.new(path_node.outputs['Is Camera Ray'], m1.inputs[0])
+    l_mat.node_tree.links.new(path_node.outputs['Is Glossy Ray'], m1.inputs[1])
+
+    m2 = lnodes.new(type='ShaderNodeMath')
+    m2.operation = 'MAXIMUM'
+    l_mat.node_tree.links.new(path_node.outputs['Is Transmission Ray'], m2.inputs[0])
+    l_mat.node_tree.links.new(path_node.outputs['Is Singular Ray'], m2.inputs[1])
+
+    m3 = lnodes.new(type='ShaderNodeMath')
+    m3.operation = 'MAXIMUM'
+    l_mat.node_tree.links.new(m1.outputs['Value'], m3.inputs[0])
+    l_mat.node_tree.links.new(m2.outputs['Value'], m3.inputs[1])
+
+    m_final = lnodes.new(type='ShaderNodeMath')
+    m_final.operation = 'MAXIMUM'
+    l_mat.node_tree.links.new(m3.outputs['Value'], m_final.inputs[0])
+    l_mat.node_tree.links.new(geom_node.outputs['Backfacing'], m_final.inputs[1])
+
     em_node = lnodes.new(type='ShaderNodeEmission')
     em_node.inputs['Color'].default_value = (final_emission[0], final_emission[1], final_emission[2], 1.0)
     em_node.inputs['Strength'].default_value = 1.0
@@ -640,13 +662,15 @@ def create_quad_light(scene, idx, light_block, calc_intensity, final_emission):
     mix_node = lnodes.new(type='ShaderNodeMixShader')
     out_node = lnodes.new(type='ShaderNodeOutputMaterial')
 
-    l_mat.node_tree.links.new(geom_node.outputs['Backfacing'], mix_node.inputs['Fac'])
+    l_mat.node_tree.links.new(m_final.outputs['Value'], mix_node.inputs['Fac'])
     l_mat.node_tree.links.new(em_node.outputs['Emission'], mix_node.inputs[1])
     l_mat.node_tree.links.new(trans_node.outputs['BSDF'], mix_node.inputs[2])
     l_mat.node_tree.links.new(mix_node.outputs['Shader'], out_node.inputs['Surface'])
 
     light_obj.data.materials.append(l_mat)
     light_obj.visible_camera = False
+    light_obj.visible_glossy = False
+    light_obj.visible_transmission = False
 
 
 def create_sphere_light(scene, idx, light_block, calc_intensity, emission):
