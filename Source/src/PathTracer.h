@@ -127,12 +127,13 @@ protected:
 
   bool Denoise()            const { return (_Settings._Denoise); }// && !LowResPass());}
 
-  bool TiledRendering()     const { return _Settings._TiledRendering; }
-  int TileWidth()           const { return ( _Settings._TileResolution.x > 0 ) ? ( _Settings._TileResolution.x ) : ( 64 ); }
-  int TileHeight()          const { return ( _Settings._TileResolution.y > 0 ) ? ( _Settings._TileResolution.y ) : ( 64 ); }
-  Vec2i NbTiles()           const { return Vec2i(std::ceil(((float)RenderWidth())/_Settings._TileResolution.x), std::ceil(((float)RenderHeight())/_Settings._TileResolution.y)); }
-  Vec2  TileOffset()        const { return Vec2(_CurTile.x * InvNbTiles().x, _CurTile.y * InvNbTiles().y); }
-  Vec2  InvNbTiles()        const { return Vec2(((float)_Settings._TileResolution.x)/RenderWidth(), ((float)_Settings._TileResolution.y)/RenderHeight()); }
+  bool TiledRendering()      const { return _Settings._TiledRendering; }
+  bool IsTileFrameComplete() const { return !Dirty() && ( _CurTile.x == ( NbTiles().x - 1 ) ) && ( _CurTile.y == 0 ); }
+  int TileWidth()            const { return ( _Settings._TileResolution.x > 0 ) ? ( _Settings._TileResolution.x ) : ( 64 ); }
+  int TileHeight()           const { return ( _Settings._TileResolution.y > 0 ) ? ( _Settings._TileResolution.y ) : ( 64 ); }
+  Vec2i NbTiles()            const { return Vec2i(std::ceil(((float)RenderWidth())/_Settings._TileResolution.x), std::ceil(((float)RenderHeight())/_Settings._TileResolution.y)); }
+  Vec2  TileOffset()         const { return Vec2(_CurTile.x * InvNbTiles().x, _CurTile.y * InvNbTiles().y); }
+  Vec2  InvNbTiles()         const { return Vec2(((float)_Settings._TileResolution.x)/RenderWidth(), ((float)_Settings._TileResolution.y)/RenderHeight()); }
   void  NextTile();
   void  ResetTiles();
 
@@ -225,6 +226,8 @@ protected:
   unsigned int _NbCompleteFrames  = 0;
   int          _AccumulateReadIndex = 0;
   bool         _DenoisedThisFrame = false;
+  bool         _HasDenoisedFrame  = false;
+  int          _LastDenoisingMethod = -1;
   bool         _PathTraceTimerWritten = false;
   bool         _AccumulateTimerWritten = false;
   bool         _DenoiseTimerWritten = false;

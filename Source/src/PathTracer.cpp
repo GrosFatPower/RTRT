@@ -163,6 +163,9 @@ int PathTracer::Initialize()
 // ----------------------------------------------------------------------------
 int PathTracer::Update()
 {
+  if ( Dirty() || !Denoise() )
+    _HasDenoisedFrame = false;
+
   if ( Dirty() )
   {
     this -> ResetTiles();
@@ -704,8 +707,19 @@ int PathTracer::RenderToTexture()
   _AccumulateTimerWritten = true;
 
   // Denoise
-  if ( Denoise() )
+  const bool methodChanged = ( _LastDenoisingMethod != (int)_Settings._DenoisingMethod );
+  const bool shouldDenoise = !TiledRendering()
+                          || IsTileFrameComplete()
+                          || ( ( _NbCompleteFrames > 0 ) && ( !_HasDenoisedFrame || methodChanged ) );
+  if ( Denoise() && shouldDenoise )
+  {
     _DenoisedThisFrame = ( 0 == this -> DenoiseOutput() );
+    if ( _DenoisedThisFrame )
+    {
+      _HasDenoisedFrame = true;
+      _LastDenoisingMethod = (int)_Settings._DenoisingMethod;
+    }
+  }
 
   return 0;
 }
@@ -954,7 +968,7 @@ int PathTracer::UpdateRenderToScreenUniforms()
 {
   _RenderToScreenShader -> Use();
 
-  if ( Denoise() )
+  if ( Denoise() && _HasDenoisedFrame )
     _RenderToScreenShader -> SetUniform("u_ScreenTexture", (int)PathTracerTexSlot::_Denoised);
   else
     _RenderToScreenShader -> SetUniform("u_ScreenTexture", (int)PathTracerTexSlot::_Accumulate);
@@ -975,7 +989,13 @@ int PathTracer::UpdateRenderToScreenUniforms()
 // ----------------------------------------------------------------------------
 int PathTracer::BindRenderToScreenTextures()
 {
-  if ( Denoise() )
+  const bool showDenoised = Denoise() && _HasDenoisedFrame;
+
+  _RenderToScreenShader -> Use();
+  _RenderToScreenShader -> SetUniform("u_ScreenTexture", (int)( showDenoised ? PathTracerTexSlot::_Denoised : PathTracerTexSlot::_Accumulate ));
+  _RenderToScreenShader -> StopUsing();
+
+  if ( showDenoised )
     GLUtil::ActivateTexture(_DenoisedTEX);
   else
     GLUtil::ActivateTexture(_AccumulateTEX[_AccumulateReadIndex][0]);
@@ -1008,7 +1028,7 @@ int PathTracer::RenderToScreen()
 // ----------------------------------------------------------------------------
 int PathTracer::ReadbackFinalColor( RenderImage & oImage )
 {
-  const GLTexture & finalTexture = Denoise() ? _DenoisedTEX : _AccumulateTEX[_AccumulateReadIndex][0];
+  const GLTexture & finalTexture = ( Denoise() && _HasDenoisedFrame ) ? _DenoisedTEX : _AccumulateTEX[_AccumulateReadIndex][0];
   if ( !finalTexture._Handle || ( RenderWidth() <= 0 ) || ( RenderHeight() <= 0 ) )
     return 1;
 
