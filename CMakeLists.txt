@@ -168,6 +168,50 @@ elseif(ARCH_X64)
   set(GLM_ENABLE_SIMD_AVX2 ON)
 endif()
 
+# Intel Open Image Denoise (OIDN)
+option(RTRT_ENABLE_OIDN "Enable Intel Open Image Denoise (OIDN)" ON)
+set(RTRT_HAS_OIDN FALSE)
+if(RTRT_ENABLE_OIDN)
+  include(FetchContent)
+  set(OIDN_VERSION "2.5.1")
+  set(OIDN_URL "")
+  if(WIN32 AND ARCH_X64)
+    set(OIDN_URL "https://github.com/RenderKit/oidn/releases/download/v${OIDN_VERSION}/oidn-${OIDN_VERSION}.x64.windows.zip")
+  elseif(APPLE AND ARCH_ARM64)
+    set(OIDN_URL "https://github.com/RenderKit/oidn/releases/download/v${OIDN_VERSION}/oidn-${OIDN_VERSION}.arm64.macos.tar.gz")
+  elseif(APPLE AND ARCH_X64)
+    set(OIDN_URL "https://github.com/RenderKit/oidn/releases/download/v${OIDN_VERSION}/oidn-${OIDN_VERSION}.x86_64.macos.tar.gz")
+  elseif(UNIX AND NOT APPLE AND ARCH_X64)
+    set(OIDN_URL "https://github.com/RenderKit/oidn/releases/download/v${OIDN_VERSION}/oidn-${OIDN_VERSION}.x86_64.linux.tar.gz")
+  elseif(UNIX AND NOT APPLE AND ARCH_ARM64)
+    set(OIDN_URL "https://github.com/RenderKit/oidn/releases/download/v${OIDN_VERSION}/oidn-${OIDN_VERSION}.aarch64.linux.tar.gz")
+  endif()
+
+  if(NOT OIDN_URL STREQUAL "")
+    FetchContent_Declare(
+      oidn_sdk
+      URL ${OIDN_URL}
+      DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    )
+    FetchContent_MakeAvailable(oidn_sdk)
+    if(EXISTS "${oidn_sdk_SOURCE_DIR}/include/OpenImageDenoise/oidn.hpp")
+      set(RTRT_HAS_OIDN TRUE)
+      set(OIDN_INCLUDE_DIR "${oidn_sdk_SOURCE_DIR}/include")
+      if(WIN32)
+        set(OIDN_LIBRARY "${oidn_sdk_SOURCE_DIR}/lib/OpenImageDenoise.lib")
+        file(GLOB OIDN_RUNTIME_FILES "${oidn_sdk_SOURCE_DIR}/bin/*.dll")
+      elseif(APPLE)
+        set(OIDN_LIBRARY "${oidn_sdk_SOURCE_DIR}/lib/libOpenImageDenoise.dylib")
+        file(GLOB OIDN_RUNTIME_FILES "${oidn_sdk_SOURCE_DIR}/lib/*.dylib")
+      else()
+        set(OIDN_LIBRARY "${oidn_sdk_SOURCE_DIR}/lib/libOpenImageDenoise.so")
+        file(GLOB OIDN_RUNTIME_FILES "${oidn_sdk_SOURCE_DIR}/lib/*.so*")
+      endif()
+      message(STATUS "Intel Open Image Denoise (OIDN ${OIDN_VERSION}) enabled: ${oidn_sdk_SOURCE_DIR}")
+    endif()
+  endif()
+endif()
+
 function(ConfigureRTRTTarget iTarget)
 target_include_directories(${iTarget}
   PUBLIC ${CMAKE_SOURCE_DIR}/Source/src
@@ -250,6 +294,28 @@ set_target_properties(${iTarget} PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/Debug
   RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/Release
 )
+
+if(RTRT_HAS_OIDN)
+  target_include_directories(${iTarget} BEFORE PUBLIC ${OIDN_INCLUDE_DIR})
+  target_link_libraries(${iTarget} ${OIDN_LIBRARY})
+  target_compile_definitions(${iTarget} PUBLIC RTRT_HAS_OIDN=1)
+
+  get_target_property(TARGET_TYPE ${iTarget} TYPE)
+  if(TARGET_TYPE STREQUAL "EXECUTABLE" AND OIDN_RUNTIME_FILES)
+    add_custom_command(TARGET ${iTarget} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${OIDN_RUNTIME_FILES}
+        $<TARGET_FILE_DIR:${iTarget}>
+      COMMENT "Copying Intel OIDN runtime libraries to $<TARGET_FILE_DIR:${iTarget}>"
+    )
+    if(APPLE)
+      set_target_properties(${iTarget} PROPERTIES
+        BUILD_WITH_INSTALL_RPATH TRUE
+        INSTALL_RPATH "@executable_path"
+      )
+    endif()
+  endif()
+endif()
 endfunction()
 
 ConfigureRTRTTarget(RTRTCore)

@@ -93,7 +93,7 @@ struct RenderSettings
   float        _DenoiserNormalPhi     = 0.3f;                   // PathTracer
   float        _DenoiserPositionPhi   = 0.6f;                   // PathTracer
   unsigned int _DenoisingWaveletScale = 1;                      // PathTracer
-  unsigned int _DenoisingMethod       = 0;                      // PathTracer. 0: Bilateral, 1: Wavelet, 2: Edge-aware
+  unsigned int _DenoisingMethod       = 0;                      // PathTracer. 0: Bilateral, 1: Wavelet, 2: Edge-aware, 3: OIDN (AI)
   unsigned int _NbThreads             = 1;                      // Raster
 
 };

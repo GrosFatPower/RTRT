@@ -838,9 +838,15 @@ int Test5::DrawSettingsUI()
 
       if ( _Settings._Denoise )
       {
-        static const char * DENOISING_METHODS[] = { "Bilateral", "Wavelet", "Edge-aware" };
+#if defined(RTRT_HAS_OIDN)
+        static const char * DENOISING_METHODS[] = { "Bilateral", "Wavelet", "Edge-aware (A-Trous)", "OIDN (AI)" };
+        const int methodCount = 4;
+#else
+        static const char * DENOISING_METHODS[] = { "Bilateral", "Wavelet", "Edge-aware (A-Trous)" };
+        const int methodCount = 3;
+#endif
         int denoisingMethod = (int)_Settings._DenoisingMethod;
-        if ( ImGui::Combo( "Denoising method", &denoisingMethod, DENOISING_METHODS, 3 ) )
+        if ( ImGui::Combo( "Denoising method", &denoisingMethod, DENOISING_METHODS, methodCount ) )
         {
           _Settings._DenoisingMethod = denoisingMethod;
         }

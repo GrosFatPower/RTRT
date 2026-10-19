@@ -14,6 +14,9 @@
 
 #include "stb_image_write.h"
 
+#if defined(RTRT_HAS_OIDN)
+#include <OpenImageDenoise/oidn.hpp>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -35,6 +38,48 @@ static void ConfigureTextureBucketShader( ShaderSource & ioShaderSource, bool iU
     ioShaderSource._Src.insert(versionEnd + 1, "#define USE_TEXTURE_BUCKETS 0\n");
 }
 
+#if defined(RTRT_HAS_OIDN)
+// ----------------------------------------------------------------------------
+// OIDN : GetOrCreateOIDNDevice
+// ----------------------------------------------------------------------------
+static oidn::DeviceRef & GetOrCreateOIDNDevice()
+{
+  static oidn::DeviceRef s_Device;
+  static bool s_Initialized = false;
+  if ( !s_Initialized )
+  {
+    s_Initialized = true;
+    s_Device = oidn::newDevice();
+    s_Device.commit();
+    const char * errorMessage = nullptr;
+    if ( s_Device.getError(errorMessage) != oidn::Error::None )
+    {
+      std::cerr << "PathTracer : OIDN Device Error: " << ( errorMessage ? errorMessage : "unknown" ) << std::endl;
+      s_Device = oidn::DeviceRef();
+      return s_Device;
+    }
+
+    const oidn::DeviceType devType = s_Device.get<oidn::DeviceType>("type");
+    const char * typeStr = "Unknown";
+    if ( oidn::DeviceType::CPU == devType )
+      typeStr = "CPU";
+    else if ( oidn::DeviceType::CUDA == devType )
+      typeStr = "GPU (CUDA)";
+    else if ( oidn::DeviceType::HIP == devType )
+      typeStr = "GPU (HIP)";
+    else if ( oidn::DeviceType::SYCL == devType )
+      typeStr = "GPU (SYCL)";
+    else if ( oidn::DeviceType::Metal == devType )
+      typeStr = "GPU (Metal)";
+
+    std::string devName = ( oidn::getNumPhysicalDevices() > 0 ) ? oidn::PhysicalDeviceRef(0).get<std::string>("name") : "";
+    std::cout << "PathTracer : Intel OIDN initialized on " << typeStr
+              << ( devName.empty() ? "" : ( " - " + devName ) ) << std::endl;
+  }
+  return s_Device;
+}
+#endif
+
 // ----------------------------------------------------------------------------
 // METHODS
 // ----------------------------------------------------------------------------
@@ -50,6 +95,10 @@ PathTracer::PathTracer( Scene & iScene, RenderSettings & iSettings )
   _UseTextureBuckets = maxFragmentSamplers >= ( S_PathTracerNonTextureArraySamplers + S_TextureBucketCount );
   if ( !_UseTextureBuckets )
     std::cout << "PathTracer : " << maxFragmentSamplers << " fragment samplers available; using a single texture array compatibility path." << std::endl;
+
+#if defined(RTRT_HAS_OIDN)
+  GetOrCreateOIDNDevice();
+#endif
 
   for ( int i = 0; i < S_TextureBucketCount; ++i )
     _TexArrayTEX[i] = { 0, GL_TEXTURE_2D_ARRAY, PathTracerTexSlot::_TexArray0 + static_cast<TextureSlot>(i), GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE };
@@ -517,7 +566,8 @@ void PathTracer::CopyAccumulateBuffer( int iSourceIndex, int iDestinationIndex )
   {
     GL_COLOR_ATTACHMENT0,
     GL_COLOR_ATTACHMENT1,
-    GL_COLOR_ATTACHMENT2
+    GL_COLOR_ATTACHMENT2,
+    GL_COLOR_ATTACHMENT3
   };
 
   glBindFramebuffer(GL_READ_FRAMEBUFFER, _AccumulateFBO[iSourceIndex]._Handle);
@@ -532,7 +582,7 @@ void PathTracer::CopyAccumulateBuffer( int iSourceIndex, int iDestinationIndex )
                       GL_COLOR_BUFFER_BIT, GL_NEAREST);
   }
 
-  glDrawBuffers(3, colorAttachments);
+  glDrawBuffers(4, colorAttachments);
 }
 
 // ----------------------------------------------------------------------------
@@ -553,7 +603,8 @@ int PathTracer::BindAccumulateTextures()
     GLUtil::ActivateTextures(_RenderTargetFBO);
   }
 
-  GLUtil::ActivateTexture(_AccumulateTEX[_AccumulateReadIndex][0]);
+  for ( int i = 0; i < 4; ++i )
+    GLUtil::ActivateTexture(_AccumulateTEX[_AccumulateReadIndex][i]);
 
   return 0;
 }
@@ -566,6 +617,9 @@ int PathTracer::UpdateAccumulateUniforms()
   _AccumulateShader -> Use();
 
   _AccumulateShader -> SetUniform("u_PreviousFrame", (int)PathTracerTexSlot::_Accumulate);
+  _AccumulateShader -> SetUniform("u_PreviousNormals", (int)PathTracerTexSlot::_AccumulateNormals);
+  _AccumulateShader -> SetUniform("u_PreviousPos", (int)PathTracerTexSlot::_AccumulatePos);
+  _AccumulateShader -> SetUniform("u_PreviousAlbedo", (int)PathTracerTexSlot::_AccumulateAlbedo);
 
   if ( LowResPass() )
     _AccumulateShader -> SetUniform("u_NewFrame", (int)PathTracerTexSlot::_RenderTargetLowRes);
@@ -576,6 +630,7 @@ int PathTracer::UpdateAccumulateUniforms()
 
   _AccumulateShader -> SetUniform("u_NewFrameNormals", (int)PathTracerTexSlot::_RenderTargetNormals);
   _AccumulateShader -> SetUniform("u_NewFramePos", (int)PathTracerTexSlot::_RenderTargetPos);
+  _AccumulateShader -> SetUniform("u_NewFrameAlbedo", (int)PathTracerTexSlot::_RenderTargetAlbedo);
 
   if ( !Dirty() && _Settings._Accumulate && ( _NbCompleteFrames > 0 ) )
     _AccumulateShader -> SetUniform("u_Accumulate", 1);
@@ -656,10 +711,109 @@ int PathTracer::RenderToTexture()
 }
 
 // ----------------------------------------------------------------------------
+// DenoiseOutputOIDN
+// ----------------------------------------------------------------------------
+int PathTracer::DenoiseOutputOIDN()
+{
+#if defined(RTRT_HAS_OIDN)
+  const int width = RenderWidth();
+  const int height = RenderHeight();
+  if ( ( width <= 0 ) || ( height <= 0 ) )
+    return 1;
+
+  oidn::DeviceRef & s_Device = GetOrCreateOIDNDevice();
+  if ( !s_Device )
+    return 1;
+
+  static oidn::FilterRef s_Filter;
+  static int s_CachedWidth = 0;
+  static int s_CachedHeight = 0;
+  static oidn::BufferRef s_ColorBuf;
+  static oidn::BufferRef s_AlbedoBuf;
+  static oidn::BufferRef s_NormalBuf;
+  static oidn::BufferRef s_OutputBuf;
+
+  if ( !s_Filter )
+    s_Filter = s_Device.newFilter("RT");
+
+  const size_t numFloats = (size_t)width * (size_t)height * 4u;
+  const size_t byteSize = numFloats * sizeof(float);
+  if ( ( width != s_CachedWidth ) || ( height != s_CachedHeight ) || !s_ColorBuf )
+  {
+    s_ColorBuf  = s_Device.newBuffer(byteSize);
+    s_AlbedoBuf = s_Device.newBuffer(byteSize);
+    s_NormalBuf = s_Device.newBuffer(byteSize);
+    s_OutputBuf = s_Device.newBuffer(byteSize);
+
+    const size_t pixelStride = sizeof(float) * 4u;
+    const size_t rowStride   = (size_t)width * pixelStride;
+    s_Filter.setImage("color",  s_ColorBuf,  oidn::Format::Float3, width, height, 0, pixelStride, rowStride);
+    s_Filter.setImage("albedo", s_AlbedoBuf, oidn::Format::Float3, width, height, 0, pixelStride, rowStride);
+    s_Filter.setImage("normal", s_NormalBuf, oidn::Format::Float3, width, height, 0, pixelStride, rowStride);
+    s_Filter.setImage("output", s_OutputBuf, oidn::Format::Float3, width, height, 0, pixelStride, rowStride);
+    s_Filter.set("hdr", true);
+    s_Filter.set("cleanAux", true);
+    s_Filter.commit();
+
+    s_CachedWidth = width;
+    s_CachedHeight = height;
+  }
+
+  _OIDNColorBuf.resize(numFloats);
+  _OIDNAlbedoBuf.resize(numFloats);
+  _OIDNNormalBuf.resize(numFloats);
+  _OIDNOutputBuf.resize(numFloats);
+
+  glBindTexture(GL_TEXTURE_2D, _AccumulateTEX[_AccumulateReadIndex][0]._Handle);
+  glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, _OIDNColorBuf.data());
+
+  glBindTexture(GL_TEXTURE_2D, _AccumulateTEX[_AccumulateReadIndex][1]._Handle);
+  glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, _OIDNNormalBuf.data());
+
+  glBindTexture(GL_TEXTURE_2D, _AccumulateTEX[_AccumulateReadIndex][3]._Handle);
+  glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, _OIDNAlbedoBuf.data());
+  glBindTexture(GL_TEXTURE_2D, 0);
+
+  s_ColorBuf.write(0, byteSize, _OIDNColorBuf.data());
+  s_NormalBuf.write(0, byteSize, _OIDNNormalBuf.data());
+  s_AlbedoBuf.write(0, byteSize, _OIDNAlbedoBuf.data());
+
+  s_Filter.execute();
+
+  const char * errorMessage = nullptr;
+  if ( s_Device.getError(errorMessage) != oidn::Error::None )
+  {
+    std::cerr << "OIDN Execute Error: " << ( errorMessage ? errorMessage : "unknown" ) << std::endl;
+    return 1;
+  }
+
+  s_OutputBuf.read(0, byteSize, _OIDNOutputBuf.data());
+  for ( size_t i = 3; i < numFloats; i += 4 )
+    _OIDNOutputBuf[i] = 1.f;
+
+  GLUtil::UpdateTexture2D(_DenoisedTEX, width, height, _OIDNOutputBuf.data());
+  return 0;
+#else
+  return 1;
+#endif
+}
+
+// ----------------------------------------------------------------------------
 // DenoiseOutput
 // ----------------------------------------------------------------------------
 int PathTracer::DenoiseOutput()
 {
+#if defined(RTRT_HAS_OIDN)
+  if ( 3 == _Settings._DenoisingMethod )
+  {
+    BeginTimer(_DenoiseTimeId);
+    const int rc = DenoiseOutputOIDN();
+    EndTimer(_DenoiseTimeId);
+    _DenoiseTimerWritten = true;
+    return rc;
+  }
+#endif
+
   if ( !_DenoiserShader )
     return 1;
 
@@ -667,24 +821,61 @@ int PathTracer::DenoiseOutput()
 
   _DenoiserShader -> Use();
 
-#if defined(_WIN32) || defined(_WIN64)
-  this -> BindDenoiserImageTextures();
+  const int numPasses = ( 2 == _Settings._DenoisingMethod ) ? 5 : 1;
+  _DenoiserShader -> SetUniform("u_TotalPasses", numPasses);
 
-  // Dispatch compute shader (assuming texture size is 512x512)
+#if defined(_WIN32) || defined(_WIN64)
   const int workGroupSizeX = 16, workGroupSizeY = 16;
   const int nbGroupsX = static_cast<int>(std::ceil(((float)RenderWidth()) / workGroupSizeX));
-  const int nbGroupsY = static_cast<int>(std::ceil(((float)RenderHeight())/workGroupSizeY));
-  glDispatchCompute(nbGroupsX, nbGroupsY, 1);
+  const int nbGroupsY = static_cast<int>(std::ceil(((float)RenderHeight()) / workGroupSizeY));
 
-  // Ensure GPU has completed work before continuing
-  glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+  for ( int pass = 0; pass < numPasses; ++pass )
+  {
+    _DenoiserShader -> SetUniform("u_PassIndex", pass);
+    _DenoiserShader -> SetUniform("u_StepSize", 1 << pass);
+
+    GLuint inputHandle = _AccumulateTEX[_AccumulateReadIndex][0]._Handle;
+    if ( pass > 0 )
+      inputHandle = ( ( pass % 2 ) == 1 ) ? _DenoisedTEX._Handle : _DenoisePingPongTEX._Handle;
+
+    GLuint outputHandle = _DenoisedTEX._Handle;
+    if ( numPasses > 1 )
+      outputHandle = ( ( pass % 2 ) == 0 ) ? _DenoisedTEX._Handle : _DenoisePingPongTEX._Handle;
+
+    this -> BindDenoiserImageTextures(inputHandle, outputHandle);
+    glDispatchCompute(nbGroupsX, nbGroupsY, 1);
+    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+  }
 #else
   this -> BindDenoiserTextures();
-
-  glBindFramebuffer(GL_FRAMEBUFFER, _DenoiseFBO._Handle);
   glViewport(0, 0, RenderWidth(), RenderHeight());
 
-  _Quad.Render(*_DenoiserShader);
+  for ( int pass = 0; pass < numPasses; ++pass )
+  {
+    _DenoiserShader -> SetUniform("u_PassIndex", pass);
+    _DenoiserShader -> SetUniform("u_StepSize", 1 << pass);
+
+    GLTexture & outputTex = ( ( numPasses > 1 ) && ( ( pass % 2 ) == 1 ) ) ? _DenoisePingPongTEX : _DenoisedTEX;
+    if ( pass == 0 )
+      _DenoiserShader -> SetUniform("u_InputImage", (int)PathTracerTexSlot::_Accumulate);
+    else if ( ( pass % 2 ) == 1 )
+    {
+      GLUtil::ActivateTexture(_DenoisedTEX);
+      _DenoiserShader -> SetUniform("u_InputImage", (int)PathTracerTexSlot::_Denoised);
+    }
+    else
+    {
+      GLUtil::ActivateTexture(_DenoisePingPongTEX);
+      _DenoiserShader -> SetUniform("u_InputImage", (int)PathTracerTexSlot::_DenoisePingPong);
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, _DenoiseFBO._Handle);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, outputTex._Handle, 0);
+    _Quad.Render(*_DenoiserShader);
+  }
+  glBindFramebuffer(GL_FRAMEBUFFER, _DenoiseFBO._Handle);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _DenoisedTEX._Handle, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
 #endif
 
   _DenoiserShader -> StopUsing();
@@ -717,6 +908,7 @@ int PathTracer::UpdateDenoiserUniforms()
   _DenoiserShader -> SetUniform("u_InputImage", (int)PathTracerTexSlot::_Accumulate);
   _DenoiserShader -> SetUniform("u_InputNormals", (int)PathTracerTexSlot::_AccumulateNormals);
   _DenoiserShader -> SetUniform("u_InputPos", (int)PathTracerTexSlot::_AccumulatePos);
+  _DenoiserShader -> SetUniform("u_InputAlbedo", (int)PathTracerTexSlot::_AccumulateAlbedo);
   _DenoiserShader -> SetUniform("u_ImageSize", RenderWidth(), RenderHeight());
 #endif
 
@@ -738,15 +930,19 @@ int PathTracer::BindDenoiserTextures()
 // ----------------------------------------------------------------------------
 // BindDenoiserImageTextures
 // ----------------------------------------------------------------------------
-int PathTracer::BindDenoiserImageTextures()
+int PathTracer::BindDenoiserImageTextures( GLuint iInputHandle, GLuint iOutputHandle )
 {
-  if ( 3 == _AccumulateFBO[_AccumulateReadIndex]._Tex.size() )
+  const GLuint inputHandle = iInputHandle ? iInputHandle : _AccumulateTEX[_AccumulateReadIndex][0]._Handle;
+  const GLuint outputHandle = iOutputHandle ? iOutputHandle : _DenoisedTEX._Handle;
+
+  if ( 4 == _AccumulateFBO[_AccumulateReadIndex]._Tex.size() )
   {
-    glBindImageTexture(0, _AccumulateTEX[_AccumulateReadIndex][0]._Handle, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+    glBindImageTexture(0, inputHandle, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
     glBindImageTexture(1, _AccumulateTEX[_AccumulateReadIndex][1]._Handle, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
     glBindImageTexture(2, _AccumulateTEX[_AccumulateReadIndex][2]._Handle, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+    glBindImageTexture(4, _AccumulateTEX[_AccumulateReadIndex][3]._Handle, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
   }
-  glBindImageTexture(3, _DenoisedTEX._Handle, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+  glBindImageTexture(3, outputHandle, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
 
   return 0;
 }
@@ -921,6 +1117,7 @@ int PathTracer::ResizeRenderTarget()
   GLUtil::ResizeFBO(_AccumulateFBO[1], RenderWidth(), RenderHeight());
 
   GLUtil::ResizeTexture(_DenoisedTEX, RenderWidth(), RenderHeight());
+  GLUtil::ResizeTexture(_DenoisePingPongTEX, RenderWidth(), RenderHeight());
   glBindFramebuffer(GL_FRAMEBUFFER, _DenoiseFBO._Handle);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _DenoisedTEX._Handle, 0);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -950,35 +1147,36 @@ int PathTracer::InitializeFrameBuffers()
     GLUtil::CreateTexture(desc, ioTex);
   };
 
-  auto createTripleFBO = []( GLTexture ioTex[3], GLFrameBuffer & ioFBO )
+  auto createQuadFBO = []( GLTexture ioTex[4], GLFrameBuffer & ioFBO )
   {
     GLFrameBufferDesc desc;
     desc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &ioTex[0] });
     desc._Attachments.push_back({ GL_COLOR_ATTACHMENT1, &ioTex[1] });
     desc._Attachments.push_back({ GL_COLOR_ATTACHMENT2, &ioTex[2] });
+    desc._Attachments.push_back({ GL_COLOR_ATTACHMENT3, &ioTex[3] });
     return GLUtil::CreateFrameBuffer(desc, ioFBO);
   };
 
-  for ( int i = 0; i < 3; ++i )
+  for ( int i = 0; i < 4; ++i )
     createRenderTexture(_RenderTargetTEX[i], RenderWidth(), RenderHeight());
-  if ( !createTripleFBO(_RenderTargetTEX, _RenderTargetFBO) )
+  if ( !createQuadFBO(_RenderTargetTEX, _RenderTargetFBO) )
     return 1;
 
-  for ( int i = 0; i < 3; ++i )
+  for ( int i = 0; i < 4; ++i )
     createRenderTexture(_RenderTargetTileTEX[i], TileWidth(), TileHeight());
-  if ( !createTripleFBO(_RenderTargetTileTEX, _RenderTargetTileFBO) )
+  if ( !createQuadFBO(_RenderTargetTileTEX, _RenderTargetTileFBO) )
     return 1;
 
-  for ( int i = 0; i < 3; ++i )
+  for ( int i = 0; i < 4; ++i )
     createRenderTexture(_RenderTargetLowResTEX[i], LowResRenderWidth(), LowResRenderHeight());
-  if ( !createTripleFBO(_RenderTargetLowResTEX, _RenderTargetLowResFBO) )
+  if ( !createQuadFBO(_RenderTargetLowResTEX, _RenderTargetLowResFBO) )
     return 1;
 
   for ( int buffer = 0; buffer < 2; ++buffer )
   {
-    for ( int i = 0; i < 3; ++i )
+    for ( int i = 0; i < 4; ++i )
       createRenderTexture(_AccumulateTEX[buffer][i], RenderWidth(), RenderHeight());
-    if ( !createTripleFBO(_AccumulateTEX[buffer], _AccumulateFBO[buffer]) )
+    if ( !createQuadFBO(_AccumulateTEX[buffer], _AccumulateFBO[buffer]) )
       return 1;
   }
 
@@ -995,6 +1193,10 @@ int PathTracer::InitializeFrameBuffers()
   denoisedDesc._WrapS          = GL_CLAMP_TO_EDGE;
   denoisedDesc._WrapT          = GL_CLAMP_TO_EDGE;
   GLUtil::CreateTexture(denoisedDesc, _DenoisedTEX);
+
+  GLTextureDesc pingPongDesc = denoisedDesc;
+  pingPongDesc._Slot = _DenoisePingPongTEX._Slot;
+  GLUtil::CreateTexture(pingPongDesc, _DenoisePingPongTEX);
 
   GLFrameBufferDesc denoiseFBODesc;
   denoiseFBODesc._Attachments.push_back({ GL_COLOR_ATTACHMENT0, &_DenoisedTEX, GL_TEXTURE_2D, 0, false });
@@ -1079,16 +1281,17 @@ int PathTracer::UnloadScene( bool iDeleteOutputTextures )
 
   if ( iDeleteOutputTextures )
   {
-    for ( int i = 0; i < 3; ++i )
+    for ( int i = 0; i < 4; ++i )
     {
       GLUtil::DeleteTEX(_RenderTargetTEX[i]);
       GLUtil::DeleteTEX(_RenderTargetTileTEX[i]);
       GLUtil::DeleteTEX(_AccumulateTEX[0][i]);
       GLUtil::DeleteTEX(_AccumulateTEX[1][i]);
     }
-    for ( int i = 0; i < 3; ++i )
+    for ( int i = 0; i < 4; ++i )
       GLUtil::DeleteTEX(_RenderTargetLowResTEX[i]);
     GLUtil::DeleteTEX(_DenoisedTEX);
+    GLUtil::DeleteTEX(_DenoisePingPongTEX);
     GLUtil::DeleteTEX(_EnvMapTEX);
     GLUtil::DeleteTEX(_EnvMapCDFTEX);
   }

@@ -78,6 +78,7 @@ void RenderTestCase::ApplySettings( RenderSettings & ioSettings ) const
     ioSettings._TiledRendering = _TiledRendering;
     ioSettings._TileResolution = _TiledRendering ? ioSettings._TileResolution : Vec2i(-1, -1);
     ioSettings._Denoise = _Denoise;
+    ioSettings._DenoisingMethod = static_cast<unsigned int>(std::max(0, _DenoisingMethod));
     ioSettings._NbSamplesPerPixel = _SamplesPerPixel;
     ioSettings._Bounces = _Bounces;
   }
@@ -301,6 +302,7 @@ bool ReadSettings( const Json & iObject, RenderTestCase & ioTestCase, std::strin
       && ReadPositiveFloat(settings, "refraction_thickness", ioTestCase._RefractionThickness, oError)
       && ReadPositiveFloat(settings, "refraction_edge_fade", ioTestCase._RefractionEdgeFade, oError)
       && ReadBool(settings, "denoise", ioTestCase._Denoise, oError)
+      && ReadNonNegativeInt(settings, "denoising_method", ioTestCase._DenoisingMethod, oError)
       && ReadPositiveInt(settings, "samples_per_pixel", ioTestCase._SamplesPerPixel, oError, false)
       && ReadPositiveInt(settings, "bounces", ioTestCase._Bounces, oError, false)
       && ReadNonNegativeFloat(settings, "specular_ibl_intensity", ioTestCase._SpecularIBLIntensity, oError)

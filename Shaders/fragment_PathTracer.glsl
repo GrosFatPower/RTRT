@@ -4,6 +4,7 @@ in vec2 fragUV;
 layout(location = 0) out vec4 fragColor;
 layout(location = 1) out vec4 fragNormal;
 layout(location = 2) out vec4 fragPosition;
+layout(location = 3) out vec4 fragAlbedo;
 
 #include Constants.glsl
 #include Globals.glsl
@@ -250,6 +251,7 @@ vec3 PathSample( in Ray iStartRay, in vec2 iCoordUV )
       {
         fragPosition = vec4(INFINITY, INFINITY, INFINITY, 1.f);
         fragNormal = vec4(-ray._Dir, 1.f);
+        fragAlbedo = vec4(1.f);
       }
       else
       {
@@ -295,12 +297,17 @@ vec3 PathSample( in Ray iStartRay, in vec2 iCoordUV )
     if ( u_DebugMode > 1 )
     {
       radiance += DebugColor( ray, closestHit );
+      if ( 0 == depth )
+        fragAlbedo = vec4(1.f);
       break;
     }
 
     // EMITTER
     if ( closestHit._IsEmitter )
     {
+      if ( 0 == depth )
+        fragAlbedo = vec4(1.f);
+
       float misWeight = 1.;
       if ( ( depth > 0 ) && ( closestHit._LightID >= 0 ) )
       {
@@ -317,6 +324,15 @@ vec3 PathSample( in Ray iStartRay, in vec2 iCoordUV )
     Material mat;
     LoadMaterial(closestHit, mat);
     eta = ( closestHit._FrontFace ) ? ( 1.f / mat._IOR ) : ( mat._IOR );
+
+    if ( 0 == depth )
+    {
+      float nonDiffuse = clamp(max(mat._SpecTrans, ( 1.f - mat._Roughness ) * ( 1.f - 0.5f * mat._Metallic )), 0.f, 1.f);
+      vec3 guideAlbedo = mix(mat._Albedo, vec3(1.f), nonDiffuse * 0.5f);
+      if ( length(mat._Emission) > EPSILON )
+        guideAlbedo = vec3(1.f);
+      fragAlbedo = vec4(max(guideAlbedo, vec3(0.04f)), 1.f);
+    }
 
     radiance += mat._Emission * throughput; // Emission from meshes is not importance sampled
 

@@ -59,7 +59,8 @@
         "accumulate": true,
         "auto_scale": true,
         "tiled_rendering": false,
-        "denoise": false,
+        "denoise": true,
+        "denoising_method": 3,
         "samples_per_pixel": 1,
         "bounces": 4
       }

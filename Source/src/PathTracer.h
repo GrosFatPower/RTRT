@@ -18,15 +18,22 @@ class Scene;
 
 struct PathTracerTexSlot
 {
+  // RenderTarget / Accumulate / Denoise pass slots (kept in 0..10 for macOS 16-sampler limit)
   static const TextureSlot _RenderTarget            = 0;
+  static const TextureSlot _RenderTargetLowRes      = 0;
+  static const TextureSlot _RenderTargetTile        = 0;
   static const TextureSlot _RenderTargetNormals     = 1;
   static const TextureSlot _RenderTargetPos         = 2;
-  static const TextureSlot _RenderTargetLowRes      = 3;
-  static const TextureSlot _RenderTargetTile        = 4;
-  static const TextureSlot _Accumulate              = 5;
-  static const TextureSlot _AccumulateNormals       = 6;
-  static const TextureSlot _AccumulatePos           = 7;
+  static const TextureSlot _RenderTargetAlbedo      = 3;
+  static const TextureSlot _Accumulate              = 4;
+  static const TextureSlot _AccumulateNormals       = 5;
+  static const TextureSlot _AccumulatePos           = 6;
+  static const TextureSlot _AccumulateAlbedo        = 7;
   static const TextureSlot _Denoised                = 8;
+  static const TextureSlot _DenoisePingPong         = 9;
+  static const TextureSlot _Temporary               = 10;
+
+  // PathTrace scene data slots
   static const TextureSlot _Vertices                = 9;
   static const TextureSlot _Normals                 = 10;
   static const TextureSlot _UVs                     = 11;
@@ -48,7 +55,6 @@ struct PathTracerTexSlot
   static const TextureSlot _BLASPackedUVs           = 31;
   static const TextureSlot _EnvMap                  = 32;
   static const TextureSlot _EnvMapCDF               = 33;
-  static const TextureSlot _Temporary               = 35;
 };
 
 class PathTracer : public Renderer
@@ -63,6 +69,7 @@ public:
 
   virtual int RenderToTexture() override;
   virtual int DenoiseOutput();
+  virtual int DenoiseOutputOIDN();
   virtual int RenderToScreen() override;
   virtual int RenderToFile( const std::filesystem::path & iFilePath ) override;
   virtual int ReadbackFinalColor( RenderImage & oImage ) override;
@@ -102,7 +109,7 @@ protected:
   int BindPathTraceTextures();
   int BindAccumulateTextures();
   int BindDenoiserTextures();
-  int BindDenoiserImageTextures();
+  int BindDenoiserImageTextures( GLuint iInputHandle = 0, GLuint iOutputHandle = 0 );
   int BindRenderToScreenTextures();
   void CopyAccumulateBuffer( int iSourceIndex, int iDestinationIndex );
 
@@ -159,38 +166,44 @@ protected:
   GLTextureBuffer _BLASPackedUVsTBO           = { 0, { 0, GL_TEXTURE_BUFFER, PathTracerTexSlot::_BLASPackedUVs          } };
 
   // Textures
-  GLTexture _RenderTargetTEX[3] =
+  GLTexture _RenderTargetTEX[4] =
   {
     { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTarget,        GL_RGBA32F, GL_RGBA, GL_FLOAT },
     { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT },
-    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetPos,     GL_RGBA32F, GL_RGBA, GL_FLOAT }
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetPos,     GL_RGBA32F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetAlbedo,  GL_RGBA32F, GL_RGBA, GL_FLOAT }
   };
-  GLTexture _RenderTargetTileTEX[3] =
+  GLTexture _RenderTargetTileTEX[4] =
   {
     { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetTile,    GL_RGBA32F, GL_RGBA, GL_FLOAT },
     { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT },
-    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetPos,     GL_RGBA32F, GL_RGBA, GL_FLOAT }
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetPos,     GL_RGBA32F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetAlbedo,  GL_RGBA32F, GL_RGBA, GL_FLOAT }
   };
-  GLTexture _RenderTargetLowResTEX[3] =
+  GLTexture _RenderTargetLowResTEX[4] =
   {
     { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetLowRes,  GL_RGBA32F, GL_RGBA, GL_FLOAT },
     { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT },
-    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetPos,     GL_RGBA32F, GL_RGBA, GL_FLOAT }
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetPos,     GL_RGBA32F, GL_RGBA, GL_FLOAT },
+    { 0, GL_TEXTURE_2D, PathTracerTexSlot::_RenderTargetAlbedo,  GL_RGBA32F, GL_RGBA, GL_FLOAT }
   };
-  GLTexture _AccumulateTEX[2][3] =
+  GLTexture _AccumulateTEX[2][4] =
   {
     {
       { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Accumulate,        GL_RGBA32F, GL_RGBA, GL_FLOAT },
       { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulateNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT },
-      { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulatePos,     GL_RGBA32F, GL_RGBA, GL_FLOAT }
+      { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulatePos,     GL_RGBA32F, GL_RGBA, GL_FLOAT },
+      { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulateAlbedo,  GL_RGBA32F, GL_RGBA, GL_FLOAT }
     },
     {
       { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Accumulate,        GL_RGBA32F, GL_RGBA, GL_FLOAT },
       { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulateNormals, GL_RGBA32F, GL_RGBA, GL_FLOAT },
-      { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulatePos,     GL_RGBA32F, GL_RGBA, GL_FLOAT }
+      { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulatePos,     GL_RGBA32F, GL_RGBA, GL_FLOAT },
+      { 0, GL_TEXTURE_2D, PathTracerTexSlot::_AccumulateAlbedo,  GL_RGBA32F, GL_RGBA, GL_FLOAT }
     }
   };
   GLTexture _DenoisedTEX         = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Denoised,         GL_RGBA32F, GL_RGBA, GL_FLOAT };
+  GLTexture _DenoisePingPongTEX  = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_DenoisePingPong,  GL_RGBA32F, GL_RGBA, GL_FLOAT };
   GLTexture _TexArrayTEX[S_TextureBucketCount];
   GLTexture _MaterialsTEX        = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_Materials,        GL_RGBA32F, GL_RGBA, GL_FLOAT };
   GLTexture _TLASTransformsIDTEX = { 0, GL_TEXTURE_2D, PathTracerTexSlot::_TLASTransformsID, GL_RGBA32F, GL_RGBA, GL_FLOAT };
@@ -233,6 +246,12 @@ protected:
   GLuint _AccumulateTimeId[2]     = { 0, 0 };
   GLuint _DenoiseTimeId[2]        = { 0, 0 };
   GLuint _RenderToScreenTimeId[2] = { 0, 0 };
+
+  // OIDN Scratch buffers
+  std::vector<float> _OIDNColorBuf;
+  std::vector<float> _OIDNAlbedoBuf;
+  std::vector<float> _OIDNNormalBuf;
+  std::vector<float> _OIDNOutputBuf;
 
 };
 

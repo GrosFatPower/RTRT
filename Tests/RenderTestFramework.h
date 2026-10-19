@@ -134,6 +134,7 @@ struct RenderTestCase
   bool            _AutoScale = true;
   bool            _TiledRendering = false;
   bool            _Denoise = false;
+  int             _DenoisingMethod = 0;
   int             _DebugMode = 0;
   bool            _DiagnosticOnly = false;
   bool            _ClampComparison = false;
