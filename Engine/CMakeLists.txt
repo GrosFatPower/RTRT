@@ -51,7 +51,7 @@ target_compile_features(RTRTCore
 
 if(APPLE)
   target_compile_options(RTRTCore
-    PRIVATE
+    PUBLIC
       -fexperimental-library
       -Wno-deprecated-declarations
   )
