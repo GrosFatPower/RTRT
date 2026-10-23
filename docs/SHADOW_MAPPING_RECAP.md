@@ -1,4 +1,4 @@
-# Shadow Mapping Implementation Recap
+﻿# Shadow Mapping Implementation Recap
 
 Date: 2026-03-08
 Feature: v1 local-light shadow mapping for the deferred `OpenGLRasterizer`
@@ -26,7 +26,7 @@ The selected shadow-casting light is:
 
 ### Renderer state and resources
 
-Updated `Source/src/DeferredRenderer.h`:
+Updated `Engine/src/DeferredRenderer.h`:
 - added a shadow cubemap texture slot
 - added a new deferred debug flag for shadow visualization
 - added shadow framebuffer and depth cubemap members
@@ -39,7 +39,7 @@ Updated `Source/src/DeferredRenderer.h`:
   - `ComputeSceneBounds()`
   - `ComputeAutoShadowFar()`
 
-Updated `Source/src/DeferredRenderer.cpp`:
+Updated `Engine/src/DeferredRenderer.cpp`:
 - initialize and destroy shadow resources
 - detect the first sphere light and cache its position/index, with fallback to the first rect light
 - compute scene bounds from mesh-instance bounding boxes
@@ -52,14 +52,14 @@ Updated `Source/src/DeferredRenderer.cpp`:
 
 ### Render settings and UI
 
-Updated `Source/src/RenderSettings.h` with new deferred-renderer settings:
+Updated `Engine/src/RenderSettings.h` with new deferred-renderer settings:
 - `_ShadowMapping`
 - `_ShowShadowMap`
 - `_ShadowMapResolution`
 - `_ShadowBias`
 - `_ShadowFar`
 
-Updated `Source/src/Test5.cpp` under `OpenGLRasterizer` settings:
+Updated `Apps/RenderLab/src/Test5.cpp` under `OpenGLRasterizer` settings:
 - added `Shadow mapping` checkbox
 - added `Shadow map resolution` slider
 - added `Shadow bias` slider
@@ -114,10 +114,10 @@ Observed warning:
 ## Files Changed
 
 Modified:
-- `Source/src/DeferredRenderer.h`
-- `Source/src/DeferredRenderer.cpp`
-- `Source/src/RenderSettings.h`
-- `Source/src/Test5.cpp`
+- `Engine/src/DeferredRenderer.h`
+- `Engine/src/DeferredRenderer.cpp`
+- `Engine/src/RenderSettings.h`
+- `Apps/RenderLab/src/Test5.cpp`
 - `Shaders/fragment_DeferredLighting.glsl`
 
 Added:

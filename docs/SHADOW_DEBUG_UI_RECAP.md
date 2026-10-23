@@ -1,4 +1,4 @@
-# Shadow Debug UI Recap
+﻿# Shadow Debug UI Recap
 
 Date: 2026-03-08
 Feature: deferred shadow debug view moved into the `Buffer` combo
@@ -17,7 +17,7 @@ Replace the standalone `Show shadow factor` checkbox in the `OpenGLRasterizer` U
 
 ## What Changed
 
-Updated `Source/src/Test5.cpp`:
+Updated `Apps/RenderLab/src/Test5.cpp`:
 - removed the separate `Show shadow factor` checkbox from the `OpenGLRasterizer` settings block
 - extended the deferred `Buffer` combo to show `Color`, `Depth`, `Normals`, and `Shadows`
 - kept the software-rasterizer buffer list unchanged
@@ -48,4 +48,4 @@ Observed warning:
 ## Files Changed
 
 Modified:
-- `Source/src/Test5.cpp`
+- `Apps/RenderLab/src/Test5.cpp`

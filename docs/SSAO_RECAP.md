@@ -1,4 +1,4 @@
-# SSAO Implementation Recap
+﻿# SSAO Implementation Recap
 
 Date: 2026-03-08
 Feature: polished v1 SSAO for the deferred `OpenGLRasterizer`
@@ -23,7 +23,7 @@ The effect uses the existing deferred G-buffer world positions, normals, and dep
 
 ### Renderer state and resources
 
-Updated `Source/src/DeferredRenderer.h`:
+Updated `Engine/src/DeferredRenderer.h`:
 - added deferred texture slots for:
   - SSAO output
   - blurred SSAO output
@@ -37,7 +37,7 @@ Updated `Source/src/DeferredRenderer.h`:
   - `BindSSAOPassTextures()`
   - `RenderSSAO()`
 
-Updated `Source/src/DeferredRenderer.cpp`:
+Updated `Engine/src/DeferredRenderer.cpp`:
 - initialize and destroy SSAO resources
 - generate a fixed hemisphere sample kernel on the CPU
 - generate a small tiled noise texture for sample rotation
@@ -49,7 +49,7 @@ Updated `Source/src/DeferredRenderer.cpp`:
 
 ### Render settings and UI
 
-Updated `Source/src/RenderSettings.h` with new deferred-renderer settings:
+Updated `Engine/src/RenderSettings.h` with new deferred-renderer settings:
 - `_SSAO`
 - `_SSAOBlur`
 - `_SSAORadius`
@@ -57,7 +57,7 @@ Updated `Source/src/RenderSettings.h` with new deferred-renderer settings:
 - `_SSAOIntensity`
 - `_SSAOKernelSize`
 
-Updated `Source/src/Test5.cpp` under `OpenGLRasterizer` settings:
+Updated `Apps/RenderLab/src/Test5.cpp` under `OpenGLRasterizer` settings:
 - added `SSAO` checkbox
 - added `SSAO blur` checkbox
 - added `SSAO radius` slider
@@ -118,10 +118,10 @@ Observed warning:
 ## Files Changed
 
 Modified:
-- `Source/src/DeferredRenderer.h`
-- `Source/src/DeferredRenderer.cpp`
-- `Source/src/RenderSettings.h`
-- `Source/src/Test5.cpp`
+- `Engine/src/DeferredRenderer.h`
+- `Engine/src/DeferredRenderer.cpp`
+- `Engine/src/RenderSettings.h`
+- `Apps/RenderLab/src/Test5.cpp`
 - `Shaders/fragment_DeferredGeometry.glsl`
 - `Shaders/fragment_DeferredLighting.glsl`
 

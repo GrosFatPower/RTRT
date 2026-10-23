@@ -1,4 +1,4 @@
-# RectLight Shadow Fallback Recap
+﻿# RectLight Shadow Fallback Recap
 
 Date: 2026-03-08
 Feature: `RectLight` fallback for deferred shadow mapping
@@ -15,7 +15,7 @@ Extend the deferred `OpenGLRasterizer` shadow-caster selection so scenes that co
 
 ## What Changed
 
-Updated `Source/src/DeferredRenderer.cpp`:
+Updated `Engine/src/DeferredRenderer.cpp`:
 - kept `SphereLight` as the first-priority shadow caster
 - added a fallback search for the first `RectLight`
 - if no sphere light exists, the renderer now uses the rect-light center at `Light._Pos` as the cubemap shadow origin
@@ -49,7 +49,7 @@ Note:
 ## Files Changed
 
 Modified:
-- `Source/src/DeferredRenderer.cpp`
+- `Engine/src/DeferredRenderer.cpp`
 - `Shaders/fragment_DeferredLighting.glsl`
 
 ## Suggested Visual Checks

@@ -8,15 +8,18 @@ This repository is a C++ rendering sandbox/workbench centered on shared scene lo
 
 Use this as the fast navigation guide.
 
-- App entry: `Source/src/main.cpp`
-- Current viewer/controller: `Source/src/Test5.h` and `Source/src/Test5.cpp`
-- Shared renderer abstraction: `Source/src/Renderer.h` and `Source/src/Renderer.cpp`
-- Scene model and compiled render data: `Source/src/Scene.h` and `Source/src/Scene.cpp`
-- Scene loading: `Source/src/Loader.h` and `Source/src/Loader.cpp`
-- GPU path tracing: `Source/src/PathTracer.h`, `Source/src/PathTracer.cpp`, and the path tracing shaders in `Shaders/`
-- CPU software rasterization: `Source/src/SoftwareRasterizer.h` and `Source/src/SoftwareRasterizer.cpp`
-- Deferred OpenGL renderer: `Source/src/DeferredRenderer.h` and `Source/src/DeferredRenderer.cpp`
-- Core math and shared data types: `Source/src/MathUtil.h`, `Camera.h`, `Light.h`, `Material.h`, `Mesh.h`, `Texture.h`, `GpuBvh.h`, `RenderSettings.h`
+- App entry: `Apps/RenderLab/src/main.cpp`
+- Current viewer/controller: `Apps/RenderLab/src/Test5.h` and `Apps/RenderLab/src/Test5.cpp`
+- FPS game standalone: `Games/FpsGame/src/main.cpp` and `Games/FpsGame/src/FpsGameApp.cpp`
+- Shared renderer abstraction: `Engine/src/Renderer.h` and `Engine/src/Renderer.cpp`
+- Scene model and compiled render data: `Engine/src/Scene.h` and `Engine/src/Scene.cpp`
+- Scene loading: `Engine/src/Loader.h` and `Engine/src/Loader.cpp`
+- GPU path tracing: `Engine/src/PathTracer.h`, `Engine/src/PathTracer.cpp`, and the path tracing shaders in `Shaders/`
+- CPU software rasterization: `Engine/src/SoftwareRasterizer.h` and `Engine/src/SoftwareRasterizer.cpp`
+- Deferred OpenGL renderer: `Engine/src/DeferredRenderer.h` and `Engine/src/DeferredRenderer.cpp`
+- Core math and shared data types: `Engine/src/MathUtil.h`, `Camera.h`, `Light.h`, `Material.h`, `Mesh.h`, `Texture.h`, `GpuBvh.h`, `RenderSettings.h`
+- Application framework & input: `Framework/src/KeyInput.h`, `MouseInput.h`, `RenderStatsUI.h`, `NativeFileDialog.h`, `Boids.h`
+- Automated regression suite: `Tests/RenderRegressionMain.cpp` and `Tests/RenderTestFramework.cpp`
 - Assets and scene definitions: `Assets/`
 - GLSL programs and shared shader includes: `Shaders/`
 - Third-party libraries: `Dependencies/`

@@ -1,4 +1,4 @@
-# Codex Todo
+﻿# Codex Todo
 
 This file stores assistant-side recommendations and follow-up ideas so they can be reused in later sessions without polluting the project's own `ToDo.txt`.
 

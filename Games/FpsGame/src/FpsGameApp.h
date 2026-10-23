@@ -1,7 +1,6 @@
-#ifndef _Test6_
-#define _Test6_
+#ifndef _FpsGameApp_
+#define _FpsGameApp_
 
-#include "BaseTest.h"
 #include "Boids.h"
 #include "FpsGame.h"
 #include "FpsGameBenchmark.h"
@@ -24,12 +23,11 @@ struct GLFWwindow;
 namespace RTRT
 {
 
-
-class Test6 : public BaseTest
+class FpsGameApp
 {
 public:
-  Test6( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iScreenHeight );
-  virtual ~Test6();
+  FpsGameApp( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iScreenHeight );
+  virtual ~FpsGameApp();
 
   int Run();
   void EnableAutomaticSoftwareBenchmark( const std::string & iLabel,
@@ -39,6 +37,7 @@ public:
                                          const std::string & iPose = "fixed" );
 
   static const char * GetTestHeader();
+  static const char * GetAppHeader();
 
 protected:
   static void KeyCallback( GLFWwindow * iWindow, const int iKey, const int iScancode, const int iAction, const int iMods );
@@ -90,6 +89,10 @@ protected:
   FpsGameHudContext MakeHudContext() const;
 
 protected:
+  std::shared_ptr<GLFWwindow> _MainWindow;
+  int                         _ScreenWidth = 0;
+  int                         _ScreenHeight = 0;
+
   std::unique_ptr<Scene>    _Scene;
   RenderSettings            _Settings;
   std::unique_ptr<Renderer> _Renderer;
@@ -166,6 +169,8 @@ protected:
   std::string      _AutomaticBenchmarkOptimization = "none";
 };
 
+using Test6 = FpsGameApp;
+
 }
 
-#endif /* _Test6_ */
+#endif /* _FpsGameApp_ */

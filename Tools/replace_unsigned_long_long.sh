@@ -1,13 +1,13 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 
 set -euo pipefail
 
 project_root="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 files=(
-  "Source/src/JobSystem.h"
-  "Source/src/RasterData.h"
-  "Source/src/SoftwareRasterizer.h"
-  "Source/src/SoftwareRasterizer.cpp"
+  "Engine/src/JobSystem.h"
+  "Engine/src/RasterData.h"
+  "Engine/src/SoftwareRasterizer.h"
+  "Engine/src/SoftwareRasterizer.cpp"
 )
 
 for file in "${files[@]}"; do
@@ -15,7 +15,7 @@ for file in "${files[@]}"; do
   perl -0pi -e 's/unsigned long long/std::uint64_t/g' "${path}"
 done
 
-for file in "Source/src/JobSystem.h" "Source/src/RasterData.h" "Source/src/SoftwareRasterizer.h"; do
+for file in "Engine/src/JobSystem.h" "Engine/src/RasterData.h" "Engine/src/SoftwareRasterizer.h"; do
   path="${project_root}/${file}"
   if ! rg -q '^#include <cstdint>$' "${path}"; then
     perl -0pi -e 's/(#include [^\n]+\n)/$1#include <cstdint>\n/' "${path}"

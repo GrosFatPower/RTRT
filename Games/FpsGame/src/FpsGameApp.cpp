@@ -1,6 +1,6 @@
-#pragma warning(disable : 4100) // unreferenced formal parameter
+﻿#pragma warning(disable : 4100) // unreferenced formal parameter
 
-#include "Test6.h"
+#include "FpsGameApp.h"
 
 #include "DeferredRenderer.h"
 #include "DroppedFileUtils.h"
@@ -30,7 +30,8 @@ namespace RTRT
 static constexpr int g_ScreenWidth  = 1280;
 static constexpr int g_ScreenHeight = 720;
 
-const char * Test6::GetTestHeader() { return "Basic FPS"; }
+const char * FpsGameApp::GetTestHeader() { return "Basic FPS"; }
+const char * FpsGameApp::GetAppHeader() { return "Basic FPS"; }
 
 // ----------------------------------------------------------------------------
 // ApplyMapSettings
@@ -169,7 +170,7 @@ static void CaptureMapRenderSettings( FpsGameMap & ioMap, const FpsGameSettings 
 // ----------------------------------------------------------------------------
 // KeyCallback
 // ----------------------------------------------------------------------------
-void Test6::KeyCallback( GLFWwindow * iWindow, const int iKey, const int iScancode, const int iAction, const int iMods )
+void FpsGameApp::KeyCallback( GLFWwindow * iWindow, const int iKey, const int iScancode, const int iAction, const int iMods )
 {
   auto * const this_ = static_cast<Test6*>(glfwGetWindowUserPointer(iWindow));
   if ( !this_ )
@@ -203,7 +204,7 @@ void Test6::KeyCallback( GLFWwindow * iWindow, const int iKey, const int iScanco
 // ----------------------------------------------------------------------------
 // MouseButtonCallback
 // ----------------------------------------------------------------------------
-void Test6::MouseButtonCallback( GLFWwindow * iWindow, const int iButton, const int iAction, const int iMods )
+void FpsGameApp::MouseButtonCallback( GLFWwindow * iWindow, const int iButton, const int iAction, const int iMods )
 {
   if ( ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) )
     return;
@@ -222,7 +223,7 @@ void Test6::MouseButtonCallback( GLFWwindow * iWindow, const int iButton, const 
 // ----------------------------------------------------------------------------
 // MouseScrollCallback
 // ----------------------------------------------------------------------------
-void Test6::MouseScrollCallback( GLFWwindow * iWindow, const double iOffsetX, const double iOffsetY )
+void FpsGameApp::MouseScrollCallback( GLFWwindow * iWindow, const double iOffsetX, const double iOffsetY )
 {
   if ( ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) )
     return;
@@ -237,7 +238,7 @@ void Test6::MouseScrollCallback( GLFWwindow * iWindow, const double iOffsetX, co
 // ----------------------------------------------------------------------------
 // FramebufferSizeCallback
 // ----------------------------------------------------------------------------
-void Test6::FramebufferSizeCallback( GLFWwindow * iWindow, const int iWidth, const int iHeight )
+void FpsGameApp::FramebufferSizeCallback( GLFWwindow * iWindow, const int iWidth, const int iHeight )
 {
   auto * const this_ = static_cast<Test6*>(glfwGetWindowUserPointer(iWindow));
   if ( !this_ )
@@ -252,7 +253,7 @@ void Test6::FramebufferSizeCallback( GLFWwindow * iWindow, const int iWidth, con
 // ----------------------------------------------------------------------------
 // DropCallback
 // ----------------------------------------------------------------------------
-void Test6::DropCallback( GLFWwindow * iWindow, int iCount, const char ** iPaths )
+void FpsGameApp::DropCallback( GLFWwindow * iWindow, int iCount, const char ** iPaths )
 {
   auto * const this_ = static_cast<Test6*>(glfwGetWindowUserPointer(iWindow));
   if ( !this_ )
@@ -264,8 +265,8 @@ void Test6::DropCallback( GLFWwindow * iWindow, int iCount, const char ** iPaths
 // ----------------------------------------------------------------------------
 // CTOR
 // ----------------------------------------------------------------------------
-Test6::Test6( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iScreenHeight )
-: BaseTest(iMainWindow, iScreenWidth, iScreenHeight)
+FpsGameApp::FpsGameApp( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iScreenHeight )
+: _MainWindow(iMainWindow), _ScreenWidth(iScreenWidth), _ScreenHeight(iScreenHeight)
 {
   InitializeCpuTimings();
 
@@ -287,7 +288,7 @@ Test6::Test6( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iSc
 // ----------------------------------------------------------------------------
 // DTOR
 // ----------------------------------------------------------------------------
-Test6::~Test6()
+FpsGameApp::~FpsGameApp()
 {
   SetMouseCaptured(false);
 }
@@ -295,7 +296,7 @@ Test6::~Test6()
 // ----------------------------------------------------------------------------
 // EnableAutomaticSoftwareBenchmark
 // ----------------------------------------------------------------------------
-void Test6::EnableAutomaticSoftwareBenchmark( const std::string & iLabel,
+void FpsGameApp::EnableAutomaticSoftwareBenchmark( const std::string & iLabel,
                                               bool iSIMD,
                                               unsigned int iTileSize,
                                               const std::string & iOptimization,
@@ -319,7 +320,7 @@ void Test6::EnableAutomaticSoftwareBenchmark( const std::string & iLabel,
 // ----------------------------------------------------------------------------
 // SyncFramebufferResolution
 // ----------------------------------------------------------------------------
-void Test6::SyncFramebufferResolution( bool iNotifyRenderer )
+void FpsGameApp::SyncFramebufferResolution( bool iNotifyRenderer )
 {
   if ( !_MainWindow )
     return;
@@ -345,7 +346,7 @@ void Test6::SyncFramebufferResolution( bool iNotifyRenderer )
 // ----------------------------------------------------------------------------
 // SetMouseCaptured
 // ----------------------------------------------------------------------------
-void Test6::SetMouseCaptured( bool iCaptured )
+void FpsGameApp::SetMouseCaptured( bool iCaptured )
 {
   if ( !_MainWindow )
     return;
@@ -358,7 +359,7 @@ void Test6::SetMouseCaptured( bool iCaptured )
 // ----------------------------------------------------------------------------
 // HandleDroppedFiles
 // ----------------------------------------------------------------------------
-void Test6::HandleDroppedFiles( int iCount, const char ** iPaths )
+void FpsGameApp::HandleDroppedFiles( int iCount, const char ** iPaths )
 {
   if ( !_Editor.IsEnabled() || !iPaths || ( iCount <= 0 ) )
     return;
@@ -401,7 +402,7 @@ void Test6::HandleDroppedFiles( int iCount, const char ** iPaths )
 // ----------------------------------------------------------------------------
 // ApplyRendererDefaults
 // ----------------------------------------------------------------------------
-void Test6::ApplyRendererDefaults()
+void FpsGameApp::ApplyRendererDefaults()
 {
   if ( FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode )
   {
@@ -436,7 +437,7 @@ void Test6::ApplyRendererDefaults()
 // ----------------------------------------------------------------------------
 // InitializeCpuTimings
 // ----------------------------------------------------------------------------
-void Test6::InitializeCpuTimings()
+void FpsGameApp::InitializeCpuTimings()
 {
   _CpuTimings.assign(CpuTimingCount, FpsCpuTiming());
   _CpuTimings[CpuProcessInput]._Name = "Process input";
@@ -457,7 +458,7 @@ void Test6::InitializeCpuTimings()
 // ----------------------------------------------------------------------------
 // ResetCpuTimings
 // ----------------------------------------------------------------------------
-void Test6::ResetCpuTimings()
+void FpsGameApp::ResetCpuTimings()
 {
   if ( _CpuTimings.size() != CpuTimingCount )
     InitializeCpuTimings();
@@ -472,7 +473,7 @@ void Test6::ResetCpuTimings()
 // ----------------------------------------------------------------------------
 // BeginCpuTiming
 // ----------------------------------------------------------------------------
-void Test6::BeginCpuTiming( int iTimingID )
+void FpsGameApp::BeginCpuTiming( int iTimingID )
 {
   if ( ( iTimingID < 0 ) || ( iTimingID >= CpuTimingCount ) )
     return;
@@ -487,7 +488,7 @@ void Test6::BeginCpuTiming( int iTimingID )
 // ----------------------------------------------------------------------------
 // EndCpuTiming
 // ----------------------------------------------------------------------------
-void Test6::EndCpuTiming( int iTimingID )
+void FpsGameApp::EndCpuTiming( int iTimingID )
 {
   if ( ( iTimingID < 0 ) || ( iTimingID >= CpuTimingCount ) )
     return;
@@ -501,7 +502,7 @@ void Test6::EndCpuTiming( int iTimingID )
 // ----------------------------------------------------------------------------
 // SetCpuTimingEnabled
 // ----------------------------------------------------------------------------
-void Test6::SetCpuTimingEnabled( int iTimingID, bool iEnabled )
+void FpsGameApp::SetCpuTimingEnabled( int iTimingID, bool iEnabled )
 {
   if ( ( iTimingID < 0 ) || ( iTimingID >= CpuTimingCount ) )
     return;
@@ -517,7 +518,7 @@ void Test6::SetCpuTimingEnabled( int iTimingID, bool iEnabled )
 // ----------------------------------------------------------------------------
 // ApplyBenchmarkPose
 // ----------------------------------------------------------------------------
-void Test6::ApplyBenchmarkPose()
+void FpsGameApp::ApplyBenchmarkPose()
 {
   FpsPlayer & player = _GameWorld.GetPlayer();
   player._Position = FpsGameBenchmark::GetPosition();
@@ -543,7 +544,7 @@ void Test6::ApplyBenchmarkPose()
 // ----------------------------------------------------------------------------
 // StartBenchmark
 // ----------------------------------------------------------------------------
-void Test6::StartBenchmark()
+void FpsGameApp::StartBenchmark()
 {
   _Benchmark.Start(_GameSettings._RendererMode);
   SetMouseCaptured(false);
@@ -556,7 +557,7 @@ void Test6::StartBenchmark()
 // ----------------------------------------------------------------------------
 // UpdateBenchmark
 // ----------------------------------------------------------------------------
-void Test6::UpdateBenchmark()
+void FpsGameApp::UpdateBenchmark()
 {
   if ( !_Renderer )
     return;
@@ -572,7 +573,7 @@ void Test6::UpdateBenchmark()
 // ----------------------------------------------------------------------------
 // FinishBenchmark
 // ----------------------------------------------------------------------------
-void Test6::FinishBenchmark()
+void FpsGameApp::FinishBenchmark()
 {
   FpsGameMap sceneSnapshot = _Map;
   sceneSnapshot._Player._Position = FpsGameBenchmark::GetPosition();
@@ -598,7 +599,7 @@ void Test6::FinishBenchmark()
 // ----------------------------------------------------------------------------
 // InitializeUI
 // ----------------------------------------------------------------------------
-int Test6::InitializeUI()
+int FpsGameApp::InitializeUI()
 {
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
@@ -620,7 +621,7 @@ int Test6::InitializeUI()
 // ----------------------------------------------------------------------------
 // MakeEditorContext
 // ----------------------------------------------------------------------------
-FpsGameEditorContext Test6::MakeEditorContext()
+FpsGameEditorContext FpsGameApp::MakeEditorContext()
 {
   return FpsGameEditorContext(_MainWindow.get(), _Scene.get(), _Renderer.get(), _Settings, _KeyInput, _GameSettings, _GameWorld, _SceneBinding, _Map, _MapPath, _MapLoaded, _ReloadScene, _ReloadBoids,
                               _FrameRate, _FrameTime, _DeltaTime, _NbRenderedFrames,
@@ -631,7 +632,7 @@ FpsGameEditorContext Test6::MakeEditorContext()
 // ----------------------------------------------------------------------------
 // MakeHudContext
 // ----------------------------------------------------------------------------
-FpsGameHudContext Test6::MakeHudContext() const
+FpsGameHudContext FpsGameApp::MakeHudContext() const
 {
   return FpsGameHudContext(_GameSettings, _GameWorld);
 }
@@ -639,7 +640,7 @@ FpsGameHudContext Test6::MakeHudContext() const
 // ----------------------------------------------------------------------------
 // SetEditorMode
 // ----------------------------------------------------------------------------
-bool Test6::SetEditorMode( bool iEnabled )
+bool FpsGameApp::SetEditorMode( bool iEnabled )
 {
   FpsGameEditorContext editorContext = MakeEditorContext();
   if ( !_Editor.SetMode(editorContext, iEnabled) )
@@ -655,7 +656,7 @@ bool Test6::SetEditorMode( bool iEnabled )
 // ----------------------------------------------------------------------------
 // InitializeScene
 // ----------------------------------------------------------------------------
-int Test6::InitializeScene()
+int FpsGameApp::InitializeScene()
 {
   std::unique_ptr<Scene> newScene(new Scene);
   if ( !newScene )
@@ -735,7 +736,7 @@ int Test6::InitializeScene()
 // ----------------------------------------------------------------------------
 // RefreshPropCollisionColliders
 // ----------------------------------------------------------------------------
-int Test6::RefreshPropCollisionColliders()
+int FpsGameApp::RefreshPropCollisionColliders()
 {
   if ( !_Scene )
   {
@@ -754,7 +755,7 @@ int Test6::RefreshPropCollisionColliders()
 // ----------------------------------------------------------------------------
 // InitializeMapBoids
 // ----------------------------------------------------------------------------
-int Test6::InitializeMapBoids( bool iResetSimulation )
+int FpsGameApp::InitializeMapBoids( bool iResetSimulation )
 {
   _BoidSettings.clear();
   _BoidSimulations.clear();
@@ -795,7 +796,7 @@ int Test6::InitializeMapBoids( bool iResetSimulation )
 // ----------------------------------------------------------------------------
 // RefreshMapBoids
 // ----------------------------------------------------------------------------
-int Test6::RefreshMapBoids()
+int FpsGameApp::RefreshMapBoids()
 {
   auto hideCurrentMapBoids = [this]()
   {
@@ -877,7 +878,7 @@ int Test6::RefreshMapBoids()
 // ----------------------------------------------------------------------------
 // InitializeRenderer
 // ----------------------------------------------------------------------------
-int Test6::InitializeRenderer()
+int FpsGameApp::InitializeRenderer()
 {
   if ( !_Scene )
     return 1;
@@ -939,7 +940,7 @@ int Test6::InitializeRenderer()
 // ----------------------------------------------------------------------------
 // ProcessInput
 // ----------------------------------------------------------------------------
-int Test6::ProcessInput()
+int FpsGameApp::ProcessInput()
 {
   double curMouseX = 0., curMouseY = 0.;
   glfwGetCursorPos(_MainWindow.get(), &curMouseX, &curMouseY);
@@ -1174,7 +1175,7 @@ int Test6::ProcessInput()
 // ----------------------------------------------------------------------------
 // UpdateGame
 // ----------------------------------------------------------------------------
-int Test6::UpdateGame()
+int FpsGameApp::UpdateGame()
 {
   BeginCpuTiming(CpuUpdateGame);
 
@@ -1224,7 +1225,7 @@ int Test6::UpdateGame()
 // ----------------------------------------------------------------------------
 // UpdateBoids
 // ----------------------------------------------------------------------------
-int Test6::UpdateBoids()
+int FpsGameApp::UpdateBoids()
 {
   BeginCpuTiming(CpuUpdateBoids);
 
@@ -1298,7 +1299,7 @@ int Test6::UpdateBoids()
 // ----------------------------------------------------------------------------
 // DrawMainMenuBar
 // ----------------------------------------------------------------------------
-int Test6::DrawMainMenuBar()
+int FpsGameApp::DrawMainMenuBar()
 {
   if ( !ImGui::BeginMainMenuBar() )
     return 0;
@@ -1397,7 +1398,7 @@ int Test6::DrawMainMenuBar()
 // ----------------------------------------------------------------------------
 // DrawHelpUI
 // ----------------------------------------------------------------------------
-int Test6::DrawHelpUI()
+int FpsGameApp::DrawHelpUI()
 {
   if ( _ShowHelpDialog )
   {
@@ -1430,7 +1431,7 @@ int Test6::DrawHelpUI()
 // ----------------------------------------------------------------------------
 // DrawUI
 // ----------------------------------------------------------------------------
-int Test6::DrawUI()
+int FpsGameApp::DrawUI()
 {
   ImGui_ImplOpenGL3_NewFrame();
   ImGui_ImplGlfw_NewFrame();
@@ -1473,7 +1474,7 @@ int Test6::DrawUI()
 // ----------------------------------------------------------------------------
 // DrawDebugPanel
 // ----------------------------------------------------------------------------
-void Test6::DrawDebugPanel()
+void FpsGameApp::DrawDebugPanel()
 {
   if ( !ImGui::Begin("Test6 FPS", &_ShowDebugPanel) )
   {
@@ -1522,7 +1523,7 @@ void Test6::DrawDebugPanel()
 // ----------------------------------------------------------------------------
 // DrawBenchmarkUI
 // ----------------------------------------------------------------------------
-int Test6::DrawBenchmarkUI()
+int FpsGameApp::DrawBenchmarkUI()
 {
   if ( !ImGui::CollapsingHeader("Benchmark") )
     return 0;
@@ -1632,7 +1633,7 @@ int Test6::DrawBenchmarkUI()
 // ----------------------------------------------------------------------------
 // DrawGameSettingsUI
 // ----------------------------------------------------------------------------
-int Test6::DrawGameSettingsUI()
+int FpsGameApp::DrawGameSettingsUI()
 {
   if ( ImGui::CollapsingHeader("Game tuning") )
   {
@@ -1742,7 +1743,7 @@ int Test6::DrawGameSettingsUI()
 // ----------------------------------------------------------------------------
 // DrawRenderSettingsUI
 // ----------------------------------------------------------------------------
-int Test6::DrawRenderSettingsUI()
+int FpsGameApp::DrawRenderSettingsUI()
 {
   if ( !ImGui::Begin("Test6 Render Settings", &_ShowRenderSettingsPanel) )
   {
@@ -1760,7 +1761,7 @@ int Test6::DrawRenderSettingsUI()
 // ----------------------------------------------------------------------------
 // DrawRenderStatsUI
 // ----------------------------------------------------------------------------
-int Test6::DrawRenderStatsUI()
+int FpsGameApp::DrawRenderStatsUI()
 {
   if ( !ImGui::Begin("Test6 Rendering Stats", &_ShowRenderStatsPanel) )
   {
@@ -1778,7 +1779,7 @@ int Test6::DrawRenderStatsUI()
 // ----------------------------------------------------------------------------
 // UpdateCPUTime
 // ----------------------------------------------------------------------------
-int Test6::UpdateCPUTime()
+int FpsGameApp::UpdateCPUTime()
 {
   double oldCpuTime = _CPUTime;
   _CPUTime = glfwGetTime();
@@ -1811,7 +1812,7 @@ int Test6::UpdateCPUTime()
 // ----------------------------------------------------------------------------
 // Run
 // ----------------------------------------------------------------------------
-int Test6::Run()
+int FpsGameApp::Run()
 {
   int ret = 0;
 
@@ -1825,11 +1826,11 @@ int Test6::Run()
 
     glfwSetWindowTitle(_MainWindow.get(), GetTestHeader());
     glfwSetWindowUserPointer(_MainWindow.get(), this);
-    glfwSetFramebufferSizeCallback(_MainWindow.get(), Test6::FramebufferSizeCallback);
-    glfwSetMouseButtonCallback(_MainWindow.get(), Test6::MouseButtonCallback);
-    glfwSetScrollCallback(_MainWindow.get(), Test6::MouseScrollCallback);
-    glfwSetKeyCallback(_MainWindow.get(), Test6::KeyCallback);
-    glfwSetDropCallback(_MainWindow.get(), Test6::DropCallback);
+    glfwSetFramebufferSizeCallback(_MainWindow.get(), FpsGameApp::FramebufferSizeCallback);
+    glfwSetMouseButtonCallback(_MainWindow.get(), FpsGameApp::MouseButtonCallback);
+    glfwSetScrollCallback(_MainWindow.get(), FpsGameApp::MouseScrollCallback);
+    glfwSetKeyCallback(_MainWindow.get(), FpsGameApp::KeyCallback);
+    glfwSetDropCallback(_MainWindow.get(), FpsGameApp::DropCallback);
 
     glfwMakeContextCurrent(_MainWindow.get());
     glfwSwapInterval(0);

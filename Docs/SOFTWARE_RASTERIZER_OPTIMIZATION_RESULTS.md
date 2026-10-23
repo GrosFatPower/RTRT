@@ -1,4 +1,4 @@
-# Software Rasterizer Optimization Results
+﻿# Software Rasterizer Optimization Results
 
 ## Reference Setup
 
@@ -64,7 +64,7 @@ The full timestamped benchmark history remains on `codex/software-rasterizer-opt
 Test6 can benchmark the active renderer from its Benchmark panel. Software automation also supports cumulative presets:
 
 ```sh
-./build/Release/RenderLab Test6 --benchmark-software LABEL scalar 64 PRESET fixed
+./build/Release/FpsGame --benchmark-software LABEL scalar 64 PRESET fixed
 ```
 
 Valid presets are `none`, `incremental`, `compact-hits`, `direct-color`, `frustum-culling`, and `pbo-upload`. Valid poses are `fixed`, `ground`, and `sky`.

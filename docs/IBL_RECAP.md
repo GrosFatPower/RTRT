@@ -1,4 +1,4 @@
-# Specular IBL Implementation Recap
+﻿# Specular IBL Implementation Recap
 
 Date: 2026-03-16
 Feature: specular image-based lighting (IBL) for the deferred `OpenGLRasterizer`
@@ -49,11 +49,11 @@ Updated `Shaders/fragment_DeferredLighting.glsl`:
 
 ### Settings and UI
 
-Updated `Source/src/RenderSettings.h`:
+Updated `Engine/src/RenderSettings.h`:
 - added `_SpecularIBL` (default `true`)
 - added `_SpecularIBLIntensity` (current default `0.5f`)
 
-Updated `Source/src/Test5.cpp`:
+Updated `Apps/RenderLab/src/Test5.cpp`:
 - added `Specular IBL` checkbox
 - added `IBL intensity` slider
 
@@ -81,10 +81,10 @@ Observed warning:
 ## Files Changed
 
 Modified:
-- `Source/src/RenderSettings.h`
-- `Source/src/DeferredRenderer.h`
-- `Source/src/DeferredRenderer.cpp`
-- `Source/src/Test5.cpp`
+- `Engine/src/RenderSettings.h`
+- `Engine/src/DeferredRenderer.h`
+- `Engine/src/DeferredRenderer.cpp`
+- `Apps/RenderLab/src/Test5.cpp`
 - `Shaders/fragment_DeferredGeometry.glsl`
 - `Shaders/fragment_DeferredLighting.glsl`
 

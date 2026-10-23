@@ -1,4 +1,4 @@
-# Distant Light Shadow Priority Recap
+﻿# Distant Light Shadow Priority Recap
 
 Date: 2026-03-08
 Feature: `DistantLight` now takes priority as the deferred shadow emitter
@@ -15,13 +15,13 @@ When a scene contains a `DistantLight`, use it as the shadow emitter in the defe
 
 ## What Changed
 
-Updated `Source/src/DeferredRenderer.h`:
+Updated `Engine/src/DeferredRenderer.h`:
 - split the shadow resources into a cubemap path and a 2D depth-map path
 - added shadow-emitter type tracking with `LightType`
 - added directional shadow state including light direction and a directional light view-projection matrix
 - added separate shadow shader handles for cube and directional passes
 
-Updated `Source/src/DeferredRenderer.cpp`:
+Updated `Engine/src/DeferredRenderer.cpp`:
 - shadow selection priority is now:
   - first `DistantLight`
   - otherwise first `SphereLight`
@@ -70,8 +70,8 @@ Result:
 ## Files Changed
 
 Modified:
-- `Source/src/DeferredRenderer.h`
-- `Source/src/DeferredRenderer.cpp`
+- `Engine/src/DeferredRenderer.h`
+- `Engine/src/DeferredRenderer.cpp`
 - `Shaders/fragment_DeferredLighting.glsl`
 
 Added:

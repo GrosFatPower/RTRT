@@ -71,31 +71,6 @@ endif()
 
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release;RelWithDebInfo" CACHE STRING "Configuration types" FORCE)
 
-add_subdirectory(Source)
-add_subdirectory(Dependencies)
-add_subdirectory(Shaders)
-
-file(GLOB_RECURSE CORE_SOURCE CONFIGURE_DEPENDS ./Source/src/*.cpp)
-file(GLOB_RECURSE CORE_HEADER CONFIGURE_DEPENDS ./Source/src/*.h ./Source/src/*.hxx)
-file(GLOB_RECURSE EXT_SOURCE CONFIGURE_DEPENDS ./Dependencies/RadeonRays/*.cpp)
-file(GLOB_RECURSE EXT_HEADER CONFIGURE_DEPENDS ./Dependencies/RadeonRays/*.h)
-file(GLOB_RECURSE SHADERS CONFIGURE_DEPENDS ./Shaders/*.glsl)
-file(GLOB_RECURSE TEST_SOURCE CONFIGURE_DEPENDS ./Tests/*.cpp)
-file(GLOB_RECURSE TEST_HEADER CONFIGURE_DEPENDS ./Tests/*.h)
-
-set(RTRT_MAIN_SOURCE ${CMAKE_SOURCE_DIR}/Source/src/main.cpp)
-list(REMOVE_ITEM CORE_SOURCE ${RTRT_MAIN_SOURCE})
-
-source_group("src"    FILES ${CORE_SOURCE} ${EXT_SOURCE})
-source_group("header" FILES ${CORE_HEADER} ${EXT_HEADER})
-source_group("shaders" FILES ${SHADERS})
-source_group("tests" FILES ${TEST_SOURCE} ${TEST_HEADER})
-
-SET(EXE_NAME "RenderLab")
-add_library(RTRTCore STATIC ${CORE_SOURCE} ${CORE_HEADER} ${EXT_SOURCE} ${EXT_HEADER})
-add_executable(${EXE_NAME} ${RTRT_MAIN_SOURCE} ${SHADERS})
-target_link_libraries(${EXE_NAME} RTRTCore)
-
 # Native File Dialog
 set(NFD_SOURCE_DIR ${CMAKE_SOURCE_DIR}/Dependencies/nativefiledialog/src)
 if(WIN32)
@@ -121,7 +96,6 @@ else()
   target_link_libraries(nativefiledialog PUBLIC ${GTK3_LIBRARIES})
   target_compile_options(nativefiledialog PRIVATE ${GTK3_CFLAGS_OTHER})
 endif()
-target_link_libraries(${EXE_NAME} nativefiledialog)
 
 # OpenGL
 find_package(OpenGL REQUIRED)
@@ -153,13 +127,13 @@ if(APPLE)
   find_library(IOKIT_LIBRARY IOKit)
   find_library(COREVIDEO_LIBRARY CoreVideo)
 endif()
-											   
-# IMGUI
+
+# IMGUI options
 option(RTRT_IMGUI_IMGUI_SHARED "Use imgui as a shared library" OFF)
 option(RTRT_BUILD_IMGUI "Build imgui using sources provided in external/imgui" ON)
 set(RTRT_IMGUI_SOURCE_DIR ${CMAKE_SOURCE_DIR}/Dependencies/imgui CACHE STRING "Source dir of imgui")
 
-# GLM
+# GLM SIMD options
 if(ARCH_ARM64)
   message("GLM_ENABLE_SIMD_NEON ON")
   set(GLM_ENABLE_SIMD_NEON ON)
@@ -212,162 +186,20 @@ if(RTRT_ENABLE_OIDN)
   endif()
 endif()
 
-function(ConfigureRTRTTarget iTarget)
-target_include_directories(${iTarget}
-  PUBLIC ${CMAKE_SOURCE_DIR}/Source/src
-)
+# Dependencies (glfw, glm, nlohmann_json, imgui, imguizmo)
+add_subdirectory(Dependencies)
 
-target_include_directories(${iTarget} BEFORE PUBLIC
-  ${CMAKE_SOURCE_DIR}/Dependencies/glfw/include
-  ${CMAKE_SOURCE_DIR}/Dependencies/imgui
-  ${CMAKE_SOURCE_DIR}/Dependencies/imgui/backends
-  ${CMAKE_SOURCE_DIR}/Dependencies/imguizmo
-  ${CMAKE_SOURCE_DIR}/Dependencies/stb
-  ${CMAKE_SOURCE_DIR}/Dependencies/glm
-  ${CMAKE_SOURCE_DIR}/Dependencies/tinyobjloader
-  ${CMAKE_SOURCE_DIR}/Dependencies/tinydir
-  ${CMAKE_SOURCE_DIR}/Dependencies/tinygltf
-  ${CMAKE_SOURCE_DIR}/Dependencies/nativefiledialog/src/include
-  ${CMAKE_SOURCE_DIR}/Dependencies/tinybvh
-  ${CMAKE_SOURCE_DIR}/Dependencies/RadeonRays
-  ${GLEW_INCLUDE_DIRS}
-)
+# Shaders
+add_subdirectory(Shaders)
 
-target_link_directories(${iTarget}
-  PUBLIC ${CMAKE_SOURCE_DIR}/Dependencies/glew-2.1.0/lib/Release/x64/
-)
-
-if(APPLE)
-  target_link_libraries(${iTarget}
-    imguizmo
-    ${GLEW_LIBRARIES}
-    ${OPENGL_LIBRARIES}
-    ${COCOA_LIBRARY} 
-    ${IOKIT_LIBRARY} 
-    ${COREVIDEO_LIBRARY}
-  )
-else()
-  target_link_libraries(${iTarget}
-    imguizmo
-    ${GLEW_LIBRARIES}
-    ${OPENGL_LIBRARIES}
-  )
-endif()
-
-if(WIN32)
-  set_target_properties(${iTarget} PROPERTIES
-  	VS_DEBUGGER_WORKING_DIRECTORY "$(Project)$(Configuration)"
-  )
-endif()
-
-target_compile_definitions(${iTarget}
-  PUBLIC GLEW_STATIC
-  PUBLIC NOMINMAX
-)
-
-target_compile_features(${iTarget}
- PRIVATE cxx_std_17
-)
-
-if(APPLE)
-  target_compile_options(${iTarget}
-    PRIVATE -fexperimental-library -Wno-deprecated-declarations
-  )
-
-  if(ARCH_ARM64)
-      set_target_properties(${iTarget} PROPERTIES
-          OSX_ARCHITECTURES "arm64"
-      )
-  endif()
-endif()
-
-# Define macros for architecture-specific SIMD support
-if(ARCH_ARM64)
-  target_compile_definitions(${iTarget} PRIVATE SIMD_ARM_NEON)
-elseif(ARCH_X64)
-  target_compile_definitions(${iTarget} PRIVATE SIMD_AVX2)
-endif()
-
-# Set output directories
-set_target_properties(${iTarget} PROPERTIES
-  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
-  RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/Debug
-  RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/Release
-)
-
-if(RTRT_HAS_OIDN)
-  target_include_directories(${iTarget} BEFORE PUBLIC ${OIDN_INCLUDE_DIR})
-  target_link_libraries(${iTarget} ${OIDN_LIBRARY})
-  target_compile_definitions(${iTarget} PUBLIC RTRT_HAS_OIDN=1)
-
-  get_target_property(TARGET_TYPE ${iTarget} TYPE)
-  if(TARGET_TYPE STREQUAL "EXECUTABLE" AND OIDN_RUNTIME_FILES)
-    add_custom_command(TARGET ${iTarget} POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${OIDN_RUNTIME_FILES}
-        $<TARGET_FILE_DIR:${iTarget}>
-      COMMENT "Copying Intel OIDN runtime libraries to $<TARGET_FILE_DIR:${iTarget}>"
-    )
-    if(APPLE)
-      set_target_properties(${iTarget} PROPERTIES
-        BUILD_WITH_INSTALL_RPATH TRUE
-        INSTALL_RPATH "@executable_path"
-      )
-    endif()
-  endif()
-endif()
-endfunction()
-
-ConfigureRTRTTarget(RTRTCore)
-ConfigureRTRTTarget(${EXE_NAME})
+# Modular Architecture Subdirectories
+add_subdirectory(Engine)
+add_subdirectory(Framework)
+add_subdirectory(Games/FpsGame)
+add_subdirectory(Apps/RenderLab)
 
 if(RTRT_BUILD_RENDER_REGRESSION_TESTS)
-  add_executable(RenderRegression ${TEST_SOURCE} ${TEST_HEADER})
-  target_link_libraries(RenderRegression RTRTCore nlohmann_json::nlohmann_json)
-  ConfigureRTRTTarget(RenderRegression)
-
-  add_custom_target(RenderWhiteFurnace
-    COMMAND $<TARGET_FILE:RenderRegression> --manifest ${CMAKE_SOURCE_DIR}/Tests/RenderTests.WhiteFurnace.json --all
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    DEPENDS RenderRegression
-    COMMENT "Running white furnace energy-conservation suite"
-  )
-
-  find_package(Python3 COMPONENTS Interpreter QUIET)
-  if(Python3_FOUND)
-    add_custom_target(GenerateBlenderReferences
-      COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/Tools/render_test_reference.py --all --compare
-      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-      COMMENT "Generating Blender Cycles ground truth references for regression tests"
-    )
-  endif()
-
-  if(BUILD_TESTING)
-    set(RENDER_TEST_MANIFEST ${CMAKE_SOURCE_DIR}/Tests/RenderTests.json)
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${RENDER_TEST_MANIFEST})
-    file(READ ${RENDER_TEST_MANIFEST} RENDER_TEST_MANIFEST_JSON)
-    string(JSON RENDER_TEST_COUNT LENGTH ${RENDER_TEST_MANIFEST_JSON} tests)
-
-    add_test(NAME UnitImageComparison COMMAND RenderRegression --unit)
-    set_tests_properties(UnitImageComparison PROPERTIES
-      LABELS "unit"
-      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    )
-
-    math(EXPR RENDER_TEST_LAST_INDEX "${RENDER_TEST_COUNT} - 1")
-    foreach(RENDER_TEST_INDEX RANGE ${RENDER_TEST_LAST_INDEX})
-      string(JSON RENDER_CASE GET ${RENDER_TEST_MANIFEST_JSON} tests ${RENDER_TEST_INDEX} name)
-      string(JSON RENDER_PROFILE GET ${RENDER_TEST_MANIFEST_JSON} tests ${RENDER_TEST_INDEX} profile)
-      string(JSON RENDER_BACKEND GET ${RENDER_TEST_MANIFEST_JSON} profiles ${RENDER_PROFILE} backend)
-
-      add_test(NAME Render_${RENDER_CASE} COMMAND RenderRegression --case ${RENDER_CASE})
-      set_tests_properties(Render_${RENDER_CASE} PROPERTIES
-        LABELS "render;${RENDER_BACKEND}"
-        SKIP_RETURN_CODE 77
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-      )
-    endforeach()
-  endif()
+  add_subdirectory(Tests)
 endif()
 
 # Display build configuration

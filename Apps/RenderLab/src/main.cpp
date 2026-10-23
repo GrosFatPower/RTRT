@@ -3,7 +3,6 @@
 #include "Test3.h"
 #include "Test4.h"
 #include "Test5.h"
-#include "Test6.h"
 #include "PathUtils.h"
 
 #include "imgui.h"
@@ -31,7 +30,7 @@ static int ParseTestArg( const std::string & iArg )
 {
   if ( 1 == iArg.size() )
   {
-    if ( ( iArg[0] >= '1' ) && ( iArg[0] <= '6' ) )
+    if ( ( iArg[0] >= '1' ) && ( iArg[0] <= '5' ) )
       return ( iArg[0] - '0' );
     return 0;
   }
@@ -43,7 +42,7 @@ static int ParseTestArg( const std::string & iArg )
 
     if ( lowerArg.rfind("test", 0) == 0 )
     {
-      if ( ( lowerArg[4] >= '1' ) && ( lowerArg[4] <= '6' ) )
+      if ( ( lowerArg[4] >= '1' ) && ( lowerArg[4] <= '5' ) )
         return ( lowerArg[4] - '0' );
     }
   }
@@ -58,26 +57,18 @@ static void PrintUsage( const char * iExeName )
 {
   const char * exeName = ( iExeName && iExeName[0] ) ? iExeName : "RenderLab";
 
-  std::cout << "Usage: " << exeName << " [Test1|Test2|Test3|Test4|Test5|Test6|1|2|3|4|5|6] [--benchmark-software-control]" << std::endl;
+  std::cout << "Usage: " << exeName << " [Test1|Test2|Test3|Test4|Test5|1|2|3|4|5]" << std::endl;
   std::cout << "Examples:" << std::endl;
   std::cout << "  " << exeName << std::endl;
-  std::cout << "  " << exeName << " Test6" << std::endl;
-  std::cout << "  " << exeName << " 6" << std::endl;
-  std::cout << "  " << exeName << " Test6 --benchmark-software-control" << std::endl;
-  std::cout << "  " << exeName << " Test6 --benchmark-software LABEL [scalar|simd] TILE_SIZE [OPTIMIZATION] [fixed|ground|sky]" << std::endl;
+  std::cout << "  " << exeName << " Test5" << std::endl;
+  std::cout << "  " << exeName << " 5" << std::endl;
 }
 
 // ----------------------------------------------------------------------------
 // RunSelectedTest
 // ----------------------------------------------------------------------------
 static int RunSelectedTest( const int iSelectedTest,
-                            std::shared_ptr<GLFWwindow> iMainWindow,
-                            bool iAutomaticSoftwareBenchmark,
-                            const std::string & iBenchmarkLabel,
-                            bool iBenchmarkSIMD,
-                            unsigned int iBenchmarkTileSize,
-                            const std::string & iBenchmarkOptimization,
-                            const std::string & iBenchmarkPose )
+                            std::shared_ptr<GLFWwindow> iMainWindow )
 {
   int failure = 0;
 
@@ -105,14 +96,6 @@ static int RunSelectedTest( const int iSelectedTest,
   {
     RTRT::Test5 test5(iMainWindow, g_ScreenWidth, g_ScreenHeight);
     failure = test5.Run();
-  }
-  else if ( 6 == iSelectedTest )
-  {
-    RTRT::Test6 test6(iMainWindow, g_ScreenWidth, g_ScreenHeight);
-    if ( iAutomaticSoftwareBenchmark )
-      test6.EnableAutomaticSoftwareBenchmark(iBenchmarkLabel, iBenchmarkSIMD, iBenchmarkTileSize,
-                                             iBenchmarkOptimization, iBenchmarkPose);
-    failure = test6.Run();
   }
 
   return failure;
@@ -145,23 +128,16 @@ int TestSelectionPanel( GLFWwindow * iMainWindow )
 
   // Setup Dear ImGui style
   ImGui::StyleColorsDark();
-  //ImGui::StyleColorsLight();
-
-  // Load Fonts
-  io.Fonts->AddFontDefault();
 
   // Setup Platform/Renderer backends
-  const char* glsl_version = "#version 410";
   ImGui_ImplGlfw_InitForOpenGL(iMainWindow, true);
-  ImGui_ImplOpenGL3_Init(glsl_version);
+  ImGui_ImplOpenGL3_Init("#version 410");
 
-  // Our state
-  const char * TestHeaders[] = { RTRT::Test1::GetTestHeader(),
+  const char * TestHeaders[5] = { RTRT::Test1::GetTestHeader(),
                                  RTRT::Test2::GetTestHeader(),
                                  RTRT::Test3::GetTestHeader(),
                                  RTRT::Test4::GetTestHeader(),
-                                 RTRT::Test5::GetTestHeader(),
-                                 RTRT::Test6::GetTestHeader() };
+                                 RTRT::Test5::GetTestHeader() };
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   while (!glfwWindowShouldClose(iMainWindow) && !selectedTest)
@@ -176,7 +152,7 @@ int TestSelectionPanel( GLFWwindow * iMainWindow )
     {
       ImGui::Begin("Test selection");
 
-      for ( int i = 0; i < 6; ++i )
+      for ( int i = 0; i < 5; ++i )
       {
         std::string buttonName = std::string( "Test " ) + std::to_string( i + 1 );
         if ( ImGui::Button( buttonName.c_str() ) )
@@ -218,64 +194,26 @@ int main(int iArgc, char** iArgv)
 {
   int failure = 0;
   int cliSelectedTest = 0;
-  bool automaticSoftwareBenchmark = false;
-  std::string benchmarkLabel = "v2-control";
-  bool benchmarkSIMD = false;
-  unsigned int benchmarkTileSize = 64;
-  std::string benchmarkOptimization = "none";
-  std::string benchmarkPose = "fixed";
 
   RTRT::PathUtils::Initialize( ( iArgv ) ? ( iArgv[0] ) : nullptr );
 
-  if ( ( iArgc > 3 ) && ( iArgc != 6 ) && ( iArgc != 7 ) && ( iArgc != 8 ) )
+  if ( iArgc > 2 )
   {
     PrintUsage( ( iArgv ) ? ( iArgv[0] ) : nullptr );
     return 1;
   }
 
-  if ( iArgc >= 2 )
+  if ( iArgc == 2 )
   {
     const std::string arg = ( iArgv && iArgv[1] ) ? iArgv[1] : "";
+    if ( arg == "--help" || arg == "-h" )
+    {
+      PrintUsage( ( iArgv ) ? ( iArgv[0] ) : nullptr );
+      return 0;
+    }
+
     cliSelectedTest = ParseTestArg( arg );
     if ( !cliSelectedTest )
-    {
-      PrintUsage( ( iArgv ) ? ( iArgv[0] ) : nullptr );
-      return 1;
-    }
-  }
-
-  if ( 3 == iArgc )
-  {
-    const std::string option = ( iArgv && iArgv[2] ) ? iArgv[2] : "";
-    automaticSoftwareBenchmark = ( option == "--benchmark-software-control" );
-    if ( !automaticSoftwareBenchmark || ( 6 != cliSelectedTest ) )
-    {
-      PrintUsage( ( iArgv ) ? ( iArgv[0] ) : nullptr );
-      return 1;
-    }
-  }
-  else if ( ( 6 == iArgc ) || ( 7 == iArgc ) || ( 8 == iArgc ) )
-  {
-    const std::string option = ( iArgv && iArgv[2] ) ? iArgv[2] : "";
-    benchmarkLabel = ( iArgv && iArgv[3] ) ? iArgv[3] : "";
-    const std::string simdMode = ( iArgv && iArgv[4] ) ? iArgv[4] : "";
-    const int tileSize = ( iArgv && iArgv[5] ) ? std::atoi(iArgv[5]) : 0;
-    if ( iArgc >= 7 && iArgv && iArgv[6] )
-      benchmarkOptimization = iArgv[6];
-    benchmarkPose = ( 8 == iArgc && iArgv && iArgv[7] ) ? iArgv[7] : "fixed";
-    const bool validOptimization = ( benchmarkOptimization == "none" ) ||
-                                   ( benchmarkOptimization == "incremental" ) ||
-                                   ( benchmarkOptimization == "compact-hits" ) ||
-                                   ( benchmarkOptimization == "direct-color" ) ||
-                                   ( benchmarkOptimization == "frustum-culling" ) ||
-                                   ( benchmarkOptimization == "pbo-upload" );
-    const bool validPose = ( benchmarkPose == "fixed" ) || ( benchmarkPose == "ground" ) || ( benchmarkPose == "sky" );
-    automaticSoftwareBenchmark = ( option == "--benchmark-software" ) && !benchmarkLabel.empty() &&
-                                 ( ( simdMode == "scalar" ) || ( simdMode == "simd" ) ) &&
-                                 ( tileSize >= 8 ) && validOptimization && validPose;
-    benchmarkSIMD = ( simdMode == "simd" );
-    benchmarkTileSize = static_cast<unsigned int>(std::max(8, tileSize));
-    if ( !automaticSoftwareBenchmark || ( 6 != cliSelectedTest ) )
     {
       PrintUsage( ( iArgv ) ? ( iArgv[0] ) : nullptr );
       return 1;
@@ -295,7 +233,7 @@ int main(int iArgc, char** iArgv)
 
   // Create window with graphics context
   {
-    auto mainWindow = std::shared_ptr<GLFWwindow>(glfwCreateWindow(g_ScreenWidth, g_ScreenHeight, "RTRT - Tests", NULL, NULL), [](GLFWwindow*window){glfwDestroyWindow(window);});
+    auto mainWindow = std::shared_ptr<GLFWwindow>(glfwCreateWindow(g_ScreenWidth, g_ScreenHeight, "RTRT - RenderLab", NULL, NULL), [](GLFWwindow*window){glfwDestroyWindow(window);});
     if ( !mainWindow )
     {
       std::cout << "Failed to create a window!" << std::endl;
@@ -312,13 +250,12 @@ int main(int iArgc, char** iArgv)
       if ( !selectedTest )
         selectedTest = TestSelectionPanel(mainWindow.get());
 
-      if ( selectedTest < 1 || selectedTest > 6 )
+      if ( selectedTest < 1 || selectedTest > 5 )
       {
         break;
       }
 
-      failure = RunSelectedTest(selectedTest, mainWindow, automaticSoftwareBenchmark, benchmarkLabel,
-                                benchmarkSIMD, benchmarkTileSize, benchmarkOptimization, benchmarkPose);
+      failure = RunSelectedTest(selectedTest, mainWindow);
 
       if ( cliSelectedTest )
         break;
