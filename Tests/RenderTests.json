@@ -556,6 +556,18 @@
         "near": 0.5
       },
       "frames": 60
+    },
+    {
+      "name": "pathtracer_metal_rough_spheres",
+      "profile": "pathtracer",
+      "scene": "MetalRoughSpheres.scene",
+      "resolution": [960, 720],
+      "environment_map": "HDR/konzerthaus_4k.hdr",
+      "frames": 256,
+      "settings": {
+        "denoise": false,
+        "bounces": 4
+      }
     }
   ]
 }

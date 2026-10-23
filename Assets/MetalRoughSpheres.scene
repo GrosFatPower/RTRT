@@ -1,0 +1,22 @@
+renderer
+{
+	resolution 960 720
+	windowresolution 960 720
+	maxdepth 4
+	tilewidth 256
+	tileheight 256
+	envmapfile HDR/konzerthaus_4k.hdr
+}
+
+camera
+{
+	position 2.2 0.8 11.2
+	lookat -0.1 -0.2 -1.2
+	fov 52
+	near 0.1
+}
+
+gltf
+{
+	file MetalRoughSpheres/MetalRoughSpheres.gltf
+}

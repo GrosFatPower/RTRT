@@ -584,9 +584,36 @@ def import_gltf_instances(scene, gltf_blocks, repo_root):
             [0.0, -1.0, 0.0, 0.0],
             [0.0,  0.0, 0.0, 1.0]
         ])
+
+        matrix_str = gb.get("matrix")
+        block_xform = Matrix.Identity(4)
+        if matrix_str:
+            m_tokens = [float(x) for x in matrix_str.split()]
+            if len(m_tokens) == 16:
+                block_xform = Matrix([
+                    [m_tokens[0], m_tokens[1], m_tokens[2],  m_tokens[3]],
+                    [m_tokens[4], m_tokens[5], m_tokens[6],  m_tokens[7]],
+                    [m_tokens[8], m_tokens[9], m_tokens[10], m_tokens[11]],
+                    [m_tokens[12], m_tokens[13], m_tokens[14], m_tokens[15]]
+                ])
+        else:
+            pos = gb.get_vec3("position", [0.0, 0.0, 0.0])
+            scale = gb.get_vec3("scale", [1.0, 1.0, 1.0])
+            rot_str = gb.get("rotation")
+            rot_mat = Matrix.Identity(4)
+            if rot_str:
+                tokens = [float(x) for x in rot_str.split()]
+                if len(tokens) == 4:
+                    from mathutils import Quaternion
+                    rot_mat = Quaternion((tokens[3], tokens[0], tokens[1], tokens[2])).to_matrix().to_4x4()
+            trans_mat = Matrix.Translation(Vector(pos))
+            scale_mat = Matrix.Diagonal((scale[0], scale[1], scale[2], 1.0))
+            block_xform = trans_mat @ rot_mat @ scale_mat
+
+        combined_xform = block_xform @ rot_fix
         for o in new_objs:
             if o.parent is None:
-                o.matrix_world = rot_fix @ o.matrix_world
+                o.matrix_world = combined_xform @ o.matrix_world
 
 
 # -----------------------------------------------------------------------------

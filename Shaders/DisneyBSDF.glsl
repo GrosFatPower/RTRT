@@ -184,10 +184,10 @@ vec3 EvalDiffuse( in Material iMat, in float iEta, in vec3 iSpecCol, in vec3 iCs
   vec3 dielectricDiff = ( 1.f - iMat._Metallic ) * ( 1.f - iMat._SpecTrans ) * ( INV_PI * mix(Fd, ss, iMat._Subsurface) * iMat._Albedo + Fsheen );
 
   // Kulla-Conty metallic multiple-scattering compensation lobe
-  vec3 F_avg = iSpecCol + ( vec3(1.f) - iSpecCol ) * ( 1.f / 21.f );
-  vec3 F_ms = iSpecCol * F_avg * E0_avg / max(vec3(1.f) - F_avg * ( 1.f - E0_avg ), vec3(1e-4f));
-  // When iSpecCol == 1, F_avg == 1 and F_ms == 1
-  F_ms = mix(F_ms, vec3(1.f), step(vec3(0.999f), iSpecCol));
+  vec3 F_avg = iMat._Albedo + ( vec3(1.f) - iMat._Albedo ) * ( 1.f / 21.f );
+  vec3 F_ms = iMat._Albedo * F_avg * E0_avg / max(vec3(1.f) - F_avg * ( 1.f - E0_avg ), vec3(1e-4f));
+  // When iMat._Albedo == 1, F_avg == 1 and F_ms == 1
+  F_ms = mix(F_ms, vec3(1.f), step(vec3(0.999f), iMat._Albedo));
   float msFactor = ( 1.f - E0_V ) * ( 1.f - E0_L ) / max(1.f - E0_avg, 1e-4f);
   vec3 metallicMS = iMat._Metallic * F_ms * ( INV_PI * msFactor );
 
@@ -291,8 +291,8 @@ vec3 EvalSpecReflection( in Material iMat, in float iEta, in vec3 iSpecCol, in v
 
   float VdotH = max(dot(iV, iH), 0.f);
   float LdotH = max(dot(iL, iH), 0.f);
-  vec3 dielectricF = vec3(DielectricFresnel(VdotH, iEta));
-  vec3 metallicF = mix(iSpecCol, vec3(1.f), SchlickFresnel(LdotH));
+  vec3 dielectricF = DielectricFresnel(VdotH, iEta) * iSpecCol;
+  vec3 metallicF = mix(iMat._Albedo, vec3(1.f), SchlickFresnel(LdotH));
   vec3 F = mix(dielectricF, metallicF, iMat._Metallic);
 
   float D = GTR2Aniso(iH.z, iH.x, iH.y, iMat._Ax, iMat._Ay);
@@ -355,8 +355,7 @@ void GetSpecColor( in Material iMat, in float iEta, out vec3 oSpecCol, out vec3 
 {
   float lum = Luminance(iMat._Albedo);
   vec3 ctint = ( lum > 0.f ) ? ( iMat._Albedo / lum ) : ( vec3(1.f) );
-  float F0 = (1.f - iEta) / (1.f + iEta);
-  oSpecCol = mix(F0 * F0 * mix(vec3(1.f), ctint, iMat._SpecTint), iMat._Albedo, iMat._Metallic);
+  oSpecCol = mix(vec3(1.f), ctint, iMat._SpecTint);
   oSheenCol = mix(vec3(1.f), ctint, iMat._SheenTint);
 }
 
@@ -375,10 +374,10 @@ void GetLobeProbabilities( in Material iMat, in float iEta, in vec3 iSpecCol, in
   float F = mix(dielectricF, metallicF, iMat._Metallic);
 
   float dielDiffWeight = (1.f - Ed_V) * Luminance(iMat._Albedo) * (1.f - iMat._Metallic) * (1.f - iMat._SpecTrans);
-  float metalMSWeight  = (1.f - E0_V) * Luminance(iSpecCol) * iMat._Metallic;
+  float metalMSWeight  = (1.f - E0_V) * Luminance(iMat._Albedo) * iMat._Metallic;
 
   oDiffuseWeight     = dielDiffWeight + metalMSWeight;
-  oSpecReflectWeight = mix(Ed_V, E0_V * Luminance(mix(iSpecCol, vec3(1.f), metallicF)), iMat._Metallic);
+  oSpecReflectWeight = mix(Ed_V, E0_V * Luminance(mix(iMat._Albedo, vec3(1.f), metallicF)), iMat._Metallic);
   oSpecRefractWeight = (1.f - F) * (1.f - iMat._Metallic) * iMat._SpecTrans * Luminance(iMat._Albedo);
   oClearcoatWeight   = .25f * iMat._Clearcoat * (1.f - iMat._Metallic);
   float totalWeight = oDiffuseWeight + oSpecReflectWeight + oSpecRefractWeight + oClearcoatWeight;

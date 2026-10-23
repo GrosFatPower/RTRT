@@ -323,7 +323,7 @@ vec3 PathSample( in Ray iStartRay, in vec2 iCoordUV )
     // MATERIAL PROPERTIES
     Material mat;
     LoadMaterial(closestHit, mat);
-    eta = ( closestHit._FrontFace ) ? ( 1.f / mat._IOR ) : ( mat._IOR );
+    eta = ( closestHit._FrontFace || ( mat._SpecTrans <= 0.f ) ) ? ( 1.f / mat._IOR ) : ( mat._IOR );
 
     if ( 0 == depth )
     {
@@ -339,27 +339,18 @@ vec3 PathSample( in Ray iStartRay, in vec2 iCoordUV )
     if ( depth >= MaxPathSegments )
       break; // Maximum depth reached
 
-    if ( IsOpaque(mat) )
+    // DIRECT LIGHT
+    if ( SCATTER_RANDOM == scatterSample._Type )
     {
-      // DIRECT LIGHT
-      if ( SCATTER_RANDOM == scatterSample._Type )
-      {
-        radiance += DirectLight(ray, closestHit, mat, eta) * throughput;
-      }
-
-      // SCATTER
-      Scatter(ray, closestHit, mat, eta, scatterSample);
-      if ( SCATTER_NONE == scatterSample._Type )
-        break;
-
-      throughput *= scatterSample._Attenuation / ( scatterSample._P + EPSILON );
+      radiance += DirectLight(ray, closestHit, mat, eta) * throughput;
     }
-    else
-    {
-      // Ignore intersection and continue ray based on alpha test
-      scatterSample._Dir = ray._Dir;
-      depth--;
-    }
+
+    // SCATTER
+    Scatter(ray, closestHit, mat, eta, scatterSample);
+    if ( SCATTER_NONE == scatterSample._Type )
+      break;
+
+    throughput *= scatterSample._Attenuation / ( scatterSample._P + EPSILON );
 
     // NEXT RAY
     vec3 offsetNormal = ( dot(scatterSample._Dir, closestHit._Normal) >= 0.f ) ? closestHit._Normal : -closestHit._Normal;

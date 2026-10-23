@@ -42,6 +42,18 @@ struct Material
 };
 
 // ----------------------------------------------------------------------------
+// sRGBToLinear
+// IEC 61966-2-1 sRGB transfer function decoding for color textures
+// ----------------------------------------------------------------------------
+vec3 sRGBToLinear( in vec3 iSRGB )
+{
+  vec3 c = clamp(iSRGB, 0.f, 1.f);
+  vec3 lo = c / 12.92f;
+  vec3 hi = pow(( c + vec3(0.055f) ) / 1.055f, vec3(2.4f));
+  return mix(lo, hi, step(vec3(0.04045f), c));
+}
+
+// ----------------------------------------------------------------------------
 // LoadMaterial
 // ----------------------------------------------------------------------------
 void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
@@ -100,7 +112,7 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
     if ( texMapping.x >= 0 )
     {
       vec4 texColor = SampleMaterialTexture(texMapping, ioClosestHit._UV);
-      oMat._Albedo *= texColor.rgb;
+      oMat._Albedo *= sRGBToLinear(texColor.rgb);
       oMat._Opacity *= texColor.a;
     }
   }
@@ -131,7 +143,10 @@ void LoadMaterial( inout HitPoint ioClosestHit, out Material oMat )
   {
     ivec4 texMapping = GetMaterialTextureMapping(emissionMapTexID);
     if ( texMapping.x >= 0 )
-      oMat._Emission = SampleMaterialTexture(texMapping, ioClosestHit._UV).rgb;
+    {
+      vec3 texEmission = sRGBToLinear(SampleMaterialTexture(texMapping, ioClosestHit._UV).rgb);
+      oMat._Emission = ( dot(oMat._Emission, oMat._Emission) > 0.f ) ? ( oMat._Emission * texEmission ) : texEmission;
+    }
   }
 
   float alpha = oMat._Roughness * oMat._Roughness;

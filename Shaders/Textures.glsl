@@ -42,7 +42,7 @@ vec4 SampleMaterialTexture( in ivec4 iMapping, in vec2 iUV )
 
   // Sample only the populated part of a padded bucket layer.
   vec2 contentSize = max(vec2(iMapping.zw), vec2(1.0));
-  vec2 sampleUV = ( vec2(0.5) + fract(iUV) * max(contentSize - vec2(1.0), vec2(0.0)) ) / float(bucketSize);
+  vec2 sampleUV = clamp(fract(iUV) * contentSize, vec2(0.5), max(contentSize - vec2(0.5), vec2(0.5))) / float(bucketSize);
   if ( iMapping.x == 0 )
     return texture(u_TexArrayTexture0, vec3(sampleUV, float(iMapping.y)));
   if ( iMapping.x == 1 )
@@ -55,7 +55,7 @@ vec4 SampleMaterialTexture( in ivec4 iMapping, in vec2 iUV )
     return texture(u_TexArrayTexture4, vec3(sampleUV, float(iMapping.y)));
 #else
   vec2 contentSize = max(vec2(iMapping.zw), vec2(1.0));
-  vec2 sampleUV = ( vec2(0.5) + fract(iUV) * max(contentSize - vec2(1.0), vec2(0.0)) ) / float(u_TextureArraySize);
+  vec2 sampleUV = clamp(fract(iUV) * contentSize, vec2(0.5), max(contentSize - vec2(0.5), vec2(0.5))) / float(u_TextureArraySize);
   return texture(u_TexArrayTexture0, vec3(sampleUV, float(iMapping.y)));
 #endif
 

@@ -378,8 +378,7 @@ int PathTracer::UpdatePathTraceUniforms()
     _PathTraceShader -> SetUniform("u_EnvMapTotalWeight", _Scene.GetEnvMap().GetTotalWeight());
     _PathTraceShader -> SetUniform("u_Gamma", _Settings._Gamma);
     _PathTraceShader -> SetUniform("u_Exposure", _Settings._Exposure);
-    _PathTraceShader -> SetUniform("u_ToneMapping", ( _Settings._ToneMapping ? 1 : 0 ));
-    //_PathTraceShader -> SetUniform("u_ToneMapping", 0);
+    _PathTraceShader -> SetUniform("u_ToneMapping", 0);
     _PathTraceShader -> SetUniform("u_DebugMode" , _DebugMode );
   }
 
@@ -975,8 +974,7 @@ int PathTracer::UpdateRenderToScreenUniforms()
   _RenderToScreenShader -> SetUniform("u_RenderRes", (float)_Settings._WindowResolution.x, (float)_Settings._WindowResolution.y);
   _RenderToScreenShader -> SetUniform("u_Gamma", _Settings._Gamma);
   _RenderToScreenShader -> SetUniform("u_Exposure", _Settings._Exposure);
-  //_RenderToScreenShader -> SetUniform("u_ToneMapping", ( _Settings._ToneMapping ? 1 : 0 ));
-  _RenderToScreenShader -> SetUniform("u_ToneMapping", 0);
+  _RenderToScreenShader -> SetUniform("u_ToneMapping", ( _Settings._ToneMapping ? 1 : 0 ));
   _RenderToScreenShader -> SetUniform("u_FXAA", (_Settings._FXAA ?  1 : 0 ));
 
   _RenderToScreenShader -> StopUsing();
@@ -1040,9 +1038,31 @@ int PathTracer::ReadbackFinalColor( RenderImage & oImage )
   glBindTexture(GL_TEXTURE_2D, finalTexture._Handle);
   glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, oImage._Pixels.data());
   glBindTexture(GL_TEXTURE_2D, 0);
+  const bool glOk = ( GL_NO_ERROR == glGetError() );
   FlipImageVertically(oImage);
 
-  return ( GL_NO_ERROR == glGetError() ) ? 0 : 1;
+  if ( _Settings._ToneMapping )
+  {
+    const float exposure = _Settings._Exposure;
+    const float invGamma = ( _Settings._Gamma > 0.f ) ? ( 1.f / _Settings._Gamma ) : 1.f;
+    const size_t pixelCount = (size_t)oImage._Width * (size_t)oImage._Height;
+    for ( size_t i = 0; i < pixelCount; ++i )
+    {
+      float r = std::max(oImage._Pixels[i * 4u + 0u], 0.f) * exposure;
+      float g = std::max(oImage._Pixels[i * 4u + 1u], 0.f) * exposure;
+      float b = std::max(oImage._Pixels[i * 4u + 2u], 0.f) * exposure;
+      const float lum = 0.299f * r + 0.587f * g + 0.114f * b;
+      const float invDenom = 1.f / ( 1.f + lum );
+      r = std::clamp(r * invDenom, 0.f, 1.f);
+      g = std::clamp(g * invDenom, 0.f, 1.f);
+      b = std::clamp(b * invDenom, 0.f, 1.f);
+      oImage._Pixels[i * 4u + 0u] = std::pow(r, invGamma);
+      oImage._Pixels[i * 4u + 1u] = std::pow(g, invGamma);
+      oImage._Pixels[i * 4u + 2u] = std::pow(b, invGamma);
+    }
+  }
+
+  return glOk ? 0 : 1;
 }
 
 // ----------------------------------------------------------------------------
