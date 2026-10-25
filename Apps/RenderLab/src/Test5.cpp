@@ -403,6 +403,12 @@ int Test5::DrawMainMenuBar()
 
   if ( ImGui::BeginMenu("View") )
   {
+    const bool anyVisible = AreAnyPanelsVisible();
+    if ( ImGui::MenuItem( anyVisible ? "Hide All" : "Show All" ) )
+      SetAllPanelsVisibility( !anyVisible );
+
+    ImGui::Separator();
+
     ImGui::MenuItem("Scene", nullptr, &_ShowScenePanel);
     ImGui::MenuItem("Settings", nullptr, &_ShowSettingsPanel);
     ImGui::MenuItem("Camera", nullptr, &_ShowCameraPanel);
@@ -456,6 +462,38 @@ int Test5::DrawMainMenuBar()
 
   ImGui::EndMainMenuBar();
   return 0;
+}
+
+// ----------------------------------------------------------------------------
+// AreAnyPanelsVisible
+// ----------------------------------------------------------------------------
+bool Test5::AreAnyPanelsVisible() const
+{
+  return _ShowScenePanel
+      || _ShowSettingsPanel
+      || _ShowCameraPanel
+      || _ShowMeshPanel
+      || _ShowBoidsPanel
+      || _ShowBackgroundPanel
+      || _ShowMaterialsPanel
+      || _ShowLightsPanel
+      || _ShowRenderStatsPanel;
+}
+
+// ----------------------------------------------------------------------------
+// SetAllPanelsVisibility
+// ----------------------------------------------------------------------------
+void Test5::SetAllPanelsVisibility( const bool iVisible )
+{
+  _ShowScenePanel       = iVisible;
+  _ShowSettingsPanel    = iVisible;
+  _ShowCameraPanel      = iVisible;
+  _ShowMeshPanel        = iVisible;
+  _ShowBoidsPanel       = iVisible;
+  _ShowBackgroundPanel  = iVisible;
+  _ShowMaterialsPanel   = iVisible;
+  _ShowLightsPanel      = iVisible;
+  _ShowRenderStatsPanel = iVisible;
 }
 
 // ----------------------------------------------------------------------------

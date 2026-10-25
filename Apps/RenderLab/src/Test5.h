@@ -56,6 +56,8 @@ protected:
   int InitializeUI();
   int DrawUI();
   int DrawMainMenuBar();
+  bool AreAnyPanelsVisible() const;
+  void SetAllPanelsVisibility( const bool iVisible );
   int DrawSceneUI();
   int DrawHelpUI();
   int DrawRenderStatsUI();
