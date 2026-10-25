@@ -284,7 +284,17 @@ vec3 PathSample( in Ray iStartRay, in vec2 iCoordUV )
             misWeight = PowerHeuristic(scatterSample._P, envMapColPdf.w);
 
           if( misWeight > 0. )
-            radiance += misWeight * envMapColPdf.rgb * throughput * u_EnvMapIntensity;
+          {
+            vec3 envRadiance = misWeight * envMapColPdf.rgb * throughput * u_EnvMapIntensity;
+            if ( depth > 0 )
+            {
+              float envLum = Luminance(envRadiance);
+              const float MaxIndirectRadiance = 35.f;
+              if ( envLum > MaxIndirectRadiance )
+                envRadiance *= ( MaxIndirectRadiance / envLum );
+            }
+            radiance += envRadiance;
+          }
         }
         else
           radiance += u_BackgroundColor * throughput;
@@ -316,7 +326,17 @@ vec3 PathSample( in Ray iStartRay, in vec2 iCoordUV )
       }
 
       if ( misWeight > 0. )
-        radiance += misWeight * u_Lights[closestHit._LightID]._Emission * throughput;
+      {
+        vec3 emitRadiance = misWeight * u_Lights[closestHit._LightID]._Emission * throughput;
+        if ( depth > 0 )
+        {
+          float emitLum = Luminance(emitRadiance);
+          const float MaxIndirectRadiance = 35.f;
+          if ( emitLum > MaxIndirectRadiance )
+            emitRadiance *= ( MaxIndirectRadiance / emitLum );
+        }
+        radiance += emitRadiance;
+      }
       break;
     }
 
@@ -342,7 +362,15 @@ vec3 PathSample( in Ray iStartRay, in vec2 iCoordUV )
     // DIRECT LIGHT
     if ( SCATTER_RANDOM == scatterSample._Type )
     {
-      radiance += DirectLight(ray, closestHit, mat, eta) * throughput;
+      vec3 directRadiance = DirectLight(ray, closestHit, mat, eta) * throughput;
+      if ( depth > 0 )
+      {
+        float dirLum = Luminance(directRadiance);
+        const float MaxIndirectRadiance = 35.f;
+        if ( dirLum > MaxIndirectRadiance )
+          directRadiance *= ( MaxIndirectRadiance / dirLum );
+      }
+      radiance += directRadiance;
     }
 
     // SCATTER
@@ -404,6 +432,9 @@ void main()
   }
   else
     radiance = max(radiance, 0.f);
+
+  if ( any(isnan(radiance)) || any(isinf(radiance)) )
+    radiance = vec3(0.f);
 
   fragColor = vec4(radiance, 1.f);
 }

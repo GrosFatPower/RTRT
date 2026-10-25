@@ -310,23 +310,27 @@ vec3 EvalSpecReflection( in Material iMat, in float iEta, in vec3 iSpecCol, in v
 vec3 EvalSpecRefraction( in Material iMat, in float iEta, in vec3 iV, in vec3 iL, in vec3 iH, out float oPdf )
 {
   oPdf = 0.f;
-  if ( iL.z >= 0.f )
+  if ( ( iL.z >= 0.f ) || ( iV.z <= 0.f ) )
     return vec3(0.f);
 
-  float F = DielectricFresnel(abs(dot(iV, iH)), iEta);
+  float VdotH = dot(iV, iH);
+  float LdotH = dot(iL, iH);
+  if ( ( VdotH <= 0.f ) || ( LdotH >= 0.f ) )
+    return vec3(0.f);
+
+  float F = DielectricFresnel(VdotH, iEta);
   float D = GTR2Aniso(iH.z, iH.x, iH.y, iMat._Ax, iMat._Ay);
   float G1 = SmithGAniso(abs(iV.z), iV.x, iV.y, iMat._Ax, iMat._Ay);
   float G2 = G1 * SmithGAniso(abs(iL.z), iL.x, iL.y, iMat._Ax, iMat._Ay);
-  float denom = dot(iL, iH) + dot(iV, iH) * iEta;
-  denom = max(denom * denom, 1e-5f);
-  float eta2 = iEta * iEta;
-  float jacobian = abs(dot(iL, iH)) / denom;
+  float sqrtDenom = LdotH + VdotH * iEta;
+  float denom = max(sqrtDenom * sqrtDenom, 1e-5f);
+  float jacobian = abs(LdotH) / denom;
 
   float Vz = max(abs(iV.z), 1e-4f);
   float Lz = max(abs(iL.z), 1e-4f);
-  oPdf = max(G1 * max(0.f, dot(iV, iH)) * D * jacobian / Vz, 0.f);
+  oPdf = max(G1 * VdotH * D * jacobian / Vz, 0.f);
 
-  return pow(iMat._Albedo, vec3(.5f)) * (1.f - iMat._Metallic) * iMat._SpecTrans * (1.f - F) * D * G2 * abs(dot(iV, iH)) * jacobian * eta2 / (Lz * Vz);
+  return pow(iMat._Albedo, vec3(.5f)) * (1.f - iMat._Metallic) * iMat._SpecTrans * (1.f - F) * D * G2 * VdotH * jacobian / (Lz * Vz);
 }
 
 // ----------------------------------------------------------------------------
@@ -376,8 +380,9 @@ void GetLobeProbabilities( in Material iMat, in float iEta, in vec3 iSpecCol, in
   float dielDiffWeight = (1.f - Ed_V) * Luminance(iMat._Albedo) * (1.f - iMat._Metallic) * (1.f - iMat._SpecTrans);
   float metalMSWeight  = (1.f - E0_V) * Luminance(iMat._Albedo) * iMat._Metallic;
 
+  float dielReflectProb = mix(Ed_V, dielectricF, iMat._SpecTrans);
   oDiffuseWeight     = dielDiffWeight + metalMSWeight;
-  oSpecReflectWeight = mix(Ed_V, E0_V * Luminance(mix(iMat._Albedo, vec3(1.f), metallicF)), iMat._Metallic);
+  oSpecReflectWeight = mix(dielReflectProb, E0_V * Luminance(mix(iMat._Albedo, vec3(1.f), metallicF)), iMat._Metallic);
   oSpecRefractWeight = (1.f - F) * (1.f - iMat._Metallic) * iMat._SpecTrans * Luminance(iMat._Albedo);
   oClearcoatWeight   = .25f * iMat._Clearcoat * (1.f - iMat._Metallic);
   float totalWeight = oDiffuseWeight + oSpecReflectWeight + oSpecRefractWeight + oClearcoatWeight;
@@ -431,10 +436,14 @@ vec3 DisneyEval( in HitPoint iHP, in Material iMat, in float iEta, in vec3 iV, i
   }
 
   // Specular Reflection
-  if ( ( specReflectWeight > 0.f ) && ( iL.z > 0.f ) && ( iV.z > 0.f ) )
+  float reflectWeight = specReflectWeight;
+  float VdotH = max(dot(iV, H), 0.f);
+  if ( ( specRefractWeight > 0.f ) && ( ( iEta * iEta * ( 1.f - VdotH * VdotH ) ) > 1.f ) )
+    reflectWeight += specRefractWeight;
+  if ( ( reflectWeight > 0.f ) && ( iL.z > 0.f ) && ( iV.z > 0.f ) )
   {
     f += EvalSpecReflection(iMat, iEta, specCol, iV, iL, H, pdf);
-    oPdf += pdf * specReflectWeight;
+    oPdf += pdf * reflectWeight;
   }
 
   // Specular Refraction
@@ -468,6 +477,8 @@ vec3 DisneySample( in HitPoint iHP, in Material iMat, in float iEta, in vec3 iV,
   vec3 T, BT;
   ComputeOnB(iHP._Normal, T, BT);
   vec3 localV = ToLocal(T, BT, iHP._Normal, iV);
+  if ( localV.z <= 0.f )
+    return vec3(0.f);
 
   // Specular and sheen color
   vec3 specCol, sheenCol;
@@ -502,6 +513,8 @@ vec3 DisneySample( in HitPoint iHP, in Material iMat, in float iEta, in vec3 iV,
     if ( H.z < 0.f )
       H = -H;
     localL = normalize(reflect(-localV, H));
+    if ( localL.z <= 0.f )
+      return vec3(0.f);
   }
   else if ( r1 < cdf[2] ) // Specular Reflection Lobe
   {
@@ -510,6 +523,8 @@ vec3 DisneySample( in HitPoint iHP, in Material iMat, in float iEta, in vec3 iV,
     if ( H.z < 0.f )
       H = -H;
     localL = normalize(reflect(-localV, H));
+    if ( localL.z <= 0.f )
+      return vec3(0.f);
   }
   else // Specular Refraction Lobe
   {
@@ -519,9 +534,17 @@ vec3 DisneySample( in HitPoint iHP, in Material iMat, in float iEta, in vec3 iV,
       H = -H;
     vec3 refracted = refract(-localV, H, iEta);
     if ( dot(refracted, refracted) > 0.f )
+    {
       localL = normalize(refracted);
+      if ( localL.z >= 0.f )
+        return vec3(0.f);
+    }
     else
+    {
       localL = normalize(reflect(-localV, H));
+      if ( localL.z <= 0.f )
+        return vec3(0.f);
+    }
   }
 
   oL = ToWorld(T, BT, iHP._Normal, localL);
