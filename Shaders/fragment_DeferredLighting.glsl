@@ -223,23 +223,34 @@ void main()
   vec3 specularSSR = vec3(0.0);
   vec3 diffuseIBL = vec3(0.0);
 
-  if ( ( u_EnableSpecularIBL != 0 ) && ( u_EnableEnvMap > 0 ) )
-  {
-    float lod = roughness * max(u_EnvMapMipCount - 1.0, 0.0);
-    vec3 R = reflect(-V, N);
-    vec3 prefiltered = SampleEnvMapNoSeamLod(R, lod);
-    vec3 roughFresnel = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - NdotV, 5.0);
-    vec2 brdf = texture(u_BRDFLUT, vec2(NdotV, roughness)).rg;
-    float roughnessFade = 1.0 - smoothstep(u_SpecularIBLMaxRoughness * 0.75, u_SpecularIBLMaxRoughness, roughness);
-    specularIBL = prefiltered * (roughFresnel * brdf.x + brdf.y) * roughnessFade;
-    specularIBL *= u_SpecularIBLIntensity;
-    specularIBL *= mix(1.0, ao, 0.2);
-  }
-
+  vec3 kS = vec3(0.0);
   if ( u_EnableEnvMap > 0 )
   {
-    vec3 envDiffuse = SampleEnvMapNoSeamLod(N, min(4.0, max(u_EnvMapMipCount - 1.0, 0.0)));
-    diffuseIBL = envDiffuse * albedo * (1.0 - metallic) * ao * 0.35;
+    vec3 envDiffuse = SampleEnvMapNoSeamLod(N, max(u_EnvMapMipCount - 1.0, 0.0));
+    vec3 F90 = clamp(50.0 * F0, 0.0, 1.0);
+    vec3 roughFresnel = F0 + (max(vec3(1.0 - roughness), F0) * F90 - F0) * pow(1.0 - NdotV, 5.0);
+    vec2 brdf = texture(u_BRDFLUT, vec2(NdotV, roughness)).rg;
+    vec3 specSingle = roughFresnel * brdf.x + F90 * brdf.y;
+    float E_ss = brdf.x + brdf.y;
+    float E_missing = clamp(1.0 - E_ss, 0.0, 1.0);
+    vec3 specMulti = F0 * E_missing;
+    kS = clamp(specSingle + specMulti, 0.0, 1.0);
+
+    if ( u_EnableSpecularIBL != 0 )
+    {
+      float lod = roughness * max(u_EnvMapMipCount - 1.0, 0.0);
+      vec3 R = reflect(-V, N);
+      vec3 dominantR = normalize(mix(R, N, roughness * roughness));
+      vec3 prefiltered = SampleEnvMapNoSeamLod(dominantR, lod);
+
+      float roughnessFade = 1.0 - smoothstep(u_SpecularIBLMaxRoughness * 0.75, u_SpecularIBLMaxRoughness, roughness);
+      vec3 specDir = prefiltered * (specSingle * roughnessFade);
+      vec3 specHemi = envDiffuse * (specSingle * (1.0 - roughnessFade) + specMulti);
+      specularIBL = (specDir + specHemi) * u_SpecularIBLIntensity * mix(1.0, ao, 0.2);
+    }
+
+    vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
+    diffuseIBL = envDiffuse * albedo * kD * ao;
   }
 
   if ( u_EnableSSR != 0 )

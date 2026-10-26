@@ -146,7 +146,15 @@ bool RenderTestCase::ApplyScene( Scene & ioScene ) const
     if ( _Material._HasSpecTrans )
       material._SpecTrans = _Material._SpecTrans;
     if ( _Material._HasIOR )
+    {
       material._IOR = _Material._IOR;
+      if ( !_Material._HasReflectance )
+      {
+        float f0 = (material._IOR - 1.0f) / (material._IOR + 1.0f);
+        f0 = f0 * f0;
+        material._Reflectance = std::clamp(std::sqrt(f0 / 0.16f), 0.0f, 1.0f);
+      }
+    }
     if ( _Material._HasOpacity )
       material._Opacity = _Material._Opacity;
   }

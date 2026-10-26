@@ -1088,6 +1088,8 @@ int DeferredRenderer::InitializeBRDFLUT()
   lutDesc._DataType       = _BRDFLUTTEX._DataType;
   lutDesc._MinFilter      = GL_LINEAR;
   lutDesc._MagFilter      = GL_LINEAR;
+  lutDesc._WrapS          = GL_CLAMP_TO_EDGE;
+  lutDesc._WrapT          = GL_CLAMP_TO_EDGE;
   GLUtil::CreateTexture(lutDesc, _BRDFLUTTEX);
 
   GLFrameBufferDesc lutFBODesc;
