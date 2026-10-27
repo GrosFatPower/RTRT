@@ -14,6 +14,8 @@ uniform vec2 u_Resolution;
 uniform int u_EnableSSAO = 1;
 uniform float u_SSAORadius = 0.5;
 uniform float u_SSAOBias = 0.025;
+uniform float u_SSAOMaxDistance = 80.0;
+uniform float u_SSAOFadeDistance = 20.0;
 uniform int u_KernelSize = 16;
 uniform vec3 u_KernelSamples[32];
 
@@ -29,14 +31,29 @@ void main()
   vec3 normalWS = normalize(texture(u_GNormal, fragUV).xyz * 2.0 - 1.0);
   vec3 fragPosWS = texture(u_GPosition, fragUV).xyz;
   vec3 fragPosVS = (u_View * vec4(fragPosWS, 1.0)).xyz;
+  float viewDist = -fragPosVS.z;
+  if ( viewDist >= u_SSAOMaxDistance )
+  {
+    fragColor = vec4(1.0, 0.0, 0.0, 1.0);
+    return;
+  }
+  float distFade = clamp((u_SSAOMaxDistance - viewDist) / max(u_SSAOFadeDistance, 0.001), 0.0, 1.0);
+  bool isOrtho = (u_Proj[3][3] == 1.0);
+  float projRadiusPixels = (u_SSAORadius * u_Proj[1][1] / (isOrtho ? 1.0 : max(viewDist, 0.001))) * (u_Resolution.y * 0.5);
+  float radiusFade = smoothstep(1.0, 2.5, projRadiusPixels);
+
   // View matrix is orthonormal (rotation + translation), so inverse-transpose == rotation for normals here.
   vec3 normalVS = normalize(mat3(u_View) * normalWS);
+  float adaptiveBias = max(u_SSAOBias, viewDist * 0.001);
 
   vec2 noiseScale = u_Resolution / 4.0;
   vec3 randomVec = normalize(texture(u_SSAONoise, fragUV * noiseScale).xyz * 2.0 - 1.0);
   vec3 tangent = randomVec - normalVS * dot(randomVec, normalVS);
   if ( length(tangent) < 0.001 )
-    tangent = vec3(1.0, 0.0, 0.0);
+  {
+    vec3 up = abs(normalVS.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    tangent = normalize(cross(up, normalVS));
+  }
   else
     tangent = normalize(tangent);
   vec3 bitangent = normalize(cross(normalVS, tangent));
@@ -64,10 +81,11 @@ void main()
     vec3 sampleWorldPos = texture(u_GPosition, sampleUV).xyz;
     vec3 samplePosFetchedVS = (u_View * vec4(sampleWorldPos, 1.0)).xyz;
 
-    float rangeCheck = smoothstep(0.0, 1.0, u_SSAORadius / (abs(fragPosVS.z - samplePosFetchedVS.z) + 0.0001));
-    occlusion += ( samplePosFetchedVS.z >= samplePosVS.z + u_SSAOBias ? 1.0 : 0.0 ) * rangeCheck;
+    float sampleDist = length(samplePosFetchedVS - fragPosVS);
+    float rangeCheck = smoothstep(1.0, 0.0, sampleDist / u_SSAORadius);
+    occlusion += ( samplePosFetchedVS.z >= samplePosVS.z + adaptiveBias ? 1.0 : 0.0 ) * rangeCheck;
   }
 
-  float ao = 1.0 - ( occlusion / float(kernelSize) );
+  float ao = 1.0 - ( occlusion / float(kernelSize) ) * distFade * radiusFade;
   fragColor = vec4(clamp(ao, 0.0, 1.0), 0.0, 0.0, 1.0);
 }

@@ -666,6 +666,16 @@ protected:
         if ( !ParseInt(tokens[1], settings._SSAOKernelSize) )
           return Error("invalid render ssaoKernelSize");
       }
+      else if ( IsEqual(tokens[0], "ssaomaxdistance") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], settings._SSAOMaxDistance) )
+          return Error("invalid render ssaoMaxDistance");
+      }
+      else if ( IsEqual(tokens[0], "ssaofadedistance") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], settings._SSAOFadeDistance) )
+          return Error("invalid render ssaoFadeDistance");
+      }
       else if ( IsEqual(tokens[0], "ssr") && ( 2 == static_cast<int>(tokens.size()) ) )
       {
         if ( !ParseBool(tokens[1], settings._SSR) )
@@ -813,6 +823,19 @@ protected:
       {
         if ( !ParseBool(tokens[1], settings._Denoise) )
           return Error("invalid render denoise");
+      }
+      else if ( ( IsEqual(tokens[0], "denoisemethod") || IsEqual(tokens[0], "denoiser") ) && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( IsEqual(tokens[1], "oidn") )
+          settings._DenoisingMethod = 3;
+        else if ( IsEqual(tokens[1], "bilateral") )
+          settings._DenoisingMethod = 0;
+        else if ( IsEqual(tokens[1], "wavelet") )
+          settings._DenoisingMethod = 1;
+        else if ( IsEqual(tokens[1], "edge-aware") || IsEqual(tokens[1], "atrous") )
+          settings._DenoisingMethod = 2;
+        else if ( !ParseInt(tokens[1], (int&)settings._DenoisingMethod) )
+          return Error("invalid render denoiser");
       }
       else
         return Error("invalid render field");
@@ -1446,6 +1469,8 @@ bool FpsGameMapLoader::Save( const std::string & iFilename, const FpsGameMap & i
     file << "  ssaoBias " << settings._SSAOBias << "\n";
     file << "  ssaoIntensity " << settings._SSAOIntensity << "\n";
     file << "  ssaoKernelSize " << settings._SSAOKernelSize << "\n";
+    file << "  ssaoMaxDistance " << settings._SSAOMaxDistance << "\n";
+    file << "  ssaoFadeDistance " << settings._SSAOFadeDistance << "\n";
     file << "  ssr " << ( settings._SSR ? "true" : "false" ) << "\n";
     file << "  ssrIntensity " << settings._SSRIntensity << "\n";
     file << "  ssrMaxRoughness " << settings._SSRMaxRoughness << "\n";
@@ -1470,6 +1495,11 @@ bool FpsGameMapLoader::Save( const std::string & iFilename, const FpsGameMap & i
     file << "  bounces " << settings._Bounces << "\n";
     file << "  spp " << settings._NbSamplesPerPixel << "\n";
     file << "  denoise " << ( settings._Denoise ? "true" : "false" ) << "\n";
+    const char * denoiserName = "oidn";
+    if ( 0 == settings._DenoisingMethod ) denoiserName = "bilateral";
+    else if ( 1 == settings._DenoisingMethod ) denoiserName = "wavelet";
+    else if ( 2 == settings._DenoisingMethod ) denoiserName = "edge-aware";
+    file << "  denoiser " << denoiserName << "\n";
     file << "}\n\n";
   }
 

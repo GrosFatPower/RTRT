@@ -89,6 +89,8 @@ struct FpsMapRenderSettings
   float           _SSAOBias = 0.025f;
   float           _SSAOIntensity = 1.f;
   int             _SSAOKernelSize = 16;
+  float           _SSAOMaxDistance = 80.f;
+  float           _SSAOFadeDistance = 20.f;
   bool            _SSR = true;
   float           _SSRIntensity = 0.6f;
   float           _SSRMaxRoughness = 0.55f;
@@ -112,7 +114,8 @@ struct FpsMapRenderSettings
   ShadingType     _ShadingType = ShadingType::PBR;
   int             _Bounces = 1;
   int             _NbSamplesPerPixel = 1;
-  bool            _Denoise = false;
+  bool            _Denoise = true;
+  unsigned int    _DenoisingMethod = 3;
 };
 
 struct FpsGameMap

@@ -1017,6 +1017,12 @@ int Test5::DrawSettingsUI()
           _Renderer -> Notify(DirtyState::RenderSettings);
         }
 
+        if ( ImGui::SliderFloat( "SSAO max distance", &_Settings._SSAOMaxDistance, 5.f, 300.f, "%.1f" ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
+        if ( ImGui::SliderFloat( "SSAO fade distance", &_Settings._SSAOFadeDistance, 1.f, 50.f, "%.1f" ) )
+          _Renderer -> Notify(DirtyState::RenderSettings);
+
         if ( ImGui::Checkbox( "SSR", &_Settings._SSR ) )
           _Renderer -> Notify(DirtyState::RenderSettings);
 

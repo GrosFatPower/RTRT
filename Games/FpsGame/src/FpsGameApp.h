@@ -72,6 +72,7 @@ protected:
 
   bool SetEditorMode( bool iEnabled );
   void SetMouseCaptured( bool iCaptured );
+  void SetRendererMode( FpsRendererMode iMode );
   void HandleDroppedFiles( int iCount, const char ** iPaths );
   void ApplyBenchmarkPose();
   void StartBenchmark();

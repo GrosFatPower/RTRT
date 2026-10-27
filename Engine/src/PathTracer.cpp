@@ -825,6 +825,11 @@ int PathTracer::DenoiseOutput()
     _DenoiseTimerWritten = true;
     return rc;
   }
+#else
+  if ( 3 == _Settings._DenoisingMethod )
+  {
+    _Settings._DenoisingMethod = 2;
+  }
 #endif
 
   if ( !_DenoiserShader )

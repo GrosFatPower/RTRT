@@ -84,6 +84,8 @@ static void ApplyMapRenderSettings( const FpsGameMap & iMap, FpsGameSettings & i
   ioRenderSettings._SSAOBias = std::max(0.f, settings._SSAOBias);
   ioRenderSettings._SSAOIntensity = std::max(0.f, settings._SSAOIntensity);
   ioRenderSettings._SSAOKernelSize = MathUtil::Clamp(settings._SSAOKernelSize, 4, 32);
+  ioRenderSettings._SSAOMaxDistance = std::max(0.1f, settings._SSAOMaxDistance);
+  ioRenderSettings._SSAOFadeDistance = std::max(0.001f, settings._SSAOFadeDistance);
 
   ioRenderSettings._SSR = settings._SSR;
   ioRenderSettings._SSRIntensity = std::max(0.f, settings._SSRIntensity);
@@ -111,6 +113,7 @@ static void ApplyMapRenderSettings( const FpsGameMap & iMap, FpsGameSettings & i
   ioRenderSettings._Bounces = std::max(1, settings._Bounces);
   ioRenderSettings._NbSamplesPerPixel = std::max(1, settings._NbSamplesPerPixel);
   ioRenderSettings._Denoise = settings._Denoise;
+  ioRenderSettings._DenoisingMethod = settings._DenoisingMethod;
 }
 
 // ----------------------------------------------------------------------------
@@ -141,6 +144,8 @@ static void CaptureMapRenderSettings( FpsGameMap & ioMap, const FpsGameSettings 
   settings._SSAOBias = iRenderSettings._SSAOBias;
   settings._SSAOIntensity = iRenderSettings._SSAOIntensity;
   settings._SSAOKernelSize = iRenderSettings._SSAOKernelSize;
+  settings._SSAOMaxDistance = iRenderSettings._SSAOMaxDistance;
+  settings._SSAOFadeDistance = iRenderSettings._SSAOFadeDistance;
   settings._SSR = iRenderSettings._SSR;
   settings._SSRIntensity = iRenderSettings._SSRIntensity;
   settings._SSRMaxRoughness = iRenderSettings._SSRMaxRoughness;
@@ -165,6 +170,7 @@ static void CaptureMapRenderSettings( FpsGameMap & ioMap, const FpsGameSettings 
   settings._Bounces = iRenderSettings._Bounces;
   settings._NbSamplesPerPixel = iRenderSettings._NbSamplesPerPixel;
   settings._Denoise = iRenderSettings._Denoise;
+  settings._DenoisingMethod = iRenderSettings._DenoisingMethod;
 }
 
 // ----------------------------------------------------------------------------
@@ -407,7 +413,12 @@ void FpsGameApp::ApplyRendererDefaults()
   if ( FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode )
   {
     _Settings._Accumulate = true;
-    _Settings._Denoise = false;
+    _Settings._Denoise = true;
+#if defined(RTRT_HAS_OIDN)
+    _Settings._DenoisingMethod = 3;
+#else
+    _Settings._DenoisingMethod = 2;
+#endif
     _Settings._NbSamplesPerPixel = 1;
     _Settings._Bounces = 2;
     _Settings._LowResRatio = 1.f;
@@ -432,6 +443,22 @@ void FpsGameApp::ApplyRendererDefaults()
     _Settings._Transparency = false;
     _Settings._TiledRendering = false;
   }
+}
+
+// ----------------------------------------------------------------------------
+// SetRendererMode
+// ----------------------------------------------------------------------------
+void FpsGameApp::SetRendererMode( FpsRendererMode iMode )
+{
+  if ( iMode == _GameSettings._RendererMode )
+    return;
+
+  _GameSettings._RendererMode = iMode;
+  ApplyRendererDefaults();
+  CaptureMapRenderSettings(_Map, _GameSettings, _Settings);
+  _ReloadRenderer = true;
+  if ( _Editor.IsEnabled() )
+    _Editor.MarkDirty();
 }
 
 // ----------------------------------------------------------------------------
@@ -976,10 +1003,7 @@ int FpsGameApp::ProcessInput()
 
       if ( requestedRendererMode != _GameSettings._RendererMode )
       {
-        _GameSettings._RendererMode = requestedRendererMode;
-        CaptureMapRenderSettings(_Map, _GameSettings, _Settings);
-        _ReloadRenderer = true;
-        _Editor.MarkDirty();
+        SetRendererMode(requestedRendererMode);
       }
 
       if ( _KeyInput.IsKeyReleased(GLFW_KEY_DELETE) )
@@ -1104,9 +1128,7 @@ int FpsGameApp::ProcessInput()
 
     if ( requestedRendererMode != _GameSettings._RendererMode )
     {
-      _GameSettings._RendererMode = requestedRendererMode;
-      CaptureMapRenderSettings(_Map, _GameSettings, _Settings);
-      _ReloadRenderer = true;
+      SetRendererMode(requestedRendererMode);
     }
 
     input._MoveForward  = _KeyInput.IsKeyDown(GLFW_KEY_W);
@@ -1350,29 +1372,17 @@ int FpsGameApp::DrawMainMenuBar()
     if ( ImGui::MenuItem("Deferred", nullptr, FpsRendererMode::Deferred == _GameSettings._RendererMode)
       && ( FpsRendererMode::Deferred != _GameSettings._RendererMode ) )
     {
-      _GameSettings._RendererMode = FpsRendererMode::Deferred;
-      CaptureMapRenderSettings(_Map, _GameSettings, _Settings);
-      _ReloadRenderer = true;
-      if ( _Editor.IsEnabled() )
-        _Editor.MarkDirty();
+      SetRendererMode(FpsRendererMode::Deferred);
     }
     if ( ImGui::MenuItem("Software", nullptr, FpsRendererMode::Software == _GameSettings._RendererMode)
       && ( FpsRendererMode::Software != _GameSettings._RendererMode ) )
     {
-      _GameSettings._RendererMode = FpsRendererMode::Software;
-      CaptureMapRenderSettings(_Map, _GameSettings, _Settings);
-      _ReloadRenderer = true;
-      if ( _Editor.IsEnabled() )
-        _Editor.MarkDirty();
+      SetRendererMode(FpsRendererMode::Software);
     }
     if ( ImGui::MenuItem("Photo Path Tracer", nullptr, FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode)
       && ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode ) )
     {
-      _GameSettings._RendererMode = FpsRendererMode::PhotoPathTracer;
-      CaptureMapRenderSettings(_Map, _GameSettings, _Settings);
-      _ReloadRenderer = true;
-      if ( _Editor.IsEnabled() )
-        _Editor.MarkDirty();
+      SetRendererMode(FpsRendererMode::PhotoPathTracer);
     }
 
     ImGui::Separator();

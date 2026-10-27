@@ -30,21 +30,24 @@ void main()
 
   float sum = 0.0;
   float weightSum = 0.0;
-  for ( int y = -1; y <= 1; ++y )
+  for ( int y = -2; y <= 2; ++y )
   {
-    for ( int x = -1; x <= 1; ++x )
+    for ( int x = -2; x <= 2; ++x )
     {
       vec2 offset = vec2(x, y) * texel;
       vec2 sampleUV = fragUV + offset;
+      if ( any(lessThan(sampleUV, vec2(0.0))) || any(greaterThan(sampleUV, vec2(1.0))) )
+        continue;
+
       float sampleDepth = texture(u_GDepth, sampleUV).r;
       if ( sampleDepth >= 1.0 )
         continue;
 
       vec3 sampleNormal = normalize(texture(u_GNormal, sampleUV).xyz * 2.0 - 1.0);
       float sampleAO = texture(u_SSAOInput, sampleUV).r;
-      float depthWeight = 1.0 / (1.0 + abs(sampleDepth - centerDepth) * 200.0);
+      float depthWeight = 1.0 / (1.0 + abs(sampleDepth - centerDepth) * 100.0);
       float normalWeight = pow(max(dot(centerNormal, sampleNormal), 0.0), 16.0);
-      float spatialWeight = 1.0 / (1.0 + float(x * x + y * y));
+      float spatialWeight = exp(-float(x * x + y * y) / 4.5);
       float weight = depthWeight * normalWeight * spatialWeight;
 
       sum += sampleAO * weight;

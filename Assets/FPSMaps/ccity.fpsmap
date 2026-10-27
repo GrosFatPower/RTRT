@@ -6,9 +6,9 @@ map "Default FPS Arena" {
 }
 
 player {
-  position 0.000000 0.050000 -8.000000
-  yaw 90.000000
-  pitch 0.000000
+  position 0.000000 -0.228779 -8.000000
+  yaw 242.160416
+  pitch 1.440000
   health 100
   armor 50
 }
@@ -24,6 +24,8 @@ render {
   cameraZNear 0.050000
   cameraZFar 501.500000
   cameraFOV 85.000000
+  cameraOrthographic false
+  cameraOrthographicHeight 10.000000
   renderScale 100
   showLights false
   toneMapping true
@@ -39,20 +41,33 @@ render {
   ssaoBias 0.025000
   ssaoIntensity 1.000000
   ssaoKernelSize 16
+  ssaoMaxDistance 80.000000
+  ssaoFadeDistance 20.000000
   ssr true
   ssrIntensity 0.600000
   ssrMaxRoughness 0.550000
   ssrMaxSteps 48
-  ssrStepSize 0.180000
+  ssrPixelStride 1.000000
+  ssrStartBias 1.000000
   ssrMaxDistance 35.000000
   ssrThickness 0.250000
   ssrFade 0.180000
+  transparency true
+  refraction true
+  refractionMaxSteps 48
+  refractionPixelStride 1.000000
+  refractionStartBias 1.000000
+  refractionMaxDistance 35.000000
+  refractionThickness 0.250000
+  refractionEdgeFade 0.180000
   pbrDirectLighting true
   directLightIntensity 1.000000
   iblMaxRoughness 0.500000
+  lighting pbr
   bounces 1
   spp 1
-  denoise false
+  denoise true
+  denoiser oidn
 }
 
 material "wall" {

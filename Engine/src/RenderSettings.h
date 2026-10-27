@@ -71,6 +71,8 @@ struct RenderSettings
   float        _SSAORadius            = 0.5f;                   // Deferred renderer
   float        _SSAOBias              = 0.025f;                 // Deferred renderer
   float        _SSAOIntensity         = 1.0f;                   // Deferred renderer
+  float        _SSAOMaxDistance       = 80.0f;                  // Deferred renderer
+  float        _SSAOFadeDistance      = 20.0f;                  // Deferred renderer
   float        _SSRPixelStride        = 1.f;                    // Deferred renderer
   float        _SSRStartBias          = 1.f;                    // Deferred renderer, pixels
   float        _SSRMaxDistance        = 35.f;                   // Deferred renderer

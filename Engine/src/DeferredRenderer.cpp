@@ -945,6 +945,8 @@ int DeferredRenderer::InitializeSSAO()
   ssaoDesc._DataType       = _SSAOTEX._DataType;
   ssaoDesc._MinFilter      = GL_LINEAR;
   ssaoDesc._MagFilter      = GL_LINEAR;
+  ssaoDesc._WrapS          = GL_CLAMP_TO_EDGE;
+  ssaoDesc._WrapT          = GL_CLAMP_TO_EDGE;
   GLUtil::CreateTexture(ssaoDesc, _SSAOTEX);
 
   GLFrameBufferDesc ssaoFBODesc;
@@ -979,7 +981,6 @@ int DeferredRenderer::InitializeSSAO()
     if ( glm::length(sample) > 0.f )
       sample = glm::normalize(sample);
 
-    sample *= dist01(rng);
     float scale = float(i) / float(_SSAOKernel.size());
     scale = MathUtil::Lerp(0.1f, 1.0f, scale * scale);
     _SSAOKernel[i] = sample * scale;
@@ -1703,6 +1704,8 @@ int DeferredRenderer::UpdateUniforms()
       _SSAOShader -> SetUniform("u_EnableSSAO", _Settings._SSAO ? 1 : 0);
       _SSAOShader -> SetUniform("u_SSAORadius", _Settings._SSAORadius);
       _SSAOShader -> SetUniform("u_SSAOBias", _Settings._SSAOBias);
+      _SSAOShader -> SetUniform("u_SSAOMaxDistance", _Settings._SSAOMaxDistance);
+      _SSAOShader -> SetUniform("u_SSAOFadeDistance", _Settings._SSAOFadeDistance);
       _SSAOShader -> SetUniform("u_KernelSize", std::min(std::max(_Settings._SSAOKernelSize, 1), 32));
       for ( int i = 0; i < (int)_SSAOKernel.size(); ++i )
         _SSAOShader -> SetUniform("u_KernelSamples[" + std::to_string(i) + "]", _SSAOKernel[i]);

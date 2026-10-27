@@ -111,6 +111,10 @@ public:
   void SetAnisotropicLevel(int iLevel);
   int GetAnisotropicLevel() const { return _Settings._AnisotropicLevel; }
   float GetEffectiveShadowFar() const { return _ShadowFar; }
+  float GetSSAOMaxDistance() const { return _Settings._SSAOMaxDistance; }
+  void  SetSSAOMaxDistance(float iDist) { _Settings._SSAOMaxDistance = std::max(0.1f, iDist); }
+  float GetSSAOFadeDistance() const { return _Settings._SSAOFadeDistance; }
+  void  SetSSAOFadeDistance(float iDist) { _Settings._SSAOFadeDistance = std::max(0.001f, iDist); }
   virtual int GetRenderPassTimings( std::vector<RenderPassTiming> & oTimings ) const override;
 
   virtual DeferredRenderer * AsDeferredRenderer() override { return this; }
@@ -180,7 +184,7 @@ protected:
   GLFrameBuffer _GBufferFBO;
   GLTexture     _GAlbedoTEX   = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GAlbedo, GL_RGBA8,  GL_RGBA, GL_UNSIGNED_BYTE };
   GLTexture     _GNormalTEX   = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GNormal, GL_RGBA16F, GL_RGBA, GL_FLOAT };
-  GLTexture     _GPositionTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GPosition, GL_RGBA16F, GL_RGBA, GL_FLOAT };
+  GLTexture     _GPositionTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GPosition, GL_RGBA32F, GL_RGBA, GL_FLOAT };
   GLTexture     _GMaterialTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GMaterial, GL_RGBA16F, GL_RGBA, GL_FLOAT };
   GLTexture     _GEmissionTEX = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GEmission, GL_RGBA16F, GL_RGBA, GL_FLOAT };
   GLTexture     _GDepthTEX    = { 0, GL_TEXTURE_2D, DeferredTexSlot::_GDepth, GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT };

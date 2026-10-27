@@ -948,6 +948,8 @@ void FpsGameEditor::SyncMapFromRuntimeSettings( FpsGameEditorContext & ioContext
   renderSettings._SSAOBias = ioContext._Settings._SSAOBias;
   renderSettings._SSAOIntensity = ioContext._Settings._SSAOIntensity;
   renderSettings._SSAOKernelSize = ioContext._Settings._SSAOKernelSize;
+  renderSettings._SSAOMaxDistance = ioContext._Settings._SSAOMaxDistance;
+  renderSettings._SSAOFadeDistance = ioContext._Settings._SSAOFadeDistance;
   renderSettings._SSR = ioContext._Settings._SSR;
   renderSettings._SSRIntensity = ioContext._Settings._SSRIntensity;
   renderSettings._SSRMaxRoughness = ioContext._Settings._SSRMaxRoughness;
@@ -972,6 +974,7 @@ void FpsGameEditor::SyncMapFromRuntimeSettings( FpsGameEditorContext & ioContext
   renderSettings._Bounces = ioContext._Settings._Bounces;
   renderSettings._NbSamplesPerPixel = ioContext._Settings._NbSamplesPerPixel;
   renderSettings._Denoise = ioContext._Settings._Denoise;
+  renderSettings._DenoisingMethod = ioContext._Settings._DenoisingMethod;
 }
 
 // ----------------------------------------------------------------------------
@@ -2569,6 +2572,10 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
         ioContext._Settings._SSAOKernelSize = std::max(4, std::min(32, ssaoKernelSize));
         notifyPersistedRenderSettingsChanged();
       }
+      if ( ImGui::SliderFloat("SSAO max distance", &ioContext._Settings._SSAOMaxDistance, 5.f, 300.f, "%.1f") )
+        notifyPersistedRenderSettingsChanged();
+      if ( ImGui::SliderFloat("SSAO fade distance", &ioContext._Settings._SSAOFadeDistance, 1.f, 50.f, "%.1f") )
+        notifyPersistedRenderSettingsChanged();
     }
 
     if ( ImGui::CollapsingHeader("SSR", ImGuiTreeNodeFlags_DefaultOpen) )
@@ -2718,6 +2725,22 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
         notifyPersistedRenderSettingsChanged();
       if ( ImGui::Checkbox("Denoise", &ioContext._Settings._Denoise) )
         notifyPersistedRenderSettingsChanged();
+      if ( ioContext._Settings._Denoise )
+      {
+#if defined(RTRT_HAS_OIDN)
+        static const char * DENOISING_METHODS[] = { "Bilateral", "Wavelet", "Edge-aware (A-Trous)", "OIDN (AI)" };
+        const int methodCount = 4;
+#else
+        static const char * DENOISING_METHODS[] = { "Bilateral", "Wavelet", "Edge-aware (A-Trous)" };
+        const int methodCount = 3;
+#endif
+        int denoisingMethod = (int)ioContext._Settings._DenoisingMethod;
+        if ( ImGui::Combo("Denoising method", &denoisingMethod, DENOISING_METHODS, methodCount) )
+        {
+          ioContext._Settings._DenoisingMethod = (unsigned int)denoisingMethod;
+          notifyPersistedRenderSettingsChanged();
+        }
+      }
     }
 
     if ( ImGui::CollapsingHeader("Path Tracer Debug") )
