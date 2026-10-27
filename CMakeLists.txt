@@ -196,6 +196,7 @@ add_subdirectory(Shaders)
 add_subdirectory(Engine)
 add_subdirectory(Framework)
 add_subdirectory(Games/FpsGame)
+add_subdirectory(Games/TetrisGame)
 add_subdirectory(Apps/RenderLab)
 
 if(RTRT_BUILD_RENDER_REGRESSION_TESTS)
