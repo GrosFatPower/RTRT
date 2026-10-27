@@ -39,6 +39,10 @@ Test5 : Render lab (GPU Path tracer / CPU Rasterizer / GPU Deferred renderer)
 
 ![Sponza_PT](./Captures/PathTracer_Sponza_28606frames.png)
 
+![slum_house_Persp_PT](./Captures/PathTracer_slum_house_Persp.png)
+
+![slum_house_Ortho_PT](./Captures/PathTracer_slum_house_Ortho.png)
+
 Test6 : (Very) Basic FPS game
 --------
 
