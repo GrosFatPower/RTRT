@@ -344,14 +344,19 @@ int TetrisGameApp::InitializeScene()
   _Scene = std::move(scene);
   if ( TetrisAppState::TitleScreen == _AppState )
   {
+    _SceneManager.ApplyTitleBackground(*_Scene, _Settings, nullptr);
     _SceneManager.SyncTitleShowcase(*_Scene, 0.f);
     _SceneManager.SyncTitleCamera(*_Scene, 0.f);
   }
   else
   {
+    _SceneManager.SelectNextRandomBackground(*_Scene, _Settings, nullptr);
     _SceneManager.SyncScene(*_Scene, _GameLogic, 0.f);
     _SceneManager.SyncCamera(*_Scene, _GameLogic);
   }
+  _PrevAppState = _AppState;
+  _PrevLevel    = _GameLogic.GetLevel();
+  _PrevElapsed  = _GameLogic.GetElapsedTime();
   return 0;
 }
 
@@ -413,6 +418,21 @@ int TetrisGameApp::ProcessInput()
 // ----------------------------------------------------------------------------
 int TetrisGameApp::UpdateGame( float iDeltaTime )
 {
+  if ( _Scene && ( _AppState != _PrevAppState ) )
+  {
+    if ( TetrisAppState::TitleScreen == _AppState )
+    {
+      _SceneManager.ApplyTitleBackground(*_Scene, _Settings, _Renderer.get());
+    }
+    else
+    {
+      _SceneManager.SelectNextRandomBackground(*_Scene, _Settings, _Renderer.get());
+      _PrevLevel   = _GameLogic.GetLevel();
+      _PrevElapsed = _GameLogic.GetElapsedTime();
+    }
+    _PrevAppState = _AppState;
+  }
+
   if ( TetrisAppState::TitleScreen == _AppState )
   {
     if ( _Scene )
@@ -424,11 +444,37 @@ int TetrisGameApp::UpdateGame( float iDeltaTime )
   }
   else
   {
+    const bool resetRequested = _InputState._ResetPressed;
     if ( !_Hud.IsSettingsOpen() )
       _GameLogic.Update(iDeltaTime, _InputState, _HandlingConfig);
 
     if ( _Scene )
     {
+      const double curElapsed = _GameLogic.GetElapsedTime();
+      const int curLevel      = _GameLogic.GetLevel();
+
+      if ( resetRequested || ( ( _PrevElapsed > 0.25 ) && ( curElapsed < 0.05 ) ) )
+      {
+        _SceneManager.SelectNextRandomBackground(*_Scene, _Settings, _Renderer.get());
+        _PrevLevel = curLevel;
+      }
+      else if ( _SceneManager.GetRotateBackgroundOnLevelUp() && ( curLevel > _PrevLevel ) )
+      {
+        _SceneManager.SelectNextRandomBackground(*_Scene, _Settings, _Renderer.get());
+        _PrevLevel = curLevel;
+      }
+      else
+      {
+        _PrevLevel = curLevel;
+      }
+      _PrevElapsed = curElapsed;
+
+      if ( !_Hud.IsSettingsOpen() && !_GameLogic.IsPaused() && !_GameLogic.IsGameOver() )
+      {
+        const float curTime = static_cast<float>(glfwGetTime());
+        _SceneManager.UpdateBackgroundMotion(_Settings, curTime);
+      }
+
       _SceneManager.SyncScene(*_Scene, _GameLogic, iDeltaTime);
       _SceneManager.SyncCamera(*_Scene, _GameLogic);
     }

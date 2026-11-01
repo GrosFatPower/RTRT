@@ -362,6 +362,7 @@ int PathTracer::UpdatePathTraceUniforms()
   _PathTraceShader -> SetUniform("u_Time", (float)glfwGetTime());
   _PathTraceShader -> SetUniform("u_FrameNum", (int)_FrameNum);
   _PathTraceShader -> SetUniform("u_NbCompleteFrames", (int)_NbCompleteFrames);
+  _PathTraceShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
 
   if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
   {

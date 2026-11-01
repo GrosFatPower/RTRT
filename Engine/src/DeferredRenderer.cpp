@@ -1865,6 +1865,7 @@ int DeferredRenderer::UpdateUniforms()
       _LightingShader -> SetUniform("u_EnvMapMipCount", envMipCount);
     }
 
+    _LightingShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
     _LightingShader -> SetUniform("u_DebugMode" , _DebugMode);
 
     _LightingShader -> StopUsing();
@@ -1900,6 +1901,7 @@ int DeferredRenderer::UpdateUniforms()
     if ( !_UseTextureBuckets )
       _TransparentShader -> SetUniform("u_TextureArraySize", _Scene.GetCompiledTextureBuckets()[0]._Size);
     _TransparentShader -> SetUniform("u_MaterialsTexture", (int)DeferredMaterialPassTexSlot::_Materials);
+    _TransparentShader -> SetUniform("u_EnvMapRotation", _Settings._SkyBoxRotation / 360.f);
 
     if ( _DirtyStates & (unsigned long)DirtyState::SceneLights )
     {

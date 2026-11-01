@@ -463,6 +463,49 @@ void TetrisHud::DrawOptionsPage( TetrisGameLogic & ioLogic,
       if ( ImGui::Checkbox("Active Piece Dynamic Point Light", &dynLight) )
         ioSceneMgr.SetDynamicPieceLighting(dynLight);
 
+      ImGui::SameLine();
+      bool camMotion = ioSceneMgr.GetInGameCameraMotion();
+      if ( ImGui::Checkbox("In-Game Background Motion", &camMotion) )
+        ioSceneMgr.SetInGameCameraMotion(camMotion);
+
+      if ( camMotion )
+      {
+        float bgSpeed = ioSceneMgr.GetBackgroundMotionSpeed();
+        if ( ImGui::SliderFloat("Background Motion Speed", &bgSpeed, 0.0f, 3.0f, "%.2fx") )
+          ioSceneMgr.SetBackgroundMotionSpeed(bgSpeed);
+
+        float boardSway = ioSceneMgr.GetBoardSwayAmplitude();
+        if ( ImGui::SliderFloat("Board Camera Sway Amplitude", &boardSway, 0.0f, 1.0f, "%.2f") )
+          ioSceneMgr.SetBoardSwayAmplitude(boardSway);
+      }
+
+      const std::vector<std::string> & bgNames = ioSceneMgr.GetBackgroundNames();
+      if ( !bgNames.empty() )
+      {
+        std::vector<const char *> bgNamePtrs;
+        bgNamePtrs.reserve(bgNames.size());
+        for ( size_t i = 0; i < bgNames.size(); ++i )
+          bgNamePtrs.push_back(bgNames[i].c_str());
+
+        int currentBgIdx = ioSceneMgr.GetCurrentBackgroundIndex();
+        if ( ImGui::Combo("HDR Background Map", &currentBgIdx, bgNamePtrs.data(), static_cast<int>(bgNamePtrs.size())) )
+          ioSceneMgr.ApplyBackgroundByIndex(currentBgIdx, ioScene, ioSettings, ioRenderer);
+
+        if ( ImGui::Button("Next Random Background", ImVec2(220.0f, 30.0f)) )
+          ioSceneMgr.SelectNextRandomBackground(ioScene, ioSettings, ioRenderer);
+
+        ImGui::SameLine();
+        bool rotateOnLevel = ioSceneMgr.GetRotateBackgroundOnLevelUp();
+        if ( ImGui::Checkbox("Auto-Rotate Background on Level Up", &rotateOnLevel) )
+          ioSceneMgr.SetRotateBackgroundOnLevelUp(rotateOnLevel);
+
+        if ( ImGui::SliderFloat("Skybox Rotation (deg)", &ioSettings._SkyBoxRotation, 0.0f, 360.0f, "%.1f deg") )
+        {
+          if ( ioRenderer )
+            ioRenderer->Notify(DirtyState::RenderSettings);
+        }
+      }
+
       ImGui::Dummy(ImVec2(0.0f, 6.0f));
       ImGui::TextDisabled("RTRTCore Engine & Renderer Settings");
       ImGui::Separator();

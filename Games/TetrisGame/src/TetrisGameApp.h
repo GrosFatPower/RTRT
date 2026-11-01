@@ -68,6 +68,9 @@ protected:
   TetrisHud                   _Hud;
 
   TetrisAppState              _AppState     = TetrisAppState::TitleScreen;
+  TetrisAppState              _PrevAppState = TetrisAppState::TitleScreen;
+  int                         _PrevLevel    = 1;
+  double                      _PrevElapsed  = 0.0;
   TetrisRendererMode          _RendererMode = TetrisRendererMode::Deferred;
   TetrisHandlingConfig        _HandlingConfig;
   TetrisInputState            _InputState;

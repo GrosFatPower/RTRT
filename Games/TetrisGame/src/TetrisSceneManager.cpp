@@ -7,10 +7,14 @@
 #include "MeshInstance.h"
 #include "PathUtils.h"
 #include "ProceduralMesh.h"
+#include "Renderer.h"
 #include "Scene.h"
+#include "TetrisPiece.h"
 
 #include <GLFW/glfw3.h>
+#include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 
 namespace RTRT
@@ -99,9 +103,25 @@ Vec3 TetrisSceneManager::CellToWorld( int iX, int iY )
 // CTOR
 // ----------------------------------------------------------------------------
 TetrisSceneManager::TetrisSceneManager()
+: _BgRng(std::random_device{}())
 {
   for ( int i = 0; i < (int)TetrisPieceType::Count; ++i )
     _PieceMaterialIDs[i] = -1;
+
+  _BackgroundNames =
+  {
+    "syferfontein_18d_clear_1k.hdr",
+    "alps_field_2k.hdr",
+    "konzerthaus_4k.hdr",
+    "peppermint_powerplant_4k.hdr",
+    "spiaggia_di_mondello_4k_new.hdr",
+    "sunset.hdr",
+    "white_cliff_top_1k.hdr",
+    "artist_workshop_1k.hdr",
+    "studio_small_05_1k.hdr"
+  };
+
+  RefillBackgroundBag();
 }
 
 // ----------------------------------------------------------------------------
@@ -109,6 +129,115 @@ TetrisSceneManager::TetrisSceneManager()
 // ----------------------------------------------------------------------------
 TetrisSceneManager::~TetrisSceneManager()
 {
+}
+
+// ----------------------------------------------------------------------------
+// RefillBackgroundBag
+// ----------------------------------------------------------------------------
+void TetrisSceneManager::RefillBackgroundBag()
+{
+  _BackgroundBag.clear();
+  for ( int i = 0; i < static_cast<int>(_BackgroundNames.size()); ++i )
+    _BackgroundBag.push_back(i);
+
+  std::shuffle(_BackgroundBag.begin(), _BackgroundBag.end(), _BgRng);
+
+  // Avoid repeating the currently active background at the seam between bags
+  if ( ( _BackgroundBag.size() > 1 ) && ( _BackgroundBag.back() == _CurrentBgIndex ) )
+    std::swap(_BackgroundBag.back(), _BackgroundBag.front());
+}
+
+// ----------------------------------------------------------------------------
+// ApplyTitleBackground
+// ----------------------------------------------------------------------------
+void TetrisSceneManager::ApplyTitleBackground( Scene & ioScene, RenderSettings & ioSettings, Renderer * ioRenderer )
+{
+  _BaseSkyBoxRotation = 0.0f;
+  ioSettings._SkyBoxRotation = 0.0f;
+
+  if ( !_IsTitleBgActive || ( _CurrentBgIndex != 0 ) )
+  {
+    _CurrentBgIndex = 0;
+    _IsTitleBgActive = true;
+    const std::string envMapPath = PathUtils::GetEnvMapPath(_BackgroundNames[0]);
+    if ( std::filesystem::exists(envMapPath) )
+      ioScene.LoadEnvMap(envMapPath);
+
+    if ( ioRenderer )
+      ioRenderer->Notify(DirtyState::SceneEnvMap);
+  }
+
+  if ( ioRenderer )
+    ioRenderer->Notify(DirtyState::RenderSettings);
+}
+
+// ----------------------------------------------------------------------------
+// ApplyBackgroundByIndex
+// ----------------------------------------------------------------------------
+void TetrisSceneManager::ApplyBackgroundByIndex( int iIndex, Scene & ioScene, RenderSettings & ioSettings, Renderer * ioRenderer )
+{
+  if ( _BackgroundNames.empty() )
+    return;
+
+  const int clampedIdx = MathUtil::Clamp(iIndex, 0, static_cast<int>(_BackgroundNames.size()) - 1);
+  const std::string envMapPath = PathUtils::GetEnvMapPath(_BackgroundNames[clampedIdx]);
+  if ( !std::filesystem::exists(envMapPath) )
+    return;
+
+  _CurrentBgIndex = clampedIdx;
+  _IsTitleBgActive = false;
+  ioScene.LoadEnvMap(envMapPath);
+
+  if ( ioRenderer )
+  {
+    ioRenderer->Notify(DirtyState::SceneEnvMap);
+    ioRenderer->Notify(DirtyState::RenderSettings);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// SelectNextRandomBackground
+// ----------------------------------------------------------------------------
+void TetrisSceneManager::SelectNextRandomBackground( Scene & ioScene, RenderSettings & ioSettings, Renderer * ioRenderer )
+{
+  if ( _BackgroundNames.empty() )
+    return;
+
+  if ( _BackgroundBag.empty() )
+    RefillBackgroundBag();
+
+  int nextIdx = _BackgroundBag.back();
+  _BackgroundBag.pop_back();
+
+  if ( ( nextIdx == _CurrentBgIndex ) && !_BackgroundBag.empty() )
+  {
+    const int altIdx = _BackgroundBag.back();
+    _BackgroundBag.back() = nextIdx;
+    nextIdx = altIdx;
+  }
+
+  std::uniform_real_distribution<float> rotDist(0.0f, 360.0f);
+  _BaseSkyBoxRotation = rotDist(_BgRng);
+  ioSettings._SkyBoxRotation = _BaseSkyBoxRotation;
+
+  ApplyBackgroundByIndex(nextIdx, ioScene, ioSettings, ioRenderer);
+}
+
+// ----------------------------------------------------------------------------
+// UpdateBackgroundMotion
+// ----------------------------------------------------------------------------
+void TetrisSceneManager::UpdateBackgroundMotion( RenderSettings & ioSettings, float iTime )
+{
+  if ( !_InGameCameraMotion || ( _BgMotionSpeed <= 0.001f ) )
+    return;
+
+  // Smoothly pan & sway the 360-degree HDR environment map while keeping the board fixed
+  const float panDeg  = iTime * 2.4f * _BgMotionSpeed;
+  const float swayDeg = std::sin(iTime * 0.38f) * 7.5f * _BgMotionSpeed;
+  float rot = std::fmod(_BaseSkyBoxRotation + panDeg + swayDeg, 360.0f);
+  if ( rot < 0.0f )
+    rot += 360.0f;
+  ioSettings._SkyBoxRotation = rot;
 }
 
 // ----------------------------------------------------------------------------
@@ -631,7 +760,7 @@ int TetrisSceneManager::SyncScene( Scene & ioScene, const TetrisGameLogic & iLog
 
   // 4. Synchronize Hold Piece
   const float previewScale = 0.85f;
-  const float minoFill     = 0.95f;
+  const float minoFill     = 0.97f;
   const TetrisPieceType holdPiece = iLogic.GetHoldPiece();
   if ( TetrisPieceType::None != holdPiece )
   {
@@ -780,15 +909,31 @@ int TetrisSceneManager::SyncCamera( Scene & ioScene, const TetrisGameLogic & iLo
   Camera & camera = ioScene.GetCamera();
   const Vec3 lookAtTarget(0.0f, 10.0f, 0.0f);
 
+  const float curTime = static_cast<float>(glfwGetTime());
+
   // Apply subtle screen shake offset
   const float shake = iLogic.GetScreenShakeImpulse();
-  const Vec3 shakeOffset(std::sin(glfwGetTime() * 45.0) * shake * 0.15f,
-                         std::cos(glfwGetTime() * 50.0) * shake * 0.22f,
+  const Vec3 shakeOffset(std::sin(curTime * 45.0f) * shake * 0.15f,
+                         std::cos(curTime * 50.0f) * shake * 0.22f,
                          0.0f);
+
+  // Optional board camera sway (defaults to 0.0f so the board stays 100% fixed while the background moves)
+  Vec3 motionOffset(0.0f);
+  if ( _InGameCameraMotion && ( _BoardSwayAmplitude > 0.001f ) )
+  {
+    const bool hasActive = ( TetrisPieceType::None != iLogic.GetActivePiece() ) && !iLogic.IsGameOver();
+    const float pieceLeanX = hasActive
+      ? ( static_cast<float>(iLogic.GetActiveOrigin().x) - 3.5f ) * 0.16f
+      : 0.0f;
+
+    motionOffset.x = ( std::cos(curTime * 0.23f) * 2.6f + std::sin(curTime * 0.53f) * 0.9f + pieceLeanX ) * _BoardSwayAmplitude;
+    motionOffset.y = ( std::sin(curTime * 0.37f) * 2.0f + std::cos(curTime * 0.19f) * 0.8f ) * _BoardSwayAmplitude;
+    motionOffset.z = ( std::sin(curTime * 0.29f) * 1.2f ) * _BoardSwayAmplitude;
+  }
 
   if ( TetrisCameraPreset::Isometric == _CameraPreset )
   {
-    camera.Initialize(Vec3(20.0f, 15.5f, 46.0f) + shakeOffset, lookAtTarget, 45.0f);
+    camera.Initialize(Vec3(11.5f, 13.5f, 26.0f) + motionOffset + shakeOffset, lookAtTarget, 74.0f);
   }
   else if ( TetrisCameraPreset::FreeOrbit == _CameraPreset )
   {
@@ -799,11 +944,11 @@ int TetrisSceneManager::SyncCamera( Scene & ioScene, const TetrisGameLogic & iLo
       _OrbitRadius * std::sin(pitchRad),
       _OrbitRadius * std::cos(yawRad) * std::cos(pitchRad)
     );
-    camera.Initialize(eyePos + shakeOffset, lookAtTarget, 45.0f);
+    camera.Initialize(eyePos + shakeOffset, lookAtTarget, 76.0f);
   }
   else // Frontal3D
   {
-    camera.Initialize(Vec3(0.0f, 10.0f, 50.0f) + shakeOffset, lookAtTarget, 45.0f);
+    camera.Initialize(Vec3(0.0f, 10.0f, 27.0f) + motionOffset + shakeOffset, lookAtTarget, 76.0f);
   }
 
   camera.SetZNearFar(0.1f, 150.0f);

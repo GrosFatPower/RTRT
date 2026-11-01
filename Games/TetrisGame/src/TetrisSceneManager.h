@@ -5,11 +5,14 @@
 #include "Material.h"
 #include "Mesh.h"
 #include "MeshInstance.h"
+#include "RenderSettings.h"
 #include "Scene.h"
 #include "TetrisGameLogic.h"
 #include "TetrisTypes.h"
 
 #include <memory>
+#include <random>
+#include <string>
 #include <vector>
 
 namespace RTRT
@@ -42,6 +45,28 @@ public:
   void SetDynamicPieceLighting( bool iEnable ) { _DynamicPieceLighting = iEnable; }
   bool GetDynamicPieceLighting() const { return _DynamicPieceLighting; }
 
+  void SetInGameCameraMotion( bool iEnable ) { _InGameCameraMotion = iEnable; }
+  bool GetInGameCameraMotion() const { return _InGameCameraMotion; }
+
+  void SetBackgroundMotionSpeed( float iSpeed ) { _BgMotionSpeed = iSpeed; }
+  float GetBackgroundMotionSpeed() const { return _BgMotionSpeed; }
+
+  void SetBoardSwayAmplitude( float iAmp ) { _BoardSwayAmplitude = iAmp; }
+  float GetBoardSwayAmplitude() const { return _BoardSwayAmplitude; }
+
+  void UpdateBackgroundMotion( RenderSettings & ioSettings, float iTime );
+
+  // Background / HDR Environment management
+  void ApplyTitleBackground( Scene & ioScene, RenderSettings & ioSettings, Renderer * ioRenderer );
+  void SelectNextRandomBackground( Scene & ioScene, RenderSettings & ioSettings, Renderer * ioRenderer );
+  void ApplyBackgroundByIndex( int iIndex, Scene & ioScene, RenderSettings & ioSettings, Renderer * ioRenderer );
+
+  void SetRotateBackgroundOnLevelUp( bool iEnable ) { _RotateBgOnLevelUp = iEnable; }
+  bool GetRotateBackgroundOnLevelUp() const { return _RotateBgOnLevelUp; }
+
+  int GetCurrentBackgroundIndex() const { return _CurrentBgIndex; }
+  const std::vector<std::string> & GetBackgroundNames() const { return _BackgroundNames; }
+
   // Orbit camera manipulation for FreeOrbit preset
   void OrbitYawPitch( float iDeltaYaw, float iDeltaPitch );
   void OrbitZoom( float iDeltaRadius );
@@ -60,14 +85,29 @@ protected:
 
   int MaterialIDForPiece( TetrisPieceType iType ) const;
 
+  void RefillBackgroundBag();
+
 protected:
   TetrisMaterialPreset _MaterialPreset = TetrisMaterialPreset::GlossyPlastic;
   TetrisCameraPreset   _CameraPreset   = TetrisCameraPreset::Frontal3D;
   bool                 _ShowGhost      = true;
   bool                 _DynamicPieceLighting = true;
+  bool                 _InGameCameraMotion   = true;
+  float                _BgMotionSpeed        = 1.0f;
+  float                _BoardSwayAmplitude   = 0.0f;
+  float                _BaseSkyBoxRotation   = 0.0f;
+  bool                 _RotateBgOnLevelUp    = true;
+
+  // Background rotation state
+  std::vector<std::string> _BackgroundNames;
+  std::vector<int>         _BackgroundBag;
+  int                      _CurrentBgIndex     = 0;
+  bool                     _IsTitleBgActive    = true;
+  int                      _LastObservedLevel  = 1;
+  std::mt19937             _BgRng;
 
   // Orbit camera parameters
-  float                _OrbitRadius    = 50.0f;
+  float                _OrbitRadius    = 27.0f;
   float                _OrbitYaw       = 0.f;
   float                _OrbitPitch     = 0.f;
 
