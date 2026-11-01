@@ -72,6 +72,9 @@ public:
 
   const std::vector<int> & GetLastClearedRows() const { return _LastClearedRows; }
 
+  const TetrisSessionStats & GetSessionStats() const { return _SessionStats; }
+  void ResetSessionStats() { _SessionStats.Reset(); _HighScore = 0; }
+
   TetrisTSpinType DetectTSpin() const;
   float ComputeGravityInterval( int iLevel ) const;
 
@@ -81,6 +84,7 @@ protected:
   void LockActivePiece( bool iFromHardDrop );
   void OnFloorManipulation();
   bool IsActivePieceOnSurface() const;
+  void UpdateSessionStats();
 
 protected:
   TetrisMatrix     _Matrix;
@@ -129,11 +133,12 @@ protected:
   std::string      _GameOverReason = "";
 
   // Visual callout & feedback
-  std::string      _ActionBannerText    = "";
-  float            _ActionBannerTimer   = 0.f;
-  float            _ActionBannerAlpha   = 0.f;
-  float            _ScreenShakeImpulse  = 0.f;
-  std::vector<int> _LastClearedRows;
+  std::string        _ActionBannerText    = "";
+  float              _ActionBannerTimer   = 0.f;
+  float              _ActionBannerAlpha   = 0.f;
+  float              _ScreenShakeImpulse  = 0.f;
+  std::vector<int>   _LastClearedRows;
+  TetrisSessionStats _SessionStats;
 };
 
 }

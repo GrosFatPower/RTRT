@@ -158,11 +158,13 @@ Mesh * TetrisSceneManager::CreateEnclosureMesh( const std::string & iName )
   // Top Cap
   builder.AddBox(Vec3(-5.65f, 21.4f, -0.8f), Vec3( 5.65f, 22.0f, 0.7f));
 
-  // Hold queue lower shelf trim
+  // Hold queue top & lower shelf trims
   builder.AddBox(Vec3(-10.2f, 13.3f, -0.7f), Vec3(-5.8f, 13.6f, 0.3f));
+  builder.AddBox(Vec3(-10.2f, 19.5f, -0.7f), Vec3(-5.8f, 19.8f, 0.3f));
 
-  // Next queue lower shelf trim
+  // Next queue top & lower shelf trims
   builder.AddBox(Vec3( 5.8f,  4.2f, -0.7f),  Vec3(10.2f,  4.5f, 0.3f));
+  builder.AddBox(Vec3( 5.8f, 19.5f, -0.7f),  Vec3(10.2f, 19.8f, 0.3f));
 
   return new Mesh(iName, builder._Vertices, builder._Normals, builder._UVs, builder._Indices);
 }
@@ -527,6 +529,22 @@ int TetrisSceneManager::SyncScene( Scene & ioScene, const TetrisGameLogic & iLog
   const TetrisMatrix & matrix = iLogic.GetMatrix();
   const Mat4x4 hiddenTransform = glm::translate(Vec3(0.f, -100.f, 0.f)) * glm::scale(Vec3(0.001f));
 
+  if ( ( _EnclosureInstanceID >= 0 ) && ( _EnclosureInstanceID < static_cast<int>(instances.size()) ) )
+  {
+    instances[_EnclosureInstanceID]._Visible = true;
+    instances[_EnclosureInstanceID]._Transform = Mat4x4(1.0f);
+  }
+  if ( ( _BackplateInstanceID >= 0 ) && ( _BackplateInstanceID < static_cast<int>(instances.size()) ) )
+  {
+    instances[_BackplateInstanceID]._Visible = true;
+    instances[_BackplateInstanceID]._Transform = Mat4x4(1.0f);
+  }
+  if ( ( _SkylineInstanceID >= 0 ) && ( _SkylineInstanceID < static_cast<int>(instances.size()) ) )
+  {
+    instances[_SkylineInstanceID]._Visible = true;
+    instances[_SkylineInstanceID]._Transform = Mat4x4(1.0f);
+  }
+
   // 1. Synchronize locked matrix blocks (rows 0 to 21)
   int cellInstanceIdx = 0;
   for ( int y = 0; y < 22; ++y )
@@ -612,12 +630,14 @@ int TetrisSceneManager::SyncScene( Scene & ioScene, const TetrisGameLogic & iLog
   }
 
   // 4. Synchronize Hold Piece
+  const float previewScale = 0.85f;
+  const float minoFill     = 0.95f;
   const TetrisPieceType holdPiece = iLogic.GetHoldPiece();
   if ( TetrisPieceType::None != holdPiece )
   {
     const std::array<Vec2i, 4> & minos = TetrisPiece::GetMinos(holdPiece, TetrisRotation::Spawn);
     const int holdMatID = MaterialIDForPiece(holdPiece);
-    const Vec3 holdCenter(-7.9f, 16.5f, 0.0f);
+    const Vec3 holdCenter(-8.0f, 16.5f, 0.0f);
     const float xCenterOffset = (TetrisPieceType::I == holdPiece) ? 1.5f : ((TetrisPieceType::O == holdPiece) ? 0.5f : 1.0f);
     const float yCenterOffset = (TetrisPieceType::I == holdPiece) ? 2.5f : ((TetrisPieceType::O == holdPiece) ? 1.5f : 1.0f);
 
@@ -627,10 +647,16 @@ int TetrisSceneManager::SyncScene( Scene & ioScene, const TetrisGameLogic & iLog
       if ( ( instID < 0 ) || ( instID >= static_cast<int>(instances.size()) ) )
         continue;
 
+      const Vec3 localOffset(
+        ( static_cast<float>(minos[i].x) - xCenterOffset ) * previewScale,
+        ( static_cast<float>(minos[i].y) - yCenterOffset ) * previewScale,
+        0.0f
+      );
+
       instances[instID]._Visible = true;
       instances[instID]._MaterialID = holdMatID;
-      instances[instID]._Transform = glm::translate(holdCenter + Vec3(static_cast<float>(minos[i].x) - xCenterOffset, static_cast<float>(minos[i].y) - yCenterOffset, 0.f))
-                                   * glm::scale(Vec3(0.85f * 0.92f));
+      instances[instID]._Transform = glm::translate(holdCenter + localOffset)
+                                   * glm::scale(Vec3(previewScale * minoFill));
     }
   }
   else
@@ -647,7 +673,7 @@ int TetrisSceneManager::SyncScene( Scene & ioScene, const TetrisGameLogic & iLog
   }
 
   // 5. Synchronize Next Queue (5 previews)
-  const float nextBaseY[5] = { 17.0f, 14.2f, 11.4f, 8.6f, 5.8f };
+  const float nextBaseY[5] = { 17.2f, 14.3f, 11.4f, 8.5f, 5.6f };
   for ( int queueIdx = 0; queueIdx < 5; ++queueIdx )
   {
     const TetrisPieceType nextPiece = iLogic.PeekNextPiece(queueIdx);
@@ -665,10 +691,16 @@ int TetrisSceneManager::SyncScene( Scene & ioScene, const TetrisGameLogic & iLog
         if ( ( instID < 0 ) || ( instID >= static_cast<int>(instances.size()) ) )
           continue;
 
+        const Vec3 localOffset(
+          ( static_cast<float>(minos[m].x) - xCenterOffset ) * previewScale,
+          ( static_cast<float>(minos[m].y) - yCenterOffset ) * previewScale,
+          0.0f
+        );
+
         instances[instID]._Visible = true;
         instances[instID]._MaterialID = nextMatID;
-        instances[instID]._Transform = glm::translate(nextCenter + Vec3(static_cast<float>(minos[m].x) - xCenterOffset, static_cast<float>(minos[m].y) - yCenterOffset, 0.f))
-                                     * glm::scale(Vec3(0.85f * 0.92f));
+        instances[instID]._Transform = glm::translate(nextCenter + localOffset)
+                                     * glm::scale(Vec3(previewScale * minoFill));
       }
     }
     else
@@ -756,7 +788,7 @@ int TetrisSceneManager::SyncCamera( Scene & ioScene, const TetrisGameLogic & iLo
 
   if ( TetrisCameraPreset::Isometric == _CameraPreset )
   {
-    camera.Initialize(Vec3(11.5f, 13.5f, 26.0f) + shakeOffset, lookAtTarget, 74.0f);
+    camera.Initialize(Vec3(20.0f, 15.5f, 46.0f) + shakeOffset, lookAtTarget, 45.0f);
   }
   else if ( TetrisCameraPreset::FreeOrbit == _CameraPreset )
   {
@@ -767,13 +799,152 @@ int TetrisSceneManager::SyncCamera( Scene & ioScene, const TetrisGameLogic & iLo
       _OrbitRadius * std::sin(pitchRad),
       _OrbitRadius * std::cos(yawRad) * std::cos(pitchRad)
     );
-    camera.Initialize(eyePos + shakeOffset, lookAtTarget, 76.0f);
+    camera.Initialize(eyePos + shakeOffset, lookAtTarget, 45.0f);
   }
   else // Frontal3D
   {
-    camera.Initialize(Vec3(0.0f, 10.0f, 27.0f) + shakeOffset, lookAtTarget, 76.0f);
+    camera.Initialize(Vec3(0.0f, 10.0f, 50.0f) + shakeOffset, lookAtTarget, 45.0f);
   }
 
+  camera.SetZNearFar(0.1f, 150.0f);
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// SyncTitleShowcase
+// ----------------------------------------------------------------------------
+int TetrisSceneManager::SyncTitleShowcase( Scene & ioScene, float iTime )
+{
+  std::vector<MeshInstance> & instances = ioScene.GetMeshInstances();
+  const Mat4x4 hiddenTransform = glm::translate(Vec3(0.f, -100.f, 0.f)) * glm::scale(Vec3(0.001f));
+
+  // Hide board enclosure & preview instances during Title Screen showcase
+  for ( int i = 0; i < static_cast<int>(instances.size()); ++i )
+  {
+    instances[i]._Visible = false;
+    instances[i]._Transform = hiddenTransform;
+  }
+
+  // 3x5 voxel bitmaps (row 0 = bottom, row 4 = top) for "T E T R I S"
+  struct VoxelLetter
+  {
+    TetrisPieceType _ColorType;
+    unsigned char   _Rows[5]; // 3-bit mask per row (bit 2 = left, bit 1 = mid, bit 0 = right)
+  };
+
+  static const VoxelLetter letters[6] =
+  {
+    { TetrisPieceType::I, { 0b010, 0b010, 0b010, 0b010, 0b111 } }, // T (Cyan)
+    { TetrisPieceType::J, { 0b111, 0b100, 0b111, 0b100, 0b111 } }, // E (Blue)
+    { TetrisPieceType::L, { 0b010, 0b010, 0b010, 0b010, 0b111 } }, // T (Orange)
+    { TetrisPieceType::O, { 0b101, 0b101, 0b110, 0b101, 0b110 } }, // R (Yellow)
+    { TetrisPieceType::S, { 0b111, 0b010, 0b010, 0b010, 0b111 } }, // I (Green)
+    { TetrisPieceType::T, { 0b110, 0b001, 0b010, 0b100, 0b011 } }  // S (Purple)
+  };
+
+  int poolCursor = _MatrixInstanceStart;
+  const int poolEnd = _MatrixInstanceStart + 220;
+
+  // 1. Place 3D "TETRIS" voxel sculpture across upper stage
+  const float totalWidth = 6.0f * 3.0f + 5.0f * 1.2f; // 24.0 units
+  const float startX = -totalWidth * 0.5f + 0.5f;
+  const float baseY  = 16.0f;
+
+  for ( int l = 0; l < 6; ++l )
+  {
+    const VoxelLetter & letter = letters[l];
+    const int matID = MaterialIDForPiece(letter._ColorType);
+    const float letterX = startX + static_cast<float>(l) * 4.2f;
+
+    for ( int row = 0; row < 5; ++row )
+    {
+      for ( int col = 0; col < 3; ++col )
+      {
+        const bool filled = ( ( letter._Rows[row] >> ( 2 - col ) ) & 1 ) != 0;
+        if ( !filled || ( poolCursor >= poolEnd ) || ( poolCursor >= static_cast<int>(instances.size()) ) )
+          continue;
+
+        const float wx = letterX + static_cast<float>(col);
+        const float wy = baseY + static_cast<float>(row);
+        const float waveY = std::sin(iTime * 2.2f + wx * 0.35f) * 0.35f;
+        const float waveZ = std::cos(iTime * 1.8f + wx * 0.30f) * 0.30f - 1.5f;
+
+        MeshInstance & inst = instances[poolCursor++];
+        inst._Visible = true;
+        inst._MaterialID = matID;
+        inst._Transform = glm::translate(Vec3(wx, wy + waveY, waveZ)) * glm::scale(Vec3(0.92f));
+      }
+    }
+  }
+
+  // 2. Place orbiting 3D Tetromino carousel in the lower/background stage
+  const int numOrbitPieces = 7;
+  const float orbitRadiusX = 13.5f;
+  const float orbitRadiusZ = 7.5f;
+
+  for ( int p = 0; p < numOrbitPieces; ++p )
+  {
+    const TetrisPieceType pieceType = static_cast<TetrisPieceType>(p + 1);
+    const int matID = MaterialIDForPiece(pieceType);
+    const std::array<Vec2i, 4> & minos = TetrisPiece::GetMinos(pieceType, TetrisRotation::Spawn);
+
+    const float angle = iTime * 0.45f + static_cast<float>(p) * ( 2.0f * static_cast<float>(M_PI) / static_cast<float>(numOrbitPieces) );
+    const Vec3 clusterCenter(
+      std::cos(angle) * orbitRadiusX,
+      5.8f + std::sin(iTime * 1.5f + static_cast<float>(p)) * 1.4f,
+      std::sin(angle) * orbitRadiusZ - 3.5f
+    );
+
+    const Mat4x4 clusterRot = glm::rotate(iTime * 0.9f + static_cast<float>(p), Vec3(0.3f, 1.0f, 0.2f));
+
+    for ( int m = 0; m < 4; ++m )
+    {
+      if ( ( poolCursor >= poolEnd ) || ( poolCursor >= static_cast<int>(instances.size()) ) )
+        break;
+
+      const Vec3 localOffset(static_cast<float>(minos[m].x) - 1.5f, static_cast<float>(minos[m].y) - 1.5f, 0.0f);
+      MeshInstance & inst = instances[poolCursor++];
+      inst._Visible = true;
+      inst._MaterialID = matID;
+      inst._Transform = glm::translate(clusterCenter) * clusterRot * glm::translate(localOffset) * glm::scale(Vec3(0.90f));
+    }
+  }
+
+  // 3. Sweep dynamic lights across the 3D showcase
+  Light * pieceLight = ioScene.GetLight(_ActivePieceLightIdx);
+  if ( pieceLight )
+  {
+    pieceLight->_Pos = Vec3(std::sin(iTime * 1.2f) * 10.0f, 15.0f, 2.5f);
+    pieceLight->_Emission = Vec3(0.2f, 0.9f, 1.0f);
+    pieceLight->_Intensity = 28.0f;
+  }
+
+  Light * flashLight = ioScene.GetLight(_LineClearLightIdx);
+  if ( flashLight )
+  {
+    flashLight->_Pos = Vec3(std::cos(iTime * 0.9f) * 11.0f, 6.5f, 2.0f);
+    flashLight->_Emission = Vec3(0.85f, 0.35f, 1.0f);
+    flashLight->_Intensity = 22.0f;
+  }
+
+  ioScene.RebuildTLASData();
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// SyncTitleCamera
+// ----------------------------------------------------------------------------
+int TetrisSceneManager::SyncTitleCamera( Scene & ioScene, float iTime )
+{
+  Camera & camera = ioScene.GetCamera();
+  const Vec3 lookAtTarget(0.0f, 9.8f, -1.5f);
+  const Vec3 eyePos(
+    std::sin(iTime * 0.32f) * 5.5f,
+    10.5f + std::sin(iTime * 0.48f) * 1.2f,
+    27.5f
+  );
+
+  camera.Initialize(eyePos, lookAtTarget, 76.0f);
   camera.SetZNearFar(0.1f, 150.0f);
   return 0;
 }

@@ -1,141 +1,742 @@
 #include "TetrisHud.h"
+
+#include "PathTracer.h"
 #include "Renderer.h"
 #include "Scene.h"
+
 #include "imgui.h"
 
+#include <algorithm>
 #include <cstdio>
-#include <iomanip>
-#include <sstream>
+#include <string>
+#include <vector>
 
 namespace RTRT
 {
 
-// ----------------------------------------------------------------------------
-// Local helpers
-// ----------------------------------------------------------------------------
-static std::string FormatTime( double iSeconds )
+namespace
 {
-  if ( iSeconds < 0. )
-    iSeconds = 0.;
 
-  const int totalSec = static_cast<int>(iSeconds);
-  const int minutes = totalSec / 60;
-  const int seconds = totalSec % 60;
-  const int millis = static_cast<int>(( iSeconds - totalSec ) * 1000.);
+// ----------------------------------------------------------------------------
+// FormatTime
+// ----------------------------------------------------------------------------
+std::string FormatTime( double iSeconds )
+{
+  const int totalMs = static_cast<int>(std::max(0.0, iSeconds) * 100.0);
+  const int mins = ( totalMs / 100 ) / 60;
+  const int secs = ( totalMs / 100 ) % 60;
+  const int hundredths = totalMs % 100;
 
-  char buffer[64];
-  std::snprintf(buffer, sizeof(buffer), "%02d:%02d.%03d", minutes, seconds, millis);
-  return std::string(buffer);
+  char buf[32];
+  std::snprintf(buf, sizeof(buf), "%02d:%02d.%02d", mins, secs, hundredths);
+  return std::string(buf);
 }
 
 // ----------------------------------------------------------------------------
-// CTOR
+// GetRendererModeLabel
+// ----------------------------------------------------------------------------
+const char * GetRendererModeLabel( TetrisRendererMode iMode )
+{
+  switch ( iMode )
+  {
+    case TetrisRendererMode::PathTracer: return "Path Tracer (GPU Ray Tracing)";
+    case TetrisRendererMode::Software:   return "Software Rasterizer (CPU SIMD)";
+    default:                             return "Deferred Renderer (Real-Time PBR)";
+  }
+}
+
+} // anonymous namespace
+
+// ----------------------------------------------------------------------------
+// CTOR / DTOR
 // ----------------------------------------------------------------------------
 TetrisHud::TetrisHud()
+: _Theme(GameUITheme::CreateArcadeTheme())
 {
 }
 
-// ----------------------------------------------------------------------------
-// DTOR
-// ----------------------------------------------------------------------------
 TetrisHud::~TetrisHud()
 {
 }
 
 // ----------------------------------------------------------------------------
-// Draw
+// Initialize
 // ----------------------------------------------------------------------------
-int TetrisHud::Draw( TetrisGameLogic & ioLogic,
-                    TetrisSceneManager & ioSceneMgr,
-                    Scene & ioScene,
-                    Renderer * ioRenderer,
-                    RenderSettings & ioSettings,
-                    TetrisRendererMode & ioRendererMode,
-                    TetrisHandlingConfig & ioHandling,
-                    double iFrameRate,
-                    double iDeltaTime,
-                    unsigned int iNbRenderedFrames,
-                    bool & oReloadRenderer )
+void TetrisHud::Initialize()
 {
-  DrawGameplayOverlay(ioLogic);
-  DrawActionBanner(ioLogic);
+  _Theme = GameUITheme::CreateArcadeTheme();
+  GameMenuUI::InitializeFonts(_Fonts);
+}
 
-  if ( ioLogic.IsGameOver() || ioLogic.IsVictory() || ioLogic.IsPaused() )
-    DrawGameOverModal(ioLogic);
+// ----------------------------------------------------------------------------
+// ToggleSettings / SetMenuPage
+// ----------------------------------------------------------------------------
+void TetrisHud::ToggleSettings()
+{
+  _ShowInGameOptions = !_ShowInGameOptions;
+}
 
-  if ( _ShowSettingsWindow )
+void TetrisHud::SetMenuPage( TetrisMenuPage iPage )
+{
+  _MenuPage = iPage;
+  _MainMenuNav.Reset();
+}
+
+// ----------------------------------------------------------------------------
+// DrawMainMenuPage
+// ----------------------------------------------------------------------------
+void TetrisHud::DrawMainMenuPage( TetrisAppState & ioAppState,
+                                  TetrisGameLogic & ioLogic,
+                                  TetrisRendererMode iRendererMode,
+                                  const GameMenuInput & iMenuInput,
+                                  bool & oRequestExit )
+{
+  const ImGuiIO & io = ImGui::GetIO();
+  const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.57f);
+  const Vec2 panelSize(520.0f, 0.0f);
+
+  if ( GameMenuUI::BeginMenuPanel("##TetrisMainMenu", "MAIN MENU", center, panelSize, _Theme, _Fonts) )
   {
-    DrawSettingsWindow(ioLogic, ioSceneMgr, ioScene, ioRenderer, ioSettings, ioRendererMode,
-                       ioHandling, iFrameRate, iDeltaTime, iNbRenderedFrames, oReloadRenderer);
+    const std::vector<GameMenuItem> items =
+    {
+      { "PLAY GAME",           "Choose Marathon, Sprint 40L, or Ultra 2m mode",     "3 MODES",  true, false },
+      { "QUICK START",         "Jump straight into Marathon mode at Level 1",       "MARATHON", true, false },
+      { "HIGH SCORES & STATS", "View personal best records and session statistics", "",         true, false },
+      { "OPTIONS",             "Configure handling (DAS/ARR), renderer & controls", "F1",       true, false },
+      { "EXIT TO DESKTOP",     "Close application",                                 "",         true, true  }
+    };
+
+    const int activated = GameMenuUI::DrawMenuButtonList(items, _MainMenuNav, iMenuInput, _Theme, _Fonts, 56.0f);
+    if ( 0 == activated )
+    {
+      _SelectedModeIndex = static_cast<int>(ioLogic.GetGameMode());
+      SetMenuPage(TetrisMenuPage::ModeSelect);
+    }
+    else if ( 1 == activated )
+    {
+      ioLogic.StartNewGame(TetrisGameMode::Marathon, 1, 0);
+      ioAppState = TetrisAppState::InGame;
+      _ShowInGameOptions = false;
+    }
+    else if ( 2 == activated )
+    {
+      SetMenuPage(TetrisMenuPage::HighScores);
+    }
+    else if ( 3 == activated )
+    {
+      SetMenuPage(TetrisMenuPage::Options);
+    }
+    else if ( 4 == activated )
+    {
+      oRequestExit = true;
+    }
+  }
+  GameMenuUI::EndMenuPanel();
+
+  const std::string leftStatus = std::string("ACTIVE BACKEND: ") + GetRendererModeLabel(iRendererMode);
+  GameMenuUI::DrawFooterBar(
+    leftStatus.c_str(),
+    "[UP/DOWN] Navigate    [ENTER] Select    [F2/F3/F4] Switch Renderer",
+    _Theme,
+    _Fonts
+  );
+}
+
+// ----------------------------------------------------------------------------
+// DrawModeSelectPage
+// ----------------------------------------------------------------------------
+void TetrisHud::DrawModeSelectPage( TetrisAppState & ioAppState,
+                                    TetrisGameLogic & ioLogic,
+                                    const GameMenuInput & iMenuInput )
+{
+  if ( iMenuInput._Back )
+  {
+    SetMenuPage(TetrisMenuPage::MainMenu);
+    return;
   }
 
-  return 0;
+  const ImGuiIO & io = ImGui::GetIO();
+  const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.55f);
+  const Vec2 panelSize(760.0f, 0.0f);
+
+  const TetrisSessionStats & stats = ioLogic.GetSessionStats();
+  const std::string marathonBest = "Best Score: " + std::to_string(stats._BestMarathonScore);
+  const std::string sprintBest   = ( stats._BestSprint40Time > 0.0 )
+                                   ? ( "Best Time: " + FormatTime(stats._BestSprint40Time) )
+                                   : "Best Time: --:--.--";
+  const std::string ultraBest    = "Best Score: " + std::to_string(stats._BestUltraScore);
+
+  if ( GameMenuUI::BeginMenuPanel("##TetrisModeSelect", "SELECT GAME MODE", center, panelSize, _Theme, _Fonts) )
+  {
+    const std::vector<GameSelectionCard> cards =
+    {
+      {
+        "MARATHON",
+        "15 LEVELS / 150 LINES",
+        "Official Guideline progression through 15 accelerating gravity levels. Enable Endless to play past 150 lines.",
+        marathonBest,
+        Vec4(0.00f, 0.90f, 0.95f, 1.0f)
+      },
+      {
+        "SPRINT",
+        "40 LINES TIME ATTACK",
+        "Pure high-speed execution. Clear 40 lines as fast as possible against the precision stopwatch.",
+        sprintBest,
+        Vec4(1.00f, 0.60f, 0.10f, 1.0f)
+      },
+      {
+        "ULTRA",
+        "2-MINUTE SCORE ATTACK",
+        "Maximize your score with T-Spins, Back-to-Backs, and Tetrises before the 2:00 timer runs out.",
+        ultraBest,
+        Vec4(0.75f, 0.30f, 1.00f, 1.0f)
+      }
+    };
+
+    bool cardConfirmed = false;
+    GameMenuUI::DrawSelectionCards(cards, _SelectedModeIndex, iMenuInput, _Theme, _Fonts, &cardConfirmed);
+
+    ImGui::Dummy(ImVec2(0.0f, 8.0f));
+    ImGui::Separator();
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+    int startLevel = ioLogic.GetStartLevel();
+    ImGui::SetNextItemWidth(260.0f);
+    if ( ImGui::SliderInt("Starting Level", &startLevel, 1, 15) )
+      ioLogic.SetStartLevel(startLevel);
+
+    if ( 0 == _SelectedModeIndex )
+    {
+      ImGui::SameLine(0.0f, 32.0f);
+      bool endless = ioLogic.IsEndlessMarathon();
+      if ( ImGui::Checkbox("Endless Marathon Mode", &endless) )
+        ioLogic.SetEndlessMarathon(endless);
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 12.0f));
+
+    const float availW = ImGui::GetContentRegionAvail().x;
+    const float btnW = ( availW - 16.0f ) * 0.5f;
+
+    if ( GameMenuUI::DrawActionButton("BACK (ESC)", Vec2(btnW, 46.0f), false, _Theme, _Fonts) )
+    {
+      SetMenuPage(TetrisMenuPage::MainMenu);
+    }
+
+    ImGui::SameLine(0.0f, 16.0f);
+
+    if ( GameMenuUI::DrawActionButton("START GAME (ENTER)", Vec2(btnW, 46.0f), true, _Theme, _Fonts) || cardConfirmed )
+    {
+      const TetrisGameMode chosenMode = static_cast<TetrisGameMode>(_SelectedModeIndex);
+      ioLogic.StartNewGame(chosenMode, ioLogic.GetStartLevel(), 0);
+      ioAppState = TetrisAppState::InGame;
+      _ShowInGameOptions = false;
+    }
+  }
+  GameMenuUI::EndMenuPanel();
+
+  GameMenuUI::DrawFooterBar(
+    "SELECT MODE & LAUNCH",
+    "[LEFT/RIGHT] Select Mode    [ENTER] Launch Game    [ESC] Back",
+    _Theme,
+    _Fonts
+  );
+}
+
+// ----------------------------------------------------------------------------
+// DrawHighScoresPage
+// ----------------------------------------------------------------------------
+void TetrisHud::DrawHighScoresPage( TetrisGameLogic & ioLogic,
+                                    const GameMenuInput & iMenuInput )
+{
+  if ( iMenuInput._Back )
+  {
+    SetMenuPage(TetrisMenuPage::MainMenu);
+    return;
+  }
+
+  const ImGuiIO & io = ImGui::GetIO();
+  const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.55f);
+  const Vec2 panelSize(720.0f, 0.0f);
+
+  const TetrisSessionStats & stats = ioLogic.GetSessionStats();
+
+  if ( GameMenuUI::BeginMenuPanel("##TetrisHighScores", "HIGH SCORES & SESSION STATISTICS", center, panelSize, _Theme, _Fonts) )
+  {
+    const std::string sprintTimeStr = ( stats._BestSprint40Time > 0.0 )
+                                      ? FormatTime(stats._BestSprint40Time)
+                                      : "--:--.--";
+
+    const std::vector<GameStatCard> statCards =
+    {
+      {
+        "MARATHON RECORD",
+        std::to_string(stats._BestMarathonScore),
+        "Best Lines: " + std::to_string(stats._BestMarathonLines),
+        "Max Level: " + std::to_string(stats._BestMarathonLevel),
+        Vec4(0.00f, 0.90f, 0.95f, 1.0f)
+      },
+      {
+        "SPRINT (40L) RECORD",
+        sprintTimeStr,
+        "Best Score: " + std::to_string(stats._BestSprintScore),
+        "Target: 40 Lines",
+        Vec4(1.00f, 0.60f, 0.10f, 1.0f)
+      },
+      {
+        "ULTRA (2:00) RECORD",
+        std::to_string(stats._BestUltraScore),
+        "Best Lines: " + std::to_string(stats._BestUltraLines),
+        "Limit: 02:00.00",
+        Vec4(0.75f, 0.30f, 1.00f, 1.0f)
+      },
+      {
+        "TOTAL LINES CLEARED",
+        std::to_string(stats._TotalLinesCleared),
+        "Games Played: " + std::to_string(stats._TotalGamesPlayed),
+        "",
+        Vec4(0.25f, 0.95f, 0.55f, 1.0f)
+      },
+      {
+        "TETRIS (4-LINE) CLEARS",
+        std::to_string(stats._TotalTetrises),
+        "Quadruple Line Clears",
+        "",
+        Vec4(1.00f, 0.85f, 0.15f, 1.0f)
+      },
+      {
+        "T-SPIN CLEARS",
+        std::to_string(stats._TotalTSpins),
+        "3-Corner Guideline Spins",
+        "",
+        Vec4(0.95f, 0.35f, 0.75f, 1.0f)
+      }
+    };
+
+    GameMenuUI::DrawStatCardsGrid(statCards, 2, _Theme, _Fonts);
+
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+    const float availW = ImGui::GetContentRegionAvail().x;
+    const float btnW = ( availW - 16.0f ) * 0.5f;
+
+    if ( GameMenuUI::DrawActionButton("BACK TO MENU (ESC)", Vec2(btnW, 44.0f), true, _Theme, _Fonts) )
+    {
+      SetMenuPage(TetrisMenuPage::MainMenu);
+    }
+
+    ImGui::SameLine(0.0f, 16.0f);
+
+    if ( GameMenuUI::DrawActionButton("RESET SESSION STATS", Vec2(btnW, 44.0f), false, _Theme, _Fonts) )
+    {
+      ioLogic.ResetSessionStats();
+    }
+  }
+  GameMenuUI::EndMenuPanel();
+
+  GameMenuUI::DrawFooterBar(
+    "SESSION LEADERBOARD",
+    "[ESC] Back to Main Menu",
+    _Theme,
+    _Fonts
+  );
+}
+
+// ----------------------------------------------------------------------------
+// DrawOptionsPage
+// ----------------------------------------------------------------------------
+void TetrisHud::DrawOptionsPage( TetrisGameLogic & ioLogic,
+                                 TetrisSceneManager & ioSceneMgr,
+                                 Scene & ioScene,
+                                 Renderer * ioRenderer,
+                                 RenderSettings & ioSettings,
+                                 TetrisRendererMode & ioRendererMode,
+                                 TetrisHandlingConfig & ioHandling,
+                                 const GameMenuInput & iMenuInput,
+                                 double iFrameRate,
+                                 double iDeltaTime,
+                                 unsigned int iNbRenderedFrames,
+                                 bool & oReloadRenderer,
+                                 bool & oBackRequested )
+{
+  oBackRequested = false;
+  if ( iMenuInput._Back )
+  {
+    oBackRequested = true;
+    return;
+  }
+
+  const ImGuiIO & io = ImGui::GetIO();
+  const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.54f);
+  const Vec2 panelSize(760.0f, 495.0f);
+
+  if ( GameMenuUI::BeginMenuPanel("##TetrisOptionsPanel", "OPTIONS & CONFIGURATION", center, panelSize, _Theme, _Fonts) )
+  {
+    const std::vector<const char *> tabs =
+    {
+      "GAMEPLAY & HANDLING",
+      "3D GRAPHICS & RENDERER",
+      "CONTROLS"
+    };
+    GameMenuUI::DrawTabBar(tabs, _OptionsTabIndex, _Theme, _Fonts);
+
+    ImGui::BeginChild("##OptionsTabContent", ImVec2(0.0f, -56.0f), false);
+
+    if ( 0 == _OptionsTabIndex )
+    {
+      ImGui::TextDisabled("Piece Handling & Guideline Tuning");
+      ImGui::Separator();
+
+      float dasMs = ioHandling._DAS * 1000.0f;
+      if ( ImGui::SliderFloat("DAS - Delayed Auto Shift (ms)", &dasMs, 30.0f, 300.0f, "%.0f ms") )
+        ioHandling._DAS = dasMs / 1000.0f;
+
+      float arrMs = ioHandling._ARR * 1000.0f;
+      if ( ImGui::SliderFloat("ARR - Auto Repeat Rate (ms)", &arrMs, 0.0f, 100.0f, "%.0f ms") )
+        ioHandling._ARR = arrMs / 1000.0f;
+
+      ImGui::SliderFloat("SDF - Soft Drop Factor", &ioHandling._SoftDropFactor, 1.0f, 40.0f, "%.1fx");
+
+      float lockMs = ioHandling._LockDelay * 1000.0f;
+      if ( ImGui::SliderFloat("Lock Delay Timer (ms)", &lockMs, 200.0f, 1000.0f, "%.0f ms") )
+        ioHandling._LockDelay = lockMs / 1000.0f;
+
+      ImGui::Dummy(ImVec2(0.0f, 6.0f));
+      if ( ImGui::Button("Preset: Official Guideline (167ms / 33ms)", ImVec2(310.0f, 32.0f)) )
+      {
+        ioHandling._DAS = 0.167f;
+        ioHandling._ARR = 0.033f;
+        ioHandling._SoftDropFactor = 20.0f;
+        ioHandling._LockDelay = 0.5f;
+      }
+      ImGui::SameLine();
+      if ( ImGui::Button("Preset: Competitive Fast (100ms / 0ms)", ImVec2(310.0f, 32.0f)) )
+      {
+        ioHandling._DAS = 0.100f;
+        ioHandling._ARR = 0.000f;
+        ioHandling._SoftDropFactor = 40.0f;
+        ioHandling._LockDelay = 0.5f;
+      }
+
+      ImGui::Dummy(ImVec2(0.0f, 8.0f));
+      ImGui::TextDisabled("Gameplay Assists");
+      ImGui::Separator();
+
+      bool showGhost = ioSceneMgr.GetShowGhost();
+      if ( ImGui::Checkbox("Show 3D Ghost Piece Landing Cage", &showGhost) )
+        ioSceneMgr.SetShowGhost(showGhost);
+
+      int startLvl = ioLogic.GetStartLevel();
+      if ( ImGui::SliderInt("Default Starting Level", &startLvl, 1, 15) )
+        ioLogic.SetStartLevel(startLvl);
+    }
+    else if ( 1 == _OptionsTabIndex )
+    {
+      ImGui::TextDisabled("3D Scene & Material Style");
+      ImGui::Separator();
+
+      int currentMatPreset = static_cast<int>(ioSceneMgr.GetMaterialPreset());
+      const char * matPresets[] =
+      {
+        "Glossy Arcade Plastic",
+        "Crystal Glass (Transmission / IOR)",
+        "Cyberpunk Neon Glow",
+        "Brushed Metallic"
+      };
+      if ( ImGui::Combo("Block Material Preset", &currentMatPreset, matPresets, IM_ARRAYSIZE(matPresets)) )
+      {
+        ioSceneMgr.SetMaterialPreset(ioScene, static_cast<TetrisMaterialPreset>(currentMatPreset));
+        if ( ioRenderer )
+          ioRenderer->Notify(DirtyState::SceneMaterials);
+      }
+
+      int currentCam = static_cast<int>(ioSceneMgr.GetCameraPreset());
+      const char * camNames[] =
+      {
+        "Frontal 3D (Default)",
+        "Isometric / Angled",
+        "Free Orbit (Mouse Drag & Scroll)"
+      };
+      if ( ImGui::Combo("In-Game Camera Preset (V)", &currentCam, camNames, IM_ARRAYSIZE(camNames)) )
+        ioSceneMgr.SetCameraPreset(static_cast<TetrisCameraPreset>(currentCam));
+
+      bool dynLight = ioSceneMgr.GetDynamicPieceLighting();
+      if ( ImGui::Checkbox("Active Piece Dynamic Point Light", &dynLight) )
+        ioSceneMgr.SetDynamicPieceLighting(dynLight);
+
+      ImGui::Dummy(ImVec2(0.0f, 6.0f));
+      ImGui::TextDisabled("RTRTCore Engine & Renderer Settings");
+      ImGui::Separator();
+
+      const char * rendererNames[] =
+      {
+        "Deferred Renderer (Real-Time PBR)",
+        "Path Tracer (GPU Ray Tracing)",
+        "Software Rasterizer (CPU SIMD)"
+      };
+      int rendererIdx = static_cast<int>(ioRendererMode);
+      GameMenuUI::DrawSharedRendererSettings(
+        ioScene,
+        ioRenderer,
+        ioSettings,
+        rendererIdx,
+        rendererNames,
+        IM_ARRAYSIZE(rendererNames),
+        oReloadRenderer,
+        _StatsUIState,
+        iFrameRate,
+        iDeltaTime,
+        iNbRenderedFrames
+      );
+      ioRendererMode = static_cast<TetrisRendererMode>(rendererIdx);
+    }
+    else if ( 2 == _OptionsTabIndex )
+    {
+      const std::vector<GameKeybindEntry> bindings =
+      {
+        { "PIECE MOVEMENT",     "Move Left",                   "LEFT ARROW",  "A"          },
+        { "PIECE MOVEMENT",     "Move Right",                  "RIGHT ARROW", "D"          },
+        { "PIECE MOVEMENT",     "Soft Drop",                   "DOWN ARROW",  "S"          },
+        { "PIECE MOVEMENT",     "Hard Drop (Instant Lock)",    "SPACE",       ""           },
+        { "ROTATION & HOLD",    "Rotate Clockwise (90 CW)",    "UP ARROW",    "X"          },
+        { "ROTATION & HOLD",    "Rotate Counter-Clockwise",    "Z",           "LEFT CTRL"  },
+        { "ROTATION & HOLD",    "Rotate 180 Degrees",          "W",           ""           },
+        { "ROTATION & HOLD",    "Hold Active Piece",           "LEFT SHIFT",  "C"          },
+        { "SYSTEM & RENDERERS", "Pause / Back",                "ESCAPE",      "P"          },
+        { "SYSTEM & RENDERERS", "Quick Restart Match",         "R",           ""           },
+        { "SYSTEM & RENDERERS", "Options Menu",                "F1",          ""           },
+        { "SYSTEM & RENDERERS", "Switch to Deferred Renderer", "F2",          ""           },
+        { "SYSTEM & RENDERERS", "Switch to Path Tracer",       "F3",          ""           },
+        { "SYSTEM & RENDERERS", "Switch to Software Raster",   "F4",          ""           },
+        { "SYSTEM & RENDERERS", "Cycle 3D Camera Preset",      "V",           ""           }
+      };
+
+      GameMenuUI::DrawKeybindingTable(bindings, _Theme, _Fonts);
+    }
+
+    ImGui::EndChild();
+
+    ImGui::Separator();
+    if ( GameMenuUI::DrawActionButton("BACK (ESC)", Vec2(220.0f, 42.0f), true, _Theme, _Fonts) )
+      oBackRequested = true;
+  }
+  GameMenuUI::EndMenuPanel();
+
+  GameMenuUI::DrawFooterBar(
+    "CONFIGURATION",
+    "[ESC] Back    [F2/F3/F4] Hot-Swap Renderer",
+    _Theme,
+    _Fonts
+  );
+}
+
+// ----------------------------------------------------------------------------
+// DrawTitleScreenMenus
+// ----------------------------------------------------------------------------
+void TetrisHud::DrawTitleScreenMenus( TetrisAppState & ioAppState,
+                                      TetrisGameLogic & ioLogic,
+                                      TetrisSceneManager & ioSceneMgr,
+                                      Scene & ioScene,
+                                      Renderer * ioRenderer,
+                                      RenderSettings & ioSettings,
+                                      TetrisRendererMode & ioRendererMode,
+                                      TetrisHandlingConfig & ioHandling,
+                                      const GameMenuInput & iMenuInput,
+                                      double iFrameRate,
+                                      double iDeltaTime,
+                                      unsigned int iNbRenderedFrames,
+                                      bool & oReloadRenderer,
+                                      bool & oRequestExit )
+{
+  GameMenuUI::DrawBackgroundOverlay(_Theme, 0.78f);
+  GameMenuUI::DrawTitleHeader(
+    "TETRIS 3D",
+    "RTRT MULTI-RENDERER GUIDELINE EDITION",
+    _Theme,
+    _Fonts,
+    28.0f
+  );
+
+  if ( TetrisMenuPage::MainMenu == _MenuPage )
+  {
+    DrawMainMenuPage(ioAppState, ioLogic, ioRendererMode, iMenuInput, oRequestExit);
+  }
+  else if ( TetrisMenuPage::ModeSelect == _MenuPage )
+  {
+    DrawModeSelectPage(ioAppState, ioLogic, iMenuInput);
+  }
+  else if ( TetrisMenuPage::HighScores == _MenuPage )
+  {
+    DrawHighScoresPage(ioLogic, iMenuInput);
+  }
+  else if ( TetrisMenuPage::Options == _MenuPage )
+  {
+    bool backRequested = false;
+    DrawOptionsPage(
+      ioLogic,
+      ioSceneMgr,
+      ioScene,
+      ioRenderer,
+      ioSettings,
+      ioRendererMode,
+      ioHandling,
+      iMenuInput,
+      iFrameRate,
+      iDeltaTime,
+      iNbRenderedFrames,
+      oReloadRenderer,
+      backRequested
+    );
+    if ( backRequested )
+      SetMenuPage(TetrisMenuPage::MainMenu);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// DrawFrameLabel3D
+// ----------------------------------------------------------------------------
+static void DrawFrameLabel3D( Scene & ioScene,
+                              const Vec3 & iWorldPos,
+                              const char * iLabel,
+                              ImFont * iFont,
+                              const GameUITheme & iTheme )
+{
+  const ImGuiIO & io = ImGui::GetIO();
+  if ( ( io.DisplaySize.x <= 0.0f ) || ( io.DisplaySize.y <= 0.0f ) )
+    return;
+
+  Camera & cam = ioScene.GetCamera();
+  Mat4x4 viewM(1.0f);
+  Mat4x4 projM(1.0f);
+  cam.ComputeLookAtMatrix(viewM);
+  cam.ComputeProjMatrix(io.DisplaySize.x / io.DisplaySize.y, projM);
+
+  const Vec4 clip = projM * viewM * Vec4(iWorldPos, 1.0f);
+  if ( clip.w <= 0.01f )
+    return;
+
+  const Vec3 ndc = Vec3(clip) / clip.w;
+  const float sx = ( ndc.x * 0.5f + 0.5f ) * io.DisplaySize.x;
+  const float sy = ( 1.0f - ( ndc.y * 0.5f + 0.5f ) ) * io.DisplaySize.y;
+
+  ImDrawList * bgList = ImGui::GetBackgroundDrawList();
+  const float fontSize = iFont ? iFont->LegacySize : 22.0f;
+  const ImVec2 textSize = iFont ? iFont->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, iLabel)
+                                : ImGui::CalcTextSize(iLabel);
+
+  const float padX = 16.0f;
+  const float padY = 5.0f;
+  const ImVec2 boxMin(sx - textSize.x * 0.5f - padX, sy - textSize.y * 0.5f - padY);
+  const ImVec2 boxMax(sx + textSize.x * 0.5f + padX, sy + textSize.y * 0.5f + padY);
+  const ImVec2 textPos(sx - textSize.x * 0.5f, sy - textSize.y * 0.5f);
+
+  bgList->AddRectFilled(boxMin, boxMax, IM_COL32(10, 14, 22, 215), 5.0f);
+  bgList->AddRect(boxMin, boxMax, IM_COL32(0, 228, 245, 165), 5.0f, 0, 1.5f);
+
+  if ( iFont )
+  {
+    bgList->AddText(iFont, fontSize, ImVec2(textPos.x + 1.5f, textPos.y + 1.5f), IM_COL32(0, 0, 0, 220), iLabel);
+    bgList->AddText(iFont, fontSize, textPos, IM_COL32(240, 248, 255, 255), iLabel);
+  }
+  else
+  {
+    bgList->AddText(textPos, IM_COL32(240, 248, 255, 255), iLabel);
+  }
+
+  (void)iTheme;
 }
 
 // ----------------------------------------------------------------------------
 // DrawGameplayOverlay
 // ----------------------------------------------------------------------------
-void TetrisHud::DrawGameplayOverlay( const TetrisGameLogic & iLogic )
+void TetrisHud::DrawGameplayOverlay( const TetrisGameLogic & iLogic, Scene & ioScene )
 {
-  ImGuiIO & io = ImGui::GetIO();
-  const float pad = 16.0f;
+  // Draw 3D-anchored "HOLD" and "NEXT" headers above the Hold and Next frames
+  DrawFrameLabel3D(ioScene, Vec3(-8.0f, 20.85f, -0.2f), "HOLD", _Fonts._HeaderFont, _Theme);
+  DrawFrameLabel3D(ioScene, Vec3( 8.0f, 20.85f, -0.2f), "NEXT", _Fonts._HeaderFont, _Theme);
 
-  // 1. Left Telemetry Window (Score, Level, Lines, Hold Label)
+  ImGuiIO & io = ImGui::GetIO();
+  const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration
+                               | ImGuiWindowFlags_AlwaysAutoResize
+                               | ImGuiWindowFlags_NoSavedSettings
+                               | ImGuiWindowFlags_NoFocusOnAppearing
+                               | ImGuiWindowFlags_NoNav
+                               | ImGuiWindowFlags_NoMove;
+
+  GameMenuUI::PushThemeStyle(_Theme);
+
+  // 1. Left Telemetry Panel
+  const float pad = 18.0f;
   ImGui::SetNextWindowPos(ImVec2(pad, pad), ImGuiCond_Always);
-  ImGui::SetNextWindowBgAlpha(0.65f);
-  ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
-                          ImGuiWindowFlags_AlwaysAutoResize |
-                          ImGuiWindowFlags_NoSavedSettings |
-                          ImGuiWindowFlags_NoFocusOnAppearing |
-                          ImGuiWindowFlags_NoNav;
+  ImGui::SetNextWindowSize(ImVec2(235.0f, 0.0f), ImGuiCond_Always);
+  ImGui::SetNextWindowBgAlpha(0.78f);
 
   if ( ImGui::Begin("##TetrisLeftTelemetry", nullptr, flags) )
   {
-    const char * modeName = "Marathon";
-    if ( TetrisGameMode::Sprint == iLogic.GetGameMode() ) modeName = "Sprint (40 Lines)";
-    else if ( TetrisGameMode::Ultra == iLogic.GetGameMode() ) modeName = "Ultra (2 Min)";
+    const char * modeLabel = "MARATHON";
+    if ( TetrisGameMode::Sprint == iLogic.GetGameMode() ) modeLabel = "SPRINT (40L)";
+    else if ( TetrisGameMode::Ultra == iLogic.GetGameMode() ) modeLabel = "ULTRA (2:00)";
 
-    ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "TETRIS 3D");
+    if ( _Fonts._HeaderFont ) ImGui::PushFont(_Fonts._HeaderFont);
+    ImGui::TextColored(ImVec4(0.0f, 0.90f, 0.96f, 1.0f), "%s", modeLabel);
+    if ( _Fonts._HeaderFont ) ImGui::PopFont();
     ImGui::Separator();
-    ImGui::Text("Mode: %s", modeName);
-    ImGui::Text("Score: %lld", iLogic.GetScore());
-    ImGui::Text("High Score: %lld", iLogic.GetHighScore());
-    ImGui::Text("Level: %d", iLogic.GetLevel());
-    ImGui::Text("Lines: %d", iLogic.GetLinesCleared());
+
+    ImGui::TextDisabled("SCORE");
+    if ( _Fonts._MonoFont ) ImGui::PushFont(_Fonts._MonoFont);
+    ImGui::Text("%lld", iLogic.GetScore());
+    if ( _Fonts._MonoFont ) ImGui::PopFont();
+
+    ImGui::TextDisabled("HIGH SCORE");
+    if ( _Fonts._MonoFont ) ImGui::PushFont(_Fonts._MonoFont);
+    ImGui::Text("%lld", iLogic.GetHighScore());
+    if ( _Fonts._MonoFont ) ImGui::PopFont();
+
+    ImGui::Separator();
+    ImGui::Text("LEVEL : %d", iLogic.GetLevel());
+    if ( TetrisGameMode::Sprint == iLogic.GetGameMode() )
+      ImGui::Text("LINES : %d / 40", iLogic.GetLinesCleared());
+    else if ( ( TetrisGameMode::Marathon == iLogic.GetGameMode() ) && !iLogic.IsEndlessMarathon() )
+      ImGui::Text("LINES : %d / 150", iLogic.GetLinesCleared());
+    else
+      ImGui::Text("LINES : %d", iLogic.GetLinesCleared());
 
     if ( iLogic.GetComboCount() > 0 )
-      ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "Combo: %dx", iLogic.GetComboCount());
+      ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "COMBO : %dx", iLogic.GetComboCount());
 
     if ( iLogic.IsBackToBackActive() )
       ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.95f, 1.0f), "[BACK-TO-BACK]");
 
-    ImGui::Dummy(ImVec2(0.f, 8.f));
-    ImGui::TextDisabled("Hold: Left Shift / C");
-    ImGui::TextDisabled("Settings: F1");
+    ImGui::Dummy(ImVec2(0.f, 6.f));
+    ImGui::TextDisabled("[ESC / P] Pause Menu");
+    ImGui::TextDisabled("[F1] Options   [F2-F4] Renderer");
   }
   ImGui::End();
 
-  // 2. Right Telemetry Window (Time, Next Queue)
-  const float rightPanelWidth = 190.0f;
+  // 2. Right Telemetry Panel
+  const float rightPanelWidth = 205.0f;
   ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - rightPanelWidth - pad, pad), ImGuiCond_Always);
-  ImGui::SetNextWindowSize(ImVec2(rightPanelWidth, 0.f), ImGuiCond_Always);
-  ImGui::SetNextWindowBgAlpha(0.65f);
+  ImGui::SetNextWindowSize(ImVec2(rightPanelWidth, 0.0f), ImGuiCond_Always);
+  ImGui::SetNextWindowBgAlpha(0.78f);
 
   if ( ImGui::Begin("##TetrisRightTelemetry", nullptr, flags) )
   {
     if ( TetrisGameMode::Ultra == iLogic.GetGameMode() )
     {
-      ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.3f, 1.0f), "REMAINING TIME");
+      ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.3f, 1.0f), "TIME REMAINING");
+      if ( _Fonts._MonoFont ) ImGui::PushFont(_Fonts._MonoFont);
       ImGui::Text("%s", FormatTime(iLogic.GetRemainingTime()).c_str());
+      if ( _Fonts._MonoFont ) ImGui::PopFont();
     }
     else
     {
-      ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.5f, 1.0f), "TIME ELAPSED");
+      ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f), "ELAPSED TIME");
+      if ( _Fonts._MonoFont ) ImGui::PushFont(_Fonts._MonoFont);
       ImGui::Text("%s", FormatTime(iLogic.GetElapsedTime()).c_str());
+      if ( _Fonts._MonoFont ) ImGui::PopFont();
     }
 
     ImGui::Separator();
-    ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.9f, 1.0f), "NEXT PIECES");
+    ImGui::TextDisabled("NEXT QUEUE");
     for ( int i = 0; i < 5; ++i )
     {
       const TetrisPieceType piece = iLogic.PeekNextPiece(i);
@@ -144,6 +745,8 @@ void TetrisHud::DrawGameplayOverlay( const TetrisGameLogic & iLogic )
     }
   }
   ImGui::End();
+
+  GameMenuUI::PopThemeStyle();
 }
 
 // ----------------------------------------------------------------------------
@@ -156,173 +759,229 @@ void TetrisHud::DrawActionBanner( const TetrisGameLogic & iLogic )
     return;
 
   ImGuiIO & io = ImGui::GetIO();
-  const ImVec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.28f);
+  const ImVec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.25f);
 
-  ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-  ImGui::SetNextWindowBgAlpha(0.75f * alpha);
+  ImDrawList * drawList = ImGui::GetForegroundDrawList();
+  const std::string & text = iLogic.GetActionBannerText();
 
-  ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
-                          ImGuiWindowFlags_AlwaysAutoResize |
-                          ImGuiWindowFlags_NoSavedSettings |
-                          ImGuiWindowFlags_NoInputs |
-                          ImGuiWindowFlags_NoFocusOnAppearing |
-                          ImGuiWindowFlags_NoNav;
+  ImFont * font = _Fonts._TitleFont ? _Fonts._TitleFont : ImGui::GetFont();
+  const float fontSize = font ? ( font->LegacySize * 0.78f ) : 32.0f;
+  const ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text.c_str());
+  const ImVec2 textPos(center.x - textSize.x * 0.5f, center.y - textSize.y * 0.5f);
 
-  if ( ImGui::Begin("##TetrisActionBanner", nullptr, flags) )
-  {
-    ImGui::SetWindowFontScale(1.8f);
-    ImGui::TextColored(ImVec4(1.0f, 0.92f, 0.25f, alpha), "%s", iLogic.GetActionBannerText().c_str());
-    ImGui::SetWindowFontScale(1.0f);
-  }
-  ImGui::End();
+  const ImU32 shadowCol = IM_COL32(0, 0, 0, static_cast<int>(220.f * alpha));
+  const ImU32 mainCol   = IM_COL32(255, 240, 95, static_cast<int>(255.f * alpha));
+
+  drawList->AddText(font, fontSize, ImVec2(textPos.x + 3.0f, textPos.y + 3.0f), shadowCol, text.c_str());
+  drawList->AddText(font, fontSize, textPos, mainCol, text.c_str());
 }
 
 // ----------------------------------------------------------------------------
-// DrawGameOverModal
+// DrawInGamePauseOrEndModal
 // ----------------------------------------------------------------------------
-void TetrisHud::DrawGameOverModal( TetrisGameLogic & ioLogic )
+void TetrisHud::DrawInGamePauseOrEndModal( TetrisAppState & ioAppState,
+                                           TetrisGameLogic & ioLogic,
+                                           TetrisSceneManager & ioSceneMgr,
+                                           Scene & ioScene,
+                                           Renderer * ioRenderer,
+                                           RenderSettings & ioSettings,
+                                           TetrisRendererMode & ioRendererMode,
+                                           TetrisHandlingConfig & ioHandling,
+                                           const GameMenuInput & iMenuInput,
+                                           double iFrameRate,
+                                           double iDeltaTime,
+                                           unsigned int iNbRenderedFrames,
+                                           bool & oReloadRenderer )
 {
-  ImGuiIO & io = ImGui::GetIO();
-  ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-  ImGui::SetNextWindowSize(ImVec2(340.f, 0.f), ImGuiCond_Always);
+  GameMenuUI::DrawBackgroundOverlay(_Theme, 0.85f);
 
-  const char * title = "GAME PAUSED";
-  if ( ioLogic.IsVictory() ) title = "VICTORY!";
-  else if ( ioLogic.IsGameOver() ) title = "GAME OVER";
-
-  if ( ImGui::Begin(title, nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize) )
+  if ( _ShowInGameOptions )
   {
-    if ( ioLogic.IsGameOver() )
-    {
-      ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Reason: %s", ioLogic.GetGameOverReason().c_str());
-      ImGui::Separator();
-    }
-    else if ( ioLogic.IsVictory() )
-    {
-      ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.4f, 1.0f), "Congratulations! Objective reached!");
-      ImGui::Separator();
-    }
+    bool backRequested = false;
+    DrawOptionsPage(
+      ioLogic,
+      ioSceneMgr,
+      ioScene,
+      ioRenderer,
+      ioSettings,
+      ioRendererMode,
+      ioHandling,
+      iMenuInput,
+      iFrameRate,
+      iDeltaTime,
+      iNbRenderedFrames,
+      oReloadRenderer,
+      backRequested
+    );
+    if ( backRequested )
+      _ShowInGameOptions = false;
+    return;
+  }
 
-    ImGui::Text("Final Score: %lld", ioLogic.GetScore());
-    ImGui::Text("Lines Cleared: %d", ioLogic.GetLinesCleared());
-    ImGui::Text("Total Time: %s", FormatTime(ioLogic.GetElapsedTime()).c_str());
+  const ImGuiIO & io = ImGui::GetIO();
+  const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.52f);
 
-    ImGui::Dummy(ImVec2(0.f, 12.f));
-    if ( ioLogic.IsPaused() )
+  // 1. Pause Menu
+  if ( ioLogic.IsPaused() && !ioLogic.IsGameOver() && !ioLogic.IsVictory() )
+  {
+    if ( GameMenuUI::BeginMenuPanel("##TetrisPauseModal", "GAME PAUSED", center, Vec2(480.0f, 0.0f), _Theme, _Fonts) )
     {
-      if ( ImGui::Button("Resume (P)", ImVec2(140.f, 32.f)) )
+      const std::vector<GameMenuItem> pauseItems =
+      {
+        { "RESUME GAME",            "Return to active match",                 "ESC / P", true, false },
+        { "RESTART MATCH",          "Start a fresh board in current mode",    "R",       true, false },
+        { "OPTIONS",                "Configure handling, renderer & visuals", "F1",      true, false },
+        { "RETURN TO TITLE SCREEN", "Exit match and return to Main Menu",     "",        true, true  }
+      };
+
+      const int act = GameMenuUI::DrawMenuButtonList(pauseItems, _PauseMenuNav, iMenuInput, _Theme, _Fonts, 56.0f);
+      if ( 0 == act )
+      {
         ioLogic.SetPaused(false);
-      ImGui::SameLine();
-    }
-
-    if ( ImGui::Button("Restart Game (R)", ImVec2(140.f, 32.f)) )
-      ioLogic.Reset();
-  }
-  ImGui::End();
-}
-
-// ----------------------------------------------------------------------------
-// DrawSettingsWindow
-// ----------------------------------------------------------------------------
-void TetrisHud::DrawSettingsWindow( TetrisGameLogic & ioLogic,
-                                   TetrisSceneManager & ioSceneMgr,
-                                   Scene & ioScene,
-                                   Renderer * ioRenderer,
-                                   RenderSettings & ioSettings,
-                                   TetrisRendererMode & ioRendererMode,
-                                   TetrisHandlingConfig & ioHandling,
-                                   double iFrameRate,
-                                   double iDeltaTime,
-                                   unsigned int iNbRenderedFrames,
-                                   bool & oReloadRenderer )
-{
-  ImGui::SetNextWindowSize(ImVec2(480.f, 580.f), ImGuiCond_FirstUseEver);
-  if ( ImGui::Begin("Game & Render Settings (F1 to hide)", &_ShowSettingsWindow) )
-  {
-    if ( ImGui::CollapsingHeader("Game Mode & Start Options", ImGuiTreeNodeFlags_DefaultOpen) )
-    {
-      int currentMode = (int)ioLogic.GetGameMode();
-      const char * modeNames[] = { "Marathon (15 Levels)", "Sprint (40 Lines)", "Ultra (2 Minutes)" };
-      if ( ImGui::Combo("Game Mode", &currentMode, modeNames, IM_ARRAYSIZE(modeNames)) )
-      {
-        ioLogic.StartNewGame(static_cast<TetrisGameMode>(currentMode), ioLogic.GetStartLevel(), 0);
       }
-
-      int startLevel = ioLogic.GetStartLevel();
-      if ( ImGui::SliderInt("Starting Level", &startLevel, 1, 15) )
-        ioLogic.SetStartLevel(startLevel);
-
-      bool endless = ioLogic.IsEndlessMarathon();
-      if ( ImGui::Checkbox("Endless Marathon Mode", &endless) )
-        ioLogic.SetEndlessMarathon(endless);
-
-      if ( ImGui::Button("Start New Game", ImVec2(160.f, 26.f)) )
+      else if ( 1 == act )
+      {
         ioLogic.Reset();
-    }
-
-    if ( ImGui::CollapsingHeader("Rendering Backend", ImGuiTreeNodeFlags_DefaultOpen) )
-    {
-      int currentRenderer = (int)ioRendererMode;
-      const char * rendererNames[] = { "Deferred Renderer (Real-Time PBR)", "Photo Path Tracer (GPU Ray Tracing)", "Software Rasterizer (CPU SIMD)" };
-      if ( ImGui::Combo("Active Renderer", &currentRenderer, rendererNames, IM_ARRAYSIZE(rendererNames)) )
+      }
+      else if ( 2 == act )
       {
-        if ( currentRenderer != (int)ioRendererMode )
+        _ShowInGameOptions = true;
+      }
+      else if ( 3 == act )
+      {
+        ioLogic.SetPaused(false);
+        SetMenuPage(TetrisMenuPage::MainMenu);
+        ioAppState = TetrisAppState::TitleScreen;
+      }
+    }
+    GameMenuUI::EndMenuPanel();
+    return;
+  }
+
+  // 2. Game Over / Victory Summary Modal
+  if ( ioLogic.IsGameOver() || ioLogic.IsVictory() )
+  {
+    const char * headerTitle = ioLogic.IsVictory() ? "OBJECTIVE COMPLETE - VICTORY!" : "GAME OVER";
+    if ( GameMenuUI::BeginMenuPanel("##TetrisEndModal", headerTitle, center, Vec2(520.0f, 0.0f), _Theme, _Fonts) )
+    {
+      if ( ioLogic.IsGameOver() && !ioLogic.GetGameOverReason().empty() )
+      {
+        ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "Cause: %s", ioLogic.GetGameOverReason().c_str());
+      }
+
+      const std::vector<GameStatCard> summaryCards =
+      {
         {
-          ioRendererMode = static_cast<TetrisRendererMode>(currentRenderer);
-          oReloadRenderer = true;
+          "FINAL SCORE",
+          std::to_string(ioLogic.GetScore()),
+          "Level Reached: " + std::to_string(ioLogic.GetLevel()),
+          "",
+          Vec4(0.00f, 0.90f, 0.95f, 1.0f)
+        },
+        {
+          "LINES & TIME",
+          FormatTime(ioLogic.GetElapsedTime()),
+          "Lines Cleared: " + std::to_string(ioLogic.GetLinesCleared()),
+          "",
+          Vec4(0.25f, 0.95f, 0.55f, 1.0f)
         }
-      }
-    }
+      };
+      GameMenuUI::DrawStatCardsGrid(summaryCards, 2, _Theme, _Fonts);
 
-    if ( ImGui::CollapsingHeader("3D Visuals & Materials", ImGuiTreeNodeFlags_DefaultOpen) )
-    {
-      int currentMatPreset = (int)ioSceneMgr.GetMaterialPreset();
-      const char * matPresets[] = { "Glossy Arcade Plastic", "Crystal Glass (Transmission/IOR)", "Cyberpunk Neon Glow", "Brushed Metallic" };
-      if ( ImGui::Combo("Block Material", &currentMatPreset, matPresets, IM_ARRAYSIZE(matPresets)) )
+      ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+      const std::vector<GameMenuItem> endItems =
       {
-        ioSceneMgr.SetMaterialPreset(ioScene, static_cast<TetrisMaterialPreset>(currentMatPreset));
-        if ( ioRenderer )
-          ioRenderer->Notify(DirtyState::SceneMaterials);
+        { "PLAY AGAIN",             "Restart immediately in current mode", "R", true, false },
+        { "CHANGE GAME MODE",       "Return to Mode Selection screen",     "",  true, false },
+        { "RETURN TO TITLE SCREEN", "Exit to Main Menu",                   "",  true, true  }
+      };
+
+      const int act = GameMenuUI::DrawMenuButtonList(endItems, _GameOverMenuNav, iMenuInput, _Theme, _Fonts, 56.0f);
+      if ( 0 == act )
+      {
+        ioLogic.Reset();
       }
-
-      int currentCam = (int)ioSceneMgr.GetCameraPreset();
-      const char * camNames[] = { "Frontal 3D (Default)", "Isometric / Angled", "Free Orbit (Mouse Drag)" };
-      if ( ImGui::Combo("Camera Preset (V)", &currentCam, camNames, IM_ARRAYSIZE(camNames)) )
-        ioSceneMgr.SetCameraPreset(static_cast<TetrisCameraPreset>(currentCam));
-
-      bool ghost = ioSceneMgr.GetShowGhost();
-      if ( ImGui::Checkbox("Show Ghost Piece", &ghost) )
-        ioSceneMgr.SetShowGhost(ghost);
-
-      bool dynLight = ioSceneMgr.GetDynamicPieceLighting();
-      if ( ImGui::Checkbox("Active Piece Dynamic Point Light", &dynLight) )
-        ioSceneMgr.SetDynamicPieceLighting(dynLight);
+      else if ( 1 == act )
+      {
+        SetMenuPage(TetrisMenuPage::ModeSelect);
+        ioAppState = TetrisAppState::TitleScreen;
+      }
+      else if ( 2 == act )
+      {
+        SetMenuPage(TetrisMenuPage::MainMenu);
+        ioAppState = TetrisAppState::TitleScreen;
+      }
     }
+    GameMenuUI::EndMenuPanel();
+  }
+}
 
-    if ( ImGui::CollapsingHeader("Guideline Handling Tuning") )
+// ----------------------------------------------------------------------------
+// Draw
+// ----------------------------------------------------------------------------
+int TetrisHud::Draw( TetrisAppState & ioAppState,
+                     TetrisGameLogic & ioLogic,
+                     TetrisSceneManager & ioSceneMgr,
+                     Scene & ioScene,
+                     Renderer * ioRenderer,
+                     RenderSettings & ioSettings,
+                     TetrisRendererMode & ioRendererMode,
+                     TetrisHandlingConfig & ioHandling,
+                     const GameMenuInput & iMenuInput,
+                     double iFrameRate,
+                     double iDeltaTime,
+                     unsigned int iNbRenderedFrames,
+                     bool & oReloadRenderer,
+                     bool & oRequestExit )
+{
+  oRequestExit = false;
+
+  if ( TetrisAppState::TitleScreen == ioAppState )
+  {
+    DrawTitleScreenMenus(
+      ioAppState,
+      ioLogic,
+      ioSceneMgr,
+      ioScene,
+      ioRenderer,
+      ioSettings,
+      ioRendererMode,
+      ioHandling,
+      iMenuInput,
+      iFrameRate,
+      iDeltaTime,
+      iNbRenderedFrames,
+      oReloadRenderer,
+      oRequestExit
+    );
+  }
+  else
+  {
+    DrawGameplayOverlay(ioLogic, ioScene);
+    DrawActionBanner(ioLogic);
+
+    if ( ioLogic.IsPaused() || ioLogic.IsGameOver() || ioLogic.IsVictory() || _ShowInGameOptions )
     {
-      float dasMs = ioHandling._DAS * 1000.f;
-      if ( ImGui::SliderFloat("DAS Delay (ms)", &dasMs, 50.f, 300.f, "%.0f ms") )
-        ioHandling._DAS = dasMs / 1000.f;
-
-      float arrMs = ioHandling._ARR * 1000.f;
-      if ( ImGui::SliderFloat("ARR Repeat Rate (ms)", &arrMs, 0.f, 100.f, "%.0f ms") )
-        ioHandling._ARR = arrMs / 1000.f;
-
-      ImGui::SliderFloat("Soft Drop Multiplier", &ioHandling._SoftDropFactor, 1.f, 40.f, "%.1fx");
-      ImGui::SliderFloat("Lock Delay (s)", &ioHandling._LockDelay, 0.1f, 1.0f, "%.2f s");
-      ImGui::SliderInt("Max Lock Manipulations", &ioHandling._MaxLockResets, 0, 30);
-    }
-
-    if ( ImGui::CollapsingHeader("Engine & Profiling Stats") )
-    {
-      RenderStatsUI::DrawFrameRateGraph(_StatsUIState, iFrameRate, iDeltaTime, iNbRenderedFrames);
-      RenderStatsUI::DrawRenderOverview(ioSettings, iDeltaTime, iNbRenderedFrames);
-      if ( ioRenderer )
-        RenderStatsUI::DrawRenderPassTimings(ioRenderer);
+      DrawInGamePauseOrEndModal(
+        ioAppState,
+        ioLogic,
+        ioSceneMgr,
+        ioScene,
+        ioRenderer,
+        ioSettings,
+        ioRendererMode,
+        ioHandling,
+        iMenuInput,
+        iFrameRate,
+        iDeltaTime,
+        iNbRenderedFrames,
+        oReloadRenderer
+      );
     }
   }
-  ImGui::End();
+
+  return 0;
 }
 
-}
+} // namespace RTRT

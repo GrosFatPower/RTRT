@@ -17,8 +17,10 @@ static void PrintUsage( const char * iExeName )
   const char * exeName = ( iExeName && iExeName[0] ) ? iExeName : "TetrisGame";
   std::cout << "Usage: " << exeName << " [OPTIONS]" << std::endl;
   std::cout << "Options:" << std::endl;
-  std::cout << "  --unit-tests   Run headless Tetris Guideline unit tests" << std::endl;
-  std::cout << "  --help, -h     Show this help message" << std::endl;
+  std::cout << "  --unit-tests       Run headless Tetris Guideline unit tests" << std::endl;
+  std::cout << "  --start-in-game    Skip Title Screen and launch directly into gameplay" << std::endl;
+  std::cout << "  --screenshot PATH  Render frames and save screenshot to PATH" << std::endl;
+  std::cout << "  --help, -h         Show this help message" << std::endl;
 }
 
 // ----------------------------------------------------------------------------
@@ -37,22 +39,27 @@ int main( int iArgc, char ** iArgv )
   RTRT::PathUtils::Initialize( ( iArgc > 0 ) ? iArgv[0] : nullptr );
 
   std::string screenshotPath;
+  bool startInGame = false;
 
-  if ( iArgc >= 2 )
+  for ( int i = 1; i < iArgc; ++i )
   {
-    const std::string arg = ( iArgv && iArgv[1] ) ? iArgv[1] : "";
+    const std::string arg = ( iArgv && iArgv[i] ) ? iArgv[i] : "";
     if ( ( arg == "--help" ) || ( arg == "-h" ) )
     {
       PrintUsage( ( iArgc > 0 ) ? iArgv[0] : nullptr );
       return 0;
     }
-    if ( arg == "--unit-tests" )
+    else if ( arg == "--unit-tests" )
     {
       return RTRT::TetrisUnitTests::RunAll();
     }
-    if ( ( arg == "--screenshot" ) && ( iArgc >= 3 ) )
+    else if ( arg == "--start-in-game" )
     {
-      screenshotPath = iArgv[2];
+      startInGame = true;
+    }
+    else if ( ( arg == "--screenshot" ) && ( ( i + 1 ) < iArgc ) )
+    {
+      screenshotPath = iArgv[++i];
     }
     else
     {
@@ -97,6 +104,7 @@ int main( int iArgc, char ** iArgv )
     glfwSwapInterval(1);
 
     RTRT::TetrisGameApp app(mainWindow, screenWidth, screenHeight);
+    app.SetStartInGame(startInGame);
     result = app.Run(screenshotPath, screenshotPath.empty() ? -1 : 15);
   }
 

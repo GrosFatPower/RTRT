@@ -7,6 +7,7 @@
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
+#include "stb_image_write.h"
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -14,6 +15,7 @@
 #include <algorithm>
 #include <iostream>
 #include <thread>
+#include <vector>
 
 namespace RTRT
 {
@@ -30,50 +32,112 @@ void TetrisGameApp::KeyCallback( GLFWwindow * iWindow, int iKey, int, int iActio
   if ( ( GLFW_PRESS == iAction ) || ( GLFW_RELEASE == iAction ) )
     app->_KeyInput.AddEvent(iKey, iAction, iMods);
 
+  if ( ( GLFW_PRESS == iAction ) || ( GLFW_REPEAT == iAction ) )
+  {
+    if ( ( GLFW_KEY_UP == iKey ) || ( GLFW_KEY_W == iKey ) )
+      app->_MenuInput._NavUp = true;
+    if ( ( GLFW_KEY_DOWN == iKey ) || ( GLFW_KEY_S == iKey ) )
+      app->_MenuInput._NavDown = true;
+    if ( ( GLFW_KEY_LEFT == iKey ) || ( GLFW_KEY_A == iKey ) )
+      app->_MenuInput._NavLeft = true;
+    if ( ( GLFW_KEY_RIGHT == iKey ) || ( GLFW_KEY_D == iKey ) )
+      app->_MenuInput._NavRight = true;
+  }
+
   if ( GLFW_PRESS == iAction )
   {
-    // Directional tap triggers
-    if ( ( GLFW_KEY_LEFT == iKey ) || ( GLFW_KEY_A == iKey ) )
-      app->_InputState._MoveLeftPressed = true;
-    if ( ( GLFW_KEY_RIGHT == iKey ) || ( GLFW_KEY_D == iKey ) )
-      app->_InputState._MoveRightPressed = true;
+    const bool inActiveGameplay = ( TetrisAppState::InGame == app->_AppState ) &&
+                                  !app->_GameLogic.IsPaused() &&
+                                  !app->_GameLogic.IsGameOver() &&
+                                  !app->_GameLogic.IsVictory() &&
+                                  !app->_Hud.IsSettingsOpen();
 
-    // Hard drop
-    if ( GLFW_KEY_SPACE == iKey )
-      app->_InputState._HardDropPressed = true;
+    if ( ( GLFW_KEY_ENTER == iKey ) || ( GLFW_KEY_KP_ENTER == iKey ) ||
+         ( !inActiveGameplay && ( GLFW_KEY_SPACE == iKey ) ) )
+    {
+      app->_MenuInput._Confirm = true;
+    }
 
-    // Rotations
-    if ( ( GLFW_KEY_UP == iKey ) || ( GLFW_KEY_X == iKey ) )
-      app->_InputState._RotateCWPressed = true;
-    if ( ( GLFW_KEY_Z == iKey ) || ( GLFW_KEY_LEFT_CONTROL == iKey ) )
-      app->_InputState._RotateCCWPressed = true;
-    if ( GLFW_KEY_W == iKey )
-      app->_InputState._Rotate180Pressed = true;
+    if ( ( GLFW_KEY_ESCAPE == iKey ) || ( GLFW_KEY_BACKSPACE == iKey ) )
+    {
+      app->_MenuInput._Back = true;
+    }
 
-    // Hold
-    if ( ( GLFW_KEY_C == iKey ) || ( GLFW_KEY_LEFT_SHIFT == iKey ) )
-      app->_InputState._HoldPressed = true;
+    if ( inActiveGameplay )
+    {
+      // Directional tap triggers
+      if ( ( GLFW_KEY_LEFT == iKey ) || ( GLFW_KEY_A == iKey ) )
+        app->_InputState._MoveLeftPressed = true;
+      if ( ( GLFW_KEY_RIGHT == iKey ) || ( GLFW_KEY_D == iKey ) )
+        app->_InputState._MoveRightPressed = true;
 
-    // Pause & Reset
-    if ( ( GLFW_KEY_P == iKey ) || ( GLFW_KEY_ESCAPE == iKey ) )
-      app->_InputState._PausePressed = true;
-    if ( GLFW_KEY_R == iKey )
-      app->_InputState._ResetPressed = true;
+      // Hard drop
+      if ( GLFW_KEY_SPACE == iKey )
+        app->_InputState._HardDropPressed = true;
+
+      // Rotations
+      if ( ( GLFW_KEY_UP == iKey ) || ( GLFW_KEY_X == iKey ) )
+        app->_InputState._RotateCWPressed = true;
+      if ( ( GLFW_KEY_Z == iKey ) || ( GLFW_KEY_LEFT_CONTROL == iKey ) )
+        app->_InputState._RotateCCWPressed = true;
+      if ( GLFW_KEY_W == iKey )
+        app->_InputState._Rotate180Pressed = true;
+
+      // Hold
+      if ( ( GLFW_KEY_C == iKey ) || ( GLFW_KEY_LEFT_SHIFT == iKey ) )
+        app->_InputState._HoldPressed = true;
+
+      // Reset
+      if ( GLFW_KEY_R == iKey )
+        app->_InputState._ResetPressed = true;
+    }
+
+    // Pause toggle during InGame
+    if ( ( TetrisAppState::InGame == app->_AppState ) &&
+         !app->_GameLogic.IsGameOver() &&
+         !app->_GameLogic.IsVictory() )
+    {
+      if ( GLFW_KEY_P == iKey )
+      {
+        app->_InputState._PausePressed = true;
+      }
+      else if ( GLFW_KEY_ESCAPE == iKey )
+      {
+        if ( app->_Hud.IsSettingsOpen() )
+          app->_Hud.ToggleSettings();
+        else
+          app->_InputState._PausePressed = true;
+      }
+    }
 
     // Toggle Settings UI
     if ( GLFW_KEY_F1 == iKey )
-      app->_Hud.ToggleSettings();
+    {
+      if ( TetrisAppState::TitleScreen == app->_AppState )
+      {
+        if ( TetrisMenuPage::Options == app->_Hud.GetMenuPage() )
+          app->_Hud.SetMenuPage(TetrisMenuPage::MainMenu);
+        else
+          app->_Hud.SetMenuPage(TetrisMenuPage::Options);
+      }
+      else
+      {
+        app->_Hud.ToggleSettings();
+        if ( app->_Hud.IsSettingsOpen() && !app->_GameLogic.IsPaused() )
+          app->_GameLogic.SetPaused(true);
+      }
+    }
 
     // Hotkey backend switching
     if ( GLFW_KEY_F2 == iKey )
       app->SetRendererMode(TetrisRendererMode::Deferred);
     if ( GLFW_KEY_F3 == iKey )
-      app->SetRendererMode(TetrisRendererMode::PhotoPathTracer);
+      app->SetRendererMode(TetrisRendererMode::PathTracer);
     if ( GLFW_KEY_F4 == iKey )
       app->SetRendererMode(TetrisRendererMode::Software);
 
     // Cycle camera presets
-    if ( GLFW_KEY_V == iKey )
+    if ( ( GLFW_KEY_V == iKey ) && ( TetrisAppState::InGame == app->_AppState ) )
     {
       const int nextCam = ( (int)app->_SceneManager.GetCameraPreset() + 1 ) % 3;
       app->_SceneManager.SetCameraPreset(static_cast<TetrisCameraPreset>(nextCam));
@@ -154,6 +218,20 @@ TetrisGameApp::TetrisGameApp( std::shared_ptr<GLFWwindow> iMainWindow, int iScre
   _Settings._ShadowMapping = true;
   _Settings._ShadowBias = 0.002f;
   _Settings._MaxShadowCastingLights = 3;
+
+  // PathTracer initial defaults (preserved across renderer hot-swaps)
+  _Settings._Accumulate = true;
+  _Settings._Denoise = true;
+#if defined(__APPLE__)
+  _Settings._DenoisingMethod = 2; // Edge-Aware GPU shader denoiser (OIDN is slow on macOS CPU)
+#elif defined(RTRT_HAS_OIDN)
+  _Settings._DenoisingMethod = 3; // OIDN (AI)
+#else
+  _Settings._DenoisingMethod = 2; // Edge-Aware GPU shader denoiser
+#endif
+  _Settings._NbSamplesPerPixel = 1;
+  _Settings._Bounces = 2;
+  _Settings._LowResRatio = 1.f;
 }
 
 // ----------------------------------------------------------------------------
@@ -168,17 +246,8 @@ TetrisGameApp::~TetrisGameApp()
 // ----------------------------------------------------------------------------
 void TetrisGameApp::ApplyRendererDefaults()
 {
-  if ( TetrisRendererMode::PhotoPathTracer == _RendererMode )
+  if ( TetrisRendererMode::PathTracer == _RendererMode )
   {
-    _Settings._Accumulate = true;
-    _Settings._Denoise = true;
-#if defined(RTRT_HAS_OIDN)
-    _Settings._DenoisingMethod = 3;
-#else
-    _Settings._DenoisingMethod = 2;
-#endif
-    _Settings._NbSamplesPerPixel = 1;
-    _Settings._Bounces = 2;
     _Settings._LowResRatio = 1.f;
     _Settings._TiledRendering = false;
   }
@@ -251,7 +320,7 @@ int TetrisGameApp::InitializeUI()
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
   ImGui::StyleColorsDark();
-  io.Fonts->AddFontDefault();
+  _Hud.Initialize();
 
   const char * glslVersion = "#version 410";
   ImGui_ImplGlfw_InitForOpenGL(_MainWindow.get(), true);
@@ -273,8 +342,16 @@ int TetrisGameApp::InitializeScene()
   }
 
   _Scene = std::move(scene);
-  _SceneManager.SyncScene(*_Scene, _GameLogic, 0.f);
-  _SceneManager.SyncCamera(*_Scene, _GameLogic);
+  if ( TetrisAppState::TitleScreen == _AppState )
+  {
+    _SceneManager.SyncTitleShowcase(*_Scene, 0.f);
+    _SceneManager.SyncTitleCamera(*_Scene, 0.f);
+  }
+  else
+  {
+    _SceneManager.SyncScene(*_Scene, _GameLogic, 0.f);
+    _SceneManager.SyncCamera(*_Scene, _GameLogic);
+  }
   return 0;
 }
 
@@ -289,7 +366,7 @@ int TetrisGameApp::InitializeRenderer()
   ApplyRendererDefaults();
 
   Renderer * newRenderer = nullptr;
-  if ( TetrisRendererMode::PhotoPathTracer == _RendererMode )
+  if ( TetrisRendererMode::PathTracer == _RendererMode )
     newRenderer = new PathTracer(*_Scene, _Settings);
   else if ( TetrisRendererMode::Software == _RendererMode )
     newRenderer = new SoftwareRasterizer(*_Scene, _Settings);
@@ -336,7 +413,26 @@ int TetrisGameApp::ProcessInput()
 // ----------------------------------------------------------------------------
 int TetrisGameApp::UpdateGame( float iDeltaTime )
 {
-  _GameLogic.Update(iDeltaTime, _InputState, _HandlingConfig);
+  if ( TetrisAppState::TitleScreen == _AppState )
+  {
+    if ( _Scene )
+    {
+      const float curTime = static_cast<float>(glfwGetTime());
+      _SceneManager.SyncTitleShowcase(*_Scene, curTime);
+      _SceneManager.SyncTitleCamera(*_Scene, curTime);
+    }
+  }
+  else
+  {
+    if ( !_Hud.IsSettingsOpen() )
+      _GameLogic.Update(iDeltaTime, _InputState, _HandlingConfig);
+
+    if ( _Scene )
+    {
+      _SceneManager.SyncScene(*_Scene, _GameLogic, iDeltaTime);
+      _SceneManager.SyncCamera(*_Scene, _GameLogic);
+    }
+  }
 
   // Clear edge-triggered inputs for next frame
   _InputState._MoveLeftPressed = false;
@@ -349,12 +445,6 @@ int TetrisGameApp::UpdateGame( float iDeltaTime )
   _InputState._PausePressed = false;
   _InputState._ResetPressed = false;
   _KeyInput.ClearLastEvents();
-
-  if ( _Scene )
-  {
-    _SceneManager.SyncScene(*_Scene, _GameLogic, iDeltaTime);
-    _SceneManager.SyncCamera(*_Scene, _GameLogic);
-  }
 
   if ( _Renderer )
   {
@@ -375,8 +465,14 @@ int TetrisGameApp::DrawUI()
   ImGui_ImplGlfw_NewFrame();
   ImGui::NewFrame();
 
-  _Hud.Draw(_GameLogic, _SceneManager, *_Scene, _Renderer.get(), _Settings, _RendererMode,
-            _HandlingConfig, _FrameRate, _DeltaTime, _NbRenderedFrames, _ReloadRenderer);
+  bool requestExit = false;
+  _Hud.Draw(_AppState, _GameLogic, _SceneManager, *_Scene, _Renderer.get(), _Settings, _RendererMode,
+            _HandlingConfig, _MenuInput, _FrameRate, _DeltaTime, _NbRenderedFrames, _ReloadRenderer, requestExit);
+
+  _MenuInput.Clear();
+
+  if ( requestExit && _MainWindow )
+    glfwSetWindowShouldClose(_MainWindow.get(), GLFW_TRUE);
 
   ImGui::Render();
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -445,17 +541,28 @@ int TetrisGameApp::Run( const std::string & iCapturePath, int iMaxFrames )
 
     DrawUI();
 
-    glfwSwapBuffers(_MainWindow.get());
-    _NbRenderedFrames++;
-
     if ( !iCapturePath.empty() && ( _NbRenderedFrames >= 10 ) )
     {
-      if ( _Renderer )
-        _Renderer->RenderToFile(iCapturePath);
+      const int w = _Settings._WindowResolution.x;
+      const int h = _Settings._WindowResolution.y;
+      if ( ( w > 0 ) && ( h > 0 ) )
+      {
+        std::vector<unsigned char> frameData(static_cast<size_t>(w) * static_cast<size_t>(h) * 4u, 0);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        glReadBuffer(GL_BACK);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, frameData.data());
+        stbi_flip_vertically_on_write(true);
+        stbi_write_png(iCapturePath.c_str(), w, h, 4, frameData.data(), w * 4);
+      }
+      glfwSwapBuffers(_MainWindow.get());
       break;
     }
 
-    if ( ( iMaxFrames > 0 ) && ( _NbRenderedFrames >= iMaxFrames ) )
+    glfwSwapBuffers(_MainWindow.get());
+    _NbRenderedFrames++;
+
+    if ( ( iMaxFrames > 0 ) && ( static_cast<int>(_NbRenderedFrames) >= iMaxFrames ) )
       break;
   }
 

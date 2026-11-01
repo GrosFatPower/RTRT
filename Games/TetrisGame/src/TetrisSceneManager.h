@@ -27,6 +27,9 @@ public:
   int SyncScene( Scene & ioScene, const TetrisGameLogic & iLogic, float iDeltaTime );
   int SyncCamera( Scene & ioScene, const TetrisGameLogic & iLogic );
 
+  int SyncTitleShowcase( Scene & ioScene, float iTime );
+  int SyncTitleCamera( Scene & ioScene, float iTime );
+
   void SetMaterialPreset( Scene & ioScene, TetrisMaterialPreset iPreset );
   TetrisMaterialPreset GetMaterialPreset() const { return _MaterialPreset; }
 
@@ -64,7 +67,7 @@ protected:
   bool                 _DynamicPieceLighting = true;
 
   // Orbit camera parameters
-  float                _OrbitRadius    = 27.0f;
+  float                _OrbitRadius    = 50.0f;
   float                _OrbitYaw       = 0.f;
   float                _OrbitPitch     = 0.f;
 

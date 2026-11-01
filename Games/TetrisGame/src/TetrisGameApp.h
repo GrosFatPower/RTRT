@@ -1,6 +1,7 @@
 #ifndef _TetrisGameApp_
 #define _TetrisGameApp_
 
+#include "GameMenuUI.h"
 #include "KeyInput.h"
 #include "MouseInput.h"
 #include "Renderer.h"
@@ -26,6 +27,8 @@ public:
   virtual ~TetrisGameApp();
 
   int Run( const std::string & iCapturePath = "", int iMaxFrames = -1 );
+
+  void SetStartInGame( bool iStartInGame ) { _AppState = iStartInGame ? TetrisAppState::InGame : TetrisAppState::TitleScreen; }
 
   static const char * GetAppHeader() { return "Tetris 3D"; }
 
@@ -64,9 +67,11 @@ protected:
   TetrisSceneManager          _SceneManager;
   TetrisHud                   _Hud;
 
+  TetrisAppState              _AppState     = TetrisAppState::TitleScreen;
   TetrisRendererMode          _RendererMode = TetrisRendererMode::Deferred;
   TetrisHandlingConfig        _HandlingConfig;
   TetrisInputState            _InputState;
+  GameMenuInput               _MenuInput;
 
   bool                        _ReloadRenderer = false;
   bool                        _ReloadScene    = false;

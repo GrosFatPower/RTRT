@@ -39,9 +39,9 @@ enum class TetrisGameMode : int
 
 enum class TetrisRendererMode : int
 {
-  Deferred        = 0,
-  PhotoPathTracer = 1,
-  Software        = 2
+  Deferred   = 0,
+  PathTracer = 1,
+  Software   = 2
 };
 
 enum class TetrisMaterialPreset : int
@@ -64,6 +64,43 @@ enum class TetrisTSpinType : int
   None = 0,
   Mini = 1,
   Full = 2
+};
+
+enum class TetrisAppState : int
+{
+  TitleScreen = 0,
+  InGame      = 1
+};
+
+enum class TetrisMenuPage : int
+{
+  MainMenu   = 0,
+  ModeSelect = 1,
+  HighScores = 2,
+  Options    = 3
+};
+
+struct TetrisSessionStats
+{
+  long long _BestMarathonScore = 0;
+  int       _BestMarathonLines = 0;
+  int       _BestMarathonLevel = 1;
+
+  double    _BestSprint40Time  = 0.0; // 0.0 = not yet completed
+  long long _BestSprintScore   = 0;
+
+  long long _BestUltraScore    = 0;
+  int       _BestUltraLines    = 0;
+
+  int       _TotalGamesPlayed  = 0;
+  int       _TotalLinesCleared = 0;
+  int       _TotalTetrises     = 0;
+  int       _TotalTSpins       = 0;
+
+  void Reset()
+  {
+    *this = TetrisSessionStats();
+  }
 };
 
 struct TetrisHandlingConfig

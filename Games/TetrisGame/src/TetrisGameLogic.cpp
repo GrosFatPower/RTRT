@@ -391,6 +391,11 @@ void TetrisGameLogic::LockActivePiece( bool )
   {
     _ComboCount++;
     _LinesCleared += linesCleared;
+    _SessionStats._TotalLinesCleared += linesCleared;
+    if ( 4 == linesCleared )
+      _SessionStats._TotalTetrises++;
+    if ( TetrisTSpinType::None != tSpin )
+      _SessionStats._TotalTSpins++;
 
     if ( TetrisTSpinType::Full == tSpin )
     {
@@ -499,6 +504,7 @@ void TetrisGameLogic::LockActivePiece( bool )
       _Victory = true;
       _ActionBannerText = "VICTORY!";
       _ActionBannerTimer = 4.f;
+      UpdateSessionStats();
       return;
     }
   }
@@ -509,11 +515,46 @@ void TetrisGameLogic::LockActivePiece( bool )
       _Victory = true;
       _ActionBannerText = "40 LINES COMPLETE!";
       _ActionBannerTimer = 4.f;
+      UpdateSessionStats();
       return;
     }
   }
 
+  UpdateSessionStats();
   SpawnNextPiece();
+}
+
+// ----------------------------------------------------------------------------
+// UpdateSessionStats
+// ----------------------------------------------------------------------------
+void TetrisGameLogic::UpdateSessionStats()
+{
+  if ( TetrisGameMode::Marathon == _Mode )
+  {
+    if ( _Score > _SessionStats._BestMarathonScore )
+      _SessionStats._BestMarathonScore = _Score;
+    if ( _LinesCleared > _SessionStats._BestMarathonLines )
+      _SessionStats._BestMarathonLines = _LinesCleared;
+    if ( _Level > _SessionStats._BestMarathonLevel )
+      _SessionStats._BestMarathonLevel = _Level;
+  }
+  else if ( TetrisGameMode::Sprint == _Mode )
+  {
+    if ( _Score > _SessionStats._BestSprintScore )
+      _SessionStats._BestSprintScore = _Score;
+    if ( _Victory && ( _ElapsedTime > 0.0 ) )
+    {
+      if ( ( _SessionStats._BestSprint40Time <= 0.0 ) || ( _ElapsedTime < _SessionStats._BestSprint40Time ) )
+        _SessionStats._BestSprint40Time = _ElapsedTime;
+    }
+  }
+  else if ( TetrisGameMode::Ultra == _Mode )
+  {
+    if ( _Score > _SessionStats._BestUltraScore )
+      _SessionStats._BestUltraScore = _Score;
+    if ( _LinesCleared > _SessionStats._BestUltraLines )
+      _SessionStats._BestUltraLines = _LinesCleared;
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -533,6 +574,12 @@ void TetrisGameLogic::Update( float iDeltaTime, const TetrisInputState & iInput,
   if ( _GameOver || _Victory || _Paused )
     return;
 
+  if ( !_GameStarted )
+  {
+    _GameStarted = true;
+    _SessionStats._TotalGamesPlayed++;
+  }
+
   // Timers update
   if ( _GameStarted )
   {
@@ -545,6 +592,7 @@ void TetrisGameLogic::Update( float iDeltaTime, const TetrisInputState & iInput,
         _Victory = true;
         _ActionBannerText = "TIME'S UP!";
         _ActionBannerTimer = 4.f;
+        UpdateSessionStats();
         return;
       }
     }
