@@ -464,6 +464,17 @@ void TetrisHud::DrawOptionsPage( TetrisGameLogic & ioLogic,
       if ( ImGui::Combo("In-Game Camera Preset (V)", &currentCam, camNames, IM_ARRAYSIZE(camNames)) )
         ioSceneMgr.SetCameraPreset(static_cast<TetrisCameraPreset>(currentCam));
 
+      float backplateOpacity = ioSceneMgr.GetBackplateOpacity();
+      if ( ImGui::SliderFloat("Playfield Backplane Opacity", &backplateOpacity, 0.0f, 1.0f, "%.2f") )
+      {
+        ioSceneMgr.SetBackplateOpacity(ioScene, backplateOpacity);
+        if ( ioRenderer )
+        {
+          ioRenderer->Notify(DirtyState::SceneMaterials);
+          ioRenderer->Notify(DirtyState::SceneInstances);
+        }
+      }
+
       bool dynLight = ioSceneMgr.GetDynamicPieceLighting();
       if ( ImGui::Checkbox("Active Piece Dynamic Point Light", &dynLight) )
         ioSceneMgr.SetDynamicPieceLighting(dynLight);

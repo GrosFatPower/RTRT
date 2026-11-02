@@ -259,10 +259,10 @@ void main()
   {
     premultipliedColor = mat._Emission * alpha;
     if ( u_EnablePBRDirectLighting != 0 )
-      premultipliedColor += directDiffuse * alpha + directSpecular;
+      premultipliedColor += directDiffuse * alpha + directSpecular * baseAlpha;
     else
-      premultipliedColor += legacyDiffuse * alpha + legacySpecular;
-    premultipliedColor += envSpecular;
+      premultipliedColor += legacyDiffuse * alpha + legacySpecular * baseAlpha;
+    premultipliedColor += envSpecular * baseAlpha;
   }
 
   // Keep purely transmissive surfaces (alpha near 0) visible through additive specular/reflection.

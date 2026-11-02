@@ -304,15 +304,17 @@ Mesh * TetrisSceneManager::CreateEnclosureMesh( const std::string & iName )
 Mesh * TetrisSceneManager::CreateBackplateMesh( const std::string & iName )
 {
   MeshBuilder builder;
+  const float z = -0.56f;
+  const Vec3 norm(0.f, 0.f, 1.f);
 
-  // Deep dark backplate behind the matrix (extending up to buffer zone)
-  builder.AddBox(Vec3(-5.0f, 0.0f, -0.65f), Vec3(5.0f, 21.4f, -0.55f));
+  // Translucent backplane behind the 10x21 matrix
+  builder.AddQuad(Vec3(-5.0f, 0.0f, z), Vec3(5.0f, 0.0f, z), Vec3(5.0f, 21.4f, z), Vec3(-5.0f, 21.4f, z), norm);
 
-  // Hold queue backing shelf
-  builder.AddBox(Vec3(-10.1f, 13.5f, -0.65f), Vec3(-5.9f, 19.5f, -0.55f));
+  // Hold queue backing plane
+  builder.AddQuad(Vec3(-10.1f, 13.5f, z), Vec3(-5.9f, 13.5f, z), Vec3(-5.9f, 19.5f, z), Vec3(-10.1f, 19.5f, z), norm);
 
-  // Next queue backing shelf
-  builder.AddBox(Vec3( 5.9f,  4.4f, -0.65f),  Vec3(10.1f, 19.5f, -0.55f));
+  // Next queue backing plane
+  builder.AddQuad(Vec3( 5.9f,  4.4f, z),  Vec3(10.1f, 4.4f, z), Vec3(10.1f, 19.5f, z), Vec3( 5.9f,  19.5f, z), norm);
 
   return new Mesh(iName, builder._Vertices, builder._Normals, builder._UVs, builder._Indices);
 }
@@ -372,12 +374,17 @@ int TetrisSceneManager::SetupMaterials( Scene & ioScene )
     _ChassisMaterialID = ioScene.AddMaterial(chassis, "__Tetris_Chassis");
   }
 
-  // Backplate Material
+  // Backplate Material (translucent by default)
   {
     Material backplate;
-    backplate._Albedo = Vec3(0.025f, 0.028f, 0.035f);
-    backplate._Roughness = 0.18f;
-    backplate._Metallic = 0.35f;
+    backplate._Albedo      = Vec3(0.025f, 0.030f, 0.042f);
+    backplate._Roughness   = 0.16f;
+    backplate._Opacity     = _BackplateOpacity;
+    backplate._Metallic    = 0.25f * _BackplateOpacity;
+    backplate._Reflectance = 0.35f * _BackplateOpacity;
+    backplate._AlphaMode   = ( _BackplateOpacity >= 0.995f )
+                             ? static_cast<float>(AlphaMode::Opaque)
+                             : static_cast<float>(AlphaMode::Blend);
     _BackplateMaterialID = ioScene.AddMaterial(backplate, "__Tetris_Backplate");
   }
 
@@ -390,6 +397,28 @@ int TetrisSceneManager::SetupMaterials( Scene & ioScene )
   }
 
   return 0;
+}
+
+// ----------------------------------------------------------------------------
+// SetBackplateOpacity
+// ----------------------------------------------------------------------------
+void TetrisSceneManager::SetBackplateOpacity( Scene & ioScene, float iOpacity )
+{
+  _BackplateOpacity = std::clamp(iOpacity, 0.0f, 1.0f);
+
+  std::vector<Material> & materials = ioScene.GetMaterials();
+  if ( ( _BackplateMaterialID >= 0 ) && ( _BackplateMaterialID < static_cast<int>(materials.size()) ) )
+  {
+    Material & backplate   = materials[_BackplateMaterialID];
+    backplate._Albedo      = Vec3(0.025f, 0.030f, 0.042f);
+    backplate._Roughness   = 0.16f;
+    backplate._Opacity     = _BackplateOpacity;
+    backplate._Metallic    = 0.25f * _BackplateOpacity;
+    backplate._Reflectance = 0.35f * _BackplateOpacity;
+    backplate._AlphaMode   = ( _BackplateOpacity >= 0.995f )
+                             ? static_cast<float>(AlphaMode::Opaque)
+                             : static_cast<float>(AlphaMode::Blend);
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -665,8 +694,9 @@ int TetrisSceneManager::SyncScene( Scene & ioScene, const TetrisGameLogic & iLog
   }
   if ( ( _BackplateInstanceID >= 0 ) && ( _BackplateInstanceID < static_cast<int>(instances.size()) ) )
   {
-    instances[_BackplateInstanceID]._Visible = true;
-    instances[_BackplateInstanceID]._Transform = Mat4x4(1.0f);
+    const bool showBackplate = ( _BackplateOpacity > 0.005f );
+    instances[_BackplateInstanceID]._Visible = showBackplate;
+    instances[_BackplateInstanceID]._Transform = showBackplate ? Mat4x4(1.0f) : hiddenTransform;
   }
   if ( ( _SkylineInstanceID >= 0 ) && ( _SkylineInstanceID < static_cast<int>(instances.size()) ) )
   {

@@ -42,6 +42,9 @@ public:
   void SetShowGhost( bool iShow ) { _ShowGhost = iShow; }
   bool GetShowGhost() const { return _ShowGhost; }
 
+  void SetBackplateOpacity( Scene & ioScene, float iOpacity );
+  float GetBackplateOpacity() const { return _BackplateOpacity; }
+
   void SetDynamicPieceLighting( bool iEnable ) { _DynamicPieceLighting = iEnable; }
   bool GetDynamicPieceLighting() const { return _DynamicPieceLighting; }
 
@@ -91,6 +94,7 @@ protected:
   TetrisMaterialPreset _MaterialPreset = TetrisMaterialPreset::GlossyPlastic;
   TetrisCameraPreset   _CameraPreset   = TetrisCameraPreset::Frontal3D;
   bool                 _ShowGhost      = true;
+  float                _BackplateOpacity = 0.45f;
   bool                 _DynamicPieceLighting = true;
   bool                 _InGameCameraMotion   = true;
   float                _BgMotionSpeed        = 1.0f;

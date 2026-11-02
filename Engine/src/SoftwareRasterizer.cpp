@@ -1518,7 +1518,7 @@ Vec4 SoftwareRasterizer::SampleEnvMap(const Vec3& iDir)
   {
     float theta = std::asin(iDir.y);
     float phi = std::atan2(iDir.z, iDir.x);
-    Vec2 uv = Vec2(.5f + phi * M_1_PI * .5f, .5f - theta * M_1_PI) + Vec2(_Settings._SkyBoxRotation, 0.0);
+    Vec2 uv = Vec2(.5f + phi * M_1_PI * .5f, .5f - theta * M_1_PI) + Vec2(_Settings._SkyBoxRotation / 360.f, 0.0f);
 
     if (_Settings._Sampling >= SamplingMode::Bilinear)
       return _Scene.GetEnvMap().BiLinearSample(uv);

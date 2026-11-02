@@ -267,7 +267,7 @@ void TetrisGameApp::ApplyRendererDefaults()
     _Settings._SSR = true;
     _Settings._ShadowMapping = true;
     _Settings._SpecularIBL = false;
-    _Settings._Transparency = false;
+    _Settings._Transparency = true;
     _Settings._TiledRendering = false;
   }
 }
