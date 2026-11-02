@@ -652,6 +652,41 @@ int FpsGameSceneBinding::SyncTransforms( Scene & iScene, const FpsGameWorld & iW
 }
 
 // ----------------------------------------------------------------------------
+// SyncTitleCamera
+// ----------------------------------------------------------------------------
+int FpsGameSceneBinding::SyncTitleCamera( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, float iTime )
+{
+  Camera & camera = iScene.GetCamera();
+
+  const Vec3 drift(std::cos(iTime * 0.15f) * 2.5f,
+                   1.5f + std::sin(iTime * 0.21f) * 0.6f,
+                   std::sin(iTime * 0.15f) * 2.5f);
+  const Vec3 position = iWorld.GetSpawnPosition() + Vec3(0.f, iSettings._EyeHeight, 0.f) + drift;
+  const float yaw = iWorld.GetSpawnYaw() + 40.f * std::sin(iTime * 0.17f);
+  const float pitch = MathUtil::Clamp(iWorld.GetSpawnPitch() - 4.f + 5.f * std::sin(iTime * 0.23f), -89.f, 89.f);
+
+  camera.SetFreeLookPose(position, yaw, pitch);
+  camera.SetFOVInDegrees(MathUtil::Clamp(iSettings._CameraFOV, 30.f, 140.f));
+  camera.SetProjection(CameraProjection::Perspective);
+  const float zNear = std::max(0.001f, iSettings._CameraZNear);
+  camera.SetZNearFar(zNear, std::max(zNear + 0.001f, iSettings._CameraZFar));
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// SetViewWeaponVisible
+// ----------------------------------------------------------------------------
+void FpsGameSceneBinding::SetViewWeaponVisible( Scene & iScene, bool iVisible )
+{
+  std::vector<MeshInstance> & instances = iScene.GetMeshInstances();
+  for ( int instanceID : _WeaponInstanceIDs )
+  {
+    if ( ( instanceID >= 0 ) && ( instanceID < static_cast<int>(instances.size()) ) )
+      instances[instanceID]._Visible = iVisible;
+  }
+}
+
+// ----------------------------------------------------------------------------
 // SetObjectInstanceVisible
 // ----------------------------------------------------------------------------
 int FpsGameSceneBinding::SetObjectInstanceVisible( Scene & iScene, int iObjectIndex, bool iVisible )

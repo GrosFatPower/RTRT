@@ -25,6 +25,19 @@ enum class FpsRendererMode
   PhotoPathTracer
 };
 
+enum class FpsAppState
+{
+  TitleScreen = 0,
+  InGame
+};
+
+enum class FpsMenuPage
+{
+  MainMenu = 0,
+  MapSelect,
+  Options
+};
+
 enum class FpsMaterialSlot
 {
   Floor = 0,
@@ -142,6 +155,9 @@ public:
   int GetActiveProjectileCount() const { return _Projectiles.GetActiveCount(); }
   int GetProjectileAmmo() const { return _Projectiles.GetAmmo(); }
   bool ConsumeProjectilesDirty() { return _Projectiles.ConsumeDirty(); }
+  const Vec3 & GetSpawnPosition() const { return _SpawnPosition; }
+  float GetSpawnYaw() const { return _SpawnYaw; }
+  float GetSpawnPitch() const { return _SpawnPitch; }
 
 protected:
   void BuildDefaultArena();
@@ -169,6 +185,8 @@ public:
   int Attach( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, const FpsGameMap & iMap );
   int SyncCamera( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, bool iAllowOrthographic = false );
   int SyncTransforms( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
+  int SyncTitleCamera( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, float iTime );
+  void SetViewWeaponVisible( Scene & iScene, bool iVisible );
   int SyncProp( Scene & iScene, const FpsGameMap & iMap, int iPropIndex );
   int LoadProp( Scene & iScene, const FpsGameMap & iMap, int iPropIndex );
   int BuildPropCollisionColliders( Scene & iScene, const FpsGameMap & iMap, std::vector<FpsCollisionObb> & oColliders ) const;

@@ -7,6 +7,8 @@
 #include "FpsGameEditor.h"
 #include "FpsGameHud.h"
 #include "FpsGameMap.h"
+#include "GameMenuUI.h"
+#include "GamepadInput.h"
 #include "KeyInput.h"
 #include "MouseInput.h"
 #include "Renderer.h"
@@ -87,7 +89,16 @@ protected:
   void SetCpuTimingEnabled( int iTimingID, bool iEnabled );
 
   FpsGameEditorContext MakeEditorContext();
-  FpsGameHudContext MakeHudContext() const;
+  FpsGameHudContext MakeHudContext();
+  void ApplyHudRequests( FpsGameHudContext & ioContext );
+  void StartGame();
+  void ResumeGame();
+  void PauseGame();
+  void ReturnToTitle( FpsMenuPage iPage );
+  void RequestMap( const std::string & iMapPath );
+  void SetDevPanelsVisible( bool iVisible );
+  void UpdateGamepadMenuInput();
+  void SyncPlayerView();
 
 protected:
   std::shared_ptr<GLFWwindow> _MainWindow;
@@ -117,12 +128,18 @@ protected:
   MouseInput                _MouseInput;
 
   bool                      _MouseCaptured = false;
+  FpsAppState               _AppState = FpsAppState::TitleScreen;
+  bool                      _Paused = false;
+  bool                      _PauseRequested = false;
+  GamepadInput              _GamepadInput;
+  GameMenuInput             _MenuInput;
+  float                     _GamepadLookSensitivity = 140.f;
   bool                      _ExitToTestSelection = false;
-  bool                      _ShowMenuBar = true;
+  bool                      _ShowMenuBar = false;
   bool                      _AltMenuToggleArmed = false;
-  bool                      _ShowDebugPanel = true;
-  bool                      _ShowRenderSettingsPanel = true;
-  bool                      _ShowRenderStatsPanel = true;
+  bool                      _ShowDebugPanel = false;
+  bool                      _ShowRenderSettingsPanel = false;
+  bool                      _ShowRenderStatsPanel = false;
   bool                      _ShowHelpDialog = false;
   bool                      _HasLastMousePos = false;
   double                    _LastMouseX = 0.;

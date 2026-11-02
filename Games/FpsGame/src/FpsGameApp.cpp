@@ -1,9 +1,10 @@
-﻿#pragma warning(disable : 4100) // unreferenced formal parameter
+#pragma warning(disable : 4100) // unreferenced formal parameter
 
 #include "FpsGameApp.h"
 
 #include "DeferredRenderer.h"
 #include "DroppedFileUtils.h"
+#include "NativeFileDialog.h"
 #include "FpsGameMap.h"
 #include "PathTracer.h"
 #include "PathUtils.h"
@@ -205,6 +206,53 @@ void FpsGameApp::KeyCallback( GLFWwindow * iWindow, const int iKey, const int iS
       this_ -> _AltMenuToggleArmed = false;
     }
   }
+
+  // Menu navigation and pause requests
+  const bool menuActive = ( FpsAppState::TitleScreen == this_ -> _AppState ) || this_ -> _Paused;
+  const bool inGame = ( FpsAppState::InGame == this_ -> _AppState );
+  const bool editorOn = this_ -> _Editor.IsEnabled();
+
+  if ( menuActive && ( ( GLFW_PRESS == iAction ) || ( GLFW_REPEAT == iAction ) ) )
+  {
+    if ( ( GLFW_KEY_UP == iKey ) || ( GLFW_KEY_W == iKey ) )
+      this_ -> _MenuInput._NavUp = true;
+    if ( ( GLFW_KEY_DOWN == iKey ) || ( GLFW_KEY_S == iKey ) )
+      this_ -> _MenuInput._NavDown = true;
+    if ( ( GLFW_KEY_LEFT == iKey ) || ( GLFW_KEY_A == iKey ) )
+      this_ -> _MenuInput._NavLeft = true;
+    if ( ( GLFW_KEY_RIGHT == iKey ) || ( GLFW_KEY_D == iKey ) )
+      this_ -> _MenuInput._NavRight = true;
+    if ( GLFW_KEY_Q == iKey )
+      this_ -> _MenuInput._PrevTab = true;
+    if ( GLFW_KEY_E == iKey )
+      this_ -> _MenuInput._NextTab = true;
+  }
+
+  if ( GLFW_PRESS == iAction )
+  {
+    if ( menuActive )
+    {
+      if ( ( GLFW_KEY_ENTER == iKey ) || ( GLFW_KEY_KP_ENTER == iKey ) || ( GLFW_KEY_SPACE == iKey ) )
+        this_ -> _MenuInput._Confirm = true;
+      if ( ( GLFW_KEY_ESCAPE == iKey ) || ( GLFW_KEY_BACKSPACE == iKey ) || ( inGame && ( GLFW_KEY_P == iKey ) ) )
+        this_ -> _MenuInput._Back = true;
+    }
+    else if ( inGame && !editorOn && ( ( GLFW_KEY_ESCAPE == iKey ) || ( GLFW_KEY_P == iKey ) ) )
+      this_ -> _PauseRequested = true;
+
+    if ( ( GLFW_KEY_F1 == iKey ) && !editorOn )
+    {
+      if ( !inGame )
+        this_ -> _Hud.SetMenuPage(( FpsMenuPage::Options == this_ -> _Hud.GetMenuPage() ) ? FpsMenuPage::MainMenu : FpsMenuPage::Options);
+      else if ( !this_ -> _Paused )
+      {
+        this_ -> _PauseRequested = true;
+        this_ -> _Hud.SetSettingsOpen(true);
+      }
+      else
+        this_ -> _Hud.SetSettingsOpen(!this_ -> _Hud.IsSettingsOpen());
+    }
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -309,6 +357,7 @@ void FpsGameApp::EnableAutomaticSoftwareBenchmark( const std::string & iLabel,
                                               const std::string & iPose )
 {
   _AutomaticBenchmark = true;
+  _AppState = FpsAppState::InGame;
   _AutomaticBenchmarkSIMD = iSIMD;
   _AutomaticBenchmarkTileSize = std::max(8u, iTileSize);
   _AutomaticBenchmarkOptimization = iOptimization;
@@ -636,7 +685,7 @@ int FpsGameApp::InitializeUI()
   io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
   ImGui::StyleColorsDark();
-  io.Fonts -> AddFontDefault();
+  _Hud.Initialize();
 
   const char * glslVersion = "#version 410";
   ImGui_ImplGlfw_InitForOpenGL(_MainWindow.get(), true);
@@ -659,9 +708,235 @@ FpsGameEditorContext FpsGameApp::MakeEditorContext()
 // ----------------------------------------------------------------------------
 // MakeHudContext
 // ----------------------------------------------------------------------------
-FpsGameHudContext FpsGameApp::MakeHudContext() const
+FpsGameHudContext FpsGameApp::MakeHudContext()
 {
-  return FpsGameHudContext(_GameSettings, _GameWorld);
+  FpsGameHudContext context;
+  context._AppState = _AppState;
+  context._Paused = _Paused;
+  context._EditorEnabled = _Editor.IsEnabled();
+  context._DevPanelsVisible = _ShowDebugPanel;
+  context._GameSettings = &_GameSettings;
+  context._GameWorld = &_GameWorld;
+  context._Scene = _Scene.get();
+  context._Renderer = _Renderer.get();
+  context._RenderSettings = &_Settings;
+  context._MenuInput = &_MenuInput;
+  context._Gamepad = &_GamepadInput;
+  context._GamepadLookSensitivity = &_GamepadLookSensitivity;
+  context._MapName = std::filesystem::path(_MapPath).filename().string();
+  context._MapPath = _MapPath;
+  context._FrameRate = _FrameRate;
+  context._DeltaTime = _DeltaTime;
+  context._NbRenderedFrames = _NbRenderedFrames;
+  return context;
+}
+
+// ----------------------------------------------------------------------------
+// SyncPlayerView
+// ----------------------------------------------------------------------------
+void FpsGameApp::SyncPlayerView()
+{
+  if ( !_Scene )
+    return;
+
+  _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings, _Editor.IsEnabled());
+  _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings);
+  if ( _Renderer )
+  {
+    _Renderer -> Notify(DirtyState::SceneCamera);
+    _Renderer -> Notify(DirtyState::SceneInstances);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// StartGame
+// ----------------------------------------------------------------------------
+void FpsGameApp::StartGame()
+{
+  _AppState = FpsAppState::InGame;
+  _Paused = false;
+  _Hud.SetSettingsOpen(false);
+  _GameWorld.Reset(_GameSettings);
+  SyncPlayerView();
+  SetMouseCaptured(FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode);
+}
+
+// ----------------------------------------------------------------------------
+// PauseGame
+// ----------------------------------------------------------------------------
+void FpsGameApp::PauseGame()
+{
+  _Paused = true;
+  _MenuInput.Clear();
+  SetMouseCaptured(false);
+}
+
+// ----------------------------------------------------------------------------
+// ResumeGame
+// ----------------------------------------------------------------------------
+void FpsGameApp::ResumeGame()
+{
+  _Paused = false;
+  _Hud.SetSettingsOpen(false);
+  SetMouseCaptured(!_Editor.IsEnabled() && ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode ));
+}
+
+// ----------------------------------------------------------------------------
+// ReturnToTitle
+// ----------------------------------------------------------------------------
+void FpsGameApp::ReturnToTitle( FpsMenuPage iPage )
+{
+  if ( _Editor.IsEnabled() )
+    SetEditorMode(false);
+
+  _AppState = FpsAppState::TitleScreen;
+  _Paused = false;
+  _Hud.SetSettingsOpen(false);
+  _Hud.SetMenuPage(iPage);
+  SetMouseCaptured(false);
+
+  if ( _Scene )
+  {
+    _SceneBinding.SetViewWeaponVisible(*_Scene, false);
+    _SceneBinding.SyncTitleCamera(*_Scene, _GameWorld, _GameSettings, static_cast<float>(glfwGetTime()));
+    if ( _Renderer )
+    {
+      _Renderer -> Notify(DirtyState::SceneCamera);
+      _Renderer -> Notify(DirtyState::SceneInstances);
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
+// RequestMap
+// ----------------------------------------------------------------------------
+void FpsGameApp::RequestMap( const std::string & iMapPath )
+{
+  const std::string resolved = std::filesystem::path(iMapPath).is_absolute() ? iMapPath : PathUtils::GetAssetPath(iMapPath);
+  if ( _MapLoaded && ( resolved == _MapPath ) )
+    return;
+
+  _MapPath = resolved;
+  _MapLoaded = false;
+  _ReloadScene = true;
+}
+
+// ----------------------------------------------------------------------------
+// SetDevPanelsVisible
+// ----------------------------------------------------------------------------
+void FpsGameApp::SetDevPanelsVisible( bool iVisible )
+{
+  _ShowMenuBar = iVisible;
+  _ShowDebugPanel = iVisible;
+  _ShowRenderSettingsPanel = iVisible;
+  _ShowRenderStatsPanel = iVisible;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateGamepadMenuInput
+// ----------------------------------------------------------------------------
+void FpsGameApp::UpdateGamepadMenuInput()
+{
+  if ( !_GamepadInput.IsConnected() )
+    return;
+
+  const bool menuActive = ( FpsAppState::TitleScreen == _AppState ) || _Paused;
+  if ( menuActive )
+  {
+    if ( _GamepadInput.IsMenuNavRepeated(GamepadDir::Up) )
+      _MenuInput._NavUp = true;
+    if ( _GamepadInput.IsMenuNavRepeated(GamepadDir::Down) )
+      _MenuInput._NavDown = true;
+    if ( _GamepadInput.IsMenuNavRepeated(GamepadDir::Left) )
+      _MenuInput._NavLeft = true;
+    if ( _GamepadInput.IsMenuNavRepeated(GamepadDir::Right) )
+      _MenuInput._NavRight = true;
+
+    if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_A) )
+      _MenuInput._Confirm = true;
+    if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_B) )
+      _MenuInput._Back = true;
+    if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_LEFT_BUMPER) )
+      _MenuInput._PrevTab = true;
+    if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER) )
+      _MenuInput._NextTab = true;
+
+    if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_START) )
+    {
+      if ( FpsAppState::TitleScreen == _AppState )
+        _MenuInput._Confirm = true;
+      else
+        _MenuInput._Back = true;
+    }
+  }
+  else if ( ( FpsAppState::InGame == _AppState ) && !_Editor.IsEnabled() )
+  {
+    if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_START) )
+      _PauseRequested = true;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// ApplyHudRequests
+// ----------------------------------------------------------------------------
+void FpsGameApp::ApplyHudRequests( FpsGameHudContext & ioContext )
+{
+  if ( ioContext._WeaponDirty && ( FpsAppState::InGame == _AppState ) )
+    SyncPlayerView();
+  if ( ioContext._RequestReloadScene )
+    _ReloadScene = true;
+  if ( ioContext._RequestToggleDevPanels )
+    SetDevPanelsVisible(!_ShowDebugPanel);
+  if ( ioContext._RequestRendererMode >= 0 )
+    SetRendererMode(static_cast<FpsRendererMode>(ioContext._RequestRendererMode));
+
+  if ( !ioContext._RequestMapPath.empty() )
+    RequestMap(ioContext._RequestMapPath);
+
+  if ( ioContext._RequestBrowseMap )
+  {
+    std::filesystem::path selectedPath;
+    std::string error;
+    const std::filesystem::path initialDirectory(PathUtils::GetAssetPath(""));
+    if ( NativeFileDialogResult::Selected == OpenFileDialog("fpsmap", initialDirectory, selectedPath, error) )
+    {
+      std::error_code ec;
+      selectedPath = std::filesystem::absolute(selectedPath, ec).lexically_normal();
+      if ( !ec )
+        RequestMap(selectedPath.string());
+      else
+        ioContext._RequestStartGame = false;
+    }
+    else
+      ioContext._RequestStartGame = false;
+  }
+
+  if ( ioContext._RequestStartGame )
+    StartGame();
+  if ( ioContext._RequestResume )
+    ResumeGame();
+  if ( ioContext._RequestRespawn )
+  {
+    _GameWorld.Reset(_GameSettings);
+    SyncPlayerView();
+    ResumeGame();
+  }
+  if ( ioContext._RequestMapSelect )
+    ReturnToTitle(FpsMenuPage::MapSelect);
+  if ( ioContext._RequestTitle )
+    ReturnToTitle(FpsMenuPage::MainMenu);
+
+  if ( ioContext._RequestEditor && !_Editor.IsEnabled() )
+  {
+    if ( FpsAppState::TitleScreen == _AppState )
+      StartGame();
+    else
+      ResumeGame();
+    SetEditorMode(true);
+  }
+
+  if ( ioContext._RequestExit )
+    glfwSetWindowShouldClose(_MainWindow.get(), GLFW_TRUE);
 }
 
 // ----------------------------------------------------------------------------
@@ -757,6 +1032,12 @@ int FpsGameApp::InitializeScene()
   _Editor.ApplyObjectVisibility(editorContext);
   _Editor.SetPathBuffers(_MapPath);
   _Editor.RefreshPropAssets();
+
+  if ( FpsAppState::TitleScreen == _AppState )
+  {
+    _SceneBinding.SetViewWeaponVisible(*_Scene, false);
+    _SceneBinding.SyncTitleCamera(*_Scene, _GameWorld, _GameSettings, static_cast<float>(glfwGetTime()));
+  }
   return 0;
 }
 
@@ -972,16 +1253,58 @@ int FpsGameApp::ProcessInput()
   double curMouseX = 0., curMouseY = 0.;
   glfwGetCursorPos(_MainWindow.get(), &curMouseX, &curMouseY);
 
-  if ( _KeyInput.IsKeyReleased(GLFW_KEY_ESCAPE) )
+  _GamepadInput.Poll(static_cast<float>(std::min(_DeltaTime, 0.1)));
+  UpdateGamepadMenuInput();
+
+  // Dear ImGui gamepad navigation is only needed for the options panel and the editor
+  ImGuiIO & uiIO = ImGui::GetIO();
+  const bool optionsOpen = ( ( FpsAppState::TitleScreen == _AppState ) && ( FpsMenuPage::Options == _Hud.GetMenuPage() ) )
+                        || ( _Paused && _Hud.IsSettingsOpen() );
+  if ( optionsOpen || _Editor.IsEnabled() )
+    uiIO.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+  else
+    uiIO.ConfigFlags &= ~ImGuiConfigFlags_NavEnableGamepad;
+
+  if ( !uiIO.WantCaptureKeyboard && _KeyInput.IsKeyReleased(GLFW_KEY_F4) )
+    SetDevPanelsVisible(!_ShowDebugPanel);
+
+  if ( _PauseRequested )
   {
-    if ( _MouseCaptured )
-      SetMouseCaptured(false);
-    else
-      return 1;
+    _PauseRequested = false;
+    if ( ( FpsAppState::InGame == _AppState ) && !_Paused && !_Editor.IsEnabled() )
+      PauseGame();
   }
 
-  if ( _KeyInput.IsKeyReleased(GLFW_KEY_F1) )
-    _ShowDebugPanel = !_ShowDebugPanel;
+  if ( _Editor.IsEnabled() && !uiIO.WantCaptureKeyboard && _KeyInput.IsKeyReleased(GLFW_KEY_ESCAPE) )
+    SetEditorMode(false);
+
+  // Title screen and pause menu: gameplay input is suspended
+  if ( ( FpsAppState::TitleScreen == _AppState ) || _Paused )
+  {
+    if ( !uiIO.WantCaptureKeyboard && _KeyInput.IsKeyReleased(GLFW_KEY_F3) )
+    {
+      if ( FpsAppState::TitleScreen == _AppState )
+        StartGame();
+      else
+        ResumeGame();
+      SetEditorMode(true);
+    }
+
+    if ( ( FpsAppState::TitleScreen == _AppState ) && _Scene && ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode ) )
+    {
+      _SceneBinding.SyncTitleCamera(*_Scene, _GameWorld, _GameSettings, static_cast<float>(glfwGetTime()));
+      if ( _Renderer )
+        _Renderer -> Notify(DirtyState::SceneCamera);
+    }
+
+    _LastMouseX = curMouseX;
+    _LastMouseY = curMouseY;
+    _KeyInput.ClearLastEvents();
+    _MouseInput.ClearLastEvents(curMouseX, curMouseY);
+
+    glfwPollEvents();
+    return 0;
+  }
 
   if ( !ImGui::GetIO().WantCaptureKeyboard && _KeyInput.IsKeyReleased(GLFW_KEY_F2) )
     _GameSettings._FreeLook = !_GameSettings._FreeLook;
@@ -1146,12 +1469,44 @@ int FpsGameApp::ProcessInput()
     input._ResetPressed = _KeyInput.IsKeyReleased(GLFW_KEY_R);
   }
 
+  if ( _GamepadInput.IsConnected() && !ImGui::GetIO().WantTextInput )
+  {
+    const float deadzone = _GamepadInput.GetStickDeadzone();
+    const float leftX = _GamepadInput.GetAxis(GLFW_GAMEPAD_AXIS_LEFT_X, deadzone);
+    const float leftY = _GamepadInput.GetAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, deadzone);
+    const float rightX = _GamepadInput.GetAxis(GLFW_GAMEPAD_AXIS_RIGHT_X, deadzone);
+    const float rightY = _GamepadInput.GetAxis(GLFW_GAMEPAD_AXIS_RIGHT_Y, deadzone);
+
+    input._MoveForward  = input._MoveForward  || ( leftY < -0.3f );
+    input._MoveBackward = input._MoveBackward || ( leftY >  0.3f );
+    input._MoveLeft     = input._MoveLeft     || ( leftX < -0.3f );
+    input._MoveRight    = input._MoveRight    || ( leftX >  0.3f );
+    input._Sprint       = input._Sprint || _GamepadInput.IsButtonDown(GLFW_GAMEPAD_BUTTON_LEFT_THUMB)
+                                        || _GamepadInput.IsButtonDown(GLFW_GAMEPAD_BUTTON_LEFT_BUMPER);
+    if ( !_GameSettings._FreeLook )
+      input._JumpPressed = input._JumpPressed || _GamepadInput.IsButtonDown(GLFW_GAMEPAD_BUTTON_A);
+    input._ResetPressed = input._ResetPressed || _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_Y);
+
+    if ( ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode ) && !_GameSettings._FreeLook
+      && _GamepadInput.IsRightTriggerDown() )
+    {
+      input._FirePressed = true;
+    }
+
+    if ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode )
+    {
+      const float lookScale = _GamepadLookSensitivity * static_cast<float>(_DeltaTime) / std::max(_GameSettings._MouseSensitivity, 0.001f);
+      input._MouseDeltaX += rightX * lookScale;
+      input._MouseDeltaY += rightY * lookScale;
+    }
+  }
+
   if ( _MouseCaptured && ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode ) )
   {
     if ( _HasLastMousePos )
     {
-      input._MouseDeltaX = static_cast<float>(curMouseX - _LastMouseX);
-      input._MouseDeltaY = static_cast<float>(curMouseY - _LastMouseY);
+      input._MouseDeltaX += static_cast<float>(curMouseX - _LastMouseX);
+      input._MouseDeltaY += static_cast<float>(curMouseY - _LastMouseY);
     }
     _HasLastMousePos = true;
   }
@@ -1234,7 +1589,7 @@ int FpsGameApp::UpdateGame()
     }
   }
 
-  if ( 0 != UpdateBoids() )
+  if ( !_Paused && ( 0 != UpdateBoids() ) )
   {
     EndCpuTiming(CpuUpdateGame);
     return 1;
@@ -1421,9 +1776,9 @@ int FpsGameApp::DrawHelpUI()
     ImGui::TextWrapped("Test6 is the FPS game and map-editing workbench.");
     ImGui::Separator();
     ImGui::Text("Gameplay");
-    ImGui::BulletText("F1 toggles FPS Debug; F2 toggles free look; F3 toggles editor mode.");
+    ImGui::BulletText("F1 opens Options; F2 toggles free look; F3 toggles editor mode; F4 toggles developer panels.");
     ImGui::BulletText("J, K, and L select Deferred, Software, and Photo Path Tracer.");
-    ImGui::BulletText("Escape releases the mouse, then returns to test selection.");
+    ImGui::BulletText("Escape or P pauses the game and opens the pause menu.");
     ImGui::Text("Editor");
     ImGui::BulletText("Left click selects; right mouse moves the editor camera; Delete removes selection.");
     ImGui::BulletText("Drag .obj, .gltf, or .glb props into the editor to add them.");
@@ -1469,15 +1824,19 @@ int FpsGameApp::DrawUI()
     _Editor.DrawPanels(editorContext);
     _Editor.DrawOverlays(editorContext);
     _Editor.DrawGizmo(editorContext);
-    _Hud.DrawCrosshair();
   }
-  else
-    _Hud.Draw(MakeHudContext());
+
+  FpsGameHudContext hudContext = MakeHudContext();
+  _Hud.Draw(hudContext);
 
   DrawHelpUI();
 
+  _MenuInput.Clear();
+
   ImGui::Render();
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+  ApplyHudRequests(hudContext);
   return _ExitToTestSelection ? 1 : 0;
 }
 
@@ -1497,7 +1856,7 @@ void FpsGameApp::DrawDebugPanel()
   else
     ImGui::Text("Click viewport to capture mouse. Esc releases capture.");
   ImGui::Text("Renderer shortcuts: J Deferred, K Software, L Photo");
-  ImGui::Text("F1 toggles this panel. F2 toggles free look. F3 toggles editor.");
+  ImGui::Text("F4 toggles this panel. F2 toggles free look. F3 toggles editor.");
   ImGui::Text("Editor: %s", _Editor.IsEnabled() ? "on" : "off");
 
   ImGui::Checkbox("Free look", &_GameSettings._FreeLook);
