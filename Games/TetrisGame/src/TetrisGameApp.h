@@ -2,6 +2,7 @@
 #define _TetrisGameApp_
 
 #include "GameMenuUI.h"
+#include "GamepadInput.h"
 #include "KeyInput.h"
 #include "MouseInput.h"
 #include "Renderer.h"
@@ -58,6 +59,7 @@ protected:
 
   KeyInput                    _KeyInput;
   MouseInput                  _MouseInput;
+  GamepadInput                _GamepadInput;
 
   std::unique_ptr<Scene>      _Scene;
   RenderSettings              _Settings;

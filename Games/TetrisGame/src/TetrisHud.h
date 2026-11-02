@@ -2,6 +2,7 @@
 #define _TetrisHud_
 
 #include "GameMenuUI.h"
+#include "GamepadInput.h"
 #include "RenderSettings.h"
 #include "RenderStatsUI.h"
 #include "TetrisGameLogic.h"
@@ -35,6 +36,8 @@ public:
             unsigned int iNbRenderedFrames,
             bool & oReloadRenderer,
             bool & oRequestExit );
+
+  void SetGamepadInput( GamepadInput * iGamepad ) { _Gamepad = iGamepad; }
 
   bool IsSettingsOpen() const { return _ShowInGameOptions; }
   void ToggleSettings();
@@ -114,6 +117,7 @@ protected:
   int                _SelectedModeIndex = 0;
   int                _OptionsTabIndex   = 0;
   bool               _ShowInGameOptions = false;
+  GamepadInput *     _Gamepad           = nullptr;
 
   RenderStatsUIState _StatsUIState;
 };

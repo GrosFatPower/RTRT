@@ -359,11 +359,16 @@ void TetrisHud::DrawOptionsPage( TetrisGameLogic & ioLogic,
                                  bool & oBackRequested )
 {
   oBackRequested = false;
-  if ( iMenuInput._Back )
+  if ( iMenuInput._Back && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId) )
   {
     oBackRequested = true;
     return;
   }
+
+  if ( iMenuInput._PrevTab )
+    _OptionsTabIndex = ( _OptionsTabIndex + 2 ) % 3;
+  if ( iMenuInput._NextTab )
+    _OptionsTabIndex = ( _OptionsTabIndex + 1 ) % 3;
 
   const ImGuiIO & io = ImGui::GetIO();
   const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.54f);
@@ -534,23 +539,51 @@ void TetrisHud::DrawOptionsPage( TetrisGameLogic & ioLogic,
     }
     else if ( 2 == _OptionsTabIndex )
     {
+      if ( _Gamepad )
+      {
+        ImGui::TextDisabled("Xbox / XInput Controller Status & Tuning");
+        ImGui::Separator();
+
+        if ( _Gamepad->IsConnected() )
+        {
+          ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f), "Controller Connected: %s (Slot %d)",
+                             _Gamepad->GetName().c_str(), _Gamepad->GetJoystickId() + 1);
+        }
+        else
+        {
+          ImGui::TextColored(ImVec4(0.65f, 0.70f, 0.78f, 1.0f), "No Gamepad Detected (Connect an Xbox Controller to play)");
+        }
+
+        bool stickHardDrop = _Gamepad->GetAllowStickHardDrop();
+        if ( ImGui::Checkbox("Allow Left Stick Up for Hard Drop (Strict Vertical Gate)", &stickHardDrop) )
+          _Gamepad->SetAllowStickHardDrop(stickHardDrop);
+
+        ImGui::SameLine(0.0f, 24.0f);
+        float deadzone = _Gamepad->GetStickDeadzone();
+        ImGui::SetNextItemWidth(160.0f);
+        if ( ImGui::SliderFloat("Stick Deadzone", &deadzone, 0.05f, 0.45f, "%.2f") )
+          _Gamepad->SetStickDeadzone(deadzone);
+
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+      }
+
       const std::vector<GameKeybindEntry> bindings =
       {
-        { "PIECE MOVEMENT",     "Move Left",                   "LEFT ARROW",  "A"          },
-        { "PIECE MOVEMENT",     "Move Right",                  "RIGHT ARROW", "D"          },
-        { "PIECE MOVEMENT",     "Soft Drop",                   "DOWN ARROW",  "S"          },
-        { "PIECE MOVEMENT",     "Hard Drop (Instant Lock)",    "SPACE",       ""           },
-        { "ROTATION & HOLD",    "Rotate Clockwise (90 CW)",    "UP ARROW",    "X"          },
-        { "ROTATION & HOLD",    "Rotate Counter-Clockwise",    "Z",           "LEFT CTRL"  },
-        { "ROTATION & HOLD",    "Rotate 180 Degrees",          "W",           ""           },
-        { "ROTATION & HOLD",    "Hold Active Piece",           "LEFT SHIFT",  "C"          },
-        { "SYSTEM & RENDERERS", "Pause / Back",                "ESCAPE",      "P"          },
-        { "SYSTEM & RENDERERS", "Quick Restart Match",         "R",           ""           },
-        { "SYSTEM & RENDERERS", "Options Menu",                "F1",          ""           },
-        { "SYSTEM & RENDERERS", "Switch to Deferred Renderer", "F2",          ""           },
-        { "SYSTEM & RENDERERS", "Switch to Path Tracer",       "F3",          ""           },
-        { "SYSTEM & RENDERERS", "Switch to Software Raster",   "F4",          ""           },
-        { "SYSTEM & RENDERERS", "Cycle 3D Camera Preset",      "V",           ""           }
+        { "PIECE MOVEMENT",     "Move Left",                   "LEFT ARROW",  "A",          "D-PAD / L-STICK LEFT"  },
+        { "PIECE MOVEMENT",     "Move Right",                  "RIGHT ARROW", "D",          "D-PAD / L-STICK RIGHT" },
+        { "PIECE MOVEMENT",     "Soft Drop",                   "DOWN ARROW",  "S",          "D-PAD / L-STICK DOWN"  },
+        { "PIECE MOVEMENT",     "Hard Drop (Instant Lock)",    "SPACE",       "",           "D-PAD UP / L-STICK UP" },
+        { "ROTATION & HOLD",    "Rotate Clockwise (90 CW)",    "UP ARROW",    "X",          "B BUTTON"              },
+        { "ROTATION & HOLD",    "Rotate Counter-Clockwise",    "Z",           "LEFT CTRL",  "A BUTTON"              },
+        { "ROTATION & HOLD",    "Rotate 180 Degrees",          "W",           "",           "X / Y BUTTON"          },
+        { "ROTATION & HOLD",    "Hold Active Piece",           "LEFT SHIFT",  "C",          "LB / RB / LT / RT"     },
+        { "SYSTEM & RENDERERS", "Pause / Back",                "ESCAPE",      "P",          "START (MENU) / B"      },
+        { "SYSTEM & RENDERERS", "Quick Restart Match",         "R",           "",           "BACK (VIEW)"           },
+        { "SYSTEM & RENDERERS", "Options Menu",                "F1",          "",           "START -> OPTIONS"      },
+        { "SYSTEM & RENDERERS", "Switch to Deferred Renderer", "F2",          "",           ""                      },
+        { "SYSTEM & RENDERERS", "Switch to Path Tracer",       "F3",          "",           ""                      },
+        { "SYSTEM & RENDERERS", "Switch to Software Raster",   "F4",          "",           ""                      },
+        { "SYSTEM & RENDERERS", "Cycle / Orbit 3D Camera",     "V / MOUSE",   "",           "R3 / RIGHT STICK"      }
       };
 
       GameMenuUI::DrawKeybindingTable(bindings, _Theme, _Fonts);
@@ -559,14 +592,14 @@ void TetrisHud::DrawOptionsPage( TetrisGameLogic & ioLogic,
     ImGui::EndChild();
 
     ImGui::Separator();
-    if ( GameMenuUI::DrawActionButton("BACK (ESC)", Vec2(220.0f, 42.0f), true, _Theme, _Fonts) )
+    if ( GameMenuUI::DrawActionButton("BACK (ESC / B)", Vec2(220.0f, 42.0f), true, _Theme, _Fonts) )
       oBackRequested = true;
   }
   GameMenuUI::EndMenuPanel();
 
   GameMenuUI::DrawFooterBar(
     "CONFIGURATION",
-    "[ESC] Back    [F2/F3/F4] Hot-Swap Renderer",
+    "[ESC / B] Back    [LB / RB] Switch Tab    [F2/F3/F4] Hot-Swap Renderer",
     _Theme,
     _Fonts
   );

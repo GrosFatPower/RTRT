@@ -790,16 +790,22 @@ void DrawKeybindingTable( const std::vector<GameKeybindEntry> & iEntries,
     else
       drawList->AddText(ImVec2(rowMin.x + 10.0f, rowMin.y + 6.0f), ToImU32(iTheme._TextPrimary), entry._Action.c_str());
 
-    // Keycap badges on right
-    float rightX = rowMin.x + availW * 0.56f;
+    // Keycap badges on right (Keyboard columns + Xbox Gamepad column)
+    float rightX = rowMin.x + availW * 0.44f;
     if ( !entry._PrimaryKey.empty() )
     {
       const float w1 = DrawKeycapPill(drawList, ImVec2(rightX, rowMin.y + 3.0f), entry._PrimaryKey.c_str(), iTheme, bodyFont, fontSize);
-      rightX += w1 + 8.0f;
+      rightX += w1 + 6.0f;
     }
     if ( !entry._SecondaryKey.empty() )
     {
       DrawKeycapPill(drawList, ImVec2(rightX, rowMin.y + 3.0f), entry._SecondaryKey.c_str(), iTheme, bodyFont, fontSize);
+    }
+
+    if ( !entry._GamepadButton.empty() )
+    {
+      const float gpX = rowMin.x + availW * 0.75f;
+      DrawKeycapPill(drawList, ImVec2(gpX, rowMin.y + 3.0f), entry._GamepadButton.c_str(), iTheme, bodyFont, fontSize);
     }
 
     ImGui::Dummy(ImVec2(availW, rowH - 2.0f));

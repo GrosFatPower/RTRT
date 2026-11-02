@@ -59,6 +59,8 @@ struct GameMenuInput
   bool _NavRight = false;
   bool _Confirm  = false;
   bool _Back     = false;
+  bool _PrevTab  = false;
+  bool _NextTab  = false;
 
   void Clear()
   {
@@ -68,6 +70,8 @@ struct GameMenuInput
     _NavRight = false;
     _Confirm  = false;
     _Back     = false;
+    _PrevTab  = false;
+    _NextTab  = false;
   }
 };
 
@@ -118,6 +122,7 @@ struct GameKeybindEntry
   std::string _Action;
   std::string _PrimaryKey;
   std::string _SecondaryKey;
+  std::string _GamepadButton;
 };
 
 // ----------------------------------------------------------------------------

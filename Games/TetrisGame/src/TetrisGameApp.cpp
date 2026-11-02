@@ -13,6 +13,7 @@
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <thread>
 #include <vector>
@@ -321,6 +322,7 @@ int TetrisGameApp::InitializeUI()
 
   ImGui::StyleColorsDark();
   _Hud.Initialize();
+  _Hud.SetGamepadInput(&_GamepadInput);
 
   const char * glslVersion = "#version 410";
   ImGui_ImplGlfw_InitForOpenGL(_MainWindow.get(), true);
@@ -392,10 +394,142 @@ int TetrisGameApp::InitializeRenderer()
 // ----------------------------------------------------------------------------
 int TetrisGameApp::ProcessInput()
 {
-  // Track held inputs
-  _InputState._LeftHeld = _KeyInput.IsKeyDown(GLFW_KEY_LEFT) || _KeyInput.IsKeyDown(GLFW_KEY_A);
-  _InputState._RightHeld = _KeyInput.IsKeyDown(GLFW_KEY_RIGHT) || _KeyInput.IsKeyDown(GLFW_KEY_D);
-  _InputState._SoftDropHeld = _KeyInput.IsKeyDown(GLFW_KEY_DOWN) || _KeyInput.IsKeyDown(GLFW_KEY_S);
+  const float dt = static_cast<float>(_DeltaTime);
+  _GamepadInput.Poll(dt);
+
+  const bool inOptionsMenu = ( ( TetrisAppState::TitleScreen == _AppState ) && ( TetrisMenuPage::Options == _Hud.GetMenuPage() ) ) ||
+                             _Hud.IsSettingsOpen();
+
+  // Enable Dear ImGui built-in gamepad widget navigation only when inside the Options panel
+  ImGuiIO & io = ImGui::GetIO();
+  if ( inOptionsMenu )
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+  else
+    io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableGamepad;
+
+  const bool inActiveGameplay = ( TetrisAppState::InGame == _AppState ) &&
+                                !_GameLogic.IsPaused() &&
+                                !_GameLogic.IsGameOver() &&
+                                !_GameLogic.IsVictory() &&
+                                !_Hud.IsSettingsOpen();
+
+  // Track held inputs (Keyboard + Xbox Gamepad D-Pad & Left Stick)
+  const float stickDeadzone = _GamepadInput.GetStickDeadzone();
+  const float leftStickX    = _GamepadInput.GetAxis(GLFW_GAMEPAD_AXIS_LEFT_X, stickDeadzone);
+  const float leftStickY    = _GamepadInput.GetAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, stickDeadzone);
+
+  const bool gpLeftHeld     = _GamepadInput.IsButtonDown(GLFW_GAMEPAD_BUTTON_DPAD_LEFT)  || ( leftStickX < -0.45f );
+  const bool gpRightHeld    = _GamepadInput.IsButtonDown(GLFW_GAMEPAD_BUTTON_DPAD_RIGHT) || ( leftStickX >  0.45f );
+  const bool gpSoftDropHeld = _GamepadInput.IsButtonDown(GLFW_GAMEPAD_BUTTON_DPAD_DOWN)  || ( leftStickY >  0.45f );
+
+  _InputState._LeftHeld     = _KeyInput.IsKeyDown(GLFW_KEY_LEFT)  || _KeyInput.IsKeyDown(GLFW_KEY_A) || gpLeftHeld;
+  _InputState._RightHeld    = _KeyInput.IsKeyDown(GLFW_KEY_RIGHT) || _KeyInput.IsKeyDown(GLFW_KEY_D) || gpRightHeld;
+  _InputState._SoftDropHeld = _KeyInput.IsKeyDown(GLFW_KEY_DOWN)  || _KeyInput.IsKeyDown(GLFW_KEY_S) || gpSoftDropHeld;
+
+  if ( _GamepadInput.IsConnected() )
+  {
+    // Menu navigation from Xbox Gamepad
+    if ( !inActiveGameplay )
+    {
+      if ( _GamepadInput.IsMenuNavRepeated(GamepadDir::Up) )
+        _MenuInput._NavUp = true;
+      if ( _GamepadInput.IsMenuNavRepeated(GamepadDir::Down) )
+        _MenuInput._NavDown = true;
+      if ( _GamepadInput.IsMenuNavRepeated(GamepadDir::Left) )
+        _MenuInput._NavLeft = true;
+      if ( _GamepadInput.IsMenuNavRepeated(GamepadDir::Right) )
+        _MenuInput._NavRight = true;
+
+      if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_A) )
+        _MenuInput._Confirm = true;
+
+      if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_B) )
+      {
+        if ( ( TetrisAppState::InGame == _AppState ) && _GameLogic.IsPaused() && !_Hud.IsSettingsOpen() )
+          _InputState._PausePressed = true;
+        else
+          _MenuInput._Back = true;
+      }
+
+      if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_LEFT_BUMPER) )
+        _MenuInput._PrevTab = true;
+      if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER) )
+        _MenuInput._NextTab = true;
+    }
+
+    // Active gameplay triggers from Xbox Gamepad
+    if ( inActiveGameplay )
+    {
+      if ( _GamepadInput.IsDirPressed(GamepadDir::Left, true) )
+        _InputState._MoveLeftPressed = true;
+      if ( _GamepadInput.IsDirPressed(GamepadDir::Right, true) )
+        _InputState._MoveRightPressed = true;
+
+      // Hard Drop: D-Pad Up or strict vertical Left Stick Up
+      const bool dpadUpPressed  = _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_DPAD_UP);
+      const bool stickUpPressed = _GamepadInput.GetAllowStickHardDrop() && _GamepadInput.IsStrictStickUpPressed();
+      if ( dpadUpPressed || stickUpPressed )
+        _InputState._HardDropPressed = true;
+
+      // Rotations (Xbox Guideline: A = CCW, B = CW, X / Y = 180)
+      if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_B) )
+        _InputState._RotateCWPressed = true;
+      if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_A) )
+        _InputState._RotateCCWPressed = true;
+      if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_X) || _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_Y) )
+        _InputState._Rotate180Pressed = true;
+
+      // Hold Piece (LB / RB / LT / RT)
+      if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_LEFT_BUMPER) ||
+           _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER) ||
+           _GamepadInput.IsLeftTriggerPressed() ||
+           _GamepadInput.IsRightTriggerPressed() )
+      {
+        _InputState._HoldPressed = true;
+      }
+
+      // Quick Restart (Back / View button)
+      if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_BACK) )
+        _InputState._ResetPressed = true;
+    }
+
+    // Start (Menu) button: Pause / Resume in-game, or Confirm on Title Screen
+    if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_START) )
+    {
+      if ( TetrisAppState::InGame == _AppState )
+      {
+        if ( _Hud.IsSettingsOpen() )
+          _Hud.ToggleSettings();
+        else if ( !_GameLogic.IsGameOver() && !_GameLogic.IsVictory() )
+          _InputState._PausePressed = true;
+        else
+          _MenuInput._Confirm = true;
+      }
+      else
+      {
+        _MenuInput._Confirm = true;
+      }
+    }
+
+    // R3 (Right Thumbstick Click): Cycle 3D Camera Preset in-game
+    if ( ( TetrisAppState::InGame == _AppState ) && _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_RIGHT_THUMB) )
+    {
+      const int nextCam = ( static_cast<int>(_SceneManager.GetCameraPreset()) + 1 ) % 3;
+      _SceneManager.SetCameraPreset(static_cast<TetrisCameraPreset>(nextCam));
+    }
+
+    // Right Stick: Orbit 3D camera when in FreeOrbit preset
+    if ( ( TetrisAppState::InGame == _AppState ) && ( TetrisCameraPreset::FreeOrbit == _SceneManager.GetCameraPreset() ) )
+    {
+      const float rx = _GamepadInput.GetAxis(GLFW_GAMEPAD_AXIS_RIGHT_X, stickDeadzone);
+      const float ry = _GamepadInput.GetAxis(GLFW_GAMEPAD_AXIS_RIGHT_Y, stickDeadzone);
+      if ( ( std::fabs(rx) > 0.001f ) || ( std::fabs(ry) > 0.001f ) )
+      {
+        const float orbitSpeed = 95.0f * dt;
+        _SceneManager.OrbitYawPitch(rx * orbitSpeed, -ry * orbitSpeed);
+      }
+    }
+  }
 
   // FreeOrbit mouse drag
   if ( _IsMouseDragging && ( TetrisCameraPreset::FreeOrbit == _SceneManager.GetCameraPreset() ) )
