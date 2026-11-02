@@ -124,9 +124,11 @@ bool TetrisMatrix::LockPiece( TetrisPieceType iType, TetrisRotation iRotation, c
 // ----------------------------------------------------------------------------
 // ClearFullLines
 // ----------------------------------------------------------------------------
-int TetrisMatrix::ClearFullLines( std::vector<int> & oClearedRows )
+int TetrisMatrix::ClearFullLines( std::vector<int> & oClearedRows, std::vector<TetrisClearedRow> * oClearedRowData )
 {
   oClearedRows.clear();
+  if ( oClearedRowData )
+    oClearedRowData->clear();
 
   int targetY = 0;
   for ( int srcY = 0; srcY < S_TotalHeight; ++srcY )
@@ -144,6 +146,14 @@ int TetrisMatrix::ClearFullLines( std::vector<int> & oClearedRows )
     if ( isRowFull )
     {
       oClearedRows.push_back(srcY);
+      if ( oClearedRowData )
+      {
+        TetrisClearedRow rowData;
+        rowData._RowY = srcY;
+        for ( int x = 0; x < S_Width; ++x )
+          rowData._Cells[x] = _Grid[CellIndex(x, srcY)];
+        oClearedRowData->push_back(rowData);
+      }
     }
     else
     {

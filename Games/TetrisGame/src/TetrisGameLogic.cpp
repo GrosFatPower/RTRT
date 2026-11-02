@@ -79,6 +79,9 @@ void TetrisGameLogic::StartNewGame( TetrisGameMode iMode, int iStartLevel, unsig
   _ActionBannerAlpha = 0.f;
   _ScreenShakeImpulse = 0.f;
   _LastClearedRows.clear();
+  _LastClearedRowData.clear();
+  _LastClearTSpin   = TetrisTSpinType::None;
+  _LastClearPerfect = false;
 
   SpawnNextPiece();
 }
@@ -379,8 +382,16 @@ void TetrisGameLogic::LockActivePiece( bool )
 
   // Clear full lines
   _LastClearedRows.clear();
-  const int linesCleared = _Matrix.ClearFullLines(_LastClearedRows);
+  _LastClearedRowData.clear();
+  const int linesCleared = _Matrix.ClearFullLines(_LastClearedRows, &_LastClearedRowData);
   const bool perfectClear = ( linesCleared > 0 ) && _Matrix.IsEmpty();
+
+  if ( linesCleared > 0 )
+  {
+    _LineClearEventId++;
+    _LastClearTSpin   = tSpin;
+    _LastClearPerfect = perfectClear;
+  }
 
   // Evaluate combo & difficult line clear
   const bool isDifficult = ( 4 == linesCleared ) || ( ( TetrisTSpinType::None != tSpin ) && ( linesCleared > 0 ) );

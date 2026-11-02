@@ -464,6 +464,19 @@ void TetrisHud::DrawOptionsPage( TetrisGameLogic & ioLogic,
       if ( ImGui::Combo("In-Game Camera Preset (V)", &currentCam, camNames, IM_ARRAYSIZE(camNames)) )
         ioSceneMgr.SetCameraPreset(static_cast<TetrisCameraPreset>(currentCam));
 
+      int currentClearAnim = static_cast<int>(ioSceneMgr.GetLineClearAnimMode());
+      const char * clearAnimNames[] =
+      {
+        "Dynamic (By Clear Type: 1=Blink, 2=Wave, 3=Cascade, 4=Burst)",
+        "Classic Blink (Flash 3x & Vanish)",
+        "3D Block Burst (Explosive Shatter)",
+        "Edge Cascade (Peel & Fall Off Edges)",
+        "Center-Out Wave (Ripple Spin & Shrink)",
+        "Random (Cycle All Animations)"
+      };
+      if ( ImGui::Combo("Line Clear 3D Animation", &currentClearAnim, clearAnimNames, IM_ARRAYSIZE(clearAnimNames)) )
+        ioSceneMgr.SetLineClearAnimMode(static_cast<TetrisLineClearAnimMode>(currentClearAnim));
+
       float backplateOpacity = ioSceneMgr.GetBackplateOpacity();
       if ( ImGui::SliderFloat("Playfield Backplane Opacity", &backplateOpacity, 0.0f, 1.0f, "%.2f") )
       {

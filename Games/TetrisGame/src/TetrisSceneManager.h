@@ -39,6 +39,9 @@ public:
   void SetCameraPreset( TetrisCameraPreset iPreset ) { _CameraPreset = iPreset; }
   TetrisCameraPreset GetCameraPreset() const { return _CameraPreset; }
 
+  void SetLineClearAnimMode( TetrisLineClearAnimMode iMode ) { _LineClearAnimMode = iMode; }
+  TetrisLineClearAnimMode GetLineClearAnimMode() const { return _LineClearAnimMode; }
+
   void SetShowGhost( bool iShow ) { _ShowGhost = iShow; }
   bool GetShowGhost() const { return _ShowGhost; }
 
@@ -90,9 +93,32 @@ protected:
 
   void RefillBackgroundBag();
 
+  TetrisLineClearAnimMode ResolveLineClearAnimMode( int iNumLines, TetrisTSpinType iTSpin, bool iPerfectClear );
+  void TriggerLineClearFx( const TetrisGameLogic & iLogic );
+  void UpdateAndSyncLineClearFx( std::vector<MeshInstance> & ioInstances, float iDeltaTime );
+  void ResetLineClearFx();
+
 protected:
-  TetrisMaterialPreset _MaterialPreset = TetrisMaterialPreset::GlossyPlastic;
-  TetrisCameraPreset   _CameraPreset   = TetrisCameraPreset::Frontal3D;
+  struct TetrisClearFxBlock
+  {
+    bool                    _Active      = false;
+    TetrisLineClearAnimMode _Mode        = TetrisLineClearAnimMode::ClassicBlink;
+    TetrisPieceType         _PieceType   = TetrisPieceType::I;
+    int                     _GridX       = 0;
+    int                     _GridY       = 0;
+    Vec3                    _Pos         = Vec3(0.f);
+    Vec3                    _Vel         = Vec3(0.f);
+    Vec3                    _EulerAngles = Vec3(0.f);
+    Vec3                    _AngularVel  = Vec3(0.f);
+    float                   _Scale       = 0.92f;
+    float                   _Elapsed     = 0.f;
+    float                   _Delay       = 0.f;
+    float                   _Duration    = 0.4f;
+  };
+
+  TetrisMaterialPreset    _MaterialPreset    = TetrisMaterialPreset::GlossyPlastic;
+  TetrisCameraPreset      _CameraPreset      = TetrisCameraPreset::Frontal3D;
+  TetrisLineClearAnimMode _LineClearAnimMode = TetrisLineClearAnimMode::Dynamic;
   bool                 _ShowGhost      = true;
   float                _BackplateOpacity = 0.45f;
   bool                 _DynamicPieceLighting = true;
@@ -127,16 +153,25 @@ protected:
   int                  _ChassisMaterialID   = -1;
   int                  _BackplateMaterialID = -1;
   int                  _SkylineMaterialID   = -1;
+  int                  _FlashMaterialID     = -1;
 
   // Pre-allocated instance indices in Scene
-  int                  _MatrixInstanceStart = -1; // 220 instances for matrix
-  int                  _ActiveInstanceStart = -1; // 4 instances
-  int                  _GhostInstanceStart  = -1; // 4 instances
-  int                  _HoldInstanceStart   = -1; // 4 instances
-  int                  _NextInstanceStart   = -1; // 20 instances (5 x 4)
-  int                  _EnclosureInstanceID = -1;
-  int                  _BackplateInstanceID = -1;
-  int                  _SkylineInstanceID   = -1;
+  int                  _MatrixInstanceStart  = -1; // 220 instances for matrix
+  int                  _ActiveInstanceStart  = -1; // 4 instances
+  int                  _GhostInstanceStart   = -1; // 4 instances
+  int                  _HoldInstanceStart    = -1; // 4 instances
+  int                  _NextInstanceStart    = -1; // 20 instances (5 x 4)
+  int                  _ClearFxInstanceStart = -1; // 40 instances (4 rows x 10 cols)
+  int                  _EnclosureInstanceID  = -1;
+  int                  _BackplateInstanceID  = -1;
+  int                  _SkylineInstanceID    = -1;
+
+  // Line clear animation state
+  unsigned int                         _LastSeenClearEventId = 0;
+  std::array<TetrisClearFxBlock, 40>   _ClearFxBlocks        = {};
+  std::array<float, 22>                _RowVisualYOffset     = {};
+  std::array<float, 22>                _RowDropVelocity      = {};
+  float                                _RowDropHoldTimer     = 0.0f;
 
   // Light indices
   int                  _ActivePieceLightIdx = -1;

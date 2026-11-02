@@ -71,6 +71,10 @@ public:
   float GetScreenShakeImpulse() const { return _ScreenShakeImpulse; }
 
   const std::vector<int> & GetLastClearedRows() const { return _LastClearedRows; }
+  const std::vector<TetrisClearedRow> & GetLastClearedRowData() const { return _LastClearedRowData; }
+  unsigned int GetLineClearEventId() const { return _LineClearEventId; }
+  TetrisTSpinType GetLastClearTSpin() const { return _LastClearTSpin; }
+  bool IsLastClearPerfect() const { return _LastClearPerfect; }
 
   const TetrisSessionStats & GetSessionStats() const { return _SessionStats; }
   void ResetSessionStats() { _SessionStats.Reset(); _HighScore = 0; }
@@ -137,8 +141,12 @@ protected:
   float              _ActionBannerTimer   = 0.f;
   float              _ActionBannerAlpha   = 0.f;
   float              _ScreenShakeImpulse  = 0.f;
-  std::vector<int>   _LastClearedRows;
-  TetrisSessionStats _SessionStats;
+  std::vector<int>              _LastClearedRows;
+  std::vector<TetrisClearedRow> _LastClearedRowData;
+  unsigned int                  _LineClearEventId   = 0;
+  TetrisTSpinType               _LastClearTSpin     = TetrisTSpinType::None;
+  bool                          _LastClearPerfect   = false;
+  TetrisSessionStats            _SessionStats;
 };
 
 }

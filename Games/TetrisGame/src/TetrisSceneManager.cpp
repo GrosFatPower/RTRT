@@ -396,6 +396,16 @@ int TetrisSceneManager::SetupMaterials( Scene & ioScene )
     _SkylineMaterialID = ioScene.AddMaterial(skyline, "__Tetris_Skyline");
   }
 
+  // Line-clear Flash / Blink material
+  {
+    Material flashMat;
+    flashMat._Albedo = Vec3(1.0f, 1.0f, 1.0f);
+    flashMat._Roughness = 0.08f;
+    flashMat._Clearcoat = 1.0f;
+    flashMat._Emission = Vec3(2.8f, 3.1f, 3.6f);
+    _FlashMaterialID = ioScene.AddMaterial(flashMat, "__Tetris_FlashWhite");
+  }
+
   return 0;
 }
 
@@ -583,7 +593,16 @@ int TetrisSceneManager::SetupInstances( Scene & ioScene )
     ioScene.AddMeshInstance(inst);
   }
 
-  // 6. Board Enclosure Chassis
+  // 6. Line Clear FX Pool: 4 rows x 10 minos = 40 instances
+  _ClearFxInstanceStart = ioScene.GetNbMeshInstances();
+  for ( int i = 0; i < 40; ++i )
+  {
+    MeshInstance inst("ClearFxMino_" + std::to_string(i), _BeveledCubeMeshID, defaultMatID, hiddenTransform);
+    inst._Visible = false;
+    ioScene.AddMeshInstance(inst);
+  }
+
+  // 7. Board Enclosure Chassis
   MeshInstance enclosureInst("BoardEnclosure", _EnclosureMeshID, _ChassisMaterialID, Mat4x4(1.0f));
   enclosureInst._Visible = true;
   _EnclosureInstanceID = ioScene.AddMeshInstance(enclosureInst);
@@ -679,6 +698,314 @@ int TetrisSceneManager::MaterialIDForPiece( TetrisPieceType iType ) const
 }
 
 // ----------------------------------------------------------------------------
+// ResetLineClearFx
+// ----------------------------------------------------------------------------
+void TetrisSceneManager::ResetLineClearFx()
+{
+  for ( TetrisClearFxBlock & blk : _ClearFxBlocks )
+    blk._Active = false;
+
+  _RowVisualYOffset.fill(0.0f);
+  _RowDropVelocity.fill(0.0f);
+  _RowDropHoldTimer = 0.0f;
+}
+
+// ----------------------------------------------------------------------------
+// ResolveLineClearAnimMode
+// ----------------------------------------------------------------------------
+TetrisLineClearAnimMode TetrisSceneManager::ResolveLineClearAnimMode( int iNumLines, TetrisTSpinType iTSpin, bool iPerfectClear )
+{
+  if ( TetrisLineClearAnimMode::Dynamic == _LineClearAnimMode )
+  {
+    if ( iPerfectClear || ( TetrisTSpinType::None != iTSpin ) || ( iNumLines >= 4 ) )
+      return TetrisLineClearAnimMode::BlockBurst;
+    if ( 3 == iNumLines )
+      return TetrisLineClearAnimMode::EdgeCascade;
+    if ( 2 == iNumLines )
+      return TetrisLineClearAnimMode::CenterWave;
+    return TetrisLineClearAnimMode::ClassicBlink;
+  }
+
+  if ( TetrisLineClearAnimMode::Random == _LineClearAnimMode )
+  {
+    std::uniform_int_distribution<int> dist(1, 4);
+    return static_cast<TetrisLineClearAnimMode>(dist(_BgRng));
+  }
+
+  return _LineClearAnimMode;
+}
+
+// ----------------------------------------------------------------------------
+// TriggerLineClearFx
+// ----------------------------------------------------------------------------
+void TetrisSceneManager::TriggerLineClearFx( const TetrisGameLogic & iLogic )
+{
+  const std::vector<TetrisClearedRow> & clearedData = iLogic.GetLastClearedRowData();
+  if ( clearedData.empty() )
+    return;
+
+  const int numLines = static_cast<int>(clearedData.size());
+  const TetrisLineClearAnimMode resolvedMode = ResolveLineClearAnimMode(
+    numLines,
+    iLogic.GetLastClearTSpin(),
+    iLogic.IsLastClearPerfect()
+  );
+
+  // Compute upper-stack hold & vertical drop offsets for surviving compacted rows
+  for ( int dstY = 0; dstY < 22; ++dstY )
+  {
+    // Find which original row srcY moved down into dstY
+    int srcY = dstY;
+    for ( const TetrisClearedRow & cr : clearedData )
+    {
+      if ( cr._RowY <= srcY )
+        srcY++;
+    }
+    const int droppedCells = srcY - dstY;
+    if ( droppedCells > 0 )
+    {
+      _RowVisualYOffset[dstY] += static_cast<float>(droppedCells);
+      _RowDropVelocity[dstY]   = 0.0f;
+    }
+  }
+
+  if ( TetrisLineClearAnimMode::ClassicBlink == resolvedMode )
+    _RowDropHoldTimer = 0.30f;
+  else if ( TetrisLineClearAnimMode::CenterWave == resolvedMode )
+    _RowDropHoldTimer = 0.18f;
+  else if ( TetrisLineClearAnimMode::EdgeCascade == resolvedMode )
+    _RowDropHoldTimer = 0.20f;
+  else
+    _RowDropHoldTimer = 0.09f;
+
+  // Spawn up to 40 3D FX blocks (4 rows x 10 cols)
+  for ( TetrisClearFxBlock & blk : _ClearFxBlocks )
+    blk._Active = false;
+
+  std::uniform_real_distribution<float> jitterDist(-1.0f, 1.0f);
+  int fxIdx = 0;
+
+  for ( int r = 0; r < numLines; ++r )
+  {
+    const TetrisClearedRow & row = clearedData[r];
+    for ( int x = 0; x < 10; ++x )
+    {
+      if ( fxIdx >= static_cast<int>(_ClearFxBlocks.size()) )
+        break;
+
+      const TetrisPieceType pType = row._Cells[x];
+      if ( TetrisPieceType::None == pType )
+        continue;
+
+      TetrisClearFxBlock & blk = _ClearFxBlocks[fxIdx++];
+      blk._Active      = true;
+      blk._Mode        = resolvedMode;
+      blk._PieceType   = pType;
+      blk._GridX       = x;
+      blk._GridY       = row._RowY;
+      blk._Pos         = CellToWorld(x, row._RowY);
+      blk._EulerAngles = Vec3(0.0f);
+      blk._Scale       = 0.92f;
+      blk._Elapsed     = 0.0f;
+      blk._Delay       = 0.0f;
+
+      const float normX = ( static_cast<float>(x) - 4.5f ) / 4.5f; // [-1.0 .. +1.0]
+
+      if ( TetrisLineClearAnimMode::ClassicBlink == resolvedMode )
+      {
+        blk._Duration   = 0.38f;
+        blk._Vel        = Vec3(0.0f);
+        blk._AngularVel = Vec3(0.0f);
+      }
+      else if ( TetrisLineClearAnimMode::BlockBurst == resolvedMode )
+      {
+        blk._Duration = 0.85f;
+        blk._Vel = Vec3(
+          normX * 10.5f + jitterDist(_BgRng) * 2.2f,
+          6.0f + static_cast<float>(r) * 2.0f + std::fabs(jitterDist(_BgRng)) * 2.5f,
+          5.0f + ( 1.0f - std::fabs(normX) ) * 4.2f + jitterDist(_BgRng) * 1.5f
+        );
+        blk._AngularVel = Vec3(
+          7.0f + jitterDist(_BgRng) * 5.0f,
+          normX * 9.0f + jitterDist(_BgRng) * 4.0f,
+          -normX * 8.0f + jitterDist(_BgRng) * 4.0f
+        );
+      }
+      else if ( TetrisLineClearAnimMode::EdgeCascade == resolvedMode )
+      {
+        // Outer columns (x=0,9) peel first; center columns (x=4,5) peel last
+        const int distFromOuterEdge = ( x < 5 ) ? x : ( 9 - x );
+        blk._Delay    = static_cast<float>(distFromOuterEdge) * 0.048f + static_cast<float>(r) * 0.025f;
+        blk._Duration = blk._Delay + 0.72f;
+
+        const float sideSign = ( x < 5 ) ? -1.0f : 1.0f;
+        blk._Vel = Vec3(
+          sideSign * ( 6.2f + static_cast<float>(4 - distFromOuterEdge) * 0.8f + std::fabs(jitterDist(_BgRng)) * 0.8f ),
+          1.8f + static_cast<float>(r) * 0.8f,
+          1.4f + std::fabs(jitterDist(_BgRng)) * 0.9f
+        );
+        blk._AngularVel = Vec3(
+          2.5f + jitterDist(_BgRng) * 2.0f,
+          sideSign * 3.0f,
+          -sideSign * ( 7.5f + std::fabs(jitterDist(_BgRng)) * 2.5f )
+        );
+      }
+      else // CenterWave
+      {
+        // Center columns (x=4,5) ripple outward to edges (x=0,9)
+        const float distFromCenter = std::fabs(static_cast<float>(x) - 4.5f) - 0.5f; // 0..4
+        blk._Delay    = distFromCenter * 0.040f + static_cast<float>(r) * 0.025f;
+        blk._Duration = blk._Delay + 0.34f;
+        blk._Vel      = Vec3(0.0f);
+        blk._AngularVel = Vec3(10.0f, 18.0f, 0.0f);
+      }
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
+// UpdateAndSyncLineClearFx
+// ----------------------------------------------------------------------------
+void TetrisSceneManager::UpdateAndSyncLineClearFx( std::vector<MeshInstance> & ioInstances, float iDeltaTime )
+{
+  const Mat4x4 hiddenTransform = glm::translate(Vec3(0.f, -100.f, 0.f)) * glm::scale(Vec3(0.001f));
+
+  // 1. Update upper-stack smooth vertical drop
+  if ( _RowDropHoldTimer > 0.0f )
+  {
+    _RowDropHoldTimer = std::max(0.0f, _RowDropHoldTimer - iDeltaTime);
+  }
+  else
+  {
+    for ( int y = 0; y < 22; ++y )
+    {
+      if ( _RowVisualYOffset[y] > 0.0001f )
+      {
+        _RowDropVelocity[y] += 42.0f * iDeltaTime;
+        _RowVisualYOffset[y] = std::max(0.0f, _RowVisualYOffset[y] - _RowDropVelocity[y] * iDeltaTime);
+        if ( _RowVisualYOffset[y] <= 0.0001f )
+        {
+          _RowVisualYOffset[y] = 0.0f;
+          _RowDropVelocity[y]  = 0.0f;
+        }
+      }
+    }
+  }
+
+  // 2. Update & sync 40 3D line-clear FX instances
+  for ( int i = 0; i < 40; ++i )
+  {
+    const int instID = _ClearFxInstanceStart + i;
+    if ( ( instID < 0 ) || ( instID >= static_cast<int>(ioInstances.size()) ) )
+      continue;
+
+    TetrisClearFxBlock & blk = _ClearFxBlocks[i];
+    if ( !blk._Active )
+    {
+      ioInstances[instID]._Visible   = false;
+      ioInstances[instID]._Transform = hiddenTransform;
+      continue;
+    }
+
+    blk._Elapsed += iDeltaTime;
+    if ( blk._Elapsed >= blk._Duration )
+    {
+      blk._Active                    = false;
+      ioInstances[instID]._Visible   = false;
+      ioInstances[instID]._Transform = hiddenTransform;
+      continue;
+    }
+
+    int matID = MaterialIDForPiece(blk._PieceType);
+
+    if ( TetrisLineClearAnimMode::ClassicBlink == blk._Mode )
+    {
+      if ( blk._Elapsed < 0.30f )
+      {
+        const int blinkPhase = static_cast<int>(blk._Elapsed / 0.05f); // 6 phases (3 full blinks)
+        const bool isWhite   = ( ( blinkPhase % 2 ) == 0 );
+        matID      = isWhite ? _FlashMaterialID : MaterialIDForPiece(blk._PieceType);
+        blk._Scale = isWhite ? 0.98f : 0.92f;
+        blk._Pos   = CellToWorld(blk._GridX, blk._GridY) + Vec3(0.f, 0.f, isWhite ? 0.14f : 0.0f);
+      }
+      else
+      {
+        const float shrinkT = MathUtil::Clamp(( blk._Elapsed - 0.30f ) / 0.08f, 0.0f, 1.0f);
+        blk._Scale = 0.92f * ( 1.0f - shrinkT );
+      }
+    }
+    else if ( TetrisLineClearAnimMode::BlockBurst == blk._Mode )
+    {
+      if ( blk._Elapsed < 0.06f )
+      {
+        matID      = _FlashMaterialID;
+        blk._Scale = 0.98f;
+      }
+      else
+      {
+        blk._Vel.y       -= 32.0f * iDeltaTime;
+        blk._Pos         += blk._Vel * iDeltaTime;
+        blk._EulerAngles += blk._AngularVel * iDeltaTime;
+
+        const float rem = blk._Duration - blk._Elapsed;
+        if ( rem < 0.25f )
+          blk._Scale = 0.92f * MathUtil::Clamp(rem / 0.25f, 0.0f, 1.0f);
+        else
+          blk._Scale = 0.92f;
+      }
+    }
+    else if ( TetrisLineClearAnimMode::EdgeCascade == blk._Mode )
+    {
+      if ( blk._Elapsed < blk._Delay )
+      {
+        const bool preFlash = ( ( blk._Delay - blk._Elapsed ) < 0.045f );
+        matID      = preFlash ? _FlashMaterialID : MaterialIDForPiece(blk._PieceType);
+        blk._Scale = preFlash ? 0.97f : 0.92f;
+      }
+      else
+      {
+        const float activeT = blk._Elapsed - blk._Delay;
+        if ( activeT < 0.04f )
+          matID = _FlashMaterialID;
+
+        blk._Vel.y       -= 35.0f * iDeltaTime;
+        blk._Pos         += blk._Vel * iDeltaTime;
+        blk._EulerAngles += blk._AngularVel * iDeltaTime;
+
+        const float rem = blk._Duration - blk._Elapsed;
+        if ( rem < 0.22f )
+          blk._Scale = 0.92f * MathUtil::Clamp(rem / 0.22f, 0.0f, 1.0f);
+        else
+          blk._Scale = 0.92f;
+      }
+    }
+    else // CenterWave
+    {
+      if ( blk._Elapsed >= blk._Delay )
+      {
+        const float localDur = std::max(0.01f, blk._Duration - blk._Delay);
+        const float localT   = MathUtil::Clamp(( blk._Elapsed - blk._Delay ) / localDur, 0.0f, 1.0f);
+        if ( localT < 0.28f )
+          matID = _FlashMaterialID;
+
+        const Vec3 basePos = CellToWorld(blk._GridX, blk._GridY);
+        blk._Pos         = basePos + Vec3(0.0f, 0.0f, std::sin(localT * static_cast<float>(M_PI)) * 1.15f);
+        blk._EulerAngles = Vec3(localT * 3.14159f, localT * 6.28318f, 0.0f);
+        blk._Scale       = 0.96f * ( 1.0f - localT * localT );
+      }
+    }
+
+    Mat4x4 rotMat = glm::rotate(blk._EulerAngles.z, Vec3(0.f, 0.f, 1.f))
+                  * glm::rotate(blk._EulerAngles.y, Vec3(0.f, 1.f, 0.f))
+                  * glm::rotate(blk._EulerAngles.x, Vec3(1.f, 0.f, 0.f));
+
+    ioInstances[instID]._Visible    = ( blk._Scale > 0.01f );
+    ioInstances[instID]._MaterialID = matID;
+    ioInstances[instID]._Transform  = glm::translate(blk._Pos) * rotMat * glm::scale(Vec3(blk._Scale));
+  }
+}
+
+// ----------------------------------------------------------------------------
 // SyncScene
 // ----------------------------------------------------------------------------
 int TetrisSceneManager::SyncScene( Scene & ioScene, const TetrisGameLogic & iLogic, float iDeltaTime )
@@ -704,10 +1031,26 @@ int TetrisSceneManager::SyncScene( Scene & ioScene, const TetrisGameLogic & iLog
     instances[_SkylineInstanceID]._Transform = Mat4x4(1.0f);
   }
 
+  // Detect new line-clear events or match resets
+  const unsigned int curClearEventId = iLogic.GetLineClearEventId();
+  if ( ( iLogic.GetElapsedTime() < 0.02 ) && ( 0 == iLogic.GetLinesCleared() ) )
+  {
+    ResetLineClearFx();
+    _LastSeenClearEventId = curClearEventId;
+  }
+  else if ( curClearEventId != _LastSeenClearEventId )
+  {
+    _LastSeenClearEventId = curClearEventId;
+    TriggerLineClearFx(iLogic);
+  }
+
+  UpdateAndSyncLineClearFx(instances, iDeltaTime);
+
   // 1. Synchronize locked matrix blocks (rows 0 to 21)
   int cellInstanceIdx = 0;
   for ( int y = 0; y < 22; ++y )
   {
+    const float visualYOffset = _RowVisualYOffset[y];
     for ( int x = 0; x < 10; ++x )
     {
       const int instID = _MatrixInstanceStart + cellInstanceIdx++;
@@ -719,7 +1062,7 @@ int TetrisSceneManager::SyncScene( Scene & ioScene, const TetrisGameLogic & iLog
       {
         instances[instID]._Visible = true;
         instances[instID]._MaterialID = MaterialIDForPiece(cellType);
-        instances[instID]._Transform = glm::translate(CellToWorld(x, y)) * glm::scale(Vec3(0.92f));
+        instances[instID]._Transform = glm::translate(CellToWorld(x, y) + Vec3(0.0f, visualYOffset, 0.0f)) * glm::scale(Vec3(0.92f));
       }
       else
       {

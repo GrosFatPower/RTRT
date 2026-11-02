@@ -30,7 +30,7 @@ public:
 
   bool CanPieceFit( TetrisPieceType iType, TetrisRotation iRotation, const Vec2i & iOrigin ) const;
   bool LockPiece( TetrisPieceType iType, TetrisRotation iRotation, const Vec2i & iOrigin, bool & oAboveSkyline );
-  int ClearFullLines( std::vector<int> & oClearedRows );
+  int ClearFullLines( std::vector<int> & oClearedRows, std::vector<TetrisClearedRow> * oClearedRowData = nullptr );
 
   bool IsEmpty() const;
 

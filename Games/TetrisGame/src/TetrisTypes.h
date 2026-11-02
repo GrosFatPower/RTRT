@@ -59,6 +59,22 @@ enum class TetrisCameraPreset : int
   FreeOrbit = 2
 };
 
+enum class TetrisLineClearAnimMode : int
+{
+  Dynamic      = 0, // Scales with clear type (1=Blink, 2=Wave, 3=EdgeCascade, 4/TSpin/PC=Burst)
+  ClassicBlink = 1, // Blinks 3 times white/color before vanishing
+  BlockBurst   = 2, // Explosive 3D shatter outward with gravity & spin
+  EdgeCascade  = 3, // Peels from outer edges and falls off the sides
+  CenterWave   = 4, // Center-out ripple spin & shrink
+  Random       = 5  // Randomly picks one of the 4 animations on each clear
+};
+
+struct TetrisClearedRow
+{
+  int                             _RowY  = 0;
+  std::array<TetrisPieceType, 10> _Cells = {};
+};
+
 enum class TetrisTSpinType : int
 {
   None = 0,
