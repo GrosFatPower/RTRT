@@ -17,8 +17,9 @@
 #include <filesystem>
 #include <iostream>
 
-namespace RTRT
+namespace Tetris
 {
+using namespace RTRT;
 
 // ----------------------------------------------------------------------------
 // Local Mesh Builders

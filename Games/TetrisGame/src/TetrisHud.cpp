@@ -11,8 +11,9 @@
 #include <string>
 #include <vector>
 
-namespace RTRT
+namespace Tetris
 {
+using namespace RTRT;
 
 namespace
 {
@@ -1084,4 +1085,4 @@ int TetrisHud::Draw( TetrisAppState & ioAppState,
   return 0;
 }
 
-} // namespace RTRT
+} // namespace Tetris

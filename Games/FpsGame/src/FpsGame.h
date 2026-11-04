@@ -12,8 +12,13 @@
 
 namespace RTRT
 {
-
 class Scene;
+}
+
+namespace FPS
+{
+using namespace RTRT;
+
 struct FpsGameMap;
 struct FpsMapProp;
 struct FpsMapPropCollider;

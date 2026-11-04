@@ -6,8 +6,9 @@
 
 #include <vector>
 
-namespace RTRT
+namespace FPS
 {
+using namespace RTRT;
 
 struct FpsGameSettings;
 struct FpsPlayer;

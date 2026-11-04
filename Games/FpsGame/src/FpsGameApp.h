@@ -22,8 +22,9 @@
 
 struct GLFWwindow;
 
-namespace RTRT
+namespace FPS
 {
+using namespace RTRT;
 
 class FpsGameApp
 {

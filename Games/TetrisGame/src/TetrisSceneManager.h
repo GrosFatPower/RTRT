@@ -17,8 +17,12 @@
 
 namespace RTRT
 {
-
 class Renderer;
+}
+
+namespace Tetris
+{
+using namespace RTRT;
 
 class TetrisSceneManager
 {

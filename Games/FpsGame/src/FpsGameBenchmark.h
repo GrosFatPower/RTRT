@@ -12,9 +12,13 @@
 
 namespace RTRT
 {
-
 class Scene;
 struct RenderSettings;
+}
+
+namespace FPS
+{
+using namespace RTRT;
 
 struct FpsGameBenchmarkDistribution
 {

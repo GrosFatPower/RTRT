@@ -23,8 +23,9 @@
 #include <sys/utsname.h>
 #endif
 
-namespace RTRT
+namespace FPS
 {
+using namespace RTRT;
 
 namespace
 {

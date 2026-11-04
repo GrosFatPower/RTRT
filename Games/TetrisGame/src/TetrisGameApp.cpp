@@ -18,8 +18,9 @@
 #include <thread>
 #include <vector>
 
-namespace RTRT
+namespace Tetris
 {
+using namespace RTRT;
 
 // ----------------------------------------------------------------------------
 // KeyCallback

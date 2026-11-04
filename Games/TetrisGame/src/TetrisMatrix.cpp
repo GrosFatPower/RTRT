@@ -1,6 +1,6 @@
 #include "TetrisMatrix.h"
 
-namespace RTRT
+namespace Tetris
 {
 
 // ----------------------------------------------------------------------------

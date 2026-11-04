@@ -5,7 +5,7 @@
 #include <deque>
 #include <random>
 
-namespace RTRT
+namespace Tetris
 {
 
 class TetrisRandomizer

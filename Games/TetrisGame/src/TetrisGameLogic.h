@@ -8,8 +8,9 @@
 #include <string>
 #include <vector>
 
-namespace RTRT
+namespace Tetris
 {
+using namespace RTRT;
 
 class TetrisGameLogic
 {

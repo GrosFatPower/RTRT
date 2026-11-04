@@ -51,7 +51,7 @@ int main( int iArgc, char ** iArgv )
     }
     else if ( arg == "--unit-tests" )
     {
-      return RTRT::TetrisUnitTests::RunAll();
+      return Tetris::TetrisUnitTests::RunAll();
     }
     else if ( arg == "--start-in-game" )
     {
@@ -103,7 +103,7 @@ int main( int iArgc, char ** iArgv )
     glfwMakeContextCurrent(mainWindow.get());
     glfwSwapInterval(1);
 
-    RTRT::TetrisGameApp app(mainWindow, screenWidth, screenHeight);
+    Tetris::TetrisGameApp app(mainWindow, screenWidth, screenHeight);
     app.SetStartInGame(startInGame);
     result = app.Run(screenshotPath, screenshotPath.empty() ? -1 : 15);
   }

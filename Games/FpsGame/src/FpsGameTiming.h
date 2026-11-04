@@ -1,7 +1,7 @@
 #ifndef _FpsGameTiming_
 #define _FpsGameTiming_
 
-namespace RTRT
+namespace FPS
 {
 
 struct FpsCpuTiming

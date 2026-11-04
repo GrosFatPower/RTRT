@@ -1,7 +1,7 @@
 #ifndef _TetrisUnitTests_
 #define _TetrisUnitTests_
 
-namespace RTRT
+namespace Tetris
 {
 
 class TetrisUnitTests

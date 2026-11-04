@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <chrono>
 
-namespace RTRT
+namespace Tetris
 {
 
 // ----------------------------------------------------------------------------

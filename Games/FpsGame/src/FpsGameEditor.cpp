@@ -32,8 +32,9 @@
 
 #include <GLFW/glfw3.h>
 
-namespace RTRT
+namespace FPS
 {
+using namespace RTRT;
 
 
 // ----------------------------------------------------------------------------

@@ -7,7 +7,7 @@
 #include <iostream>
 #include <set>
 
-namespace RTRT
+namespace Tetris
 {
 
 // ----------------------------------------------------------------------------

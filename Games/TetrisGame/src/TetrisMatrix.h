@@ -5,7 +5,7 @@
 #include <array>
 #include <vector>
 
-namespace RTRT
+namespace Tetris
 {
 
 class TetrisMatrix

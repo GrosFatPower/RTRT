@@ -5,7 +5,7 @@
 #include <array>
 #include <string>
 
-namespace RTRT
+namespace Tetris
 {
 
 class TetrisPiece

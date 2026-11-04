@@ -18,8 +18,9 @@
 
 struct GLFWwindow;
 
-namespace RTRT
+namespace Tetris
 {
+using namespace RTRT;
 
 class TetrisGameApp
 {

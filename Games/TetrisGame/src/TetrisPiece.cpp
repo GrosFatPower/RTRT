@@ -1,6 +1,6 @@
 #include "TetrisPiece.h"
 
-namespace RTRT
+namespace Tetris
 {
 
 // ----------------------------------------------------------------------------

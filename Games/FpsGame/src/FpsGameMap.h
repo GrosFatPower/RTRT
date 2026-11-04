@@ -11,8 +11,9 @@
 #include <string>
 #include <vector>
 
-namespace RTRT
+namespace FPS
 {
+using namespace RTRT;
 
 struct FpsMapPlayer
 {

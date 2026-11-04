@@ -11,8 +11,12 @@
 
 namespace RTRT
 {
-
 class Renderer;
+}
+
+namespace Tetris
+{
+using namespace RTRT;
 
 class TetrisHud
 {
@@ -122,6 +126,6 @@ protected:
   RenderStatsUIState _StatsUIState;
 };
 
-} // namespace RTRT
+} // namespace Tetris
 
 #endif /* _TetrisHud_ */

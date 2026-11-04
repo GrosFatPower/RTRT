@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace RTRT
+namespace Tetris
 {
 
 enum class TetrisPieceType : int

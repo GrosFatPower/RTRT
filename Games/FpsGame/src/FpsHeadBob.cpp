@@ -3,8 +3,9 @@
 #include <algorithm>
 #include <cmath>
 
-namespace RTRT
+namespace FPS
 {
+using namespace RTRT;
 
 // ----------------------------------------------------------------------------
 // Reset

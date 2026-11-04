@@ -141,7 +141,7 @@ int main( int iArgc, char ** iArgv )
     glfwMakeContextCurrent(mainWindow.get());
     glfwSwapInterval(1);
 
-    RTRT::FpsGameApp app(mainWindow, g_ScreenWidth, g_ScreenHeight);
+    FPS::FpsGameApp app(mainWindow, g_ScreenWidth, g_ScreenHeight);
     if ( automaticSoftwareBenchmark )
     {
       app.EnableAutomaticSoftwareBenchmark(benchmarkLabel, benchmarkSIMD, benchmarkTileSize,

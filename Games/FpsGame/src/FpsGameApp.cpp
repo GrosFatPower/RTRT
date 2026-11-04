@@ -22,8 +22,9 @@
 #include <iostream>
 #include <thread>
 
-namespace RTRT
+namespace FPS
 {
+using namespace RTRT;
 
 // ----------------------------------------------------------------------------
 // Global variables

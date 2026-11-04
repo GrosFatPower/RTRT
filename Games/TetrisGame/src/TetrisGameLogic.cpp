@@ -2,8 +2,9 @@
 #include <algorithm>
 #include <cmath>
 
-namespace RTRT
+namespace Tetris
 {
+using namespace RTRT;
 
 // ----------------------------------------------------------------------------
 // CTOR

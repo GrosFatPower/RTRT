@@ -3,8 +3,9 @@
 
 #include "MathUtil.h"
 
-namespace RTRT
+namespace FPS
 {
+using namespace RTRT;
 
 struct FpsCollisionObb
 {

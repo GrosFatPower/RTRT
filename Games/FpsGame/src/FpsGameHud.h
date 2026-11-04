@@ -11,9 +11,13 @@
 
 namespace RTRT
 {
-
 class Renderer;
 class Scene;
+}
+
+namespace FPS
+{
+using namespace RTRT;
 
 // ----------------------------------------------------------------------------
 // FpsGameHudContext

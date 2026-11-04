@@ -8,8 +8,9 @@
 #include <iostream>
 #include <set>
 
-namespace RTRT
+namespace FPS
 {
+using namespace RTRT;
 
 // ----------------------------------------------------------------------------
 // Local helpers
