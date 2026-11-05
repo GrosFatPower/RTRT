@@ -44,6 +44,11 @@ struct FpsGameHudContext
   double                  _FrameRate = 60.;
   double                  _DeltaTime = 0.016;
   unsigned int            _NbRenderedFrames = 0;
+  FpsPhotoModeState       _PhotoModeState = FpsPhotoModeState::Inactive;
+  FpsPhotoModeSettings  * _PhotoSettings = nullptr;
+  int                     _PhotoCurrentPass = 0;
+  int                     _PhotoTargetPasses = 64;
+  std::string             _PhotoSavedPath;
 
   // Outputs
   bool                    _RequestStartGame = false;
@@ -58,6 +63,14 @@ struct FpsGameHudContext
   bool                    _RequestReloadScene = false;
   bool                    _RequestToggleDevPanels = false;
   bool                    _WeaponDirty = false;
+  bool                    _CameraDirty = false;
+  bool                    _RenderSettingsDirty = false;
+  bool                    _RequestPhotoMode = false;
+  bool                    _RequestCapturePhoto = false;
+  bool                    _RequestCancelPhotoCapture = false;
+  bool                    _RequestExitPhotoPreview = false;
+  bool                    _RequestRetakePhoto = false;
+  bool                    _RequestResetPhotoCamera = false;
   int                     _RequestRendererMode = -1;
 };
 
@@ -86,6 +99,7 @@ protected:
   void DrawOptionsPage( FpsGameHudContext & ioContext, bool & oBackRequested );
   void DrawGameplayHud( const FpsGameHudContext & iContext );
   void DrawInGamePauseModal( FpsGameHudContext & ioContext );
+  void DrawPhotoModeHud( FpsGameHudContext & ioContext );
 
 protected:
   GameUITheme         _Theme;

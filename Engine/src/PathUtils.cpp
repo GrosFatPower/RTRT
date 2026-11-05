@@ -218,6 +218,14 @@ std::string GetBenchmarkPath( const std::string & iBenchmarkName )
 }
 
 // ----------------------------------------------------------------------------
+// GetScreenshotPath
+// ----------------------------------------------------------------------------
+std::string GetScreenshotPath( const std::string & iScreenshotName )
+{
+  return BuildPath( ResolveRepoRoot() / "Screenshots", iScreenshotName );
+}
+
+// ----------------------------------------------------------------------------
 // GetDataPath
 // ----------------------------------------------------------------------------
 std::string GetDataPath( const std::string & iDataName )

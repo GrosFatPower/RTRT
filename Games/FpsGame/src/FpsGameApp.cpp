@@ -18,7 +18,9 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
+#include <ctime>
 #include <iostream>
 #include <thread>
 
@@ -212,6 +214,7 @@ void FpsGameApp::KeyCallback( GLFWwindow * iWindow, const int iKey, const int iS
   const bool menuActive = ( FpsAppState::TitleScreen == this_ -> _AppState ) || this_ -> _Paused;
   const bool inGame = ( FpsAppState::InGame == this_ -> _AppState );
   const bool editorOn = this_ -> _Editor.IsEnabled();
+  const bool photoModeOn = ( FpsPhotoModeState::Inactive != this_ -> _PhotoModeState );
 
   if ( menuActive && ( ( GLFW_PRESS == iAction ) || ( GLFW_REPEAT == iAction ) ) )
   {
@@ -238,10 +241,10 @@ void FpsGameApp::KeyCallback( GLFWwindow * iWindow, const int iKey, const int iS
       if ( ( GLFW_KEY_ESCAPE == iKey ) || ( GLFW_KEY_BACKSPACE == iKey ) || ( inGame && ( GLFW_KEY_P == iKey ) ) )
         this_ -> _MenuInput._Back = true;
     }
-    else if ( inGame && !editorOn && ( ( GLFW_KEY_ESCAPE == iKey ) || ( GLFW_KEY_P == iKey ) ) )
+    else if ( inGame && !editorOn && !photoModeOn && ( ( GLFW_KEY_ESCAPE == iKey ) || ( GLFW_KEY_P == iKey ) ) )
       this_ -> _PauseRequested = true;
 
-    if ( ( GLFW_KEY_F1 == iKey ) && !editorOn )
+    if ( ( GLFW_KEY_F1 == iKey ) && !editorOn && !photoModeOn )
     {
       if ( !inGame )
         this_ -> _Hud.SetMenuPage(( FpsMenuPage::Options == this_ -> _Hud.GetMenuPage() ) ? FpsMenuPage::MainMenu : FpsMenuPage::Options);
@@ -397,6 +400,17 @@ void FpsGameApp::SyncFramebufferResolution( bool iNotifyRenderer )
 
   if ( iNotifyRenderer && _Renderer )
     _Renderer -> Notify(DirtyState::RenderSettings);
+
+  if ( _PhotoRenderer )
+  {
+    _PhotoRenderSettings._WindowResolution = _Settings._WindowResolution;
+    _PhotoRenderSettings._RenderResolution = _Settings._WindowResolution;
+    if ( FpsPhotoModeState::Capturing == _PhotoModeState )
+    {
+      _PhotoCaptureWarmupDone = false;
+      _PhotoRenderer -> Notify(DirtyState::RenderSettings);
+    }
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -460,22 +474,7 @@ void FpsGameApp::HandleDroppedFiles( int iCount, const char ** iPaths )
 // ----------------------------------------------------------------------------
 void FpsGameApp::ApplyRendererDefaults()
 {
-  if ( FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode )
-  {
-    _Settings._Accumulate = true;
-    _Settings._Denoise = true;
-#if defined(RTRT_HAS_OIDN)
-    _Settings._DenoisingMethod = 3;
-#else
-    _Settings._DenoisingMethod = 2;
-#endif
-    _Settings._NbSamplesPerPixel = 1;
-    _Settings._Bounces = 2;
-    _Settings._LowResRatio = 1.f;
-    _Settings._TiledRendering = false;
-    SetMouseCaptured(false);
-  }
-  else if ( FpsRendererMode::Software == _GameSettings._RendererMode )
+  if ( FpsRendererMode::Software == _GameSettings._RendererMode )
   {
     _Settings._NbThreads = std::max(1u, std::thread::hardware_concurrency());
     _Settings._ShadingType = ShadingType::PBR;
@@ -729,6 +728,11 @@ FpsGameHudContext FpsGameApp::MakeHudContext()
   context._FrameRate = _FrameRate;
   context._DeltaTime = _DeltaTime;
   context._NbRenderedFrames = _NbRenderedFrames;
+  context._PhotoModeState = _PhotoModeState;
+  context._PhotoSettings = &_PhotoSettings;
+  context._PhotoCurrentPass = _PhotoRenderer ? static_cast<int>(_PhotoRenderer -> GetNbCompleteFrames()) : 0;
+  context._PhotoTargetPasses = std::max(1, _PhotoSettings._TargetPasses);
+  context._PhotoSavedPath = _LastPhotoOutputPath.string();
   return context;
 }
 
@@ -754,12 +758,15 @@ void FpsGameApp::SyncPlayerView()
 // ----------------------------------------------------------------------------
 void FpsGameApp::StartGame()
 {
+  if ( FpsPhotoModeState::Inactive != _PhotoModeState )
+    ExitPhotoMode();
+
   _AppState = FpsAppState::InGame;
   _Paused = false;
   _Hud.SetSettingsOpen(false);
   _GameWorld.Reset(_GameSettings);
   SyncPlayerView();
-  SetMouseCaptured(FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode);
+  SetMouseCaptured(true);
 }
 
 // ----------------------------------------------------------------------------
@@ -779,7 +786,7 @@ void FpsGameApp::ResumeGame()
 {
   _Paused = false;
   _Hud.SetSettingsOpen(false);
-  SetMouseCaptured(!_Editor.IsEnabled() && ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode ));
+  SetMouseCaptured(!_Editor.IsEnabled() && ( FpsPhotoModeState::Inactive == _PhotoModeState ));
 }
 
 // ----------------------------------------------------------------------------
@@ -787,6 +794,9 @@ void FpsGameApp::ResumeGame()
 // ----------------------------------------------------------------------------
 void FpsGameApp::ReturnToTitle( FpsMenuPage iPage )
 {
+  if ( FpsPhotoModeState::Inactive != _PhotoModeState )
+    ExitPhotoMode();
+
   if ( _Editor.IsEnabled() )
     SetEditorMode(false);
 
@@ -884,12 +894,29 @@ void FpsGameApp::ApplyHudRequests( FpsGameHudContext & ioContext )
 {
   if ( ioContext._WeaponDirty && ( FpsAppState::InGame == _AppState ) )
     SyncPlayerView();
+  if ( ioContext._CameraDirty && ( FpsAppState::InGame == _AppState ) )
+    SyncPlayerView();
+  if ( ioContext._RenderSettingsDirty && _Renderer )
+    _Renderer -> Notify(DirtyState::RenderSettings);
   if ( ioContext._RequestReloadScene )
     _ReloadScene = true;
   if ( ioContext._RequestToggleDevPanels )
     SetDevPanelsVisible(!_ShowDebugPanel);
   if ( ioContext._RequestRendererMode >= 0 )
     SetRendererMode(static_cast<FpsRendererMode>(ioContext._RequestRendererMode));
+
+  if ( ioContext._RequestPhotoMode )
+    EnterPhotoMode();
+  if ( ioContext._RequestResetPhotoCamera )
+    ResetPhotoCameraToPlayer();
+  if ( ioContext._RequestCapturePhoto )
+    StartPhotoCapture();
+  if ( ioContext._RequestCancelPhotoCapture )
+    CancelPhotoCapture();
+  if ( ioContext._RequestRetakePhoto )
+    ReturnToPhotoSetup();
+  if ( ioContext._RequestExitPhotoPreview )
+    ExitPhotoMode();
 
   if ( !ioContext._RequestMapPath.empty() )
     RequestMap(ioContext._RequestMapPath);
@@ -945,6 +972,9 @@ void FpsGameApp::ApplyHudRequests( FpsGameHudContext & ioContext )
 // ----------------------------------------------------------------------------
 bool FpsGameApp::SetEditorMode( bool iEnabled )
 {
+  if ( iEnabled && ( FpsPhotoModeState::Inactive != _PhotoModeState ) )
+    ExitPhotoMode();
+
   FpsGameEditorContext editorContext = MakeEditorContext();
   if ( !_Editor.SetMode(editorContext, iEnabled) )
     return false;
@@ -954,6 +984,216 @@ bool FpsGameApp::SetEditorMode( bool iEnabled )
     SetMouseCaptured(false);
 
   return true;
+}
+
+// ----------------------------------------------------------------------------
+// EnterPhotoMode
+// ----------------------------------------------------------------------------
+void FpsGameApp::EnterPhotoMode()
+{
+  if ( ( FpsAppState::InGame != _AppState ) || _Editor.IsEnabled() )
+    return;
+
+  if ( FpsPhotoModeState::Inactive != _PhotoModeState )
+    return;
+
+  _Paused = false;
+  _Hud.SetSettingsOpen(false);
+  SetMouseCaptured(false);
+
+  _SavedPlayerBeforePhoto = _GameWorld.GetPlayer();
+  _SavedFreeLookBeforePhoto = _GameSettings._FreeLook;
+  _SavedShowViewWeaponBeforePhoto = _GameSettings._ShowViewWeapon;
+  _SavedCameraFOVBeforePhoto = _GameSettings._CameraFOV;
+  _SavedToneMappingBeforePhoto = _Settings._ToneMapping;
+  _SavedExposureBeforePhoto = _Settings._Exposure;
+  _SavedGammaBeforePhoto = _Settings._Gamma;
+
+  _GameWorld.GetPlayer()._Velocity = Vec3(0.f);
+  _GameSettings._FreeLook = true;
+  _GameSettings._ShowViewWeapon = false;
+
+  _PhotoRenderer.reset();
+  _PhotoModeState = FpsPhotoModeState::Setup;
+  SyncPlayerView();
+}
+
+// ----------------------------------------------------------------------------
+// ExitPhotoMode
+// ----------------------------------------------------------------------------
+void FpsGameApp::ExitPhotoMode()
+{
+  if ( FpsPhotoModeState::Inactive == _PhotoModeState )
+    return;
+
+  _PhotoRenderer.reset();
+  _PhotoModeState = FpsPhotoModeState::Inactive;
+
+  _GameWorld.GetPlayer() = _SavedPlayerBeforePhoto;
+  _GameSettings._FreeLook = _SavedFreeLookBeforePhoto;
+  _GameSettings._ShowViewWeapon = _SavedShowViewWeaponBeforePhoto;
+  _GameSettings._CameraFOV = _SavedCameraFOVBeforePhoto;
+  _Settings._ToneMapping = _SavedToneMappingBeforePhoto;
+  _Settings._Exposure = _SavedExposureBeforePhoto;
+  _Settings._Gamma = _SavedGammaBeforePhoto;
+
+  SyncPlayerView();
+  if ( _Renderer )
+    _Renderer -> Notify(DirtyState::RenderSettings);
+
+  if ( ( FpsAppState::InGame == _AppState ) && !_Paused && !_Editor.IsEnabled() )
+    SetMouseCaptured(true);
+}
+
+// ----------------------------------------------------------------------------
+// ResetPhotoCameraToPlayer
+// ----------------------------------------------------------------------------
+void FpsGameApp::ResetPhotoCameraToPlayer()
+{
+  if ( FpsPhotoModeState::Setup != _PhotoModeState )
+    return;
+
+  FpsPlayer & player = _GameWorld.GetPlayer();
+  player._Position = _SavedPlayerBeforePhoto._Position;
+  player._Velocity = Vec3(0.f);
+  player._Yaw = _SavedPlayerBeforePhoto._Yaw;
+  player._Pitch = _SavedPlayerBeforePhoto._Pitch;
+  _GameSettings._CameraFOV = _SavedCameraFOVBeforePhoto;
+
+  SyncPlayerView();
+}
+
+// ----------------------------------------------------------------------------
+// StartPhotoCapture
+// ----------------------------------------------------------------------------
+void FpsGameApp::StartPhotoCapture()
+{
+  if ( !_Scene || ( FpsPhotoModeState::Setup != _PhotoModeState ) )
+    return;
+
+  _PhotoRenderSettings = _Settings;
+  _PhotoRenderSettings._WindowResolution = _Settings._WindowResolution;
+  _PhotoRenderSettings._RenderResolution = _Settings._WindowResolution;
+  _PhotoRenderSettings._RenderScale = 100;
+  _PhotoRenderSettings._LowResRatio = 1.f;
+  _PhotoRenderSettings._TiledRendering = false;
+  _PhotoRenderSettings._Accumulate = true;
+  _PhotoRenderSettings._NbSamplesPerPixel = std::max(1, _PhotoSettings._SamplesPerPixel);
+  _PhotoRenderSettings._Bounces = std::max(1, _PhotoSettings._Bounces);
+  _PhotoRenderSettings._DenoisingMethod = _PhotoSettings._DenoisingMethod;
+  _PhotoRenderSettings._Denoise = false;
+
+  _PhotoRenderer.reset(new PathTracer(*_Scene, _PhotoRenderSettings));
+  if ( !_PhotoRenderer || ( 0 != _PhotoRenderer -> Initialize() ) )
+  {
+    _PhotoRenderer.reset();
+    return;
+  }
+
+  _PhotoCaptureWarmupDone = false;
+  _PhotoModeState = FpsPhotoModeState::Capturing;
+}
+
+// ----------------------------------------------------------------------------
+// CancelPhotoCapture
+// ----------------------------------------------------------------------------
+void FpsGameApp::CancelPhotoCapture()
+{
+  if ( FpsPhotoModeState::Capturing != _PhotoModeState )
+    return;
+
+  _PhotoRenderer.reset();
+  _PhotoModeState = FpsPhotoModeState::Setup;
+  SyncPlayerView();
+  if ( _Renderer )
+    _Renderer -> Notify(DirtyState::RenderSettings);
+}
+
+// ----------------------------------------------------------------------------
+// ReturnToPhotoSetup
+// ----------------------------------------------------------------------------
+void FpsGameApp::ReturnToPhotoSetup()
+{
+  if ( FpsPhotoModeState::Preview != _PhotoModeState )
+    return;
+
+  _PhotoRenderer.reset();
+  _PhotoModeState = FpsPhotoModeState::Setup;
+  SyncPlayerView();
+  if ( _Renderer )
+    _Renderer -> Notify(DirtyState::RenderSettings);
+}
+
+// ----------------------------------------------------------------------------
+// UpdatePhotoCapture
+// ----------------------------------------------------------------------------
+int FpsGameApp::UpdatePhotoCapture()
+{
+  if ( !_PhotoRenderer )
+    return 1;
+
+  const int targetPasses = std::max(1, _PhotoSettings._TargetPasses);
+  const int completedBefore = static_cast<int>(_PhotoRenderer -> GetNbCompleteFrames());
+  const bool willFinishThisFrame = _PhotoCaptureWarmupDone && ( ( completedBefore + 1 ) >= targetPasses );
+  if ( willFinishThisFrame && _PhotoSettings._Denoise )
+    _PhotoRenderSettings._Denoise = true;
+
+  BeginCpuTiming(CpuRendererUpdate);
+  _PhotoRenderer -> Update();
+  EndCpuTiming(CpuRendererUpdate);
+
+  BeginCpuTiming(CpuRenderToTexture);
+  _PhotoRenderer -> RenderToTexture();
+  EndCpuTiming(CpuRenderToTexture);
+
+  BeginCpuTiming(CpuRenderToScreen);
+  _PhotoRenderer -> RenderToScreen();
+  EndCpuTiming(CpuRenderToScreen);
+
+  _PhotoRenderer -> Done();
+  _PhotoCaptureWarmupDone = true;
+
+  if ( static_cast<int>(_PhotoRenderer -> GetNbCompleteFrames()) >= targetPasses )
+  {
+    const auto now = std::chrono::system_clock::now();
+    const std::time_t nowTime = std::chrono::system_clock::to_time_t(now);
+    std::tm localTime = {};
+#if defined(_WIN32)
+    localtime_s(&localTime, &nowTime);
+#else
+    localtime_r(&nowTime, &localTime);
+#endif
+    char timeBuf[32] = {};
+    std::strftime(timeBuf, sizeof(timeBuf), "%Y%m%d_%H%M%S", &localTime);
+
+    std::string mapStem = std::filesystem::path(_MapPath).stem().string();
+    if ( mapStem.empty() )
+      mapStem = "arena";
+
+    const std::string filename = "Photo_" + mapStem + "_" + std::string(timeBuf) + ".png";
+    const std::filesystem::path outPath(PathUtils::GetScreenshotPath(filename));
+    std::error_code ec;
+    std::filesystem::create_directories(outPath.parent_path(), ec);
+
+    BeginCpuTiming(CpuRenderToFile);
+    if ( 0 == _PhotoRenderer -> RenderToFile(outPath) )
+    {
+      _LastPhotoOutputPath = outPath;
+      std::cout << "Photo saved to: " << _LastPhotoOutputPath.string() << std::endl;
+    }
+    else
+    {
+      _LastPhotoOutputPath.clear();
+      std::cout << "Failed to save photo to: " << outPath.string() << std::endl;
+    }
+    EndCpuTiming(CpuRenderToFile);
+
+    _PhotoModeState = FpsPhotoModeState::Preview;
+  }
+  else
+    SetCpuTimingEnabled(CpuRenderToFile, false);
+
+  return 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -1206,9 +1446,7 @@ int FpsGameApp::InitializeRenderer()
   }
 
   Renderer * newRenderer = nullptr;
-  if ( FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode )
-    newRenderer = new PathTracer(*_Scene, _Settings);
-  else if ( FpsRendererMode::Software == _GameSettings._RendererMode )
+  if ( FpsRendererMode::Software == _GameSettings._RendererMode )
     newRenderer = new SoftwareRasterizer(*_Scene, _Settings);
   else
     newRenderer = new DeferredRenderer(*_Scene, _Settings);
@@ -1291,7 +1529,7 @@ int FpsGameApp::ProcessInput()
       SetEditorMode(true);
     }
 
-    if ( ( FpsAppState::TitleScreen == _AppState ) && _Scene && ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode ) )
+    if ( ( FpsAppState::TitleScreen == _AppState ) && _Scene )
     {
       _SceneBinding.SyncTitleCamera(*_Scene, _GameWorld, _GameSettings, static_cast<float>(glfwGetTime()));
       if ( _Renderer )
@@ -1303,6 +1541,143 @@ int FpsGameApp::ProcessInput()
     _KeyInput.ClearLastEvents();
     _MouseInput.ClearLastEvents(curMouseX, curMouseY);
 
+    glfwPollEvents();
+    return 0;
+  }
+
+  if ( FpsPhotoModeState::Inactive != _PhotoModeState )
+  {
+    if ( FpsPhotoModeState::Setup == _PhotoModeState )
+    {
+      if ( !uiIO.WantCaptureKeyboard )
+      {
+        if ( _KeyInput.IsKeyReleased(GLFW_KEY_ESCAPE) || _KeyInput.IsKeyReleased(GLFW_KEY_L) || _KeyInput.IsKeyReleased(GLFW_KEY_F12) )
+        {
+          ExitPhotoMode();
+          _LastMouseX = curMouseX;
+          _LastMouseY = curMouseY;
+          _KeyInput.ClearLastEvents();
+          _MouseInput.ClearLastEvents(curMouseX, curMouseY);
+          glfwPollEvents();
+          return 0;
+        }
+        if ( _KeyInput.IsKeyReleased(GLFW_KEY_ENTER) || _KeyInput.IsKeyReleased(GLFW_KEY_KP_ENTER) )
+        {
+          StartPhotoCapture();
+          _LastMouseX = curMouseX;
+          _LastMouseY = curMouseY;
+          _KeyInput.ClearLastEvents();
+          _MouseInput.ClearLastEvents(curMouseX, curMouseY);
+          glfwPollEvents();
+          return 0;
+        }
+        if ( _KeyInput.IsKeyReleased(GLFW_KEY_R) )
+          ResetPhotoCameraToPlayer();
+      }
+
+      const bool mouseDragHeld = !uiIO.WantCaptureMouse
+                              && ( ( GLFW_PRESS == glfwGetMouseButton(_MainWindow.get(), GLFW_MOUSE_BUTTON_RIGHT) )
+                                || ( GLFW_PRESS == glfwGetMouseButton(_MainWindow.get(), GLFW_MOUSE_BUTTON_LEFT) ) );
+
+      FpsPlayer & player = _GameWorld.GetPlayer();
+      bool cameraMoved = false;
+
+      if ( mouseDragHeld )
+      {
+        if ( _HasLastMousePos )
+        {
+          const float deltaX = static_cast<float>(curMouseX - _LastMouseX);
+          const float deltaY = static_cast<float>(curMouseY - _LastMouseY);
+          if ( ( std::abs(deltaX) > 0.f ) || ( std::abs(deltaY) > 0.f ) )
+          {
+            player._Yaw += deltaX * _GameSettings._MouseSensitivity;
+            player._Pitch -= deltaY * _GameSettings._MouseSensitivity;
+            player._Pitch = MathUtil::Clamp(player._Pitch, -89.f, 89.f);
+            cameraMoved = true;
+          }
+        }
+        _HasLastMousePos = true;
+      }
+      else
+        _HasLastMousePos = false;
+
+      if ( !uiIO.WantTextInput && !uiIO.WantCaptureKeyboard )
+      {
+        const float yawRad = MathUtil::ToRadians(player._Yaw);
+        const float pitchRad = MathUtil::ToRadians(player._Pitch);
+        Vec3 forward(std::cos(yawRad) * std::cos(pitchRad),
+                     std::sin(pitchRad),
+                     std::sin(yawRad) * std::cos(pitchRad));
+        forward = glm::normalize(forward);
+        const Vec3 right = glm::normalize(glm::cross(forward, Vec3(0.f, 1.f, 0.f)));
+        const Vec3 up(0.f, 1.f, 0.f);
+
+        Vec3 move(0.f);
+        if ( _KeyInput.IsKeyDown(GLFW_KEY_W) )
+          move += forward;
+        if ( _KeyInput.IsKeyDown(GLFW_KEY_S) )
+          move -= forward;
+        if ( _KeyInput.IsKeyDown(GLFW_KEY_D) )
+          move += right;
+        if ( _KeyInput.IsKeyDown(GLFW_KEY_A) )
+          move -= right;
+        if ( _KeyInput.IsKeyDown(GLFW_KEY_SPACE) || _KeyInput.IsKeyDown(GLFW_KEY_E) )
+          move += up;
+        if ( _KeyInput.IsKeyDown(GLFW_KEY_LEFT_CONTROL) || _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_CONTROL) || _KeyInput.IsKeyDown(GLFW_KEY_Q) )
+          move -= up;
+
+        if ( _GamepadInput.IsConnected() )
+        {
+          const float deadzone = _GamepadInput.GetStickDeadzone();
+          const float leftX = _GamepadInput.GetAxis(GLFW_GAMEPAD_AXIS_LEFT_X, deadzone);
+          const float leftY = _GamepadInput.GetAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, deadzone);
+          const float rightX = _GamepadInput.GetAxis(GLFW_GAMEPAD_AXIS_RIGHT_X, deadzone);
+          const float rightY = _GamepadInput.GetAxis(GLFW_GAMEPAD_AXIS_RIGHT_Y, deadzone);
+
+          move += forward * ( -leftY ) + right * leftX;
+          if ( ( std::abs(rightX) > 0.f ) || ( std::abs(rightY) > 0.f ) )
+          {
+            player._Yaw += rightX * _GamepadLookSensitivity * static_cast<float>(_DeltaTime);
+            player._Pitch -= rightY * _GamepadLookSensitivity * static_cast<float>(_DeltaTime);
+            player._Pitch = MathUtil::Clamp(player._Pitch, -89.f, 89.f);
+            cameraMoved = true;
+          }
+        }
+
+        if ( glm::length(move) > EPSILON )
+        {
+          const float speed = ( _KeyInput.IsKeyDown(GLFW_KEY_LEFT_SHIFT) || _KeyInput.IsKeyDown(GLFW_KEY_RIGHT_SHIFT) )
+                            ? _GameSettings._SprintSpeed
+                            : _GameSettings._MoveSpeed;
+          const float deltaTime = std::min(static_cast<float>(_DeltaTime), 0.05f);
+          player._Position += glm::normalize(move) * speed * deltaTime;
+          cameraMoved = true;
+        }
+      }
+
+      if ( cameraMoved )
+        SyncPlayerView();
+    }
+    else if ( FpsPhotoModeState::Capturing == _PhotoModeState )
+    {
+      if ( !uiIO.WantCaptureKeyboard && _KeyInput.IsKeyReleased(GLFW_KEY_ESCAPE) )
+        CancelPhotoCapture();
+    }
+    else if ( FpsPhotoModeState::Preview == _PhotoModeState )
+    {
+      if ( !uiIO.WantCaptureKeyboard )
+      {
+        if ( _KeyInput.IsKeyReleased(GLFW_KEY_ESCAPE) || _KeyInput.IsKeyReleased(GLFW_KEY_ENTER) || _KeyInput.IsKeyReleased(GLFW_KEY_KP_ENTER) )
+          ExitPhotoMode();
+        else if ( _KeyInput.IsKeyReleased(GLFW_KEY_BACKSPACE) )
+          ReturnToPhotoSetup();
+      }
+    }
+
+    _LastMouseX = curMouseX;
+    _LastMouseY = curMouseY;
+    _KeyInput.ClearLastEvents();
+    _MouseInput.ClearLastEvents(curMouseX, curMouseY);
     glfwPollEvents();
     return 0;
   }
@@ -1322,8 +1697,6 @@ int FpsGameApp::ProcessInput()
         requestedRendererMode = FpsRendererMode::Deferred;
       else if ( _KeyInput.IsKeyDown(GLFW_KEY_K) )
         requestedRendererMode = FpsRendererMode::Software;
-      else if ( _KeyInput.IsKeyDown(GLFW_KEY_L) )
-        requestedRendererMode = FpsRendererMode::PhotoPathTracer;
 
       if ( requestedRendererMode != _GameSettings._RendererMode )
       {
@@ -1338,8 +1711,7 @@ int FpsGameApp::ProcessInput()
     }
 
     const bool rightMouseHeld = !ImGui::GetIO().WantCaptureMouse
-                             && ( GLFW_PRESS == glfwGetMouseButton(_MainWindow.get(), GLFW_MOUSE_BUTTON_RIGHT) )
-                             && ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode );
+                             && ( GLFW_PRESS == glfwGetMouseButton(_MainWindow.get(), GLFW_MOUSE_BUTTON_RIGHT) );
     double mouseX = 0., mouseY = 0.;
     if ( !ImGui::GetIO().WantCaptureMouse
       && !rightMouseHeld
@@ -1430,7 +1802,7 @@ int FpsGameApp::ProcessInput()
     // LEFT CLICK
     if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1, mouseX, mouseY) )
     {
-      if ( ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode ) && !_GameSettings._FreeLook )
+      if ( !_GameSettings._FreeLook )
         input._FirePressed = true;
     }
   }
@@ -1442,13 +1814,22 @@ int FpsGameApp::ProcessInput()
     if ( _KeyInput.IsKeyReleased(GLFW_KEY_PAGE_DOWN) )
       _GameSettings._MoveSpeed = std::clamp(_GameSettings._MoveSpeed - 5.f, 1.f, 100.f);
 
+    if ( _KeyInput.IsKeyReleased(GLFW_KEY_L) || _KeyInput.IsKeyReleased(GLFW_KEY_F12) )
+    {
+      EnterPhotoMode();
+      _LastMouseX = curMouseX;
+      _LastMouseY = curMouseY;
+      _KeyInput.ClearLastEvents();
+      _MouseInput.ClearLastEvents(curMouseX, curMouseY);
+      glfwPollEvents();
+      return 0;
+    }
+
     FpsRendererMode requestedRendererMode = _GameSettings._RendererMode;
     if ( _KeyInput.IsKeyDown(GLFW_KEY_J) )
       requestedRendererMode = FpsRendererMode::Deferred;
     else if ( _KeyInput.IsKeyDown(GLFW_KEY_K) )
       requestedRendererMode = FpsRendererMode::Software;
-    else if ( _KeyInput.IsKeyDown(GLFW_KEY_L) )
-      requestedRendererMode = FpsRendererMode::PhotoPathTracer;
 
     if ( requestedRendererMode != _GameSettings._RendererMode )
     {
@@ -1488,21 +1869,17 @@ int FpsGameApp::ProcessInput()
       input._JumpPressed = input._JumpPressed || _GamepadInput.IsButtonDown(GLFW_GAMEPAD_BUTTON_A);
     input._ResetPressed = input._ResetPressed || _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_Y);
 
-    if ( ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode ) && !_GameSettings._FreeLook
-      && _GamepadInput.IsRightTriggerDown() )
+    if ( !_GameSettings._FreeLook && _GamepadInput.IsRightTriggerDown() )
     {
       input._FirePressed = true;
     }
 
-    if ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode )
-    {
-      const float lookScale = _GamepadLookSensitivity * static_cast<float>(_DeltaTime) / std::max(_GameSettings._MouseSensitivity, 0.001f);
-      input._MouseDeltaX += rightX * lookScale;
-      input._MouseDeltaY += rightY * lookScale;
-    }
+    const float lookScale = _GamepadLookSensitivity * static_cast<float>(_DeltaTime) / std::max(_GameSettings._MouseSensitivity, 0.001f);
+    input._MouseDeltaX += rightX * lookScale;
+    input._MouseDeltaY += rightY * lookScale;
   }
 
-  if ( _MouseCaptured && ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode ) )
+  if ( _MouseCaptured )
   {
     if ( _HasLastMousePos )
     {
@@ -1515,26 +1892,23 @@ int FpsGameApp::ProcessInput()
   _LastMouseX = curMouseX;
   _LastMouseY = curMouseY;
 
-  if ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode )
-  {
-    if ( 0 != _GameWorld.Update(static_cast<float>(_DeltaTime), input, _GameSettings) )
-      return 1;
+  if ( 0 != _GameWorld.Update(static_cast<float>(_DeltaTime), input, _GameSettings) )
+    return 1;
 
-    if ( 0 != _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings, _Editor.IsEnabled()) )
+  if ( 0 != _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings, _Editor.IsEnabled()) )
+    return 1;
+
+  if ( _Renderer )
+    _Renderer -> Notify(DirtyState::SceneCamera);
+
+  const bool projectilesDirty = _GameWorld.ConsumeProjectilesDirty();
+  if ( projectilesDirty || ( _GameSettings._ShowViewWeapon && _SceneBinding.HasViewWeapon() ) )
+  {
+    if ( 0 != _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings) )
       return 1;
 
     if ( _Renderer )
-      _Renderer -> Notify(DirtyState::SceneCamera);
-
-    const bool projectilesDirty = _GameWorld.ConsumeProjectilesDirty();
-    if ( projectilesDirty || ( _GameSettings._ShowViewWeapon && _SceneBinding.HasViewWeapon() ) )
-    {
-      if ( 0 != _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings) )
-        return 1;
-
-      if ( _Renderer )
-        _Renderer -> Notify(DirtyState::SceneInstances);
-    }
+      _Renderer -> Notify(DirtyState::SceneInstances);
   }
 
   if ( _KeyInput.IsKeyReleased(GLFW_KEY_C) )
@@ -1559,6 +1933,9 @@ int FpsGameApp::UpdateGame()
 
   if ( _ReloadScene )
   {
+    if ( FpsPhotoModeState::Inactive != _PhotoModeState )
+      ExitPhotoMode();
+
     _ReloadScene = false;
     _ReloadBoids = false;
     _Renderer.reset();
@@ -1590,7 +1967,7 @@ int FpsGameApp::UpdateGame()
     }
   }
 
-  if ( !_Paused && ( 0 != UpdateBoids() ) )
+  if ( !_Paused && ( FpsPhotoModeState::Inactive == _PhotoModeState ) && ( 0 != UpdateBoids() ) )
   {
     EndCpuTiming(CpuUpdateGame);
     return 1;
@@ -1607,7 +1984,7 @@ int FpsGameApp::UpdateBoids()
 {
   BeginCpuTiming(CpuUpdateBoids);
 
-  if ( !_Scene || ( FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode ) )
+  if ( !_Scene || ( FpsPhotoModeState::Inactive != _PhotoModeState ) )
   {
     EndCpuTiming(CpuUpdateBoids);
     SetCpuTimingEnabled(CpuUpdateBoids, false);
@@ -1735,10 +2112,14 @@ int FpsGameApp::DrawMainMenuBar()
     {
       SetRendererMode(FpsRendererMode::Software);
     }
-    if ( ImGui::MenuItem("Photo Path Tracer", nullptr, FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode)
-      && ( FpsRendererMode::PhotoPathTracer != _GameSettings._RendererMode ) )
+
+    ImGui::Separator();
+    if ( ImGui::MenuItem("Photo Mode (Path Tracer)", "L / F12", FpsPhotoModeState::Inactive != _PhotoModeState, ( FpsAppState::InGame == _AppState ) && !_Editor.IsEnabled()) )
     {
-      SetRendererMode(FpsRendererMode::PhotoPathTracer);
+      if ( FpsPhotoModeState::Inactive == _PhotoModeState )
+        EnterPhotoMode();
+      else
+        ExitPhotoMode();
     }
 
     ImGui::Separator();
@@ -1778,7 +2159,7 @@ int FpsGameApp::DrawHelpUI()
     ImGui::Separator();
     ImGui::Text("Gameplay");
     ImGui::BulletText("F1 opens Options; F2 toggles free look; F3 toggles editor mode; F4 toggles developer panels.");
-    ImGui::BulletText("J, K, and L select Deferred, Software, and Photo Path Tracer.");
+    ImGui::BulletText("J and K select Deferred and Software renderers; L or F12 enters Photo Mode (Path Tracer).");
     ImGui::BulletText("Escape or P pauses the game and opens the pause menu.");
     ImGui::Text("Editor");
     ImGui::BulletText("Left click selects; right mouse moves the editor camera; Delete removes selection.");
@@ -1852,11 +2233,11 @@ void FpsGameApp::DrawDebugPanel()
     return;
   }
 
-  if ( FpsRendererMode::PhotoPathTracer == _GameSettings._RendererMode )
-    ImGui::Text("Photo mode: gameplay paused");
+  if ( FpsPhotoModeState::Inactive != _PhotoModeState )
+    ImGui::Text("Photo mode active: gameplay paused");
   else
     ImGui::Text("Click viewport to capture mouse. Esc releases capture.");
-  ImGui::Text("Renderer shortcuts: J Deferred, K Software, L Photo");
+  ImGui::Text("Renderer shortcuts: J Deferred, K Software, L/F12 Photo Mode");
   ImGui::Text("F4 toggles this panel. F2 toggles free look. F3 toggles editor.");
   ImGui::Text("Editor: %s", _Editor.IsEnabled() ? "on" : "off");
 
@@ -2257,29 +2638,46 @@ int FpsGameApp::Run()
       }
       EndCpuTiming(CpuProcessInput);
 
-      BeginCpuTiming(CpuRendererUpdate);
-      _Renderer -> Update();
-      EndCpuTiming(CpuRendererUpdate);
-
-      BeginCpuTiming(CpuRenderToTexture);
-      _Renderer -> RenderToTexture();
-      EndCpuTiming(CpuRenderToTexture);
-
-      BeginCpuTiming(CpuRenderToScreen);
-      _Renderer -> RenderToScreen();
-      EndCpuTiming(CpuRenderToScreen);
-
-      if ( _RenderToFile )
+      if ( ( FpsPhotoModeState::Capturing == _PhotoModeState ) && _PhotoRenderer )
       {
-        BeginCpuTiming(CpuRenderToFile);
-        _Renderer -> RenderToFile(_CaptureOutputPath);
-        EndCpuTiming(CpuRenderToFile);
-        _RenderToFile = false;
+        UpdatePhotoCapture();
       }
-      else
+      else if ( ( FpsPhotoModeState::Preview == _PhotoModeState ) && _PhotoRenderer )
+      {
+        SetCpuTimingEnabled(CpuRendererUpdate, false);
+        SetCpuTimingEnabled(CpuRenderToTexture, false);
         SetCpuTimingEnabled(CpuRenderToFile, false);
 
-      _Renderer -> Done();
+        BeginCpuTiming(CpuRenderToScreen);
+        _PhotoRenderer -> RenderToScreen();
+        EndCpuTiming(CpuRenderToScreen);
+      }
+      else
+      {
+        BeginCpuTiming(CpuRendererUpdate);
+        _Renderer -> Update();
+        EndCpuTiming(CpuRendererUpdate);
+
+        BeginCpuTiming(CpuRenderToTexture);
+        _Renderer -> RenderToTexture();
+        EndCpuTiming(CpuRenderToTexture);
+
+        BeginCpuTiming(CpuRenderToScreen);
+        _Renderer -> RenderToScreen();
+        EndCpuTiming(CpuRenderToScreen);
+
+        if ( _RenderToFile )
+        {
+          BeginCpuTiming(CpuRenderToFile);
+          _Renderer -> RenderToFile(_CaptureOutputPath);
+          EndCpuTiming(CpuRenderToFile);
+          _RenderToFile = false;
+        }
+        else
+          SetCpuTimingEnabled(CpuRenderToFile, false);
+
+        _Renderer -> Done();
+      }
 
       BeginCpuTiming(CpuDrawUI);
       if ( 0 != DrawUI() )

@@ -26,8 +26,28 @@ struct FpsMapPropCollider;
 enum class FpsRendererMode
 {
   Deferred = 0,
-  Software,
-  PhotoPathTracer
+  Software
+};
+
+enum class FpsPhotoModeState
+{
+  Inactive = 0,
+  Setup,
+  Capturing,
+  Preview
+};
+
+struct FpsPhotoModeSettings
+{
+  int          _TargetPasses    = 64;
+  int          _SamplesPerPixel = 1;
+  int          _Bounces         = 4;
+  bool         _Denoise         = true;
+#if defined(RTRT_HAS_OIDN)
+  unsigned int _DenoisingMethod = 3;
+#else
+  unsigned int _DenoisingMethod = 2;
+#endif
 };
 
 enum class FpsAppState

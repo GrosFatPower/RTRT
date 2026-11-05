@@ -308,7 +308,7 @@ static bool ParseRendererMode( const std::string & iToken, FpsRendererMode & oMo
   }
   if ( IsEqual(iToken, "photo") || IsEqual(iToken, "photopathtracer") )
   {
-    oMode = FpsRendererMode::PhotoPathTracer;
+    oMode = FpsRendererMode::Deferred;
     return true;
   }
   return false;
@@ -318,8 +318,6 @@ static const char * RendererModeName( FpsRendererMode iMode )
 {
   if ( FpsRendererMode::Software == iMode )
     return "software";
-  if ( FpsRendererMode::PhotoPathTracer == iMode )
-    return "photo";
   return "deferred";
 }
 

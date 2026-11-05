@@ -30,6 +30,7 @@ Assets/.DS_Store?
 Bin/
 Build/
 tmp/
+Screenshots/
 Tests/Artifacts/
 shader.tmp/
 VertexShader_*.glsl

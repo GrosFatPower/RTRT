@@ -2357,8 +2357,7 @@ void FpsGameEditor::DrawSettingsPanel( FpsGameEditorContext & ioContext )
   }
 
   ImGui::Text("Mode: editor");
-  ImGui::Text("Renderer: %s", FpsRendererMode::Deferred == ioContext._GameSettings._RendererMode ? "Deferred" :
-                              FpsRendererMode::Software == ioContext._GameSettings._RendererMode ? "Software" : "Photo Path Tracer");
+  ImGui::Text("Renderer: %s", FpsRendererMode::Deferred == ioContext._GameSettings._RendererMode ? "Deferred" : "Software");
   if ( !_StatusMessage.empty() )
     ImGui::TextWrapped("Status: %s", _StatusMessage.c_str());
 
@@ -2715,44 +2714,6 @@ int FpsGameEditor::DrawRenderSettingsUI( FpsGameEditorContext & ioContext )
     if ( ioContext._SoftwareShowWires )
       ioContext._DebugMode |= (int)RasterDebugModes::Wires;
     ioContext._Renderer -> SetDebugMode(ioContext._DebugMode);
-  }
-  else if ( FpsRendererMode::PhotoPathTracer == ioContext._GameSettings._RendererMode )
-  {
-    if ( ImGui::CollapsingHeader("Path Tracing", ImGuiTreeNodeFlags_DefaultOpen) )
-    {
-      if ( ImGui::SliderInt("Bounces", &ioContext._Settings._Bounces, 1, 8) )
-        notifyPersistedRenderSettingsChanged();
-      if ( ImGui::SliderInt("SPP", &ioContext._Settings._NbSamplesPerPixel, 1, 8) )
-        notifyPersistedRenderSettingsChanged();
-      if ( ImGui::Checkbox("Denoise", &ioContext._Settings._Denoise) )
-        notifyPersistedRenderSettingsChanged();
-      if ( ioContext._Settings._Denoise )
-      {
-#if defined(RTRT_HAS_OIDN)
-        static const char * DENOISING_METHODS[] = { "Bilateral", "Wavelet", "Edge-aware (A-Trous)", "OIDN (AI)" };
-        const int methodCount = 4;
-#else
-        static const char * DENOISING_METHODS[] = { "Bilateral", "Wavelet", "Edge-aware (A-Trous)" };
-        const int methodCount = 3;
-#endif
-        int denoisingMethod = (int)ioContext._Settings._DenoisingMethod;
-        if ( ImGui::Combo("Denoising method", &denoisingMethod, DENOISING_METHODS, methodCount) )
-        {
-          ioContext._Settings._DenoisingMethod = (unsigned int)denoisingMethod;
-          notifyPersistedRenderSettingsChanged();
-        }
-      }
-    }
-
-    if ( ImGui::CollapsingHeader("Path Tracer Debug") )
-    {
-      static const char * DEBUG_VIEWS[] = { "Off", "Tiles", "Albedo", "Metalness", "Roughness", "Normals", "UV", "BLAS" };
-      if ( ImGui::Combo("Debug view", &ioContext._DebugMode, DEBUG_VIEWS, 8) )
-      {
-        ioContext._Renderer -> SetDebugMode(ioContext._DebugMode);
-        ioContext._Renderer -> Notify(DirtyState::RenderSettings);
-      }
-    }
   }
 
   return 0;

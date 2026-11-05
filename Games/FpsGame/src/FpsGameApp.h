@@ -22,6 +22,11 @@
 
 struct GLFWwindow;
 
+namespace RTRT
+{
+class PathTracer;
+}
+
 namespace FPS
 {
 using namespace RTRT;
@@ -101,6 +106,14 @@ protected:
   void UpdateGamepadMenuInput();
   void SyncPlayerView();
 
+  void EnterPhotoMode();
+  void ExitPhotoMode();
+  void ResetPhotoCameraToPlayer();
+  void StartPhotoCapture();
+  void CancelPhotoCapture();
+  void ReturnToPhotoSetup();
+  int  UpdatePhotoCapture();
+
 protected:
   std::shared_ptr<GLFWwindow> _MainWindow;
   int                         _ScreenWidth = 0;
@@ -159,6 +172,20 @@ protected:
 
   bool                      _RenderToFile = false;
   std::filesystem::path     _CaptureOutputPath;
+
+  FpsPhotoModeState           _PhotoModeState = FpsPhotoModeState::Inactive;
+  FpsPhotoModeSettings        _PhotoSettings;
+  RenderSettings              _PhotoRenderSettings;
+  std::unique_ptr<PathTracer> _PhotoRenderer;
+  bool                        _PhotoCaptureWarmupDone = false;
+  FpsPlayer                   _SavedPlayerBeforePhoto;
+  bool                        _SavedFreeLookBeforePhoto = false;
+  bool                        _SavedShowViewWeaponBeforePhoto = true;
+  float                       _SavedCameraFOVBeforePhoto = 85.f;
+  bool                        _SavedToneMappingBeforePhoto = true;
+  float                       _SavedExposureBeforePhoto = 1.f;
+  float                       _SavedGammaBeforePhoto = 2.2f;
+  std::filesystem::path       _LastPhotoOutputPath;
 
   enum CpuTimingID
   {

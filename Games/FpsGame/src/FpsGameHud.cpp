@@ -6,6 +6,7 @@
 #include "imgui.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -25,9 +26,8 @@ const char * GetRendererModeLabel( FpsRendererMode iMode )
 {
   switch ( iMode )
   {
-    case FpsRendererMode::Software:        return "Software Rasterizer (CPU SIMD)";
-    case FpsRendererMode::PhotoPathTracer: return "Photo Path Tracer (GPU Ray Tracing)";
-    default:                               return "Deferred Renderer (Real-Time PBR)";
+    case FpsRendererMode::Software: return "Software Rasterizer (CPU SIMD)";
+    default:                        return "Deferred Renderer (Real-Time PBR)";
   }
 }
 
@@ -264,8 +264,7 @@ void FpsGameHud::DrawOptionsPage( FpsGameHudContext & ioContext, bool & oBackReq
       const char * rendererNames[] =
       {
         "Deferred Renderer (Real-Time PBR)",
-        "Software Rasterizer (CPU SIMD)",
-        "Photo Path Tracer (GPU Ray Tracing)"
+        "Software Rasterizer (CPU SIMD)"
       };
       int rendererIdx = static_cast<int>(game._RendererMode);
       bool reloadRenderer = false;
@@ -335,7 +334,8 @@ void FpsGameHud::DrawOptionsPage( FpsGameHudContext & ioContext, bool & oBackReq
         { "SYSTEM",          "Toggle Free Look",        "F2",          "",           ""                   },
         { "SYSTEM",          "Map Editor",              "F3",          "",           ""                   },
         { "SYSTEM",          "Developer Panels",        "F4",          "",           ""                   },
-        { "SYSTEM",          "Deferred / Software / Photo", "J / K / L", "",          ""                   }
+        { "SYSTEM",          "Deferred / Software",     "J / K",       "",           ""                   },
+        { "SYSTEM",          "Photo Mode (Path Tracer)", "L",          "F12",        ""                   }
       };
       GameMenuUI::DrawKeybindingTable(bindings, _Theme, _Fonts);
     }
@@ -402,6 +402,7 @@ void FpsGameHud::DrawInGamePauseModal( FpsGameHudContext & ioContext )
     const std::vector<GameMenuItem> items =
     {
       { "RESUME GAME",            "Return to active combat",                    "ESC / P", true, false },
+      { "PHOTO MODE",             "Frame & capture high-quality path-traced photo", "L / F12", true, false },
       { "RESPAWN PLAYER",         "Reset position, velocity & clear projectiles", "R",     true, false },
       { "SWITCH MAP",             "Open the map selection screen",              "MAPS",    true, false },
       { "ENTER MAP EDITOR",       "Switch to the interactive 3D map editor",    "F3",      true, false },
@@ -413,14 +414,16 @@ void FpsGameHud::DrawInGamePauseModal( FpsGameHudContext & ioContext )
     if ( 0 == activated )
       ioContext._RequestResume = true;
     else if ( 1 == activated )
-      ioContext._RequestRespawn = true;
+      ioContext._RequestPhotoMode = true;
     else if ( 2 == activated )
-      ioContext._RequestMapSelect = true;
+      ioContext._RequestRespawn = true;
     else if ( 3 == activated )
-      ioContext._RequestEditor = true;
+      ioContext._RequestMapSelect = true;
     else if ( 4 == activated )
-      _ShowInGameOptions = true;
+      ioContext._RequestEditor = true;
     else if ( 5 == activated )
+      _ShowInGameOptions = true;
+    else if ( 6 == activated )
       ioContext._RequestTitle = true;
   }
   GameMenuUI::EndMenuPanel();
@@ -443,9 +446,164 @@ void FpsGameHud::Draw( FpsGameHudContext & ioContext )
     return;
   }
 
+  if ( FpsPhotoModeState::Inactive != ioContext._PhotoModeState )
+  {
+    DrawPhotoModeHud(ioContext);
+    return;
+  }
+
   DrawGameplayHud(ioContext);
   if ( ioContext._Paused )
     DrawInGamePauseModal(ioContext);
+}
+
+// ----------------------------------------------------------------------------
+// DrawPhotoModeHud
+// ----------------------------------------------------------------------------
+void FpsGameHud::DrawPhotoModeHud( FpsGameHudContext & ioContext )
+{
+  const ImGuiIO & io = ImGui::GetIO();
+
+  if ( FpsPhotoModeState::Setup == ioContext._PhotoModeState )
+  {
+    const Vec2 panelSize(380.0f, 0.0f);
+    const Vec2 panelCenter(io.DisplaySize.x - panelSize.x * 0.5f - 28.0f, io.DisplaySize.y * 0.48f);
+
+    if ( GameMenuUI::BeginMenuPanel("##FpsPhotoSetup", "PHOTO MODE SETUP", panelCenter, panelSize, _Theme, _Fonts) )
+    {
+      ImGui::TextDisabled("Camera & Composition");
+      ImGui::Separator();
+
+      if ( ioContext._GameSettings )
+      {
+        if ( ImGui::SliderFloat("Field of View", &ioContext._GameSettings->_CameraFOV, 30.f, 140.f, "%.0f deg") )
+          ioContext._CameraDirty = true;
+
+        if ( ImGui::Checkbox("Show View Weapon", &ioContext._GameSettings->_ShowViewWeapon) )
+          ioContext._WeaponDirty = true;
+
+        ImGui::SameLine(0.0f, 16.0f);
+        if ( ImGui::SmallButton("Reset Camera") )
+          ioContext._RequestResetPhotoCamera = true;
+      }
+
+      if ( ioContext._RenderSettings )
+      {
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
+        ImGui::TextDisabled("Exposure & Tone Mapping");
+        ImGui::Separator();
+
+        if ( ImGui::Checkbox("Tone Mapping", &ioContext._RenderSettings->_ToneMapping) )
+          ioContext._RenderSettingsDirty = true;
+        if ( ioContext._RenderSettings->_ToneMapping )
+        {
+          if ( ImGui::SliderFloat("Exposure", &ioContext._RenderSettings->_Exposure, 0.1f, 5.f, "%.2f") )
+            ioContext._RenderSettingsDirty = true;
+          if ( ImGui::SliderFloat("Gamma", &ioContext._RenderSettings->_Gamma, 0.5f, 3.f, "%.2f") )
+            ioContext._RenderSettingsDirty = true;
+        }
+      }
+
+      if ( ioContext._PhotoSettings )
+      {
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
+        ImGui::TextDisabled("Path Tracer Capture Settings");
+        ImGui::Separator();
+
+        ImGui::SliderInt("Accumulation Passes", &ioContext._PhotoSettings->_TargetPasses, 8, 512);
+        ImGui::SliderInt("Samples / Pass (SPP)", &ioContext._PhotoSettings->_SamplesPerPixel, 1, 8);
+        ImGui::SliderInt("Max Bounces", &ioContext._PhotoSettings->_Bounces, 1, 8);
+        ImGui::Checkbox("Enable Denoiser", &ioContext._PhotoSettings->_Denoise);
+
+        if ( ioContext._PhotoSettings->_Denoise )
+        {
+#if defined(RTRT_HAS_OIDN)
+          static const char * DENOISING_METHODS[] = { "Bilateral", "Wavelet", "Edge-aware (A-Trous)", "OIDN (AI)" };
+          const int methodCount = 4;
+#else
+          static const char * DENOISING_METHODS[] = { "Bilateral", "Wavelet", "Edge-aware (A-Trous)" };
+          const int methodCount = 3;
+#endif
+          int denoisingMethod = static_cast<int>(ioContext._PhotoSettings->_DenoisingMethod);
+          if ( ImGui::Combo("Denoiser", &denoisingMethod, DENOISING_METHODS, methodCount) )
+            ioContext._PhotoSettings->_DenoisingMethod = static_cast<unsigned int>(denoisingMethod);
+        }
+      }
+
+      ImGui::Dummy(ImVec2(0.0f, 8.0f));
+      ImGui::Separator();
+      ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+      const float availW = ImGui::GetContentRegionAvail().x;
+      if ( GameMenuUI::DrawActionButton("CAPTURE PHOTO (ENTER)", Vec2(availW, 44.0f), true, _Theme, _Fonts) )
+        ioContext._RequestCapturePhoto = true;
+
+      if ( GameMenuUI::DrawActionButton("EXIT PHOTO MODE (ESC)", Vec2(availW, 40.0f), false, _Theme, _Fonts) )
+        ioContext._RequestExitPhotoPreview = true;
+    }
+    GameMenuUI::EndMenuPanel();
+
+    GameMenuUI::DrawFooterBar(
+      "PHOTO MODE — IN-GAME RENDERER PREVIEW",
+      "[RMB + WASD / SPACE / CTRL] Fly Camera    [SHIFT] Fast    [ENTER] Capture Photo    [ESC] Exit",
+      _Theme,
+      _Fonts );
+  }
+  else if ( FpsPhotoModeState::Capturing == ioContext._PhotoModeState )
+  {
+    const Vec2 panelSize(460.0f, 0.0f);
+    const Vec2 panelCenter(io.DisplaySize.x * 0.5f, io.DisplaySize.y - 120.0f);
+
+    if ( GameMenuUI::BeginMenuPanel("##FpsPhotoCapture", "CAPTURING PHOTO (PATH TRACER)", panelCenter, panelSize, _Theme, _Fonts) )
+    {
+      const int target = std::max(1, ioContext._PhotoTargetPasses);
+      const int current = MathUtil::Clamp(ioContext._PhotoCurrentPass, 0, target);
+      const float progress = static_cast<float>(current) / static_cast<float>(target);
+
+      char overlay[64];
+      std::snprintf(overlay, sizeof(overlay), "Accumulating pass %d / %d (%.0f%%)", current, target, progress * 100.0f);
+      ImGui::ProgressBar(progress, ImVec2(-1.0f, 26.0f), overlay);
+
+      ImGui::Dummy(ImVec2(0.0f, 6.0f));
+      const float availW = ImGui::GetContentRegionAvail().x;
+      if ( GameMenuUI::DrawActionButton("CANCEL CAPTURE (ESC)", Vec2(availW, 40.0f), false, _Theme, _Fonts) )
+        ioContext._RequestCancelPhotoCapture = true;
+    }
+    GameMenuUI::EndMenuPanel();
+  }
+  else if ( FpsPhotoModeState::Preview == ioContext._PhotoModeState )
+  {
+    const Vec2 panelSize(720.0f, 0.0f);
+    const Vec2 panelCenter(io.DisplaySize.x * 0.5f, io.DisplaySize.y - 110.0f);
+
+    if ( GameMenuUI::BeginMenuPanel("##FpsPhotoPreview", "PHOTO CAPTURED", panelCenter, panelSize, _Theme, _Fonts) )
+    {
+      if ( !ioContext._PhotoSavedPath.empty() )
+      {
+        ImGui::TextColored(ImVec4(0.30f, 0.88f, 0.45f, 1.0f), "Saved to:");
+        ImGui::SameLine();
+        ImGui::TextWrapped("%s", ioContext._PhotoSavedPath.c_str());
+      }
+      else
+      {
+        ImGui::TextColored(ImVec4(0.95f, 0.24f, 0.24f, 1.0f), "Failed to save screenshot file.");
+      }
+
+      ImGui::Dummy(ImVec2(0.0f, 8.0f));
+
+      const float availW = ImGui::GetContentRegionAvail().x;
+      const float btnW = ( availW - 14.0f ) * 0.5f;
+
+      if ( GameMenuUI::DrawActionButton("REFRAME (BACKSPACE)", Vec2(btnW, 42.0f), false, _Theme, _Fonts) )
+        ioContext._RequestRetakePhoto = true;
+
+      ImGui::SameLine(0.0f, 14.0f);
+
+      if ( GameMenuUI::DrawActionButton("EXIT PREVIEW (ESC)", Vec2(btnW, 42.0f), true, _Theme, _Fonts) )
+        ioContext._RequestExitPhotoPreview = true;
+    }
+    GameMenuUI::EndMenuPanel();
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -499,7 +657,7 @@ void FpsGameHud::DrawGameplayHud( const FpsGameHudContext & iContext )
     drawList -> AddText(ImVec2(origin.x + 8.f, y + 5.f), textColor, label.c_str());
   }
 
-  const char * hint = "[ESC] Pause   [F1] Options   [F3] Editor";
+  const char * hint = "[ESC] Pause   [L] Photo Mode   [F1] Options   [F3] Editor";
   const ImVec2 hintSize = ImGui::CalcTextSize(hint);
   drawList -> AddText(ImVec2(io.DisplaySize.x - hintSize.x - margin, margin), IM_COL32(245, 245, 245, 140), hint);
 

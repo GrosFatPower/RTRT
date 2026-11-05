@@ -563,9 +563,8 @@ const char * FpsGameBenchmark::GetRendererName( FpsRendererMode iRendererMode )
 {
   switch ( iRendererMode )
   {
-  case FpsRendererMode::Deferred:        return "Deferred";
-  case FpsRendererMode::Software:        return "Software";
-  case FpsRendererMode::PhotoPathTracer: return "PhotoPathTracer";
+  case FpsRendererMode::Deferred: return "Deferred";
+  case FpsRendererMode::Software: return "Software";
   }
   return "Unknown";
 }
