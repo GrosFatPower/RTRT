@@ -74,6 +74,8 @@ public:
   const std::vector<int> & GetLastClearedRows() const { return _LastClearedRows; }
   const std::vector<TetrisClearedRow> & GetLastClearedRowData() const { return _LastClearedRowData; }
   unsigned int GetLineClearEventId() const { return _LineClearEventId; }
+  unsigned int GetLockEventId() const { return _LockEventId; }
+  bool WasLastLockFromHardDrop() const { return _LastLockFromHardDrop; }
   TetrisTSpinType GetLastClearTSpin() const { return _LastClearTSpin; }
   bool IsLastClearPerfect() const { return _LastClearPerfect; }
 
@@ -144,7 +146,9 @@ protected:
   float              _ScreenShakeImpulse  = 0.f;
   std::vector<int>              _LastClearedRows;
   std::vector<TetrisClearedRow> _LastClearedRowData;
-  unsigned int                  _LineClearEventId   = 0;
+  unsigned int                  _LineClearEventId       = 0;
+  unsigned int                  _LockEventId            = 0;
+  bool                          _LastLockFromHardDrop   = false;
   TetrisTSpinType               _LastClearTSpin     = TetrisTSpinType::None;
   bool                          _LastClearPerfect   = false;
   TetrisSessionStats            _SessionStats;

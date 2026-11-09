@@ -1,4 +1,5 @@
 #include "TetrisHud.h"
+#include "AudioEngine.h"
 
 #include "PathTracer.h"
 #include "Renderer.h"
@@ -108,6 +109,9 @@ void TetrisHud::DrawMainMenuPage( TetrisAppState & ioAppState,
     };
 
     const int activated = GameMenuUI::DrawMenuButtonList(items, _MainMenuNav, iMenuInput, _Theme, _Fonts, 56.0f);
+    if ( ( activated >= 0 ) && _Audio && !iMenuInput._Confirm )
+      _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+
     if ( 0 == activated )
     {
       _SelectedModeIndex = static_cast<int>(ioLogic.GetGameMode());
@@ -195,7 +199,11 @@ void TetrisHud::DrawModeSelectPage( TetrisAppState & ioAppState,
     };
 
     bool cardConfirmed = false;
-    GameMenuUI::DrawSelectionCards(cards, _SelectedModeIndex, iMenuInput, _Theme, _Fonts, &cardConfirmed);
+    if ( GameMenuUI::DrawSelectionCards(cards, _SelectedModeIndex, iMenuInput, _Theme, _Fonts, &cardConfirmed) )
+    {
+      if ( _Audio && !iMenuInput._NavLeft && !iMenuInput._NavRight )
+        _Audio->PlaySound2D("ui_nav", 0.65f, 1.0f);
+    }
 
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
     ImGui::Separator();
@@ -221,6 +229,8 @@ void TetrisHud::DrawModeSelectPage( TetrisAppState & ioAppState,
 
     if ( GameMenuUI::DrawActionButton("BACK (ESC)", Vec2(btnW, 46.0f), false, _Theme, _Fonts) )
     {
+      if ( _Audio && !iMenuInput._Back )
+        _Audio->PlaySound2D("ui_back", 0.8f, 1.0f);
       SetMenuPage(TetrisMenuPage::MainMenu);
     }
 
@@ -228,6 +238,9 @@ void TetrisHud::DrawModeSelectPage( TetrisAppState & ioAppState,
 
     if ( GameMenuUI::DrawActionButton("START GAME (ENTER)", Vec2(btnW, 46.0f), true, _Theme, _Fonts) || cardConfirmed )
     {
+      if ( _Audio && !iMenuInput._Confirm )
+        _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+
       const TetrisGameMode chosenMode = static_cast<TetrisGameMode>(_SelectedModeIndex);
       ioLogic.StartNewGame(chosenMode, ioLogic.GetStartLevel(), 0);
       ioAppState = TetrisAppState::InGame;
@@ -322,6 +335,8 @@ void TetrisHud::DrawHighScoresPage( TetrisGameLogic & ioLogic,
 
     if ( GameMenuUI::DrawActionButton("BACK TO MENU (ESC)", Vec2(btnW, 44.0f), true, _Theme, _Fonts) )
     {
+      if ( _Audio && !iMenuInput._Back )
+        _Audio->PlaySound2D("ui_back", 0.8f, 1.0f);
       SetMenuPage(TetrisMenuPage::MainMenu);
     }
 
@@ -329,6 +344,8 @@ void TetrisHud::DrawHighScoresPage( TetrisGameLogic & ioLogic,
 
     if ( GameMenuUI::DrawActionButton("RESET SESSION STATS", Vec2(btnW, 44.0f), false, _Theme, _Fonts) )
     {
+      if ( _Audio && !iMenuInput._Confirm )
+        _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
       ioLogic.ResetSessionStats();
     }
   }
@@ -367,23 +384,28 @@ void TetrisHud::DrawOptionsPage( TetrisGameLogic & ioLogic,
   }
 
   if ( iMenuInput._PrevTab )
-    _OptionsTabIndex = ( _OptionsTabIndex + 2 ) % 3;
+    _OptionsTabIndex = ( _OptionsTabIndex + 3 ) % 4;
   if ( iMenuInput._NextTab )
-    _OptionsTabIndex = ( _OptionsTabIndex + 1 ) % 3;
+    _OptionsTabIndex = ( _OptionsTabIndex + 1 ) % 4;
 
   const ImGuiIO & io = ImGui::GetIO();
   const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.54f);
-  const Vec2 panelSize(760.0f, 495.0f);
+  const Vec2 panelSize(780.0f, 510.0f);
 
   if ( GameMenuUI::BeginMenuPanel("##TetrisOptionsPanel", "OPTIONS & CONFIGURATION", center, panelSize, _Theme, _Fonts) )
   {
     const std::vector<const char *> tabs =
     {
-      "GAMEPLAY & HANDLING",
-      "3D GRAPHICS & RENDERER",
+      "GAMEPLAY",
+      "GRAPHICS",
+      "AUDIO",
       "CONTROLS"
     };
-    GameMenuUI::DrawTabBar(tabs, _OptionsTabIndex, _Theme, _Fonts);
+    if ( GameMenuUI::DrawTabBar(tabs, _OptionsTabIndex, _Theme, _Fonts) )
+    {
+      if ( _Audio && !iMenuInput._PrevTab && !iMenuInput._NextTab )
+        _Audio->PlaySound2D("ui_nav", 0.65f, 1.0f);
+    }
 
     ImGui::BeginChild("##OptionsTabContent", ImVec2(0.0f, -56.0f), false);
 
@@ -564,6 +586,17 @@ void TetrisHud::DrawOptionsPage( TetrisGameLogic & ioLogic,
     }
     else if ( 2 == _OptionsTabIndex )
     {
+      if ( _Audio )
+      {
+        GameMenuUI::DrawAudioSettings( *_Audio, _Theme, _Fonts );
+      }
+      else
+      {
+        ImGui::TextDisabled("Audio engine not available.");
+      }
+    }
+    else if ( 3 == _OptionsTabIndex )
+    {
       if ( _Gamepad )
       {
         ImGui::TextDisabled("Xbox / XInput Controller Status & Tuning");
@@ -618,7 +651,11 @@ void TetrisHud::DrawOptionsPage( TetrisGameLogic & ioLogic,
 
     ImGui::Separator();
     if ( GameMenuUI::DrawActionButton("BACK (ESC / B)", Vec2(220.0f, 42.0f), true, _Theme, _Fonts) )
+    {
+      if ( _Audio && !iMenuInput._Back )
+        _Audio->PlaySound2D("ui_back", 0.8f, 1.0f);
       oBackRequested = true;
+    }
   }
   GameMenuUI::EndMenuPanel();
 
@@ -936,6 +973,9 @@ void TetrisHud::DrawInGamePauseOrEndModal( TetrisAppState & ioAppState,
       };
 
       const int act = GameMenuUI::DrawMenuButtonList(pauseItems, _PauseMenuNav, iMenuInput, _Theme, _Fonts, 56.0f);
+      if ( ( act >= 0 ) && _Audio && !iMenuInput._Confirm )
+        _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+
       if ( 0 == act )
       {
         ioLogic.SetPaused(false);
@@ -999,6 +1039,9 @@ void TetrisHud::DrawInGamePauseOrEndModal( TetrisAppState & ioAppState,
       };
 
       const int act = GameMenuUI::DrawMenuButtonList(endItems, _GameOverMenuNav, iMenuInput, _Theme, _Fonts, 56.0f);
+      if ( ( act >= 0 ) && _Audio && !iMenuInput._Confirm )
+        _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+
       if ( 0 == act )
       {
         ioLogic.Reset();
@@ -1037,6 +1080,27 @@ int TetrisHud::Draw( TetrisAppState & ioAppState,
                      bool & oRequestExit )
 {
   oRequestExit = false;
+
+  if ( _Audio )
+  {
+    const bool inMenu = ( TetrisAppState::TitleScreen == ioAppState ) ||
+                        ioLogic.IsPaused() || ioLogic.IsGameOver() || ioLogic.IsVictory() || _ShowInGameOptions;
+    if ( inMenu )
+    {
+      if ( iMenuInput._NavUp || iMenuInput._NavDown || iMenuInput._NavLeft || iMenuInput._NavRight || iMenuInput._PrevTab || iMenuInput._NextTab )
+      {
+        _Audio->PlaySound2D( "ui_nav", 0.65f, 1.0f );
+      }
+      else if ( iMenuInput._Confirm )
+      {
+        _Audio->PlaySound2D( "ui_confirm", 0.8f, 1.0f );
+      }
+      else if ( iMenuInput._Back )
+      {
+        _Audio->PlaySound2D( "ui_back", 0.8f, 1.0f );
+      }
+    }
+  }
 
   if ( TetrisAppState::TitleScreen == ioAppState )
   {

@@ -79,6 +79,8 @@ void TetrisGameLogic::StartNewGame( TetrisGameMode iMode, int iStartLevel, unsig
   _ActionBannerTimer = 0.f;
   _ActionBannerAlpha = 0.f;
   _ScreenShakeImpulse = 0.f;
+  _LockEventId = 0;
+  _LastLockFromHardDrop = false;
   _LastClearedRows.clear();
   _LastClearedRowData.clear();
   _LastClearTSpin   = TetrisTSpinType::None;
@@ -354,12 +356,15 @@ TetrisTSpinType TetrisGameLogic::DetectTSpin() const
 // ----------------------------------------------------------------------------
 // LockActivePiece
 // ----------------------------------------------------------------------------
-void TetrisGameLogic::LockActivePiece( bool )
+void TetrisGameLogic::LockActivePiece( bool iFromHardDrop )
 {
   if ( ( TetrisPieceType::None == _ActivePiece ) || _GameOver )
     return;
 
   // Evaluate T-Spin before committing to matrix
+  _LockEventId++;
+  _LastLockFromHardDrop = iFromHardDrop;
+
   const TetrisTSpinType tSpin = DetectTSpin();
 
   bool lockedAboveSkyline = false;

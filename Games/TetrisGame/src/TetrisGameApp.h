@@ -1,6 +1,7 @@
 #ifndef _TetrisGameApp_
 #define _TetrisGameApp_
 
+#include "AudioEngine.h"
 #include "GameMenuUI.h"
 #include "GamepadInput.h"
 #include "KeyInput.h"
@@ -44,6 +45,7 @@ protected:
   int InitializeUI();
   int InitializeScene();
   int InitializeRenderer();
+  void InitializeSoundBank();
 
   int ProcessInput();
   int UpdateGame( float iDeltaTime );
@@ -69,6 +71,7 @@ protected:
   TetrisGameLogic             _GameLogic;
   TetrisSceneManager          _SceneManager;
   TetrisHud                   _Hud;
+  AudioEngine                 _Audio;
 
   TetrisAppState              _AppState     = TetrisAppState::TitleScreen;
   TetrisAppState              _PrevAppState = TetrisAppState::TitleScreen;
@@ -78,6 +81,18 @@ protected:
   TetrisHandlingConfig        _HandlingConfig;
   TetrisInputState            _InputState;
   GameMenuInput               _MenuInput;
+
+  // Audio diff tracking
+  int                         _PrevPieceOriginX  = 0;
+  int                         _PrevPieceOriginY  = 0;
+  TetrisPieceType             _PrevActivePiece   = TetrisPieceType::None;
+  TetrisRotation              _PrevRotation      = TetrisRotation::Spawn;
+  TetrisPieceType             _PrevHoldPiece     = TetrisPieceType::None;
+  unsigned int                _PrevLockEventId   = 0;
+  unsigned int                _PrevLineClearId   = 0;
+  int                         _PrevComboCount    = -1;
+  bool                        _PrevGameOver      = false;
+  bool                        _PrevVictory       = false;
 
   bool                        _ReloadRenderer = false;
   bool                        _ReloadScene    = false;

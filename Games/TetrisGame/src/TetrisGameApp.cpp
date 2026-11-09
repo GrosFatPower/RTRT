@@ -12,8 +12,10 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
+#include "PathUtils.h"
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 #include <thread>
 #include <vector>
@@ -312,6 +314,324 @@ void TetrisGameApp::SyncFramebufferResolution( bool iNotifyRenderer )
 }
 
 // ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// InitializeSoundBank
+// ----------------------------------------------------------------------------
+void TetrisGameApp::InitializeSoundBank()
+{
+  // 1. UI Navigation
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Triangle;
+    desc._StartFrequency = 1200.0f;
+    desc._EndFrequency = 1600.0f;
+    desc._Duration = 0.025f;
+    desc._AttackTime = 0.002f;
+    desc._DecayTime = 0.010f;
+    desc._SustainLevel = 0.2f;
+    desc._ReleaseTime = 0.013f;
+    desc._Volume = 0.5f;
+    _Audio.RegisterProceduralSound("ui_nav", desc);
+  }
+
+  // 2. UI Confirm
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Triangle;
+    desc._StartFrequency = 660.0f;
+    desc._EndFrequency = 660.0f;
+    desc._ArpInterval2 = 5.0f;
+    desc._ArpInterval3 = 12.0f;
+    desc._ArpSpeed = 0.035f;
+    desc._Duration = 0.12f;
+    desc._AttackTime = 0.004f;
+    desc._DecayTime = 0.030f;
+    desc._SustainLevel = 0.4f;
+    desc._ReleaseTime = 0.08f;
+    desc._Volume = 0.7f;
+    _Audio.RegisterProceduralSound("ui_confirm", desc);
+  }
+
+  // 3. UI Back
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Triangle;
+    desc._StartFrequency = 660.0f;
+    desc._EndFrequency = 660.0f;
+    desc._ArpInterval2 = -5.0f;
+    desc._ArpSpeed = 0.040f;
+    desc._Duration = 0.10f;
+    desc._AttackTime = 0.004f;
+    desc._DecayTime = 0.030f;
+    desc._SustainLevel = 0.3f;
+    desc._ReleaseTime = 0.06f;
+    desc._Volume = 0.65f;
+    _Audio.RegisterProceduralSound("ui_back", desc);
+  }
+
+  // 4. Piece Move
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Sine;
+    desc._StartFrequency = 440.0f;
+    desc._EndFrequency = 520.0f;
+    desc._Duration = 0.025f;
+    desc._AttackTime = 0.002f;
+    desc._DecayTime = 0.010f;
+    desc._SustainLevel = 0.1f;
+    desc._ReleaseTime = 0.013f;
+    desc._Harmonic2Weight = 0.25f;
+    desc._Volume = 0.55f;
+    _Audio.RegisterProceduralSound("piece_move", desc);
+  }
+
+  // 5. Piece Rotate
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Triangle;
+    desc._StartFrequency = 480.0f;
+    desc._EndFrequency = 880.0f;
+    desc._Duration = 0.045f;
+    desc._AttackTime = 0.003f;
+    desc._DecayTime = 0.020f;
+    desc._SustainLevel = 0.3f;
+    desc._ReleaseTime = 0.022f;
+    desc._Harmonic2Weight = 0.2f;
+    desc._Volume = 0.65f;
+    _Audio.RegisterProceduralSound("piece_rotate", desc);
+  }
+
+  // 6. Piece Soft Drop
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Sine;
+    desc._StartFrequency = 240.0f;
+    desc._EndFrequency = 220.0f;
+    desc._Duration = 0.022f;
+    desc._AttackTime = 0.002f;
+    desc._DecayTime = 0.010f;
+    desc._SustainLevel = 0.1f;
+    desc._ReleaseTime = 0.010f;
+    desc._Volume = 0.40f;
+    _Audio.RegisterProceduralSound("piece_softdrop", desc);
+  }
+
+  // 7. Piece Hard Drop
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Square;
+    desc._StartFrequency = 320.0f;
+    desc._EndFrequency = 50.0f;
+    desc._FrequencyExp = 2.0f;
+    desc._Duration = 0.12f;
+    desc._AttackTime = 0.002f;
+    desc._DecayTime = 0.050f;
+    desc._SustainLevel = 0.2f;
+    desc._ReleaseTime = 0.068f;
+    desc._NoiseMix = 0.35f;
+    desc._Volume = 0.85f;
+    _Audio.RegisterProceduralSound("piece_harddrop", desc);
+  }
+
+  // 8. Piece Lock
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Triangle;
+    desc._StartFrequency = 280.0f;
+    desc._EndFrequency = 140.0f;
+    desc._Duration = 0.06f;
+    desc._AttackTime = 0.002f;
+    desc._DecayTime = 0.030f;
+    desc._SustainLevel = 0.2f;
+    desc._ReleaseTime = 0.028f;
+    desc._NoiseMix = 0.15f;
+    desc._Volume = 0.65f;
+    _Audio.RegisterProceduralSound("piece_lock", desc);
+  }
+
+  // 9. Piece Hold
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Sine;
+    desc._StartFrequency = 380.0f;
+    desc._EndFrequency = 620.0f;
+    desc._Duration = 0.07f;
+    desc._AttackTime = 0.005f;
+    desc._DecayTime = 0.030f;
+    desc._SustainLevel = 0.4f;
+    desc._ReleaseTime = 0.035f;
+    desc._Harmonic2Weight = 0.4f;
+    desc._Volume = 0.70f;
+    _Audio.RegisterProceduralSound("piece_hold", desc);
+  }
+
+  // 10. Clear Line
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Triangle;
+    desc._StartFrequency = 523.25f; // C5
+    desc._EndFrequency = 523.25f;
+    desc._ArpInterval2 = 4.0f; // E5
+    desc._ArpInterval3 = 7.0f; // G5
+    desc._ArpSpeed = 0.045f;
+    desc._Duration = 0.22f;
+    desc._AttackTime = 0.005f;
+    desc._DecayTime = 0.060f;
+    desc._SustainLevel = 0.4f;
+    desc._ReleaseTime = 0.12f;
+    desc._Harmonic2Weight = 0.3f;
+    desc._Volume = 0.80f;
+    _Audio.RegisterProceduralSound("clear_line", desc);
+  }
+
+  // 11. Clear Tetris
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Triangle;
+    desc._StartFrequency = 523.25f; // C5
+    desc._EndFrequency = 523.25f;
+    desc._ArpInterval2 = 4.0f;  // E5
+    desc._ArpInterval3 = 7.0f;  // G5
+    desc._ArpInterval4 = 12.0f; // C6
+    desc._ArpSpeed = 0.065f;
+    desc._Duration = 0.45f;
+    desc._AttackTime = 0.005f;
+    desc._DecayTime = 0.100f;
+    desc._SustainLevel = 0.5f;
+    desc._ReleaseTime = 0.20f;
+    desc._Harmonic2Weight = 0.4f;
+    desc._Volume = 0.90f;
+    _Audio.RegisterProceduralSound("clear_tetris", desc);
+  }
+
+  // 12. Clear T-Spin
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Square;
+    desc._StartFrequency = 440.0f;
+    desc._EndFrequency = 880.0f;
+    desc._DutyCycle = 0.3f;
+    desc._Duration = 0.32f;
+    desc._AttackTime = 0.005f;
+    desc._DecayTime = 0.080f;
+    desc._SustainLevel = 0.4f;
+    desc._ReleaseTime = 0.15f;
+    desc._Harmonic2Weight = 0.5f;
+    desc._Volume = 0.85f;
+    _Audio.RegisterProceduralSound("clear_tspin", desc);
+  }
+
+  // 13. Clear Combo
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Sine;
+    desc._StartFrequency = 600.0f;
+    desc._EndFrequency = 900.0f;
+    desc._Duration = 0.15f;
+    desc._AttackTime = 0.004f;
+    desc._DecayTime = 0.040f;
+    desc._SustainLevel = 0.3f;
+    desc._ReleaseTime = 0.08f;
+    desc._Harmonic2Weight = 0.5f;
+    desc._Harmonic3Weight = 0.25f;
+    desc._Volume = 0.75f;
+    _Audio.RegisterProceduralSound("clear_combo", desc);
+  }
+
+  // 14. Perfect Clear
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Triangle;
+    desc._StartFrequency = 440.0f;
+    desc._EndFrequency = 880.0f;
+    desc._ArpInterval2 = 7.0f;
+    desc._ArpInterval3 = 12.0f;
+    desc._ArpInterval4 = 19.0f;
+    desc._ArpSpeed = 0.07f;
+    desc._Duration = 0.55f;
+    desc._AttackTime = 0.005f;
+    desc._DecayTime = 0.10f;
+    desc._SustainLevel = 0.5f;
+    desc._ReleaseTime = 0.25f;
+    desc._Volume = 0.95f;
+    _Audio.RegisterProceduralSound("clear_perfect", desc);
+  }
+
+  // 15. Level Up
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Square;
+    desc._StartFrequency = 350.0f;
+    desc._EndFrequency = 700.0f;
+    desc._DutyCycle = 0.25f;
+    desc._ArpInterval2 = 4.0f;
+    desc._ArpInterval3 = 7.0f;
+    desc._ArpInterval4 = 12.0f;
+    desc._ArpSpeed = 0.055f;
+    desc._Duration = 0.38f;
+    desc._AttackTime = 0.005f;
+    desc._DecayTime = 0.08f;
+    desc._SustainLevel = 0.4f;
+    desc._ReleaseTime = 0.15f;
+    desc._Volume = 0.85f;
+    _Audio.RegisterProceduralSound("level_up", desc);
+  }
+
+  // 16. Game Over
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Sawtooth;
+    desc._StartFrequency = 330.0f;
+    desc._EndFrequency = 110.0f;
+    desc._ArpInterval2 = -3.0f;
+    desc._ArpInterval3 = -7.0f;
+    desc._ArpSpeed = 0.11f;
+    desc._Duration = 0.65f;
+    desc._AttackTime = 0.008f;
+    desc._DecayTime = 0.15f;
+    desc._SustainLevel = 0.3f;
+    desc._ReleaseTime = 0.25f;
+    desc._NoiseMix = 0.15f;
+    desc._Volume = 0.85f;
+    _Audio.RegisterProceduralSound("game_over", desc);
+  }
+
+  // 17. Victory
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Triangle;
+    desc._StartFrequency = 523.25f;
+    desc._EndFrequency = 1046.50f;
+    desc._ArpInterval2 = 4.0f;
+    desc._ArpInterval3 = 7.0f;
+    desc._ArpInterval4 = 12.0f;
+    desc._ArpSpeed = 0.07f;
+    desc._Duration = 0.65f;
+    desc._AttackTime = 0.005f;
+    desc._DecayTime = 0.12f;
+    desc._SustainLevel = 0.5f;
+    desc._ReleaseTime = 0.30f;
+    desc._Volume = 0.90f;
+    _Audio.RegisterProceduralSound("victory", desc);
+  }
+
+  // File-based asset overrides (if present on disk)
+  const char * soundNames[] = {
+    "ui_nav", "ui_confirm", "ui_back",
+    "piece_move", "piece_rotate", "piece_softdrop", "piece_harddrop", "piece_lock", "piece_hold",
+    "clear_line", "clear_tetris", "clear_tspin", "clear_combo", "clear_perfect",
+    "level_up", "game_over", "victory"
+  };
+  for ( const char * name : soundNames )
+  {
+    std::string path = PathUtils::GetAssetPath( std::string("Sounds/Tetris/") + name + ".wav" );
+    if ( std::filesystem::exists( path ) )
+    {
+      _Audio.RegisterSoundFile( name, path );
+    }
+  }
+}
+
 // InitializeUI
 // ----------------------------------------------------------------------------
 int TetrisGameApp::InitializeUI()
@@ -324,6 +644,7 @@ int TetrisGameApp::InitializeUI()
   ImGui::StyleColorsDark();
   _Hud.Initialize();
   _Hud.SetGamepadInput(&_GamepadInput);
+  _Hud.SetAudioEngine(&_Audio);
 
   const char * glslVersion = "#version 410";
   ImGui_ImplGlfw_InitForOpenGL(_MainWindow.get(), true);
@@ -583,6 +904,101 @@ int TetrisGameApp::UpdateGame( float iDeltaTime )
     if ( !_Hud.IsSettingsOpen() )
       _GameLogic.Update(iDeltaTime, _InputState, _HandlingConfig);
 
+      // Evaluate audio triggers
+      const bool isGameOver = _GameLogic.IsGameOver();
+      const bool isVictory  = _GameLogic.IsVictory();
+      const unsigned int curLockId = _GameLogic.GetLockEventId();
+      const unsigned int curLineClearId = _GameLogic.GetLineClearEventId();
+      const int curLevel = _GameLogic.GetLevel();
+      const TetrisPieceType curPiece = _GameLogic.GetActivePiece();
+      const Vec2i & curOrigin = _GameLogic.GetActiveOrigin();
+      const TetrisRotation curRot = _GameLogic.GetActiveRotation();
+      const TetrisPieceType curHold = _GameLogic.GetHoldPiece();
+
+      if ( isGameOver && !_PrevGameOver )
+      {
+        _Audio.PlaySound2D( "game_over", 0.9f, 1.0f );
+      }
+      else if ( isVictory && !_PrevVictory )
+      {
+        _Audio.PlaySound2D( "victory", 0.95f, 1.0f );
+      }
+      else if ( curLineClearId != _PrevLineClearId )
+      {
+        if ( _GameLogic.IsLastClearPerfect() )
+        {
+          _Audio.PlaySound2D( "clear_perfect", 1.0f, 1.0f );
+        }
+        else if ( _GameLogic.GetLastClearTSpin() != TetrisTSpinType::None )
+        {
+          _Audio.PlaySound2D( "clear_tspin", 0.95f, 1.0f );
+        }
+        else
+        {
+          const int cleared = static_cast<int>( _GameLogic.GetLastClearedRows().size() );
+          if ( cleared >= 4 )
+          {
+            _Audio.PlaySound2D( "clear_tetris", 1.0f, 1.0f );
+          }
+          else
+          {
+            float pitch = 1.0f + ( cleared - 1 ) * 0.12f;
+            _Audio.PlaySound2D( "clear_line", 0.85f, pitch );
+          }
+        }
+
+        if ( _GameLogic.GetComboCount() >= 1 )
+        {
+          float comboPitch = std::min( 2.2f, 1.0f + _GameLogic.GetComboCount() * 0.08f );
+          _Audio.PlaySound2D( "clear_combo", 0.8f, comboPitch );
+        }
+      }
+      else if ( curLockId != _PrevLockEventId )
+      {
+        if ( _GameLogic.WasLastLockFromHardDrop() )
+        {
+          _Audio.PlaySound2D( "piece_harddrop", 0.85f, 1.0f );
+        }
+        else
+        {
+          _Audio.PlaySound2D( "piece_lock", 0.75f, 1.0f );
+        }
+      }
+      else if ( curHold != _PrevHoldPiece )
+      {
+        _Audio.PlaySound2D( "piece_hold", 0.75f, 1.0f );
+      }
+      else if ( curPiece != TetrisPieceType::None && curPiece == _PrevActivePiece )
+      {
+        if ( curRot != _PrevRotation )
+        {
+          _Audio.PlaySound2D( "piece_rotate", 0.70f, 1.0f );
+        }
+        else if ( curOrigin.x != _PrevPieceOriginX )
+        {
+          _Audio.PlaySound2D( "piece_move", 0.60f, 1.0f );
+        }
+        else if ( _InputState._SoftDropHeld && curOrigin.y < _PrevPieceOriginY )
+        {
+          _Audio.PlaySound2D( "piece_softdrop", 0.45f, 1.0f );
+        }
+      }
+
+      if ( curLevel > _PrevLevel && !_GameLogic.IsGameOver() && !_GameLogic.IsVictory() )
+      {
+        _Audio.PlaySound2D( "level_up", 0.9f, 1.0f );
+      }
+
+      _PrevGameOver      = isGameOver;
+      _PrevVictory       = isVictory;
+      _PrevLockEventId   = curLockId;
+      _PrevLineClearId   = curLineClearId;
+      _PrevActivePiece   = curPiece;
+      _PrevPieceOriginX  = curOrigin.x;
+      _PrevPieceOriginY  = curOrigin.y;
+      _PrevRotation      = curRot;
+      _PrevHoldPiece     = curHold;
+
     if ( _Scene )
     {
       const double curElapsed = _GameLogic.GetElapsedTime();
@@ -687,6 +1103,9 @@ int TetrisGameApp::Run( const std::string & iCapturePath, int iMaxFrames )
     return 1;
   if ( 0 != InitializeRenderer() )
     return 1;
+
+  _Audio.Initialize();
+  InitializeSoundBank();
 
   SyncFramebufferResolution(true);
   glDisable(GL_DEPTH_TEST);

@@ -1,5 +1,6 @@
 #include "GameMenuUI.h"
 
+#include "AudioEngine.h"
 #include "PathTracer.h"
 #include "PathUtils.h"
 #include "Renderer.h"
@@ -735,14 +736,32 @@ bool DrawTabBar( const std::vector<const char *> & iTabNames,
       drawList->AddRect(pMin, pMax, ToImU32(iTheme._AccentPrimary, 0.75f), iTheme._CornerRounding, 0, 1.5f);
     }
 
-    const ImVec2 textSize = font ? font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, iTabNames[i])
-                                 : ImGui::CalcTextSize(iTabNames[i]);
+    ImFont * drawFont = font;
+    float drawFontSize = fontSize;
+    ImVec2 textSize = drawFont ? drawFont->CalcTextSizeA(drawFontSize, FLT_MAX, 0.0f, iTabNames[i])
+                               : ImGui::CalcTextSize(iTabNames[i]);
+
+    if ( textSize.x > ( tabW - 12.0f ) && iFonts._BodyFont )
+    {
+      drawFont = iFonts._BodyFont;
+      drawFontSize = drawFont->LegacySize;
+      textSize = drawFont->CalcTextSizeA(drawFontSize, FLT_MAX, 0.0f, iTabNames[i]);
+    }
+    if ( textSize.x > ( tabW - 8.0f ) && drawFont )
+    {
+      const float shrinkRatio = ( tabW - 8.0f ) / std::max(1.0f, textSize.x);
+      drawFontSize = std::max(12.0f, drawFontSize * shrinkRatio);
+      textSize = drawFont->CalcTextSizeA(drawFontSize, FLT_MAX, 0.0f, iTabNames[i]);
+    }
+
     const ImVec2 textPos(pMin.x + ( tabW - textSize.x ) * 0.5f, pMin.y + ( tabH - textSize.y ) * 0.5f - 1.0f);
 
-    if ( font )
-      drawList->AddText(font, fontSize, textPos, ToImU32(active ? iTheme._AccentPrimary : iTheme._TextMuted), iTabNames[i]);
+    drawList->PushClipRect(pMin, pMax, true);
+    if ( drawFont )
+      drawList->AddText(drawFont, drawFontSize, textPos, ToImU32(active ? iTheme._AccentPrimary : iTheme._TextMuted), iTabNames[i]);
     else
       drawList->AddText(textPos, ToImU32(active ? iTheme._AccentPrimary : iTheme._TextMuted), iTabNames[i]);
+    drawList->PopClipRect();
 
     ImGui::PopID();
   }
@@ -932,6 +951,52 @@ bool DrawActionButton( const char * iLabel,
 // ----------------------------------------------------------------------------
 // DrawSharedRendererSettings
 // ----------------------------------------------------------------------------
+void DrawAudioSettings( AudioEngine & ioAudio,
+                        const GameUITheme & iTheme,
+                        const GameUIFonts & iFonts )
+{
+  DrawSectionHeader( "AUDIO OUTPUT & VOLUME", iTheme, iFonts );
+
+  bool muted = ioAudio.IsMuted();
+  if ( ImGui::Checkbox( "Mute All Audio", &muted ) )
+  {
+    ioAudio.SetMuted( muted );
+  }
+
+  ImGui::Spacing();
+
+  float masterVol = ioAudio.GetMasterVolume() * 100.0f;
+  if ( ImGui::SliderFloat( "Master Volume", &masterVol, 0.0f, 100.0f, "%.0f%%" ) )
+  {
+    ioAudio.SetMasterVolume( masterVol / 100.0f );
+  }
+
+  float sfxVol = ioAudio.GetSfxVolume() * 100.0f;
+  if ( ImGui::SliderFloat( "SFX Volume", &sfxVol, 0.0f, 100.0f, "%.0f%%" ) )
+  {
+    ioAudio.SetSfxVolume( sfxVol / 100.0f );
+  }
+
+  float musicVol = ioAudio.GetMusicVolume() * 100.0f;
+  if ( ImGui::SliderFloat( "Music Volume", &musicVol, 0.0f, 100.0f, "%.0f%%" ) )
+  {
+    ioAudio.SetMusicVolume( musicVol / 100.0f );
+  }
+
+  ImGui::Spacing();
+  if ( ImGui::Button( "Test SFX", ImVec2( 120.0f, 32.0f ) ) )
+  {
+    if ( ioAudio.HasSound( "ui_confirm" ) )
+    {
+      ioAudio.PlaySound2D( "ui_confirm", 1.0f, 1.0f );
+    }
+    else if ( ioAudio.HasSound( "piece_harddrop" ) )
+    {
+      ioAudio.PlaySound2D( "piece_harddrop", 1.0f, 1.0f );
+    }
+  }
+}
+
 void DrawSharedRendererSettings( Scene & ioScene,
                                  Renderer * ioRenderer,
                                  RenderSettings & ioSettings,

@@ -1,4 +1,5 @@
 #include "TetrisUnitTests.h"
+#include "AudioEngine.h"
 #include "TetrisGameLogic.h"
 #include "TetrisMatrix.h"
 #include "TetrisPiece.h"
@@ -224,6 +225,81 @@ bool TetrisUnitTests::TestScoringAndB2B()
 }
 
 // ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// TestAudioEngineSynthesis
+// ----------------------------------------------------------------------------
+bool TetrisUnitTests::TestAudioEngineSynthesis()
+{
+  using namespace RTRT;
+
+  AudioEngine audio;
+  const bool initOk = audio.Initialize();
+  if ( !initOk )
+  {
+    std::cout << "[INFO] Audio device unavailable (headless environment). Skipping hardware playback checks." << std::endl;
+  }
+
+  // 1. Procedural Tone Synthesis
+  ProceduralSoundDesc toneDesc;
+  toneDesc._Waveform = WaveformType::Sine;
+  toneDesc._StartFrequency = 440.0f;
+  toneDesc._EndFrequency = 880.0f;
+  toneDesc._Duration = 0.05f;
+  if ( !audio.RegisterProceduralSound("test_tone", toneDesc) )
+  {
+    std::cerr << "TestAudioEngineSynthesis: Failed to register procedural sine sweep!" << std::endl;
+    return false;
+  }
+
+  if ( !audio.HasSound("test_tone") )
+  {
+    std::cerr << "TestAudioEngineSynthesis: HasSound('test_tone') returned false!" << std::endl;
+    return false;
+  }
+
+  // 2. Procedural Chord / Arpeggio Synthesis
+  ProceduralSoundDesc chordDesc;
+  chordDesc._Waveform = WaveformType::Triangle;
+  chordDesc._StartFrequency = 523.25f;
+  chordDesc._EndFrequency = 523.25f;
+  chordDesc._ArpInterval2 = 4.0f;
+  chordDesc._ArpInterval3 = 7.0f;
+  chordDesc._ArpSpeed = 0.02f;
+  chordDesc._Duration = 0.08f;
+  if ( !audio.RegisterProceduralSound("test_chord", chordDesc) )
+  {
+    std::cerr << "TestAudioEngineSynthesis: Failed to register procedural arpeggio!" << std::endl;
+    return false;
+  }
+
+  // 3. Playback calls (safe even when headless/silent)
+  audio.PlaySound2D("test_tone", 0.5f, 1.0f);
+  audio.UpdateListener(Vec3(0.0f, 1.7f, 0.0f), Vec3(0.0f, 0.0f, -1.0f), Vec3(0.0f, 1.0f, 0.0f));
+  audio.PlaySound3D("test_chord", Vec3(2.0f, 0.0f, -3.0f), 0.7f, 1.0f);
+
+  // 4. Volume controls
+  audio.SetMasterVolume(0.8f);
+  if ( std::abs(audio.GetMasterVolume() - 0.8f) > 0.01f )
+  {
+    std::cerr << "TestAudioEngineSynthesis: Master volume mismatch!" << std::endl;
+    return false;
+  }
+
+  audio.SetMuted(true);
+  if ( !audio.IsMuted() )
+  {
+    std::cerr << "TestAudioEngineSynthesis: IsMuted() check failed!" << std::endl;
+    return false;
+  }
+  audio.SetMuted(false);
+
+  audio.StopAllSounds();
+  audio.Shutdown();
+
+  std::cout << "[PASS] AudioEngine synthesis & sound bank lifecycle test passed." << std::endl;
+  return true;
+}
+
 // RunAll
 // ----------------------------------------------------------------------------
 int TetrisUnitTests::RunAll()
@@ -238,11 +314,12 @@ int TetrisUnitTests::RunAll()
   ok = ok && TestTSpinDetection();
   ok = ok && TestExtendedLockDelay();
   ok = ok && TestScoringAndB2B();
+  ok = ok && TestAudioEngineSynthesis();
 
   std::cout << "==========================================" << std::endl;
   if ( ok )
   {
-    std::cout << "ALL TETRIS GUIDELINE TESTS PASSED (5/5)" << std::endl;
+    std::cout << "ALL TETRIS GUIDELINE & AUDIO TESTS PASSED (6/6)" << std::endl;
     std::cout << "==========================================" << std::endl;
     return 0;
   }

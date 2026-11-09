@@ -11,6 +11,7 @@
 
 namespace RTRT
 {
+class AudioEngine;
 class Renderer;
 class Scene;
 }
@@ -36,6 +37,7 @@ struct FpsGameHudContext
   Scene                 * _Scene = nullptr;
   Renderer              * _Renderer = nullptr;
   RenderSettings        * _RenderSettings = nullptr;
+  AudioEngine           * _Audio = nullptr;
   const GameMenuInput   * _MenuInput = nullptr;
   GamepadInput          * _Gamepad = nullptr;
   float                 * _GamepadLookSensitivity = nullptr;
@@ -91,6 +93,9 @@ public:
 
   FpsMenuPage GetMenuPage() const { return _MenuPage; }
   void SetMenuPage( FpsMenuPage iPage );
+
+  const GameUITheme & GetTheme() const { return _Theme; }
+  const GameUIFonts & GetFonts() const { return _Fonts; }
 
 protected:
   void DrawTitleScreenMenus( FpsGameHudContext & ioContext );

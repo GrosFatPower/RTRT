@@ -1,5 +1,6 @@
 #include "FpsGameHud.h"
 
+#include "AudioEngine.h"
 #include "Renderer.h"
 #include "Scene.h"
 
@@ -90,6 +91,9 @@ void FpsGameHud::DrawMainMenuPage( FpsGameHudContext & ioContext )
     };
 
     const int activated = GameMenuUI::DrawMenuButtonList(items, _MainMenuNav, *ioContext._MenuInput, _Theme, _Fonts, 56.0f);
+    if ( ( activated >= 0 ) && ioContext._Audio && !ioContext._MenuInput->_Confirm )
+      ioContext._Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+
     if ( 0 == activated )
       SetMenuPage(FpsMenuPage::MapSelect);
     else if ( 1 == activated )
@@ -150,7 +154,11 @@ void FpsGameHud::DrawMapSelectPage( FpsGameHudContext & ioContext )
     };
 
     bool cardConfirmed = false;
-    GameMenuUI::DrawSelectionCards(cards, _SelectedMapIndex, *ioContext._MenuInput, _Theme, _Fonts, &cardConfirmed);
+    if ( GameMenuUI::DrawSelectionCards(cards, _SelectedMapIndex, *ioContext._MenuInput, _Theme, _Fonts, &cardConfirmed) )
+    {
+      if ( ioContext._Audio && !ioContext._MenuInput->_NavLeft && !ioContext._MenuInput->_NavRight )
+        ioContext._Audio->PlaySound2D("ui_nav", 0.65f, 1.0f);
+    }
 
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
     ImGui::Separator();
@@ -167,12 +175,19 @@ void FpsGameHud::DrawMapSelectPage( FpsGameHudContext & ioContext )
     const float btnW = ( availW - 16.0f ) * 0.5f;
 
     if ( GameMenuUI::DrawActionButton("BACK (ESC)", Vec2(btnW, 46.0f), false, _Theme, _Fonts) )
+    {
+      if ( ioContext._Audio && !ioContext._MenuInput->_Back )
+        ioContext._Audio->PlaySound2D("ui_back", 0.8f, 1.0f);
       SetMenuPage(FpsMenuPage::MainMenu);
+    }
 
     ImGui::SameLine(0.0f, 16.0f);
 
     if ( GameMenuUI::DrawActionButton("DEPLOY (ENTER)", Vec2(btnW, 46.0f), true, _Theme, _Fonts) || cardConfirmed )
     {
+      if ( ioContext._Audio && !ioContext._MenuInput->_Confirm )
+        ioContext._Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+
       if ( _SelectedMapIndex < 2 )
       {
         ioContext._RequestMapPath = g_MapPaths[_SelectedMapIndex];
@@ -204,9 +219,9 @@ void FpsGameHud::DrawOptionsPage( FpsGameHudContext & ioContext, bool & oBackReq
   }
 
   if ( menuInput._PrevTab )
-    _OptionsTabIndex = ( _OptionsTabIndex + 2 ) % 3;
+    _OptionsTabIndex = ( _OptionsTabIndex + 3 ) % 4;
   if ( menuInput._NextTab )
-    _OptionsTabIndex = ( _OptionsTabIndex + 1 ) % 3;
+    _OptionsTabIndex = ( _OptionsTabIndex + 1 ) % 4;
 
   FpsGameSettings & game = *ioContext._GameSettings;
 
@@ -215,8 +230,12 @@ void FpsGameHud::DrawOptionsPage( FpsGameHudContext & ioContext, bool & oBackReq
 
   if ( GameMenuUI::BeginMenuPanel("##FpsOptionsPanel", "OPTIONS & CONFIGURATION", center, Vec2(780.0f, 540.0f), _Theme, _Fonts) )
   {
-    const std::vector<const char *> tabs = { "GAMEPLAY & WEAPON", "GRAPHICS & RENDERER", "CONTROLS" };
-    GameMenuUI::DrawTabBar(tabs, _OptionsTabIndex, _Theme, _Fonts);
+    const std::vector<const char *> tabs = { "GAMEPLAY", "GRAPHICS", "AUDIO", "CONTROLS" };
+    if ( GameMenuUI::DrawTabBar(tabs, _OptionsTabIndex, _Theme, _Fonts) )
+    {
+      if ( ioContext._Audio && !ioContext._MenuInput->_PrevTab && !ioContext._MenuInput->_NextTab )
+        ioContext._Audio->PlaySound2D("ui_nav", 0.65f, 1.0f);
+    }
 
     ImGui::BeginChild("##FpsOptionsTabContent", ImVec2(0.0f, -56.0f), false);
 
@@ -292,6 +311,17 @@ void FpsGameHud::DrawOptionsPage( FpsGameHudContext & ioContext, bool & oBackReq
       if ( ImGui::Checkbox("Show developer panels (F4)", &devPanels) )
         ioContext._RequestToggleDevPanels = true;
     }
+    else if ( 2 == _OptionsTabIndex )
+    {
+      if ( ioContext._Audio )
+      {
+        GameMenuUI::DrawAudioSettings(*ioContext._Audio, _Theme, _Fonts);
+      }
+      else
+      {
+        ImGui::TextDisabled("Audio engine not available.");
+      }
+    }
     else
     {
       if ( ioContext._Gamepad )
@@ -344,7 +374,11 @@ void FpsGameHud::DrawOptionsPage( FpsGameHudContext & ioContext, bool & oBackReq
 
     ImGui::Separator();
     if ( GameMenuUI::DrawActionButton("BACK (ESC / B)", Vec2(220.0f, 42.0f), true, _Theme, _Fonts) )
+    {
+      if ( ioContext._Audio && !ioContext._MenuInput->_Back )
+        ioContext._Audio->PlaySound2D("ui_back", 0.8f, 1.0f);
       oBackRequested = true;
+    }
   }
   GameMenuUI::EndMenuPanel();
 
@@ -411,6 +445,9 @@ void FpsGameHud::DrawInGamePauseModal( FpsGameHudContext & ioContext )
     };
 
     const int activated = GameMenuUI::DrawMenuButtonList(items, _PauseMenuNav, *ioContext._MenuInput, _Theme, _Fonts, 56.0f);
+    if ( ( activated >= 0 ) && ioContext._Audio && !ioContext._MenuInput->_Confirm )
+      ioContext._Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+
     if ( 0 == activated )
       ioContext._RequestResume = true;
     else if ( 1 == activated )
@@ -434,6 +471,28 @@ void FpsGameHud::DrawInGamePauseModal( FpsGameHudContext & ioContext )
 // ----------------------------------------------------------------------------
 void FpsGameHud::Draw( FpsGameHudContext & ioContext )
 {
+  if ( ioContext._Audio && ioContext._MenuInput )
+  {
+    const bool inMenu = ( FpsAppState::TitleScreen == ioContext._AppState ) ||
+                        ioContext._Paused || _ShowInGameOptions;
+    if ( inMenu )
+    {
+      const GameMenuInput & menuInput = *ioContext._MenuInput;
+      if ( menuInput._NavUp || menuInput._NavDown || menuInput._NavLeft || menuInput._NavRight || menuInput._PrevTab || menuInput._NextTab )
+      {
+        ioContext._Audio->PlaySound2D("ui_nav", 0.65f, 1.0f);
+      }
+      else if ( menuInput._Confirm )
+      {
+        ioContext._Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+      }
+      else if ( menuInput._Back )
+      {
+        ioContext._Audio->PlaySound2D("ui_back", 0.8f, 1.0f);
+      }
+    }
+  }
+
   if ( FpsAppState::TitleScreen == ioContext._AppState )
   {
     DrawTitleScreenMenus(ioContext);

@@ -15,6 +15,7 @@ protected:
   static bool TestTSpinDetection();
   static bool TestExtendedLockDelay();
   static bool TestScoringAndB2B();
+  static bool TestAudioEngineSynthesis();
 };
 
 }

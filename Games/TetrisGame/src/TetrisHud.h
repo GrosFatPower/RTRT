@@ -11,6 +11,7 @@
 
 namespace RTRT
 {
+class AudioEngine;
 class Renderer;
 }
 
@@ -42,6 +43,7 @@ public:
             bool & oRequestExit );
 
   void SetGamepadInput( GamepadInput * iGamepad ) { _Gamepad = iGamepad; }
+  void SetAudioEngine( AudioEngine * iAudio ) { _Audio = iAudio; }
 
   bool IsSettingsOpen() const { return _ShowInGameOptions; }
   void ToggleSettings();
@@ -122,6 +124,7 @@ protected:
   int                _OptionsTabIndex   = 0;
   bool               _ShowInGameOptions = false;
   GamepadInput *     _Gamepad           = nullptr;
+  AudioEngine *      _Audio             = nullptr;
 
   RenderStatsUIState _StatsUIState;
 };

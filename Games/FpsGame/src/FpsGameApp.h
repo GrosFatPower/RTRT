@@ -1,6 +1,7 @@
 #ifndef _FpsGameApp_
 #define _FpsGameApp_
 
+#include "AudioEngine.h"
 #include "Boids.h"
 #include "FpsGame.h"
 #include "FpsGameBenchmark.h"
@@ -58,6 +59,7 @@ protected:
   int InitializeUI();
   int InitializeScene();
   int InitializeRenderer();
+  void InitializeSoundBank();
   int InitializeMapBoids( bool iResetSimulation );
   int RefreshMapBoids();
   int RefreshPropCollisionColliders();
@@ -147,6 +149,9 @@ protected:
   bool                      _PauseRequested = false;
   GamepadInput              _GamepadInput;
   GameMenuInput             _MenuInput;
+  AudioEngine               _Audio;
+  bool                      _PrevGrounded = false;
+  float                     _FootstepTimer = 0.0f;
   float                     _GamepadLookSensitivity = 140.f;
   bool                      _ExitToTestSelection = false;
   bool                      _ShowMenuBar = false;

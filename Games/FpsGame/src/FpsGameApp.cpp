@@ -673,6 +673,140 @@ void FpsGameApp::FinishBenchmark()
 
 
 // ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// InitializeSoundBank
+// ----------------------------------------------------------------------------
+void FpsGameApp::InitializeSoundBank()
+{
+  // 1. UI Navigation
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Triangle;
+    desc._StartFrequency = 1200.0f;
+    desc._EndFrequency = 1600.0f;
+    desc._Duration = 0.025f;
+    desc._AttackTime = 0.002f;
+    desc._DecayTime = 0.010f;
+    desc._SustainLevel = 0.2f;
+    desc._ReleaseTime = 0.013f;
+    desc._Volume = 0.5f;
+    _Audio.RegisterProceduralSound("ui_nav", desc);
+  }
+
+  // 2. UI Confirm
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Triangle;
+    desc._StartFrequency = 660.0f;
+    desc._EndFrequency = 660.0f;
+    desc._ArpInterval2 = 5.0f;
+    desc._ArpInterval3 = 12.0f;
+    desc._ArpSpeed = 0.035f;
+    desc._Duration = 0.12f;
+    desc._AttackTime = 0.004f;
+    desc._DecayTime = 0.030f;
+    desc._SustainLevel = 0.4f;
+    desc._ReleaseTime = 0.08f;
+    desc._Volume = 0.7f;
+    _Audio.RegisterProceduralSound("ui_confirm", desc);
+  }
+
+  // 3. UI Back
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Triangle;
+    desc._StartFrequency = 660.0f;
+    desc._EndFrequency = 660.0f;
+    desc._ArpInterval2 = -5.0f;
+    desc._ArpSpeed = 0.040f;
+    desc._Duration = 0.10f;
+    desc._AttackTime = 0.004f;
+    desc._DecayTime = 0.030f;
+    desc._SustainLevel = 0.3f;
+    desc._ReleaseTime = 0.06f;
+    desc._Volume = 0.65f;
+    _Audio.RegisterProceduralSound("ui_back", desc);
+  }
+
+  // 4. Footstep
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Noise;
+    desc._StartFrequency = 180.0f;
+    desc._EndFrequency = 60.0f;
+    desc._Duration = 0.07f;
+    desc._AttackTime = 0.002f;
+    desc._DecayTime = 0.025f;
+    desc._SustainLevel = 0.2f;
+    desc._ReleaseTime = 0.043f;
+    desc._NoiseMix = 0.85f;
+    desc._Volume = 0.45f;
+    _Audio.RegisterProceduralSound("fps_step", desc);
+  }
+
+  // 5. Jump
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Sine;
+    desc._StartFrequency = 140.0f;
+    desc._EndFrequency = 340.0f;
+    desc._Duration = 0.12f;
+    desc._AttackTime = 0.005f;
+    desc._DecayTime = 0.040f;
+    desc._SustainLevel = 0.3f;
+    desc._ReleaseTime = 0.075f;
+    desc._NoiseMix = 0.2f;
+    desc._Volume = 0.65f;
+    _Audio.RegisterProceduralSound("fps_jump", desc);
+  }
+
+  // 6. Land
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Square;
+    desc._StartFrequency = 220.0f;
+    desc._EndFrequency = 45.0f;
+    desc._FrequencyExp = 2.0f;
+    desc._Duration = 0.14f;
+    desc._AttackTime = 0.002f;
+    desc._DecayTime = 0.060f;
+    desc._SustainLevel = 0.2f;
+    desc._ReleaseTime = 0.078f;
+    desc._NoiseMix = 0.45f;
+    desc._Volume = 0.75f;
+    _Audio.RegisterProceduralSound("fps_land", desc);
+  }
+
+  // 7. Fire
+  {
+    ProceduralSoundDesc desc;
+    desc._Waveform = WaveformType::Square;
+    desc._StartFrequency = 880.0f;
+    desc._EndFrequency = 110.0f;
+    desc._FrequencyExp = 2.5f;
+    desc._Duration = 0.16f;
+    desc._AttackTime = 0.002f;
+    desc._DecayTime = 0.060f;
+    desc._SustainLevel = 0.2f;
+    desc._ReleaseTime = 0.098f;
+    desc._NoiseMix = 0.50f;
+    desc._Volume = 0.85f;
+    _Audio.RegisterProceduralSound("fps_fire", desc);
+  }
+
+  // File-based asset overrides (if present on disk)
+  const char * soundNames[] = {
+    "ui_nav", "ui_confirm", "ui_back",
+    "fps_step", "fps_jump", "fps_land", "fps_fire"
+  };
+  for ( const char * name : soundNames )
+  {
+    const std::string path = std::string("Assets/Sounds/") + name + ".wav";
+    if ( std::filesystem::exists(path) )
+      _Audio.RegisterSoundFile(name, path);
+  }
+}
+
 // InitializeUI
 // ----------------------------------------------------------------------------
 int FpsGameApp::InitializeUI()
@@ -720,6 +854,7 @@ FpsGameHudContext FpsGameApp::MakeHudContext()
   context._Scene = _Scene.get();
   context._Renderer = _Renderer.get();
   context._RenderSettings = &_Settings;
+  context._Audio = &_Audio;
   context._MenuInput = &_MenuInput;
   context._Gamepad = &_GamepadInput;
   context._GamepadLookSensitivity = &_GamepadLookSensitivity;
@@ -751,9 +886,28 @@ void FpsGameApp::SyncPlayerView()
     _Renderer -> Notify(DirtyState::SceneCamera);
     _Renderer -> Notify(DirtyState::SceneInstances);
   }
+
+  const Camera & cam = _Scene->GetCamera();
+  _Audio.UpdateListener( cam.GetPos(), cam.GetForward(), cam.GetUp() );
+}
+
+#if 0
+{
+  if ( !_Scene )
+    return;
+
+  _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings, _Editor.IsEnabled());
+  _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings);
+  if ( _Renderer )
+  {
+    _Renderer -> Notify(DirtyState::SceneCamera);
+    _Renderer -> Notify(DirtyState::SceneInstances);
+  }
 }
 
 // ----------------------------------------------------------------------------
+#endif
+
 // StartGame
 // ----------------------------------------------------------------------------
 void FpsGameApp::StartGame()
@@ -777,6 +931,7 @@ void FpsGameApp::PauseGame()
   _Paused = true;
   _MenuInput.Clear();
   SetMouseCaptured(false);
+  _Audio.PlaySound2D("ui_back", 0.8f, 1.0f);
 }
 
 // ----------------------------------------------------------------------------
@@ -787,6 +942,7 @@ void FpsGameApp::ResumeGame()
   _Paused = false;
   _Hud.SetSettingsOpen(false);
   SetMouseCaptured(!_Editor.IsEnabled() && ( FpsPhotoModeState::Inactive == _PhotoModeState ));
+  _Audio.PlaySound2D("ui_confirm", 0.8f, 1.0f);
 }
 
 // ----------------------------------------------------------------------------
@@ -1901,6 +2057,44 @@ int FpsGameApp::ProcessInput()
   if ( _Renderer )
     _Renderer -> Notify(DirtyState::SceneCamera);
 
+  // 3D Audio player movement and combat cues
+  const FpsPlayer & player = _GameWorld.GetPlayer();
+
+  if ( _Scene )
+  {
+    const Camera & cam = _Scene->GetCamera();
+    _Audio.UpdateListener( cam.GetPos(), cam.GetForward(), cam.GetUp(), player._Velocity );
+  }
+
+  if ( player._Grounded && !_PrevGrounded )
+  {
+    _Audio.PlaySound3D( "fps_land", player._Position, 0.75f, 1.0f );
+  }
+  else if ( !player._Grounded && _PrevGrounded && ( player._Velocity.y > 0.5f ) )
+  {
+    _Audio.PlaySound3D( "fps_jump", player._Position, 0.70f, 1.0f );
+  }
+  else if ( player._Grounded && ( std::sqrt( player._Velocity.x * player._Velocity.x + player._Velocity.z * player._Velocity.z ) > 0.8f ) )
+  {
+    _FootstepTimer += static_cast<float>( _DeltaTime );
+    if ( _FootstepTimer >= 0.38f )
+    {
+      _FootstepTimer = 0.0f;
+      float pitch = 0.95f + ( ( rand() % 10 ) * 0.015f );
+      _Audio.PlaySound3D( "fps_step", player._Position, 0.40f, pitch );
+    }
+  }
+  else
+  {
+    _FootstepTimer = 0.20f;
+  }
+  _PrevGrounded = player._Grounded;
+
+  if ( input._FirePressed )
+  {
+    _Audio.PlaySound2D( "fps_fire", 0.85f, 1.0f );
+  }
+
   const bool projectilesDirty = _GameWorld.ConsumeProjectilesDirty();
   if ( projectilesDirty || ( _GameSettings._ShowViewWeapon && _SceneBinding.HasViewWeapon() ) )
   {
@@ -2242,6 +2436,11 @@ void FpsGameApp::DrawDebugPanel()
   ImGui::Text("Editor: %s", _Editor.IsEnabled() ? "on" : "off");
 
   ImGui::Checkbox("Free look", &_GameSettings._FreeLook);
+
+  if ( ImGui::CollapsingHeader("Audio Settings") )
+  {
+    GameMenuUI::DrawAudioSettings( _Audio, _Hud.GetTheme(), _Hud.GetFonts() );
+  }
 
   const FpsPlayer & player = _GameWorld.GetPlayer();
   ImGui::Text("Mode: %s", _GameSettings._FreeLook ? "Free look" : "Player physics");
@@ -2616,6 +2815,9 @@ int FpsGameApp::Run()
       ret = 1;
       break;
     }
+
+    _Audio.Initialize();
+    InitializeSoundBank();
 
     glDisable(GL_DEPTH_TEST);
 

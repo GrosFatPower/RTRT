@@ -12,6 +12,7 @@ struct ImFont;
 namespace RTRT
 {
 
+class AudioEngine;
 class Renderer;
 class Scene;
 struct RenderSettings;
@@ -204,6 +205,10 @@ bool DrawActionButton( const char * iLabel,
                        const GameUIFonts & iFonts );
 
 void DrawSectionHeader( const char * iTitle,
+                        const GameUITheme & iTheme,
+                        const GameUIFonts & iFonts );
+
+void DrawAudioSettings( AudioEngine & ioAudio,
                         const GameUITheme & iTheme,
                         const GameUIFonts & iFonts );
 

@@ -16,3 +16,6 @@
 [submodule "Dependencies/nativefiledialog"]
 	path = Dependencies/nativefiledialog
 	url = https://github.com/mlabbe/nativefiledialog.git
+[submodule "Dependencies/miniaudio"]
+	path = Dependencies/miniaudio
+	url = https://github.com/mackron/miniaudio.git
