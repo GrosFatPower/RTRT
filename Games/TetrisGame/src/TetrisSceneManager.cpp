@@ -697,9 +697,6 @@ int TetrisSceneManager::Initialize( Scene & ioScene )
   const std::string envMapPath = PathUtils::GetEnvMapPath("syferfontein_18d_clear_1k.hdr");
   ioScene.LoadEnvMap(envMapPath);
 
-  // Compile TLAS / BVH
-  ioScene.CompileMeshData(Vec2i(0), false, true, false);
-
   return 0;
 }
 
@@ -1336,7 +1333,6 @@ int TetrisSceneManager::SyncScene( Scene & ioScene, const TetrisGameLogic * iLog
   if ( numPlayers < 2 )
     HideBoard(1, ioScene);
 
-  ioScene.RebuildTLASData();
   return 0;
 }
 
@@ -1548,7 +1544,6 @@ int TetrisSceneManager::SyncTitleShowcase( Scene & ioScene, float iTime )
   if ( flashLight1 )
     flashLight1->_Intensity = 0.0f;
 
-  ioScene.RebuildTLASData();
   return 0;
 }
 
