@@ -85,6 +85,11 @@ void TetrisGameLogic::StartNewGame( TetrisGameMode iMode, int iStartLevel, unsig
   _LastClearedRowData.clear();
   _LastClearTSpin   = TetrisTSpinType::None;
   _LastClearPerfect = false;
+  _PendingGarbage   = 0;
+  _LastAttackLines  = 0;
+  _TotalAttacksSent = 0;
+  _GarbageRngState  = ( iSeed != 0 ) ? ( iSeed ^ 0xA5A5A5A5u ) : 0x9E3779B9u;
+  _GarbageHoleColumn = static_cast<int>( _GarbageRngState % 10u );
 
   SpawnNextPiece();
 }
@@ -305,6 +310,96 @@ void TetrisGameLogic::PerformHold()
 }
 
 // ----------------------------------------------------------------------------
+// AddPendingGarbage / OffsetPendingGarbage / ComputeGarbageAttack
+// ----------------------------------------------------------------------------
+void TetrisGameLogic::AddPendingGarbage( int iLines )
+{
+  if ( iLines > 0 )
+    _PendingGarbage = std::min(20, _PendingGarbage + iLines);
+}
+
+int TetrisGameLogic::OffsetPendingGarbage( int iAttackLines )
+{
+  if ( ( iAttackLines <= 0 ) || ( _PendingGarbage <= 0 ) )
+    return 0;
+
+  const int cancelled = std::min(_PendingGarbage, iAttackLines);
+  _PendingGarbage -= cancelled;
+  return cancelled;
+}
+
+void TetrisGameLogic::ForceVictory()
+{
+  if ( !_Victory && !_GameOver )
+  {
+    _Victory = true;
+    _ActionBannerText = "VICTORY!";
+    _ActionBannerTimer = 4.0f;
+    _ActionBannerAlpha = 1.0f;
+    UpdateSessionStats();
+  }
+}
+
+void TetrisGameLogic::ForceGameOver( const std::string & iReason )
+{
+  if ( !_GameOver && !_Victory )
+  {
+    _GameOver = true;
+    _GameOverReason = iReason;
+    _ActionBannerText = "DEFEAT";
+    _ActionBannerTimer = 4.0f;
+    _ActionBannerAlpha = 1.0f;
+    UpdateSessionStats();
+  }
+}
+
+int TetrisGameLogic::ComputeGarbageAttack( int iLinesCleared,
+                                           TetrisTSpinType iTSpin,
+                                           bool iBackToBack,
+                                           int iComboCount,
+                                           bool iPerfectClear )
+{
+  if ( iLinesCleared <= 0 )
+    return 0;
+
+  int attack = 0;
+  const int b2bBonus = iBackToBack ? 1 : 0;
+
+  if ( TetrisTSpinType::Full == iTSpin )
+  {
+    if ( 1 == iLinesCleared )      attack = 2 + b2bBonus;
+    else if ( 2 == iLinesCleared ) attack = 4 + b2bBonus;
+    else if ( 3 == iLinesCleared ) attack = 6 + b2bBonus;
+  }
+  else if ( TetrisTSpinType::Mini == iTSpin )
+  {
+    if ( 1 == iLinesCleared )      attack = 0 + b2bBonus;
+    else if ( 2 == iLinesCleared ) attack = 1 + b2bBonus;
+  }
+  else
+  {
+    if ( 1 == iLinesCleared )      attack = 0;
+    else if ( 2 == iLinesCleared ) attack = 1;
+    else if ( 3 == iLinesCleared ) attack = 2;
+    else if ( 4 == iLinesCleared ) attack = 4 + b2bBonus;
+  }
+
+  // Guideline Combo Table
+  if ( iComboCount >= 1 )
+  {
+    if ( iComboCount <= 2 )      attack += 1;
+    else if ( iComboCount <= 4 ) attack += 2;
+    else if ( iComboCount <= 6 ) attack += 3;
+    else                         attack += 4;
+  }
+
+  if ( iPerfectClear )
+    attack += 10;
+
+  return attack;
+}
+
+// ----------------------------------------------------------------------------
 // DetectTSpin
 // ----------------------------------------------------------------------------
 TetrisTSpinType TetrisGameLogic::DetectTSpin() const
@@ -483,11 +578,19 @@ void TetrisGameLogic::LockActivePiece( bool iFromHardDrop )
       _ScreenShakeImpulse = 1.0f;
     }
 
+    const int rawAttack = ComputeGarbageAttack(linesCleared, tSpin, _BackToBackActive, _ComboCount, perfectClear);
+    const int cancelled = OffsetPendingGarbage(rawAttack);
+    _LastAttackLines = rawAttack - cancelled;
+    _TotalAttacksSent += _LastAttackLines;
+    if ( ( cancelled > 0 ) && ( 0 == _LastAttackLines ) && !banner.empty() )
+      banner += " [COUNTER!]";
+
     _BackToBackActive = isDifficult;
   }
   else
   {
     _ComboCount = -1;
+    _LastAttackLines = 0;
     if ( TetrisTSpinType::Full == tSpin )
     {
       awardScore = 100 * _Level;
@@ -497,6 +600,31 @@ void TetrisGameLogic::LockActivePiece( bool iFromHardDrop )
     {
       awardScore = 50 * _Level;
       banner = "T-SPIN MINI";
+    }
+
+    // Insert pending garbage lines when a piece locks without clearing any line
+    if ( _PendingGarbage > 0 )
+    {
+      const int toInsert = std::min(8, _PendingGarbage);
+      _PendingGarbage -= toInsert;
+
+      // 70% chance to keep same hole column for clean counterplay, 30% new random column
+      _GarbageRngState = _GarbageRngState * 1664525u + 1013904223u;
+      if ( ( _GarbageRngState % 10u ) < 3u )
+      {
+        _GarbageRngState = _GarbageRngState * 1664525u + 1013904223u;
+        _GarbageHoleColumn = static_cast<int>( _GarbageRngState % 10u );
+      }
+
+      if ( !_Matrix.AddGarbageLines(toInsert, _GarbageHoleColumn) )
+      {
+        _GameOver = true;
+        _GameOverReason = "Garbage Top Out";
+        _ActionBannerText = "TOP OUT";
+        _ActionBannerTimer = 3.f;
+        return;
+      }
+      _ScreenShakeImpulse = std::min(1.f, _ScreenShakeImpulse + 0.35f);
     }
   }
 
@@ -511,12 +639,12 @@ void TetrisGameLogic::LockActivePiece( bool iFromHardDrop )
   }
 
   // Mode goals
-  if ( TetrisGameMode::Marathon == _Mode )
+  if ( ( TetrisGameMode::Marathon == _Mode ) || ( TetrisGameMode::Versus == _Mode ) )
   {
     const int targetLevel = _StartLevel + ( _LinesCleared / 10 );
     _Level = MathUtil::Clamp(targetLevel, 1, 15);
 
-    if ( !_EndlessMarathon && ( _LinesCleared >= 150 ) )
+    if ( ( TetrisGameMode::Marathon == _Mode ) && !_EndlessMarathon && ( _LinesCleared >= 150 ) )
     {
       _Victory = true;
       _ActionBannerText = "VICTORY!";

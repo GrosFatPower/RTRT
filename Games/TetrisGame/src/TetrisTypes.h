@@ -11,15 +11,16 @@ namespace Tetris
 
 enum class TetrisPieceType : int
 {
-  None  = 0,
-  I     = 1, // Cyan
-  J     = 2, // Blue
-  L     = 3, // Orange
-  O     = 4, // Yellow
-  S     = 5, // Green
-  T     = 6, // Magenta / Purple
-  Z     = 7, // Red
-  Count = 8
+  None    = 0,
+  I       = 1, // Cyan
+  J       = 2, // Blue
+  L       = 3, // Orange
+  O       = 4, // Yellow
+  S       = 5, // Green
+  T       = 6, // Magenta / Purple
+  Z       = 7, // Red
+  Garbage = 8, // Metallic Grey
+  Count   = 9
 };
 
 enum class TetrisRotation : int
@@ -34,7 +35,27 @@ enum class TetrisGameMode : int
 {
   Marathon = 0,
   Sprint   = 1, // 40 Lines
-  Ultra    = 2  // 2-minute score attack
+  Ultra    = 2, // 2-minute score attack
+  Versus   = 3  // 2-Player Local Battle (Garbage Wars)
+};
+
+enum class TetrisControlDevice : int
+{
+  None          = -1,
+  KeyboardLeft  = 0, // WASD, Space, Shift, C, Q, E
+  KeyboardRight = 1, // Arrows, Numpad, RShift
+  KeyboardFull  = 2, // All keyboard keys (1P or 2P when paired with Gamepad)
+  Gamepad1      = 3, // 1st connected gamepad (Slot 0)
+  Gamepad2      = 4  // 2nd connected gamepad (Slot 1)
+};
+
+enum class TetrisMultiplayerPreset : int
+{
+  Auto              = 0, // Auto-assign based on connected gamepads
+  Gamepad1_Gamepad2 = 1, // P1: Gamepad 1,       P2: Gamepad 2
+  Gamepad1_Keyboard = 2, // P1: Gamepad 1,       P2: Keyboard (Full)
+  Keyboard_Gamepad1 = 3, // P1: Keyboard (Full), P2: Gamepad 1
+  Keyboard_Keyboard = 4  // P1: Keyboard (WASD), P2: Keyboard (Arrows)
 };
 
 enum class TetrisRendererMode : int
@@ -90,10 +111,11 @@ enum class TetrisAppState : int
 
 enum class TetrisMenuPage : int
 {
-  MainMenu   = 0,
-  ModeSelect = 1,
-  HighScores = 2,
-  Options    = 3
+  MainMenu         = 0,
+  ModeSelect       = 1,
+  HighScores       = 2,
+  Options          = 3,
+  MultiplayerLobby = 4
 };
 
 struct TetrisSessionStats

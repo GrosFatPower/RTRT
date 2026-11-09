@@ -177,6 +177,47 @@ int TetrisMatrix::ClearFullLines( std::vector<int> & oClearedRows, std::vector<T
 }
 
 // ----------------------------------------------------------------------------
+// AddGarbageLines
+// ----------------------------------------------------------------------------
+bool TetrisMatrix::AddGarbageLines( int iCount, int iHoleColumn )
+{
+  if ( iCount <= 0 )
+    return true;
+
+  const int count = ( iCount > S_TotalHeight ) ? S_TotalHeight : iCount;
+  const int holeX = ( iHoleColumn >= 0 && iHoleColumn < S_Width ) ? iHoleColumn : 0;
+
+  bool toppedOut = false;
+  for ( int y = S_TotalHeight - count; y < S_TotalHeight; ++y )
+  {
+    for ( int x = 0; x < S_Width; ++x )
+    {
+      if ( TetrisPieceType::None != _Grid[CellIndex(x, y)] )
+      {
+        toppedOut = true;
+        break;
+      }
+    }
+  }
+
+  // Shift existing rows upwards by count
+  for ( int y = S_TotalHeight - 1; y >= count; --y )
+  {
+    for ( int x = 0; x < S_Width; ++x )
+      _Grid[CellIndex(x, y)] = _Grid[CellIndex(x, y - count)];
+  }
+
+  // Populate bottom rows with Garbage blocks except at holeX
+  for ( int y = 0; y < count; ++y )
+  {
+    for ( int x = 0; x < S_Width; ++x )
+      _Grid[CellIndex(x, y)] = ( x == holeX ) ? TetrisPieceType::None : TetrisPieceType::Garbage;
+  }
+
+  return !toppedOut;
+}
+
+// ----------------------------------------------------------------------------
 // IsEmpty
 // ----------------------------------------------------------------------------
 bool TetrisMatrix::IsEmpty() const

@@ -16,6 +16,9 @@ protected:
   static bool TestExtendedLockDelay();
   static bool TestScoringAndB2B();
   static bool TestAudioEngineSynthesis();
+  static bool TestMatrixAddGarbageLines();
+  static bool TestGarbageCalculationAndCancellation();
+  static bool TestMultiplayerInputMapping();
 };
 
 }

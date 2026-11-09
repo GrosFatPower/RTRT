@@ -96,7 +96,10 @@ static const std::array<Vec2i, 4> s_PieceMinos[(int)TetrisPieceType::Count][4] =
     { Vec2i(0, 1), Vec2i(1, 1), Vec2i(1, 0), Vec2i(2, 0) },
     // Left (L)
     { Vec2i(1, 2), Vec2i(0, 1), Vec2i(1, 1), Vec2i(0, 0) }
-  }
+  },
+
+  // Garbage
+  { s_EmptyMinos, s_EmptyMinos, s_EmptyMinos, s_EmptyMinos }
 };
 
 // ----------------------------------------------------------------------------
@@ -125,8 +128,9 @@ Vec3 TetrisPiece::GetColor( TetrisPieceType iType )
     case TetrisPieceType::O: return Vec3(0.95f, 0.90f, 0.05f); // Yellow
     case TetrisPieceType::S: return Vec3(0.12f, 0.88f, 0.16f); // Green
     case TetrisPieceType::T: return Vec3(0.65f, 0.10f, 0.90f); // Purple
-    case TetrisPieceType::Z: return Vec3(0.95f, 0.10f, 0.12f); // Red
-    default:                 return Vec3(0.50f, 0.50f, 0.50f);
+    case TetrisPieceType::Z:       return Vec3(0.95f, 0.10f, 0.12f); // Red
+    case TetrisPieceType::Garbage: return Vec3(0.55f, 0.58f, 0.62f); // Metallic Titanium Grey
+    default:                       return Vec3(0.50f, 0.50f, 0.50f);
   }
 }
 
@@ -143,8 +147,9 @@ const char * TetrisPiece::GetName( TetrisPieceType iType )
     case TetrisPieceType::O: return "O";
     case TetrisPieceType::S: return "S";
     case TetrisPieceType::T: return "T";
-    case TetrisPieceType::Z: return "Z";
-    default:                 return "None";
+    case TetrisPieceType::Z:       return "Z";
+    case TetrisPieceType::Garbage: return "Garbage";
+    default:                       return "None";
   }
 }
 

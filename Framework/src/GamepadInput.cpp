@@ -78,38 +78,38 @@ void GamepadInput::Poll( float iDeltaTime )
 
   int activeJid = -1;
   bool isMappedGamepad = false;
+  const int targetSlot = std::max(0, _DeviceSlot);
 
-  // Prefer the previously connected joystick if still present
-  if ( ( _JoystickId >= GLFW_JOYSTICK_1 ) && ( _JoystickId <= GLFW_JOYSTICK_LAST ) &&
-       ( GLFW_TRUE == glfwJoystickPresent(_JoystickId) ) )
+  // Scan for mapped Xbox/SDL gamepads first and pick the targetSlot-th connected device
+  int foundCount = 0;
+  for ( int jid = GLFW_JOYSTICK_1; jid <= GLFW_JOYSTICK_LAST; ++jid )
   {
-    activeJid = _JoystickId;
-    isMappedGamepad = ( GLFW_TRUE == glfwJoystickIsGamepad(activeJid) );
-  }
-  else
-  {
-    // Scan for a mapped Xbox/SDL gamepad first
-    for ( int jid = GLFW_JOYSTICK_1; jid <= GLFW_JOYSTICK_LAST; ++jid )
+    if ( ( GLFW_TRUE == glfwJoystickPresent(jid) ) && ( GLFW_TRUE == glfwJoystickIsGamepad(jid) ) )
     {
-      if ( ( GLFW_TRUE == glfwJoystickPresent(jid) ) && ( GLFW_TRUE == glfwJoystickIsGamepad(jid) ) )
+      if ( foundCount == targetSlot )
       {
         activeJid = jid;
         isMappedGamepad = true;
         break;
       }
+      ++foundCount;
     }
+  }
 
-    // Fallback to any present joystick
-    if ( activeJid < 0 )
+  // Fallback to any unmapped present joystick if targetSlot not yet satisfied
+  if ( activeJid < 0 )
+  {
+    for ( int jid = GLFW_JOYSTICK_1; jid <= GLFW_JOYSTICK_LAST; ++jid )
     {
-      for ( int jid = GLFW_JOYSTICK_1; jid <= GLFW_JOYSTICK_LAST; ++jid )
+      if ( ( GLFW_TRUE == glfwJoystickPresent(jid) ) && ( GLFW_TRUE != glfwJoystickIsGamepad(jid) ) )
       {
-        if ( GLFW_TRUE == glfwJoystickPresent(jid) )
+        if ( foundCount == targetSlot )
         {
           activeJid = jid;
           isMappedGamepad = false;
           break;
         }
+        ++foundCount;
       }
     }
   }

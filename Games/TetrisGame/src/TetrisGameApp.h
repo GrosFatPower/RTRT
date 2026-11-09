@@ -23,6 +23,36 @@ namespace Tetris
 {
 using namespace RTRT;
 
+struct TetrisPlayerAudioTracker
+{
+  int             _PrevPieceOriginX = 0;
+  int             _PrevPieceOriginY = 0;
+  TetrisPieceType _PrevActivePiece  = TetrisPieceType::None;
+  TetrisRotation  _PrevRotation     = TetrisRotation::Spawn;
+  TetrisPieceType _PrevHoldPiece    = TetrisPieceType::None;
+  unsigned int    _PrevLockEventId  = 0;
+  unsigned int    _PrevLineClearId  = 0;
+  int             _PrevComboCount   = -1;
+  int             _PrevLevel        = 1;
+  bool            _PrevGameOver     = false;
+  bool            _PrevVictory      = false;
+
+  void Reset( const TetrisGameLogic & iLogic )
+  {
+    _PrevPieceOriginX = iLogic.GetActiveOrigin().x;
+    _PrevPieceOriginY = iLogic.GetActiveOrigin().y;
+    _PrevActivePiece  = iLogic.GetActivePiece();
+    _PrevRotation     = iLogic.GetActiveRotation();
+    _PrevHoldPiece    = iLogic.GetHoldPiece();
+    _PrevLockEventId  = iLogic.GetLockEventId();
+    _PrevLineClearId  = iLogic.GetLineClearEventId();
+    _PrevComboCount   = iLogic.GetComboCount();
+    _PrevLevel        = iLogic.GetLevel();
+    _PrevGameOver     = iLogic.IsGameOver();
+    _PrevVictory      = iLogic.IsVictory();
+  }
+};
+
 class TetrisGameApp
 {
 public:
@@ -34,6 +64,24 @@ public:
   void SetStartInGame( bool iStartInGame ) { _AppState = iStartInGame ? TetrisAppState::InGame : TetrisAppState::TitleScreen; }
 
   static const char * GetAppHeader() { return "Tetris 3D"; }
+
+  // Public static helpers for input device assignment & routing (testable by unit tests)
+  static void ResolveDevicesForPreset( TetrisMultiplayerPreset iPreset,
+                                       int iNumPlayers,
+                                       bool iGp1Connected,
+                                       bool iGp2Connected,
+                                       TetrisControlDevice & oP1Device,
+                                       TetrisControlDevice & oP2Device );
+
+  static void RouteKeyPressToInput( int iKey,
+                                    TetrisControlDevice iDevice,
+                                    TetrisInputState & ioInput );
+
+  static void PollHeldKeysForDevice( const KeyInput & iKeyInput,
+                                     TetrisControlDevice iDevice,
+                                     bool & oLeftHeld,
+                                     bool & oRightHeld,
+                                     bool & oSoftDropHeld );
 
 protected:
   static void KeyCallback( GLFWwindow * iWindow, int iKey, int iScancode, int iAction, int iMods );
@@ -51,6 +99,13 @@ protected:
   int UpdateGame( float iDeltaTime );
   int DrawUI();
 
+  void ResolvePlayerDevices();
+  void PollGamepadForPlayer( GamepadInput & ioGamepad, TetrisInputState & ioInput, bool iInActiveGameplay );
+  void StartMatch( int iNumPlayers, TetrisGameMode iMode, int iStartLevel, bool iResetSeries );
+  void CheckPendingMatchRequests();
+  void EvaluatePlayerAudio( int iPlayerIdx, const Vec3 & iBoardPos, bool iUseSpatial3D );
+  bool IsInActiveGameplay() const;
+
   void SyncFramebufferResolution( bool iNotifyRenderer = false );
   void SetRendererMode( TetrisRendererMode iMode );
   void ApplyRendererDefaults();
@@ -62,16 +117,19 @@ protected:
 
   KeyInput                    _KeyInput;
   MouseInput                  _MouseInput;
-  GamepadInput                _GamepadInput;
+  GamepadInput                _GamepadInputs[2];
 
   std::unique_ptr<Scene>      _Scene;
   RenderSettings              _Settings;
   std::unique_ptr<Renderer>   _Renderer;
 
-  TetrisGameLogic             _GameLogic;
+  TetrisGameLogic             _GameLogic[2];
   TetrisSceneManager          _SceneManager;
   TetrisHud                   _Hud;
   AudioEngine                 _Audio;
+
+  TetrisMultiplayerState      _MpState;
+  bool                        _RoundResolved = false;
 
   TetrisAppState              _AppState     = TetrisAppState::TitleScreen;
   TetrisAppState              _PrevAppState = TetrisAppState::TitleScreen;
@@ -79,20 +137,10 @@ protected:
   double                      _PrevElapsed  = 0.0;
   TetrisRendererMode          _RendererMode = TetrisRendererMode::Deferred;
   TetrisHandlingConfig        _HandlingConfig;
-  TetrisInputState            _InputState;
+  TetrisInputState            _InputState[2];
   GameMenuInput               _MenuInput;
 
-  // Audio diff tracking
-  int                         _PrevPieceOriginX  = 0;
-  int                         _PrevPieceOriginY  = 0;
-  TetrisPieceType             _PrevActivePiece   = TetrisPieceType::None;
-  TetrisRotation              _PrevRotation      = TetrisRotation::Spawn;
-  TetrisPieceType             _PrevHoldPiece     = TetrisPieceType::None;
-  unsigned int                _PrevLockEventId   = 0;
-  unsigned int                _PrevLineClearId   = 0;
-  int                         _PrevComboCount    = -1;
-  bool                        _PrevGameOver      = false;
-  bool                        _PrevVictory       = false;
+  TetrisPlayerAudioTracker    _AudioTrackers[2];
 
   bool                        _ReloadRenderer = false;
   bool                        _ReloadScene    = false;

@@ -32,7 +32,9 @@ public:
 
   int Initialize( Scene & ioScene );
   int SyncScene( Scene & ioScene, const TetrisGameLogic & iLogic, float iDeltaTime );
+  int SyncScene( Scene & ioScene, const TetrisGameLogic * iLogics, int iNumPlayers, float iDeltaTime );
   int SyncCamera( Scene & ioScene, const TetrisGameLogic & iLogic );
+  int SyncCamera( Scene & ioScene, const TetrisGameLogic * iLogics, int iNumPlayers );
 
   int SyncTitleShowcase( Scene & ioScene, float iTime );
   int SyncTitleCamera( Scene & ioScene, float iTime );
@@ -81,7 +83,8 @@ public:
   void OrbitYawPitch( float iDeltaYaw, float iDeltaPitch );
   void OrbitZoom( float iDeltaRadius );
 
-  static Vec3 CellToWorld( int iX, int iY );
+  static Vec3 GetBoardOrigin( int iPlayerIndex, int iNumPlayers );
+  static Vec3 CellToWorld( int iX, int iY, const Vec3 & iBoardOrigin = Vec3(0.0f) );
 
 protected:
   Mesh * CreateGhostCageMesh( const std::string & iName, float iSize = 0.94f, float iThickness = 0.08f );
@@ -98,9 +101,11 @@ protected:
   void RefillBackgroundBag();
 
   TetrisLineClearAnimMode ResolveLineClearAnimMode( int iNumLines, TetrisTSpinType iTSpin, bool iPerfectClear );
-  void TriggerLineClearFx( const TetrisGameLogic & iLogic );
-  void UpdateAndSyncLineClearFx( std::vector<MeshInstance> & ioInstances, float iDeltaTime );
-  void ResetLineClearFx();
+  void TriggerLineClearFx( int iPlayerIndex, const TetrisGameLogic & iLogic, const Vec3 & iBoardOrigin );
+  void UpdateAndSyncLineClearFx( int iPlayerIndex, const Vec3 & iBoardOrigin, std::vector<MeshInstance> & ioInstances, float iDeltaTime );
+  void ResetLineClearFx( int iPlayerIndex );
+  void SyncSingleBoard( int iPlayerIndex, const Vec3 & iBoardOrigin, Scene & ioScene, const TetrisGameLogic & iLogic, float iDeltaTime );
+  void HideBoard( int iPlayerIndex, Scene & ioScene );
 
 protected:
   struct TetrisClearFxBlock
@@ -159,28 +164,28 @@ protected:
   int                  _SkylineMaterialID   = -1;
   int                  _FlashMaterialID     = -1;
 
-  // Pre-allocated instance indices in Scene
-  int                  _MatrixInstanceStart  = -1; // 220 instances for matrix
-  int                  _ActiveInstanceStart  = -1; // 4 instances
-  int                  _GhostInstanceStart   = -1; // 4 instances
-  int                  _HoldInstanceStart    = -1; // 4 instances
-  int                  _NextInstanceStart    = -1; // 20 instances (5 x 4)
-  int                  _ClearFxInstanceStart = -1; // 40 instances (4 rows x 10 cols)
-  int                  _EnclosureInstanceID  = -1;
-  int                  _BackplateInstanceID  = -1;
-  int                  _SkylineInstanceID    = -1;
+  // Pre-allocated instance indices in Scene (per player board [0..1])
+  int                  _MatrixInstanceStart[2]  = { -1, -1 }; // 220 instances for matrix
+  int                  _ActiveInstanceStart[2]  = { -1, -1 }; // 4 instances
+  int                  _GhostInstanceStart[2]   = { -1, -1 }; // 4 instances
+  int                  _HoldInstanceStart[2]    = { -1, -1 }; // 4 instances
+  int                  _NextInstanceStart[2]    = { -1, -1 }; // 20 instances (5 x 4)
+  int                  _ClearFxInstanceStart[2] = { -1, -1 }; // 40 instances (4 rows x 10 cols)
+  int                  _EnclosureInstanceID[2]  = { -1, -1 };
+  int                  _BackplateInstanceID[2]  = { -1, -1 };
+  int                  _SkylineInstanceID[2]    = { -1, -1 };
 
-  // Line clear animation state
-  unsigned int                         _LastSeenClearEventId = 0;
-  std::array<TetrisClearFxBlock, 40>   _ClearFxBlocks        = {};
-  std::array<float, 22>                _RowVisualYOffset     = {};
-  std::array<float, 22>                _RowDropVelocity      = {};
-  float                                _RowDropHoldTimer     = 0.0f;
+  // Line clear animation state (per player board [0..1])
+  unsigned int                         _LastSeenClearEventId[2] = { 0, 0 };
+  std::array<TetrisClearFxBlock, 40>   _ClearFxBlocks[2]        = {};
+  std::array<float, 22>                _RowVisualYOffset[2]     = {};
+  std::array<float, 22>                _RowDropVelocity[2]      = {};
+  float                                _RowDropHoldTimer[2]     = { 0.0f, 0.0f };
 
-  // Light indices
-  int                  _ActivePieceLightIdx = -1;
-  int                  _LineClearLightIdx   = -1;
-  float                _FlashLightIntensity = 0.f;
+  // Light indices (per player board [0..1])
+  int                  _ActivePieceLightIdx[2] = { -1, -1 };
+  int                  _LineClearLightIdx[2]   = { -1, -1 };
+  float                _FlashLightIntensity[2] = { 0.f, 0.f };
 };
 
 }

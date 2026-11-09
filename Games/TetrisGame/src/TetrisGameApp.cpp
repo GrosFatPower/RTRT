@@ -17,12 +17,185 @@
 #include <cmath>
 #include <filesystem>
 #include <iostream>
+#include <random>
 #include <thread>
 #include <vector>
 
 namespace Tetris
 {
 using namespace RTRT;
+
+// ----------------------------------------------------------------------------
+// ResolveDevicesForPreset
+// ----------------------------------------------------------------------------
+void TetrisGameApp::ResolveDevicesForPreset( TetrisMultiplayerPreset iPreset,
+                                             int iNumPlayers,
+                                             bool iGp1Connected,
+                                             bool iGp2Connected,
+                                             TetrisControlDevice & oP1Device,
+                                             TetrisControlDevice & oP2Device )
+{
+  if ( iNumPlayers <= 1 )
+  {
+    oP1Device = TetrisControlDevice::KeyboardFull;
+    oP2Device = TetrisControlDevice::None;
+    return;
+  }
+
+  switch ( iPreset )
+  {
+    case TetrisMultiplayerPreset::Gamepad1_Gamepad2:
+      oP1Device = TetrisControlDevice::Gamepad1;
+      oP2Device = TetrisControlDevice::Gamepad2;
+      break;
+
+    case TetrisMultiplayerPreset::Gamepad1_Keyboard:
+      oP1Device = TetrisControlDevice::Gamepad1;
+      oP2Device = TetrisControlDevice::KeyboardFull;
+      break;
+
+    case TetrisMultiplayerPreset::Keyboard_Gamepad1:
+      oP1Device = TetrisControlDevice::KeyboardFull;
+      oP2Device = TetrisControlDevice::Gamepad1;
+      break;
+
+    case TetrisMultiplayerPreset::Keyboard_Keyboard:
+      oP1Device = TetrisControlDevice::KeyboardLeft;
+      oP2Device = TetrisControlDevice::KeyboardRight;
+      break;
+
+    case TetrisMultiplayerPreset::Auto:
+    default:
+      if ( iGp1Connected && iGp2Connected )
+      {
+        oP1Device = TetrisControlDevice::Gamepad1;
+        oP2Device = TetrisControlDevice::Gamepad2;
+      }
+      else if ( iGp1Connected )
+      {
+        oP1Device = TetrisControlDevice::Gamepad1;
+        oP2Device = TetrisControlDevice::KeyboardFull;
+      }
+      else
+      {
+        oP1Device = TetrisControlDevice::KeyboardLeft;
+        oP2Device = TetrisControlDevice::KeyboardRight;
+      }
+      break;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// RouteKeyPressToInput
+// ----------------------------------------------------------------------------
+void TetrisGameApp::RouteKeyPressToInput( int iKey,
+                                          TetrisControlDevice iDevice,
+                                          TetrisInputState & ioInput )
+{
+  if ( TetrisControlDevice::KeyboardFull == iDevice )
+  {
+    if ( ( GLFW_KEY_LEFT == iKey ) || ( GLFW_KEY_A == iKey ) )
+      ioInput._MoveLeftPressed = true;
+    if ( ( GLFW_KEY_RIGHT == iKey ) || ( GLFW_KEY_D == iKey ) )
+      ioInput._MoveRightPressed = true;
+    if ( GLFW_KEY_SPACE == iKey )
+      ioInput._HardDropPressed = true;
+    if ( ( GLFW_KEY_UP == iKey ) || ( GLFW_KEY_X == iKey ) || ( GLFW_KEY_H == iKey ) )
+      ioInput._RotateCWPressed = true;
+    if ( ( GLFW_KEY_Z == iKey ) || ( GLFW_KEY_LEFT_CONTROL == iKey ) || ( GLFW_KEY_G == iKey ) )
+      ioInput._RotateCCWPressed = true;
+    if ( ( GLFW_KEY_W == iKey ) || ( GLFW_KEY_Y == iKey ) )
+      ioInput._Rotate180Pressed = true;
+    if ( ( GLFW_KEY_C == iKey ) || ( GLFW_KEY_LEFT_SHIFT == iKey ) )
+      ioInput._HoldPressed = true;
+  }
+  else if ( TetrisControlDevice::KeyboardLeft == iDevice )
+  {
+    if ( GLFW_KEY_A == iKey )
+      ioInput._MoveLeftPressed = true;
+    if ( GLFW_KEY_D == iKey )
+      ioInput._MoveRightPressed = true;
+    if ( GLFW_KEY_SPACE == iKey )
+      ioInput._HardDropPressed = true;
+    if ( ( GLFW_KEY_H == iKey ) || ( GLFW_KEY_X == iKey ) || ( GLFW_KEY_E == iKey ) )
+      ioInput._RotateCWPressed = true;
+    if ( ( GLFW_KEY_G == iKey ) || ( GLFW_KEY_Z == iKey ) || ( GLFW_KEY_Q == iKey ) )
+      ioInput._RotateCCWPressed = true;
+    if ( ( GLFW_KEY_W == iKey ) || ( GLFW_KEY_Y == iKey ) )
+      ioInput._Rotate180Pressed = true;
+    if ( ( GLFW_KEY_LEFT_SHIFT == iKey ) || ( GLFW_KEY_C == iKey ) || ( GLFW_KEY_LEFT_CONTROL == iKey ) )
+      ioInput._HoldPressed = true;
+  }
+  else if ( TetrisControlDevice::KeyboardRight == iDevice )
+  {
+    if ( ( GLFW_KEY_LEFT == iKey ) || ( GLFW_KEY_KP_4 == iKey ) )
+      ioInput._MoveLeftPressed = true;
+    if ( ( GLFW_KEY_RIGHT == iKey ) || ( GLFW_KEY_KP_6 == iKey ) )
+      ioInput._MoveRightPressed = true;
+    if ( ( GLFW_KEY_RIGHT_SHIFT == iKey ) || ( GLFW_KEY_ENTER == iKey ) || ( GLFW_KEY_KP_ENTER == iKey ) || ( GLFW_KEY_KP_8 == iKey ) )
+      ioInput._HardDropPressed = true;
+    if ( ( GLFW_KEY_UP == iKey ) || ( GLFW_KEY_KP_2 == iKey ) || ( GLFW_KEY_SLASH == iKey ) )
+      ioInput._RotateCWPressed = true;
+    if ( ( GLFW_KEY_KP_1 == iKey ) || ( GLFW_KEY_PERIOD == iKey ) || ( GLFW_KEY_RIGHT_ALT == iKey ) )
+      ioInput._RotateCCWPressed = true;
+    if ( ( GLFW_KEY_KP_3 == iKey ) || ( GLFW_KEY_COMMA == iKey ) )
+      ioInput._Rotate180Pressed = true;
+    if ( ( GLFW_KEY_RIGHT_CONTROL == iKey ) || ( GLFW_KEY_KP_0 == iKey ) || ( GLFW_KEY_SEMICOLON == iKey ) )
+      ioInput._HoldPressed = true;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// PollHeldKeysForDevice
+// ----------------------------------------------------------------------------
+void TetrisGameApp::PollHeldKeysForDevice( const KeyInput & iKeyInput,
+                                           TetrisControlDevice iDevice,
+                                           bool & oLeftHeld,
+                                           bool & oRightHeld,
+                                           bool & oSoftDropHeld )
+{
+  oLeftHeld     = false;
+  oRightHeld    = false;
+  oSoftDropHeld = false;
+
+  if ( TetrisControlDevice::KeyboardFull == iDevice )
+  {
+    oLeftHeld     = iKeyInput.IsKeyDown(GLFW_KEY_LEFT)  || iKeyInput.IsKeyDown(GLFW_KEY_A);
+    oRightHeld    = iKeyInput.IsKeyDown(GLFW_KEY_RIGHT) || iKeyInput.IsKeyDown(GLFW_KEY_D);
+    oSoftDropHeld = iKeyInput.IsKeyDown(GLFW_KEY_DOWN)  || iKeyInput.IsKeyDown(GLFW_KEY_S);
+  }
+  else if ( TetrisControlDevice::KeyboardLeft == iDevice )
+  {
+    oLeftHeld     = iKeyInput.IsKeyDown(GLFW_KEY_A);
+    oRightHeld    = iKeyInput.IsKeyDown(GLFW_KEY_D);
+    oSoftDropHeld = iKeyInput.IsKeyDown(GLFW_KEY_S);
+  }
+  else if ( TetrisControlDevice::KeyboardRight == iDevice )
+  {
+    oLeftHeld     = iKeyInput.IsKeyDown(GLFW_KEY_LEFT)  || iKeyInput.IsKeyDown(GLFW_KEY_KP_4);
+    oRightHeld    = iKeyInput.IsKeyDown(GLFW_KEY_RIGHT) || iKeyInput.IsKeyDown(GLFW_KEY_KP_6);
+    oSoftDropHeld = iKeyInput.IsKeyDown(GLFW_KEY_DOWN)  || iKeyInput.IsKeyDown(GLFW_KEY_KP_5);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// IsInActiveGameplay
+// ----------------------------------------------------------------------------
+bool TetrisGameApp::IsInActiveGameplay() const
+{
+  if ( ( TetrisAppState::InGame != _AppState ) || _Hud.IsSettingsOpen() )
+    return false;
+
+  if ( 2 == _MpState._NumPlayers )
+  {
+    const bool anyEnded  = _GameLogic[0].IsGameOver() || _GameLogic[0].IsVictory() ||
+                           _GameLogic[1].IsGameOver() || _GameLogic[1].IsVictory();
+    const bool anyPaused = _GameLogic[0].IsPaused() || _GameLogic[1].IsPaused();
+    return !anyEnded && !anyPaused;
+  }
+
+  return !_GameLogic[0].IsPaused() && !_GameLogic[0].IsGameOver() && !_GameLogic[0].IsVictory();
+}
 
 // ----------------------------------------------------------------------------
 // KeyCallback
@@ -50,14 +223,9 @@ void TetrisGameApp::KeyCallback( GLFWwindow * iWindow, int iKey, int, int iActio
 
   if ( GLFW_PRESS == iAction )
   {
-    const bool inActiveGameplay = ( TetrisAppState::InGame == app->_AppState ) &&
-                                  !app->_GameLogic.IsPaused() &&
-                                  !app->_GameLogic.IsGameOver() &&
-                                  !app->_GameLogic.IsVictory() &&
-                                  !app->_Hud.IsSettingsOpen();
+    const bool inActiveGameplay = app->IsInActiveGameplay();
 
-    if ( ( GLFW_KEY_ENTER == iKey ) || ( GLFW_KEY_KP_ENTER == iKey ) ||
-         ( !inActiveGameplay && ( GLFW_KEY_SPACE == iKey ) ) )
+    if ( ( !inActiveGameplay && ( ( GLFW_KEY_ENTER == iKey ) || ( GLFW_KEY_KP_ENTER == iKey ) || ( GLFW_KEY_SPACE == iKey ) ) ) )
     {
       app->_MenuInput._Confirm = true;
     }
@@ -69,48 +237,39 @@ void TetrisGameApp::KeyCallback( GLFWwindow * iWindow, int iKey, int, int iActio
 
     if ( inActiveGameplay )
     {
-      // Directional tap triggers
-      if ( ( GLFW_KEY_LEFT == iKey ) || ( GLFW_KEY_A == iKey ) )
-        app->_InputState._MoveLeftPressed = true;
-      if ( ( GLFW_KEY_RIGHT == iKey ) || ( GLFW_KEY_D == iKey ) )
-        app->_InputState._MoveRightPressed = true;
+      app->ResolvePlayerDevices();
+      if ( 1 == app->_MpState._NumPlayers )
+      {
+        RouteKeyPressToInput(iKey, TetrisControlDevice::KeyboardFull, app->_InputState[0]);
+      }
+      else
+      {
+        RouteKeyPressToInput(iKey, app->_MpState._PlayerDevices[0], app->_InputState[0]);
+        RouteKeyPressToInput(iKey, app->_MpState._PlayerDevices[1], app->_InputState[1]);
+      }
 
-      // Hard drop
-      if ( GLFW_KEY_SPACE == iKey )
-        app->_InputState._HardDropPressed = true;
-
-      // Rotations
-      if ( ( GLFW_KEY_UP == iKey ) || ( GLFW_KEY_X == iKey ) )
-        app->_InputState._RotateCWPressed = true;
-      if ( ( GLFW_KEY_Z == iKey ) || ( GLFW_KEY_LEFT_CONTROL == iKey ) )
-        app->_InputState._RotateCCWPressed = true;
-      if ( GLFW_KEY_W == iKey )
-        app->_InputState._Rotate180Pressed = true;
-
-      // Hold
-      if ( ( GLFW_KEY_C == iKey ) || ( GLFW_KEY_LEFT_SHIFT == iKey ) )
-        app->_InputState._HoldPressed = true;
-
-      // Reset
       if ( GLFW_KEY_R == iKey )
-        app->_InputState._ResetPressed = true;
+        app->_InputState[0]._ResetPressed = true;
     }
 
     // Pause toggle during InGame
-    if ( ( TetrisAppState::InGame == app->_AppState ) &&
-         !app->_GameLogic.IsGameOver() &&
-         !app->_GameLogic.IsVictory() )
+    const bool anyEnded = ( 2 == app->_MpState._NumPlayers )
+                          ? ( app->_GameLogic[0].IsGameOver() || app->_GameLogic[0].IsVictory() ||
+                              app->_GameLogic[1].IsGameOver() || app->_GameLogic[1].IsVictory() )
+                          : ( app->_GameLogic[0].IsGameOver() || app->_GameLogic[0].IsVictory() );
+
+    if ( ( TetrisAppState::InGame == app->_AppState ) && !anyEnded )
     {
       if ( GLFW_KEY_P == iKey )
       {
-        app->_InputState._PausePressed = true;
+        app->_InputState[0]._PausePressed = true;
       }
       else if ( GLFW_KEY_ESCAPE == iKey )
       {
         if ( app->_Hud.IsSettingsOpen() )
           app->_Hud.ToggleSettings();
         else
-          app->_InputState._PausePressed = true;
+          app->_InputState[0]._PausePressed = true;
       }
     }
 
@@ -127,8 +286,11 @@ void TetrisGameApp::KeyCallback( GLFWwindow * iWindow, int iKey, int, int iActio
       else
       {
         app->_Hud.ToggleSettings();
-        if ( app->_Hud.IsSettingsOpen() && !app->_GameLogic.IsPaused() )
-          app->_GameLogic.SetPaused(true);
+        if ( app->_Hud.IsSettingsOpen() && !app->_GameLogic[0].IsPaused() )
+        {
+          app->_GameLogic[0].SetPaused(true);
+          app->_GameLogic[1].SetPaused(true);
+        }
       }
     }
 
@@ -209,6 +371,9 @@ void TetrisGameApp::FramebufferSizeCallback( GLFWwindow * iWindow, int iWidth, i
 TetrisGameApp::TetrisGameApp( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidth, int iScreenHeight )
 : _MainWindow(iMainWindow), _ScreenWidth(iScreenWidth), _ScreenHeight(iScreenHeight)
 {
+  _GamepadInputs[0].SetDeviceSlot(0);
+  _GamepadInputs[1].SetDeviceSlot(1);
+
   _Settings._WindowResolution.x = _ScreenWidth;
   _Settings._WindowResolution.y = _ScreenHeight;
   _Settings._RenderResolution.x = _Settings._WindowResolution.x;
@@ -243,6 +408,85 @@ TetrisGameApp::TetrisGameApp( std::shared_ptr<GLFWwindow> iMainWindow, int iScre
 // ----------------------------------------------------------------------------
 TetrisGameApp::~TetrisGameApp()
 {
+}
+
+// ----------------------------------------------------------------------------
+// ResolvePlayerDevices
+// ----------------------------------------------------------------------------
+void TetrisGameApp::ResolvePlayerDevices()
+{
+  ResolveDevicesForPreset(
+    _MpState._Preset,
+    _MpState._NumPlayers,
+    _GamepadInputs[0].IsConnected(),
+    _GamepadInputs[1].IsConnected(),
+    _MpState._PlayerDevices[0],
+    _MpState._PlayerDevices[1]
+  );
+}
+
+// ----------------------------------------------------------------------------
+// StartMatch
+// ----------------------------------------------------------------------------
+void TetrisGameApp::StartMatch( int iNumPlayers, TetrisGameMode iMode, int iStartLevel, bool iResetSeries )
+{
+  _MpState._NumPlayers = std::clamp(iNumPlayers, 1, 2);
+  if ( iResetSeries )
+  {
+    _MpState._RoundWins[0]    = 0;
+    _MpState._RoundWins[1]    = 0;
+    _MpState._LastRoundWinner = -1;
+  }
+
+  _RoundResolved = false;
+
+  std::random_device rd;
+  unsigned int sharedSeed = rd();
+  if ( 0 == sharedSeed )
+    sharedSeed = 1337u;
+
+  _GameLogic[0].StartNewGame(iMode, iStartLevel, sharedSeed);
+  _GameLogic[1].StartNewGame(iMode, iStartLevel, sharedSeed);
+
+  _AudioTrackers[0].Reset(_GameLogic[0]);
+  _AudioTrackers[1].Reset(_GameLogic[1]);
+
+  if ( _Scene )
+  {
+    _SceneManager.SelectNextRandomBackground(*_Scene, _Settings, _Renderer.get());
+    _SceneManager.SyncScene(*_Scene, _GameLogic, _MpState._NumPlayers, 0.f);
+    _SceneManager.SyncCamera(*_Scene, _GameLogic, _MpState._NumPlayers);
+  }
+
+  _PrevLevel   = _GameLogic[0].GetLevel();
+  _PrevElapsed = _GameLogic[0].GetElapsedTime();
+}
+
+// ----------------------------------------------------------------------------
+// CheckPendingMatchRequests
+// ----------------------------------------------------------------------------
+void TetrisGameApp::CheckPendingMatchRequests()
+{
+  if ( _MpState._RequestStart1P )
+  {
+    _MpState._RequestStart1P = false;
+    StartMatch(1, _MpState._Requested1PMode, _MpState._StartLevel, true);
+  }
+  else if ( _MpState._RequestStart2P )
+  {
+    _MpState._RequestStart2P = false;
+    StartMatch(2, _MpState._MpMode, _MpState._StartLevel, true);
+  }
+  else if ( _MpState._RequestNextRound )
+  {
+    _MpState._RequestNextRound = false;
+    StartMatch(_MpState._NumPlayers, _GameLogic[0].GetGameMode(), _GameLogic[0].GetStartLevel(), false);
+  }
+  else if ( _MpState._RequestRematch )
+  {
+    _MpState._RequestRematch = false;
+    StartMatch(_MpState._NumPlayers, _GameLogic[0].GetGameMode(), _GameLogic[0].GetStartLevel(), true);
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -313,7 +557,6 @@ void TetrisGameApp::SyncFramebufferResolution( bool iNotifyRenderer )
     _Renderer->Notify(DirtyState::RenderSettings);
 }
 
-// ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 // InitializeSoundBank
 // ----------------------------------------------------------------------------
@@ -632,6 +875,7 @@ void TetrisGameApp::InitializeSoundBank()
   }
 }
 
+// ----------------------------------------------------------------------------
 // InitializeUI
 // ----------------------------------------------------------------------------
 int TetrisGameApp::InitializeUI()
@@ -643,7 +887,9 @@ int TetrisGameApp::InitializeUI()
 
   ImGui::StyleColorsDark();
   _Hud.Initialize();
-  _Hud.SetGamepadInput(&_GamepadInput);
+  _Hud.SetGamepadInputs(&_GamepadInputs[0], &_GamepadInputs[1]);
+  _Hud.SetPlayerLogics(_GameLogic);
+  _Hud.SetMultiplayerState(&_MpState);
   _Hud.SetAudioEngine(&_Audio);
 
   const char * glslVersion = "#version 410";
@@ -675,12 +921,12 @@ int TetrisGameApp::InitializeScene()
   else
   {
     _SceneManager.SelectNextRandomBackground(*_Scene, _Settings, nullptr);
-    _SceneManager.SyncScene(*_Scene, _GameLogic, 0.f);
-    _SceneManager.SyncCamera(*_Scene, _GameLogic);
+    _SceneManager.SyncScene(*_Scene, _GameLogic, _MpState._NumPlayers, 0.f);
+    _SceneManager.SyncCamera(*_Scene, _GameLogic, _MpState._NumPlayers);
   }
   _PrevAppState = _AppState;
-  _PrevLevel    = _GameLogic.GetLevel();
-  _PrevElapsed  = _GameLogic.GetElapsedTime();
+  _PrevLevel    = _GameLogic[0].GetLevel();
+  _PrevElapsed  = _GameLogic[0].GetElapsedTime();
   return 0;
 }
 
@@ -712,12 +958,69 @@ int TetrisGameApp::InitializeRenderer()
 }
 
 // ----------------------------------------------------------------------------
+// PollGamepadForPlayer
+// ----------------------------------------------------------------------------
+void TetrisGameApp::PollGamepadForPlayer( GamepadInput & ioGamepad,
+                                          TetrisInputState & ioInput,
+                                          bool iInActiveGameplay )
+{
+  if ( !ioGamepad.IsConnected() )
+    return;
+
+  const float stickDeadzone = ioGamepad.GetStickDeadzone();
+  const float leftStickX    = ioGamepad.GetAxis(GLFW_GAMEPAD_AXIS_LEFT_X, stickDeadzone);
+  const float leftStickY    = ioGamepad.GetAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, stickDeadzone);
+
+  const bool gpLeftHeld     = ioGamepad.IsButtonDown(GLFW_GAMEPAD_BUTTON_DPAD_LEFT)  || ( leftStickX < -0.45f );
+  const bool gpRightHeld    = ioGamepad.IsButtonDown(GLFW_GAMEPAD_BUTTON_DPAD_RIGHT) || ( leftStickX >  0.45f );
+  const bool gpSoftDropHeld = ioGamepad.IsButtonDown(GLFW_GAMEPAD_BUTTON_DPAD_DOWN)  || ( leftStickY >  0.45f );
+
+  ioInput._LeftHeld     = ioInput._LeftHeld     || gpLeftHeld;
+  ioInput._RightHeld    = ioInput._RightHeld    || gpRightHeld;
+  ioInput._SoftDropHeld = ioInput._SoftDropHeld || gpSoftDropHeld;
+
+  if ( !iInActiveGameplay )
+    return;
+
+  if ( ioGamepad.IsDirPressed(GamepadDir::Left, true) )
+    ioInput._MoveLeftPressed = true;
+  if ( ioGamepad.IsDirPressed(GamepadDir::Right, true) )
+    ioInput._MoveRightPressed = true;
+
+  const bool dpadUpPressed  = ioGamepad.IsButtonPressed(GLFW_GAMEPAD_BUTTON_DPAD_UP);
+  const bool stickUpPressed = ioGamepad.GetAllowStickHardDrop() && ioGamepad.IsStrictStickUpPressed();
+  if ( dpadUpPressed || stickUpPressed )
+    ioInput._HardDropPressed = true;
+
+  if ( ioGamepad.IsButtonPressed(GLFW_GAMEPAD_BUTTON_B) )
+    ioInput._RotateCWPressed = true;
+  if ( ioGamepad.IsButtonPressed(GLFW_GAMEPAD_BUTTON_A) )
+    ioInput._RotateCCWPressed = true;
+  if ( ioGamepad.IsButtonPressed(GLFW_GAMEPAD_BUTTON_X) || ioGamepad.IsButtonPressed(GLFW_GAMEPAD_BUTTON_Y) )
+    ioInput._Rotate180Pressed = true;
+
+  if ( ioGamepad.IsButtonPressed(GLFW_GAMEPAD_BUTTON_LEFT_BUMPER) ||
+       ioGamepad.IsButtonPressed(GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER) ||
+       ioGamepad.IsLeftTriggerPressed() ||
+       ioGamepad.IsRightTriggerPressed() )
+  {
+    ioInput._HoldPressed = true;
+  }
+
+  if ( ioGamepad.IsButtonPressed(GLFW_GAMEPAD_BUTTON_BACK) )
+    _InputState[0]._ResetPressed = true;
+}
+
+// ----------------------------------------------------------------------------
 // ProcessInput
 // ----------------------------------------------------------------------------
 int TetrisGameApp::ProcessInput()
 {
   const float dt = static_cast<float>(_DeltaTime);
-  _GamepadInput.Poll(dt);
+  _GamepadInputs[0].Poll(dt);
+  _GamepadInputs[1].Poll(dt);
+
+  ResolvePlayerDevices();
 
   const bool inOptionsMenu = ( ( TetrisAppState::TitleScreen == _AppState ) && ( TetrisMenuPage::Options == _Hud.GetMenuPage() ) ) ||
                              _Hud.IsSettingsOpen();
@@ -729,101 +1032,59 @@ int TetrisGameApp::ProcessInput()
   else
     io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableGamepad;
 
-  const bool inActiveGameplay = ( TetrisAppState::InGame == _AppState ) &&
-                                !_GameLogic.IsPaused() &&
-                                !_GameLogic.IsGameOver() &&
-                                !_GameLogic.IsVictory() &&
-                                !_Hud.IsSettingsOpen();
+  const bool inActiveGameplay = IsInActiveGameplay();
 
-  // Track held inputs (Keyboard + Xbox Gamepad D-Pad & Left Stick)
-  const float stickDeadzone = _GamepadInput.GetStickDeadzone();
-  const float leftStickX    = _GamepadInput.GetAxis(GLFW_GAMEPAD_AXIS_LEFT_X, stickDeadzone);
-  const float leftStickY    = _GamepadInput.GetAxis(GLFW_GAMEPAD_AXIS_LEFT_Y, stickDeadzone);
-
-  const bool gpLeftHeld     = _GamepadInput.IsButtonDown(GLFW_GAMEPAD_BUTTON_DPAD_LEFT)  || ( leftStickX < -0.45f );
-  const bool gpRightHeld    = _GamepadInput.IsButtonDown(GLFW_GAMEPAD_BUTTON_DPAD_RIGHT) || ( leftStickX >  0.45f );
-  const bool gpSoftDropHeld = _GamepadInput.IsButtonDown(GLFW_GAMEPAD_BUTTON_DPAD_DOWN)  || ( leftStickY >  0.45f );
-
-  _InputState._LeftHeld     = _KeyInput.IsKeyDown(GLFW_KEY_LEFT)  || _KeyInput.IsKeyDown(GLFW_KEY_A) || gpLeftHeld;
-  _InputState._RightHeld    = _KeyInput.IsKeyDown(GLFW_KEY_RIGHT) || _KeyInput.IsKeyDown(GLFW_KEY_D) || gpRightHeld;
-  _InputState._SoftDropHeld = _KeyInput.IsKeyDown(GLFW_KEY_DOWN)  || _KeyInput.IsKeyDown(GLFW_KEY_S) || gpSoftDropHeld;
-
-  if ( _GamepadInput.IsConnected() )
+  // Menu navigation from either connected Gamepad when not in active gameplay
+  for ( int g = 0; g < 2; ++g )
   {
-    // Menu navigation from Xbox Gamepad
+    GamepadInput & gp = _GamepadInputs[g];
+    if ( !gp.IsConnected() )
+      continue;
+
     if ( !inActiveGameplay )
     {
-      if ( _GamepadInput.IsMenuNavRepeated(GamepadDir::Up) )
+      if ( gp.IsMenuNavRepeated(GamepadDir::Up) )
         _MenuInput._NavUp = true;
-      if ( _GamepadInput.IsMenuNavRepeated(GamepadDir::Down) )
+      if ( gp.IsMenuNavRepeated(GamepadDir::Down) )
         _MenuInput._NavDown = true;
-      if ( _GamepadInput.IsMenuNavRepeated(GamepadDir::Left) )
+      if ( gp.IsMenuNavRepeated(GamepadDir::Left) )
         _MenuInput._NavLeft = true;
-      if ( _GamepadInput.IsMenuNavRepeated(GamepadDir::Right) )
+      if ( gp.IsMenuNavRepeated(GamepadDir::Right) )
         _MenuInput._NavRight = true;
 
-      if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_A) )
+      if ( gp.IsButtonPressed(GLFW_GAMEPAD_BUTTON_A) )
         _MenuInput._Confirm = true;
 
-      if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_B) )
+      if ( gp.IsButtonPressed(GLFW_GAMEPAD_BUTTON_B) )
       {
-        if ( ( TetrisAppState::InGame == _AppState ) && _GameLogic.IsPaused() && !_Hud.IsSettingsOpen() )
-          _InputState._PausePressed = true;
+        const bool isPaused = ( TetrisAppState::InGame == _AppState ) &&
+                              ( _GameLogic[0].IsPaused() || _GameLogic[1].IsPaused() ) &&
+                              !_Hud.IsSettingsOpen();
+        if ( isPaused )
+          _InputState[0]._PausePressed = true;
         else
           _MenuInput._Back = true;
       }
 
-      if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_LEFT_BUMPER) )
+      if ( gp.IsButtonPressed(GLFW_GAMEPAD_BUTTON_LEFT_BUMPER) )
         _MenuInput._PrevTab = true;
-      if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER) )
+      if ( gp.IsButtonPressed(GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER) )
         _MenuInput._NextTab = true;
     }
 
-    // Active gameplay triggers from Xbox Gamepad
-    if ( inActiveGameplay )
-    {
-      if ( _GamepadInput.IsDirPressed(GamepadDir::Left, true) )
-        _InputState._MoveLeftPressed = true;
-      if ( _GamepadInput.IsDirPressed(GamepadDir::Right, true) )
-        _InputState._MoveRightPressed = true;
-
-      // Hard Drop: D-Pad Up or strict vertical Left Stick Up
-      const bool dpadUpPressed  = _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_DPAD_UP);
-      const bool stickUpPressed = _GamepadInput.GetAllowStickHardDrop() && _GamepadInput.IsStrictStickUpPressed();
-      if ( dpadUpPressed || stickUpPressed )
-        _InputState._HardDropPressed = true;
-
-      // Rotations (Xbox Guideline: A = CCW, B = CW, X / Y = 180)
-      if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_B) )
-        _InputState._RotateCWPressed = true;
-      if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_A) )
-        _InputState._RotateCCWPressed = true;
-      if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_X) || _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_Y) )
-        _InputState._Rotate180Pressed = true;
-
-      // Hold Piece (LB / RB / LT / RT)
-      if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_LEFT_BUMPER) ||
-           _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER) ||
-           _GamepadInput.IsLeftTriggerPressed() ||
-           _GamepadInput.IsRightTriggerPressed() )
-      {
-        _InputState._HoldPressed = true;
-      }
-
-      // Quick Restart (Back / View button)
-      if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_BACK) )
-        _InputState._ResetPressed = true;
-    }
-
     // Start (Menu) button: Pause / Resume in-game, or Confirm on Title Screen
-    if ( _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_START) )
+    if ( gp.IsButtonPressed(GLFW_GAMEPAD_BUTTON_START) )
     {
       if ( TetrisAppState::InGame == _AppState )
       {
+        const bool anyEnded = ( 2 == _MpState._NumPlayers )
+                              ? ( _GameLogic[0].IsGameOver() || _GameLogic[0].IsVictory() ||
+                                  _GameLogic[1].IsGameOver() || _GameLogic[1].IsVictory() )
+                              : ( _GameLogic[0].IsGameOver() || _GameLogic[0].IsVictory() );
         if ( _Hud.IsSettingsOpen() )
           _Hud.ToggleSettings();
-        else if ( !_GameLogic.IsGameOver() && !_GameLogic.IsVictory() )
-          _InputState._PausePressed = true;
+        else if ( !anyEnded )
+          _InputState[0]._PausePressed = true;
         else
           _MenuInput._Confirm = true;
       }
@@ -834,7 +1095,7 @@ int TetrisGameApp::ProcessInput()
     }
 
     // R3 (Right Thumbstick Click): Cycle 3D Camera Preset in-game
-    if ( ( TetrisAppState::InGame == _AppState ) && _GamepadInput.IsButtonPressed(GLFW_GAMEPAD_BUTTON_RIGHT_THUMB) )
+    if ( ( TetrisAppState::InGame == _AppState ) && gp.IsButtonPressed(GLFW_GAMEPAD_BUTTON_RIGHT_THUMB) )
     {
       const int nextCam = ( static_cast<int>(_SceneManager.GetCameraPreset()) + 1 ) % 3;
       _SceneManager.SetCameraPreset(static_cast<TetrisCameraPreset>(nextCam));
@@ -843,13 +1104,36 @@ int TetrisGameApp::ProcessInput()
     // Right Stick: Orbit 3D camera when in FreeOrbit preset
     if ( ( TetrisAppState::InGame == _AppState ) && ( TetrisCameraPreset::FreeOrbit == _SceneManager.GetCameraPreset() ) )
     {
-      const float rx = _GamepadInput.GetAxis(GLFW_GAMEPAD_AXIS_RIGHT_X, stickDeadzone);
-      const float ry = _GamepadInput.GetAxis(GLFW_GAMEPAD_AXIS_RIGHT_Y, stickDeadzone);
+      const float stickDeadzone = gp.GetStickDeadzone();
+      const float rx = gp.GetAxis(GLFW_GAMEPAD_AXIS_RIGHT_X, stickDeadzone);
+      const float ry = gp.GetAxis(GLFW_GAMEPAD_AXIS_RIGHT_Y, stickDeadzone);
       if ( ( std::fabs(rx) > 0.001f ) || ( std::fabs(ry) > 0.001f ) )
       {
         const float orbitSpeed = 95.0f * dt;
         _SceneManager.OrbitYawPitch(rx * orbitSpeed, -ry * orbitSpeed);
       }
+    }
+  }
+
+  // Gameplay input routing for 1P or 2P
+  if ( 1 == _MpState._NumPlayers )
+  {
+    PollHeldKeysForDevice(_KeyInput, TetrisControlDevice::KeyboardFull,
+                          _InputState[0]._LeftHeld, _InputState[0]._RightHeld, _InputState[0]._SoftDropHeld);
+    PollGamepadForPlayer(_GamepadInputs[0], _InputState[0], inActiveGameplay);
+  }
+  else
+  {
+    for ( int p = 0; p < 2; ++p )
+    {
+      const TetrisControlDevice dev = _MpState._PlayerDevices[p];
+      PollHeldKeysForDevice(_KeyInput, dev,
+                            _InputState[p]._LeftHeld, _InputState[p]._RightHeld, _InputState[p]._SoftDropHeld);
+
+      if ( TetrisControlDevice::Gamepad1 == dev )
+        PollGamepadForPlayer(_GamepadInputs[0], _InputState[p], inActiveGameplay);
+      else if ( TetrisControlDevice::Gamepad2 == dev )
+        PollGamepadForPlayer(_GamepadInputs[1], _InputState[p], inActiveGameplay);
     }
   }
 
@@ -870,10 +1154,121 @@ int TetrisGameApp::ProcessInput()
 }
 
 // ----------------------------------------------------------------------------
+// EvaluatePlayerAudio
+// ----------------------------------------------------------------------------
+void TetrisGameApp::EvaluatePlayerAudio( int iPlayerIdx, const Vec3 & iBoardPos, bool iUseSpatial3D )
+{
+  const TetrisGameLogic & logic     = _GameLogic[iPlayerIdx];
+  const TetrisInputState & input    = _InputState[iPlayerIdx];
+  TetrisPlayerAudioTracker & tracker = _AudioTrackers[iPlayerIdx];
+
+  auto playSfx = [&]( const std::string & iSoundId, float iVol, float iPitch )
+  {
+    if ( iUseSpatial3D )
+      _Audio.PlaySound3D(iSoundId, iBoardPos, iVol, iPitch, 20.0f, 80.0f);
+    else
+      _Audio.PlaySound2D(iSoundId, iVol, iPitch);
+  };
+
+  const bool isGameOver            = logic.IsGameOver();
+  const bool isVictory             = logic.IsVictory();
+  const unsigned int curLockId     = logic.GetLockEventId();
+  const unsigned int curLineClearId = logic.GetLineClearEventId();
+  const int curLevel               = logic.GetLevel();
+  const TetrisPieceType curPiece   = logic.GetActivePiece();
+  const Vec2i & curOrigin          = logic.GetActiveOrigin();
+  const TetrisRotation curRot      = logic.GetActiveRotation();
+  const TetrisPieceType curHold    = logic.GetHoldPiece();
+
+  if ( isGameOver && !tracker._PrevGameOver )
+  {
+    playSfx("game_over", 0.9f, 1.0f);
+  }
+  else if ( isVictory && !tracker._PrevVictory )
+  {
+    playSfx("victory", 0.95f, 1.0f);
+  }
+  else if ( curLineClearId != tracker._PrevLineClearId )
+  {
+    if ( logic.IsLastClearPerfect() )
+    {
+      playSfx("clear_perfect", 1.0f, 1.0f);
+    }
+    else if ( logic.GetLastClearTSpin() != TetrisTSpinType::None )
+    {
+      playSfx("clear_tspin", 0.95f, 1.0f);
+    }
+    else
+    {
+      const int cleared = static_cast<int>(logic.GetLastClearedRows().size());
+      if ( cleared >= 4 )
+      {
+        playSfx("clear_tetris", 1.0f, 1.0f);
+      }
+      else
+      {
+        const float pitch = 1.0f + ( cleared - 1 ) * 0.12f;
+        playSfx("clear_line", 0.85f, pitch);
+      }
+    }
+
+    if ( logic.GetComboCount() >= 1 )
+    {
+      const float comboPitch = std::min(2.2f, 1.0f + logic.GetComboCount() * 0.08f);
+      playSfx("clear_combo", 0.8f, comboPitch);
+    }
+  }
+  else if ( curLockId != tracker._PrevLockEventId )
+  {
+    if ( logic.WasLastLockFromHardDrop() )
+      playSfx("piece_harddrop", 0.85f, 1.0f);
+    else
+      playSfx("piece_lock", 0.75f, 1.0f);
+  }
+  else if ( curHold != tracker._PrevHoldPiece )
+  {
+    playSfx("piece_hold", 0.75f, 1.0f);
+  }
+  else if ( ( curPiece != TetrisPieceType::None ) && ( curPiece == tracker._PrevActivePiece ) )
+  {
+    if ( curRot != tracker._PrevRotation )
+    {
+      playSfx("piece_rotate", 0.70f, 1.0f);
+    }
+    else if ( curOrigin.x != tracker._PrevPieceOriginX )
+    {
+      playSfx("piece_move", 0.60f, 1.0f);
+    }
+    else if ( input._SoftDropHeld && ( curOrigin.y < tracker._PrevPieceOriginY ) )
+    {
+      playSfx("piece_softdrop", 0.45f, 1.0f);
+    }
+  }
+
+  if ( ( curLevel > tracker._PrevLevel ) && !isGameOver && !isVictory )
+  {
+    playSfx("level_up", 0.9f, 1.0f);
+  }
+
+  tracker._PrevGameOver     = isGameOver;
+  tracker._PrevVictory      = isVictory;
+  tracker._PrevLockEventId  = curLockId;
+  tracker._PrevLineClearId  = curLineClearId;
+  tracker._PrevActivePiece  = curPiece;
+  tracker._PrevPieceOriginX = curOrigin.x;
+  tracker._PrevPieceOriginY = curOrigin.y;
+  tracker._PrevRotation     = curRot;
+  tracker._PrevHoldPiece    = curHold;
+  tracker._PrevLevel        = curLevel;
+}
+
+// ----------------------------------------------------------------------------
 // UpdateGame
 // ----------------------------------------------------------------------------
 int TetrisGameApp::UpdateGame( float iDeltaTime )
 {
+  CheckPendingMatchRequests();
+
   if ( _Scene && ( _AppState != _PrevAppState ) )
   {
     if ( TetrisAppState::TitleScreen == _AppState )
@@ -883,8 +1278,8 @@ int TetrisGameApp::UpdateGame( float iDeltaTime )
     else
     {
       _SceneManager.SelectNextRandomBackground(*_Scene, _Settings, _Renderer.get());
-      _PrevLevel   = _GameLogic.GetLevel();
-      _PrevElapsed = _GameLogic.GetElapsedTime();
+      _PrevLevel   = _GameLogic[0].GetLevel();
+      _PrevElapsed = _GameLogic[0].GetElapsedTime();
     }
     _PrevAppState = _AppState;
   }
@@ -898,111 +1293,18 @@ int TetrisGameApp::UpdateGame( float iDeltaTime )
       _SceneManager.SyncTitleCamera(*_Scene, curTime);
     }
   }
-  else
+  else if ( 1 == _MpState._NumPlayers )
   {
-    const bool resetRequested = _InputState._ResetPressed;
+    const bool resetRequested = _InputState[0]._ResetPressed;
     if ( !_Hud.IsSettingsOpen() )
-      _GameLogic.Update(iDeltaTime, _InputState, _HandlingConfig);
+      _GameLogic[0].Update(iDeltaTime, _InputState[0], _HandlingConfig);
 
-      // Evaluate audio triggers
-      const bool isGameOver = _GameLogic.IsGameOver();
-      const bool isVictory  = _GameLogic.IsVictory();
-      const unsigned int curLockId = _GameLogic.GetLockEventId();
-      const unsigned int curLineClearId = _GameLogic.GetLineClearEventId();
-      const int curLevel = _GameLogic.GetLevel();
-      const TetrisPieceType curPiece = _GameLogic.GetActivePiece();
-      const Vec2i & curOrigin = _GameLogic.GetActiveOrigin();
-      const TetrisRotation curRot = _GameLogic.GetActiveRotation();
-      const TetrisPieceType curHold = _GameLogic.GetHoldPiece();
-
-      if ( isGameOver && !_PrevGameOver )
-      {
-        _Audio.PlaySound2D( "game_over", 0.9f, 1.0f );
-      }
-      else if ( isVictory && !_PrevVictory )
-      {
-        _Audio.PlaySound2D( "victory", 0.95f, 1.0f );
-      }
-      else if ( curLineClearId != _PrevLineClearId )
-      {
-        if ( _GameLogic.IsLastClearPerfect() )
-        {
-          _Audio.PlaySound2D( "clear_perfect", 1.0f, 1.0f );
-        }
-        else if ( _GameLogic.GetLastClearTSpin() != TetrisTSpinType::None )
-        {
-          _Audio.PlaySound2D( "clear_tspin", 0.95f, 1.0f );
-        }
-        else
-        {
-          const int cleared = static_cast<int>( _GameLogic.GetLastClearedRows().size() );
-          if ( cleared >= 4 )
-          {
-            _Audio.PlaySound2D( "clear_tetris", 1.0f, 1.0f );
-          }
-          else
-          {
-            float pitch = 1.0f + ( cleared - 1 ) * 0.12f;
-            _Audio.PlaySound2D( "clear_line", 0.85f, pitch );
-          }
-        }
-
-        if ( _GameLogic.GetComboCount() >= 1 )
-        {
-          float comboPitch = std::min( 2.2f, 1.0f + _GameLogic.GetComboCount() * 0.08f );
-          _Audio.PlaySound2D( "clear_combo", 0.8f, comboPitch );
-        }
-      }
-      else if ( curLockId != _PrevLockEventId )
-      {
-        if ( _GameLogic.WasLastLockFromHardDrop() )
-        {
-          _Audio.PlaySound2D( "piece_harddrop", 0.85f, 1.0f );
-        }
-        else
-        {
-          _Audio.PlaySound2D( "piece_lock", 0.75f, 1.0f );
-        }
-      }
-      else if ( curHold != _PrevHoldPiece )
-      {
-        _Audio.PlaySound2D( "piece_hold", 0.75f, 1.0f );
-      }
-      else if ( curPiece != TetrisPieceType::None && curPiece == _PrevActivePiece )
-      {
-        if ( curRot != _PrevRotation )
-        {
-          _Audio.PlaySound2D( "piece_rotate", 0.70f, 1.0f );
-        }
-        else if ( curOrigin.x != _PrevPieceOriginX )
-        {
-          _Audio.PlaySound2D( "piece_move", 0.60f, 1.0f );
-        }
-        else if ( _InputState._SoftDropHeld && curOrigin.y < _PrevPieceOriginY )
-        {
-          _Audio.PlaySound2D( "piece_softdrop", 0.45f, 1.0f );
-        }
-      }
-
-      if ( curLevel > _PrevLevel && !_GameLogic.IsGameOver() && !_GameLogic.IsVictory() )
-      {
-        _Audio.PlaySound2D( "level_up", 0.9f, 1.0f );
-      }
-
-      _PrevGameOver      = isGameOver;
-      _PrevVictory       = isVictory;
-      _PrevLockEventId   = curLockId;
-      _PrevLineClearId   = curLineClearId;
-      _PrevActivePiece   = curPiece;
-      _PrevPieceOriginX  = curOrigin.x;
-      _PrevPieceOriginY  = curOrigin.y;
-      _PrevRotation      = curRot;
-      _PrevHoldPiece     = curHold;
+    EvaluatePlayerAudio(0, Vec3(0.0f, 10.0f, 0.0f), false);
 
     if ( _Scene )
     {
-      const double curElapsed = _GameLogic.GetElapsedTime();
-      const int curLevel      = _GameLogic.GetLevel();
+      const double curElapsed = _GameLogic[0].GetElapsedTime();
+      const int curLevel      = _GameLogic[0].GetLevel();
 
       if ( resetRequested || ( ( _PrevElapsed > 0.25 ) && ( curElapsed < 0.05 ) ) )
       {
@@ -1020,27 +1322,149 @@ int TetrisGameApp::UpdateGame( float iDeltaTime )
       }
       _PrevElapsed = curElapsed;
 
-      if ( !_Hud.IsSettingsOpen() && !_GameLogic.IsPaused() && !_GameLogic.IsGameOver() )
+      if ( !_Hud.IsSettingsOpen() && !_GameLogic[0].IsPaused() && !_GameLogic[0].IsGameOver() )
       {
         const float curTime = static_cast<float>(glfwGetTime());
         _SceneManager.UpdateBackgroundMotion(_Settings, curTime);
       }
 
-      _SceneManager.SyncScene(*_Scene, _GameLogic, iDeltaTime);
-      _SceneManager.SyncCamera(*_Scene, _GameLogic);
+      _SceneManager.SyncScene(*_Scene, _GameLogic, 1, iDeltaTime);
+      _SceneManager.SyncCamera(*_Scene, _GameLogic, 1);
+    }
+  }
+  else
+  {
+    // 2-Player Local Multiplayer Update
+    if ( _InputState[0]._ResetPressed )
+    {
+      StartMatch(2, _GameLogic[0].GetGameMode(), _GameLogic[0].GetStartLevel(), false);
+    }
+    else if ( _InputState[0]._PausePressed )
+    {
+      const bool nextPaused = !_GameLogic[0].IsPaused();
+      _GameLogic[0].SetPaused(nextPaused);
+      _GameLogic[1].SetPaused(nextPaused);
+      _InputState[0]._PausePressed = false;
+      _InputState[1]._PausePressed = false;
+    }
+
+    const unsigned int prevClearId0 = _GameLogic[0].GetLineClearEventId();
+    const unsigned int prevClearId1 = _GameLogic[1].GetLineClearEventId();
+
+    if ( !_Hud.IsSettingsOpen() && !_RoundResolved )
+    {
+      _GameLogic[0].Update(iDeltaTime, _InputState[0], _HandlingConfig);
+      _GameLogic[1].Update(iDeltaTime, _InputState[1], _HandlingConfig);
+
+      // Route VS Battle Garbage Attacks between P1 and P2
+      if ( TetrisGameMode::Versus == _GameLogic[0].GetGameMode() )
+      {
+        if ( ( _GameLogic[0].GetLineClearEventId() != prevClearId0 ) && ( _GameLogic[0].GetLastAttackLinesSent() > 0 ) )
+        {
+          _GameLogic[1].AddPendingGarbage(_GameLogic[0].GetLastAttackLinesSent());
+        }
+        if ( ( _GameLogic[1].GetLineClearEventId() != prevClearId1 ) && ( _GameLogic[1].GetLastAttackLinesSent() > 0 ) )
+        {
+          _GameLogic[0].AddPendingGarbage(_GameLogic[1].GetLastAttackLinesSent());
+        }
+      }
+
+      // Check 2P Round Completion & Winner Resolution
+      const bool p0Dead = _GameLogic[0].IsGameOver();
+      const bool p1Dead = _GameLogic[1].IsGameOver();
+      const bool p0Won  = _GameLogic[0].IsVictory();
+      const bool p1Won  = _GameLogic[1].IsVictory();
+
+      if ( p0Dead || p1Dead || p0Won || p1Won )
+      {
+        _RoundResolved = true;
+        int winner = -1;
+
+        if ( p0Dead && !p1Dead )
+        {
+          _GameLogic[1].ForceVictory();
+          winner = 1;
+        }
+        else if ( p1Dead && !p0Dead )
+        {
+          _GameLogic[0].ForceVictory();
+          winner = 0;
+        }
+        else if ( p0Won && !p1Won )
+        {
+          _GameLogic[1].ForceGameOver("Opponent Completed Objective First");
+          winner = 0;
+        }
+        else if ( p1Won && !p0Won )
+        {
+          _GameLogic[0].ForceGameOver("Opponent Completed Objective First");
+          winner = 1;
+        }
+        else
+        {
+          // Simultaneous finish (e.g. Ultra 2:00 timer expiration or simultaneous top-out)
+          if ( _GameLogic[0].GetScore() > _GameLogic[1].GetScore() )
+          {
+            _GameLogic[0].ForceVictory();
+            _GameLogic[1].ForceGameOver("Outscored by Player 1");
+            winner = 0;
+          }
+          else if ( _GameLogic[1].GetScore() > _GameLogic[0].GetScore() )
+          {
+            _GameLogic[1].ForceVictory();
+            _GameLogic[0].ForceGameOver("Outscored by Player 2");
+            winner = 1;
+          }
+          else
+          {
+            winner = -1;
+          }
+        }
+
+        _MpState._LastRoundWinner = winner;
+        if ( ( 0 == winner ) || ( 1 == winner ) )
+          _MpState._RoundWins[winner]++;
+      }
+    }
+
+    // 3D Spatialized Audio for P1 (Left Board) and P2 (Right Board)
+    _Audio.UpdateListener(Vec3(0.0f, 10.0f, 18.0f), Vec3(0.0f, 0.0f, -1.0f), Vec3(0.0f, 1.0f, 0.0f));
+    EvaluatePlayerAudio(0, TetrisSceneManager::GetBoardOrigin(0, 2) + Vec3(0.0f, 10.0f, 0.0f), true);
+    EvaluatePlayerAudio(1, TetrisSceneManager::GetBoardOrigin(1, 2) + Vec3(0.0f, 10.0f, 0.0f), true);
+
+    if ( _Scene )
+    {
+      const int maxLevel = std::max(_GameLogic[0].GetLevel(), _GameLogic[1].GetLevel());
+      if ( _SceneManager.GetRotateBackgroundOnLevelUp() && ( maxLevel > _PrevLevel ) )
+      {
+        _SceneManager.SelectNextRandomBackground(*_Scene, _Settings, _Renderer.get());
+      }
+      _PrevLevel = maxLevel;
+
+      if ( !_Hud.IsSettingsOpen() && !_GameLogic[0].IsPaused() && !_RoundResolved )
+      {
+        const float curTime = static_cast<float>(glfwGetTime());
+        _SceneManager.UpdateBackgroundMotion(_Settings, curTime);
+      }
+
+      _SceneManager.SyncScene(*_Scene, _GameLogic, 2, iDeltaTime);
+      _SceneManager.SyncCamera(*_Scene, _GameLogic, 2);
     }
   }
 
   // Clear edge-triggered inputs for next frame
-  _InputState._MoveLeftPressed = false;
-  _InputState._MoveRightPressed = false;
-  _InputState._HardDropPressed = false;
-  _InputState._RotateCWPressed = false;
-  _InputState._RotateCCWPressed = false;
-  _InputState._Rotate180Pressed = false;
-  _InputState._HoldPressed = false;
-  _InputState._PausePressed = false;
-  _InputState._ResetPressed = false;
+  for ( int p = 0; p < 2; ++p )
+  {
+    _InputState[p]._MoveLeftPressed  = false;
+    _InputState[p]._MoveRightPressed = false;
+    _InputState[p]._HardDropPressed  = false;
+    _InputState[p]._RotateCWPressed  = false;
+    _InputState[p]._RotateCCWPressed = false;
+    _InputState[p]._Rotate180Pressed = false;
+    _InputState[p]._HoldPressed      = false;
+    _InputState[p]._PausePressed     = false;
+    _InputState[p]._ResetPressed     = false;
+  }
   _KeyInput.ClearLastEvents();
 
   if ( _Renderer )
@@ -1063,9 +1487,10 @@ int TetrisGameApp::DrawUI()
   ImGui::NewFrame();
 
   bool requestExit = false;
-  _Hud.Draw(_AppState, _GameLogic, _SceneManager, *_Scene, _Renderer.get(), _Settings, _RendererMode,
+  _Hud.Draw(_AppState, _GameLogic[0], _SceneManager, *_Scene, _Renderer.get(), _Settings, _RendererMode,
             _HandlingConfig, _MenuInput, _FrameRate, _DeltaTime, _NbRenderedFrames, _ReloadRenderer, requestExit);
 
+  CheckPendingMatchRequests();
   _MenuInput.Clear();
 
   if ( requestExit && _MainWindow )

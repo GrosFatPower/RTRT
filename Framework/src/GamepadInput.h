@@ -32,6 +32,8 @@ public:
 
   bool IsConnected() const { return _Connected; }
   int GetJoystickId() const { return _JoystickId; }
+  int GetDeviceSlot() const { return _DeviceSlot; }
+  void SetDeviceSlot( int iSlot ) { _DeviceSlot = iSlot; }
   const std::string & GetName() const { return _GamepadName; }
 
   // Standard GLFW_GAMEPAD_BUTTON_* queries
@@ -73,6 +75,7 @@ protected:
 
 protected:
   bool          _Connected          = false;
+  int           _DeviceSlot         = 0;
   int           _JoystickId         = -1;
   std::string   _GamepadName        = "No Gamepad";
 

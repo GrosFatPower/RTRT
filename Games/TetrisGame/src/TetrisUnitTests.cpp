@@ -1,10 +1,13 @@
 #include "TetrisUnitTests.h"
 #include "AudioEngine.h"
+#include "GamepadInput.h"
+#include "TetrisGameApp.h"
 #include "TetrisGameLogic.h"
 #include "TetrisMatrix.h"
 #include "TetrisPiece.h"
 #include "TetrisRandomizer.h"
 
+#include <GLFW/glfw3.h>
 #include <iostream>
 #include <set>
 
@@ -127,12 +130,6 @@ bool TetrisUnitTests::TestTSpinDetection()
 
   // Position a T piece directly into the T slot at origin (3, 0), rotation Flip (pointing down)
   // Center is at (4, 1). 3 corners: (3, 2) blocked, (3, 0) blocked, (5, 0) blocked -> 3 corners!
-  // Force active piece to T
-  TetrisInputState input;
-  TetrisHandlingConfig handling;
-
-  // Verify that when center is (4, 1) and rotation was performed, DetectTSpin is Full
-  // Let's test DetectTSpin logic directly
   const Vec2i center(4, 1);
   const bool tl = matrix.IsCellOccupied(center.x - 1, center.y + 1); // (3, 2) occupied!
   const bool bl = matrix.IsCellOccupied(center.x - 1, center.y - 1); // (3, 0) occupied!
@@ -178,7 +175,6 @@ bool TetrisUnitTests::TestExtendedLockDelay()
   }
 
   // Advance time beyond lock delay without further moves -> piece must lock!
-  const TetrisPieceType pieceBefore = logic.GetActivePiece();
   logic.Update(0.6f, input, handling);
 
   std::cout << "[PASS] Extended placement (15 manipulation limit) lock delay passed." << std::endl;
@@ -224,7 +220,6 @@ bool TetrisUnitTests::TestScoringAndB2B()
   return true;
 }
 
-// ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 // TestAudioEngineSynthesis
 // ----------------------------------------------------------------------------
@@ -300,6 +295,225 @@ bool TetrisUnitTests::TestAudioEngineSynthesis()
   return true;
 }
 
+// ----------------------------------------------------------------------------
+// TestMatrixAddGarbageLines
+// ----------------------------------------------------------------------------
+bool TetrisUnitTests::TestMatrixAddGarbageLines()
+{
+  TetrisMatrix matrix;
+  matrix.Clear();
+
+  // Place a marker block at (2, 0)
+  matrix.SetCell(2, 0, TetrisPieceType::T);
+
+  // Push 3 garbage lines with hole at column 5
+  const bool noOverflow = matrix.AddGarbageLines(3, 5);
+  if ( !noOverflow )
+  {
+    std::cerr << "TestMatrixAddGarbageLines: Unexpected overflow when adding 3 garbage lines!" << std::endl;
+    return false;
+  }
+
+  // Original marker block at (2, 0) must now be shifted up to (2, 3)
+  if ( matrix.GetCell(2, 3) != TetrisPieceType::T )
+  {
+    std::cerr << "TestMatrixAddGarbageLines: Existing block was not shifted up to row 3!" << std::endl;
+    return false;
+  }
+
+  // Bottom 3 rows must have Garbage in all columns except hole column 5
+  for ( int y = 0; y < 3; ++y )
+  {
+    for ( int x = 0; x < TetrisMatrix::S_Width; ++x )
+    {
+      const TetrisPieceType expected = ( x == 5 ) ? TetrisPieceType::None : TetrisPieceType::Garbage;
+      if ( matrix.GetCell(x, y) != expected )
+      {
+        std::cerr << "TestMatrixAddGarbageLines: Incorrect cell at (" << x << ", " << y << ")!" << std::endl;
+        return false;
+      }
+    }
+  }
+
+  std::cout << "[PASS] Matrix upward shift & garbage line insertion passed." << std::endl;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// TestGarbageCalculationAndCancellation
+// ----------------------------------------------------------------------------
+bool TetrisUnitTests::TestGarbageCalculationAndCancellation()
+{
+  // 1. Verify Guideline Attack Table
+  if ( TetrisGameLogic::ComputeGarbageAttack(1, TetrisTSpinType::None, false, 0, false) != 0 ||
+       TetrisGameLogic::ComputeGarbageAttack(2, TetrisTSpinType::None, false, 0, false) != 1 ||
+       TetrisGameLogic::ComputeGarbageAttack(3, TetrisTSpinType::None, false, 0, false) != 2 ||
+       TetrisGameLogic::ComputeGarbageAttack(4, TetrisTSpinType::None, false, 0, false) != 4 )
+  {
+    std::cerr << "TestGarbageCalculationAndCancellation: Base 1/2/3/4 line clear attack values wrong!" << std::endl;
+    return false;
+  }
+
+  // Back-to-Back Tetris = 4 + 1 = 5
+  if ( TetrisGameLogic::ComputeGarbageAttack(4, TetrisTSpinType::None, true, 0, false) != 5 )
+  {
+    std::cerr << "TestGarbageCalculationAndCancellation: B2B Tetris should send 5 lines!" << std::endl;
+    return false;
+  }
+
+  // T-Spin Double = 4, B2B T-Spin Double = 5, T-Spin Triple = 6
+  if ( TetrisGameLogic::ComputeGarbageAttack(2, TetrisTSpinType::Full, false, 0, false) != 4 ||
+       TetrisGameLogic::ComputeGarbageAttack(2, TetrisTSpinType::Full, true,  0, false) != 5 ||
+       TetrisGameLogic::ComputeGarbageAttack(3, TetrisTSpinType::Full, false, 0, false) != 6 )
+  {
+    std::cerr << "TestGarbageCalculationAndCancellation: T-Spin attack values wrong!" << std::endl;
+    return false;
+  }
+
+  // 2. Verify Pending Garbage Queue & Countering / Cancellation
+  TetrisGameLogic p1, p2;
+  const unsigned int sharedSeed = 20261109u;
+  p1.StartNewGame(TetrisGameMode::Versus, 1, sharedSeed);
+  p2.StartNewGame(TetrisGameMode::Versus, 1, sharedSeed);
+
+  // Verify shared seed produces identical active piece and next queue for fair 2P matches
+  if ( p1.GetActivePiece() != p2.GetActivePiece() )
+  {
+    std::cerr << "TestGarbageCalculationAndCancellation: Shared seed did not produce identical starting piece!" << std::endl;
+    return false;
+  }
+  for ( int i = 0; i < 5; ++i )
+  {
+    if ( p1.PeekNextPiece(i) != p2.PeekNextPiece(i) )
+    {
+      std::cerr << "TestGarbageCalculationAndCancellation: Shared seed next queue mismatch at index " << i << "!" << std::endl;
+      return false;
+    }
+  }
+
+  // Queue 5 incoming garbage lines on P1, then offset with a 3-line attack -> 3 cancelled, 2 remaining
+  p1.AddPendingGarbage(5);
+  if ( p1.GetPendingGarbage() != 5 )
+    return false;
+
+  const int cancelled1 = p1.OffsetPendingGarbage(3);
+  if ( ( cancelled1 != 3 ) || ( p1.GetPendingGarbage() != 2 ) )
+  {
+    std::cerr << "TestGarbageCalculationAndCancellation: Partial garbage cancellation failed!" << std::endl;
+    return false;
+  }
+
+  // Offset remaining 2 with a 5-line B2B Tetris -> 2 cancelled, 0 remaining, 5 - 2 = 3 net counter-attack!
+  const int cancelled2 = p1.OffsetPendingGarbage(5);
+  const int netAttack  = 5 - cancelled2;
+  if ( ( cancelled2 != 2 ) || ( netAttack != 3 ) || ( p1.GetPendingGarbage() != 0 ) )
+  {
+    std::cerr << "TestGarbageCalculationAndCancellation: Full garbage counter-attack overflow failed!" << std::endl;
+    return false;
+  }
+
+  // Queue 3 garbage lines on P2 and perform a non-clearing hard drop -> 3 garbage lines must rise from bottom!
+  p2.AddPendingGarbage(3);
+  p2.PerformHardDrop();
+  if ( p2.GetPendingGarbage() != 0 )
+  {
+    std::cerr << "TestGarbageCalculationAndCancellation: Pending garbage was not consumed on non-clearing lock!" << std::endl;
+    return false;
+  }
+
+  int garbageBlocksInRow0 = 0;
+  for ( int x = 0; x < TetrisMatrix::S_Width; ++x )
+  {
+    if ( p2.GetMatrix().GetCell(x, 0) == TetrisPieceType::Garbage )
+      garbageBlocksInRow0++;
+  }
+  if ( garbageBlocksInRow0 != 9 )
+  {
+    std::cerr << "TestGarbageCalculationAndCancellation: Row 0 did not receive 9 garbage blocks + 1 hole!" << std::endl;
+    return false;
+  }
+
+  std::cout << "[PASS] Guideline VS Garbage attack table, cancellation & shared-seed parity passed." << std::endl;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// TestMultiplayerInputMapping
+// ----------------------------------------------------------------------------
+bool TetrisUnitTests::TestMultiplayerInputMapping()
+{
+  // 1. Verify Gamepad logical slot configuration
+  RTRT::GamepadInput gp1, gp2;
+  gp1.SetDeviceSlot(0);
+  gp2.SetDeviceSlot(1);
+  if ( ( gp1.GetDeviceSlot() != 0 ) || ( gp2.GetDeviceSlot() != 1 ) )
+  {
+    std::cerr << "TestMultiplayerInputMapping: GamepadInput logical device slot mismatch!" << std::endl;
+    return false;
+  }
+
+  // 2. Verify Auto & Explicit Preset Device Resolution
+  TetrisControlDevice d1 = TetrisControlDevice::None;
+  TetrisControlDevice d2 = TetrisControlDevice::None;
+
+  // Auto with 0 gamepads -> KeyboardLeft + KeyboardRight
+  TetrisGameApp::ResolveDevicesForPreset(TetrisMultiplayerPreset::Auto, 2, false, false, d1, d2);
+  if ( ( d1 != TetrisControlDevice::KeyboardLeft ) || ( d2 != TetrisControlDevice::KeyboardRight ) )
+  {
+    std::cerr << "TestMultiplayerInputMapping: Auto (0 gamepads) should assign KeyboardLeft + KeyboardRight!" << std::endl;
+    return false;
+  }
+
+  // Auto with 1 gamepad -> Gamepad1 + KeyboardFull
+  TetrisGameApp::ResolveDevicesForPreset(TetrisMultiplayerPreset::Auto, 2, true, false, d1, d2);
+  if ( ( d1 != TetrisControlDevice::Gamepad1 ) || ( d2 != TetrisControlDevice::KeyboardFull ) )
+  {
+    std::cerr << "TestMultiplayerInputMapping: Auto (1 gamepad) should assign Gamepad1 + KeyboardFull!" << std::endl;
+    return false;
+  }
+
+  // Auto with 2 gamepads -> Gamepad1 + Gamepad2
+  TetrisGameApp::ResolveDevicesForPreset(TetrisMultiplayerPreset::Auto, 2, true, true, d1, d2);
+  if ( ( d1 != TetrisControlDevice::Gamepad1 ) || ( d2 != TetrisControlDevice::Gamepad2 ) )
+  {
+    std::cerr << "TestMultiplayerInputMapping: Auto (2 gamepads) should assign Gamepad1 + Gamepad2!" << std::endl;
+    return false;
+  }
+
+  // 3. Verify Split Keyboard Disjoint Routing (P1 Left Keyboard vs P2 Right Keyboard)
+  TetrisInputState inP1, inP2;
+  TetrisGameApp::RouteKeyPressToInput(GLFW_KEY_A,           TetrisControlDevice::KeyboardLeft,  inP1);
+  TetrisGameApp::RouteKeyPressToInput(GLFW_KEY_A,           TetrisControlDevice::KeyboardRight, inP2);
+  TetrisGameApp::RouteKeyPressToInput(GLFW_KEY_LEFT,        TetrisControlDevice::KeyboardLeft,  inP1);
+  TetrisGameApp::RouteKeyPressToInput(GLFW_KEY_LEFT,        TetrisControlDevice::KeyboardRight, inP2);
+  TetrisGameApp::RouteKeyPressToInput(GLFW_KEY_SPACE,       TetrisControlDevice::KeyboardLeft,  inP1);
+  TetrisGameApp::RouteKeyPressToInput(GLFW_KEY_RIGHT_SHIFT, TetrisControlDevice::KeyboardRight, inP2);
+
+  if ( !inP1._MoveLeftPressed || inP1._MoveRightPressed || !inP1._HardDropPressed )
+  {
+    std::cerr << "TestMultiplayerInputMapping: P1 KeyboardLeft routing failed!" << std::endl;
+    return false;
+  }
+  if ( !inP2._MoveLeftPressed || inP2._MoveRightPressed || !inP2._HardDropPressed )
+  {
+    std::cerr << "TestMultiplayerInputMapping: P2 KeyboardRight routing failed!" << std::endl;
+    return false;
+  }
+
+  // Ensure P2's Right Shift does not trigger P1's Hard Drop
+  TetrisInputState inP1Check;
+  TetrisGameApp::RouteKeyPressToInput(GLFW_KEY_RIGHT_SHIFT, TetrisControlDevice::KeyboardLeft, inP1Check);
+  if ( inP1Check._HardDropPressed )
+  {
+    std::cerr << "TestMultiplayerInputMapping: Cross-talk detected between P2 Right Shift and P1 KeyboardLeft!" << std::endl;
+    return false;
+  }
+
+  std::cout << "[PASS] Local Multiplayer device assignment & split keyboard isolation passed." << std::endl;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
 // RunAll
 // ----------------------------------------------------------------------------
 int TetrisUnitTests::RunAll()
@@ -315,11 +529,14 @@ int TetrisUnitTests::RunAll()
   ok = ok && TestExtendedLockDelay();
   ok = ok && TestScoringAndB2B();
   ok = ok && TestAudioEngineSynthesis();
+  ok = ok && TestMatrixAddGarbageLines();
+  ok = ok && TestGarbageCalculationAndCancellation();
+  ok = ok && TestMultiplayerInputMapping();
 
   std::cout << "==========================================" << std::endl;
   if ( ok )
   {
-    std::cout << "ALL TETRIS GUIDELINE & AUDIO TESTS PASSED (6/6)" << std::endl;
+    std::cout << "ALL TETRIS GUIDELINE, AUDIO & MULTIPLAYER TESTS PASSED (9/9)" << std::endl;
     std::cout << "==========================================" << std::endl;
     return 0;
   }

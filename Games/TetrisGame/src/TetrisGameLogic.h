@@ -82,6 +82,23 @@ public:
   const TetrisSessionStats & GetSessionStats() const { return _SessionStats; }
   void ResetSessionStats() { _SessionStats.Reset(); _HighScore = 0; }
 
+  // Versus / Garbage mechanics
+  void AddPendingGarbage( int iLines );
+  int OffsetPendingGarbage( int iAttackLines );
+  int GetPendingGarbage() const { return _PendingGarbage; }
+  void ClearPendingGarbage() { _PendingGarbage = 0; }
+  int GetLastAttackLinesSent() const { return _LastAttackLines; }
+  int GetTotalAttacksSent() const { return _TotalAttacksSent; }
+
+  void ForceVictory();
+  void ForceGameOver( const std::string & iReason );
+
+  static int ComputeGarbageAttack( int iLinesCleared,
+                                   TetrisTSpinType iTSpin,
+                                   bool iBackToBack,
+                                   int iComboCount,
+                                   bool iPerfectClear );
+
   TetrisTSpinType DetectTSpin() const;
   float ComputeGravityInterval( int iLevel ) const;
 
@@ -151,6 +168,11 @@ protected:
   bool                          _LastLockFromHardDrop   = false;
   TetrisTSpinType               _LastClearTSpin     = TetrisTSpinType::None;
   bool                          _LastClearPerfect   = false;
+  int                           _PendingGarbage     = 0;
+  int                           _LastAttackLines    = 0;
+  int                           _TotalAttacksSent   = 0;
+  int                           _GarbageHoleColumn  = 4;
+  unsigned int                  _GarbageRngState    = 0x9E3779B9u;
   TetrisSessionStats            _SessionStats;
 };
 

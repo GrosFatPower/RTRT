@@ -8,6 +8,7 @@
 #include "imgui.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -47,6 +48,180 @@ const char * GetRendererModeLabel( TetrisRendererMode iMode )
   }
 }
 
+// ----------------------------------------------------------------------------
+// ProjectWorldToScreen
+// ----------------------------------------------------------------------------
+bool ProjectWorldToScreen( Scene & ioScene, const Vec3 & iWorldPos, ImVec2 & oScreenPos )
+{
+  const ImGuiIO & io = ImGui::GetIO();
+  if ( ( io.DisplaySize.x <= 0.0f ) || ( io.DisplaySize.y <= 0.0f ) )
+    return false;
+
+  Camera & cam = ioScene.GetCamera();
+  Mat4x4 viewM(1.0f);
+  Mat4x4 projM(1.0f);
+  cam.ComputeLookAtMatrix(viewM);
+  cam.ComputeProjMatrix(io.DisplaySize.x / io.DisplaySize.y, projM);
+
+  const Vec4 clip = projM * viewM * Vec4(iWorldPos, 1.0f);
+  if ( clip.w <= 0.01f )
+    return false;
+
+  const Vec3 ndc = Vec3(clip) / clip.w;
+  oScreenPos.x = ( ndc.x * 0.5f + 0.5f ) * io.DisplaySize.x;
+  oScreenPos.y = ( 1.0f - ( ndc.y * 0.5f + 0.5f ) ) * io.DisplaySize.y;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// DrawFrameLabel3DColored
+// ----------------------------------------------------------------------------
+void DrawFrameLabel3DColored( Scene & ioScene,
+                              const Vec3 & iWorldPos,
+                              const char * iLabel,
+                              ImFont * iFont,
+                              ImU32 iBorderCol,
+                              ImU32 iTextCol = IM_COL32(240, 248, 255, 255) )
+{
+  ImVec2 screenPos;
+  if ( !ProjectWorldToScreen(ioScene, iWorldPos, screenPos) )
+    return;
+
+  ImDrawList * bgList = ImGui::GetBackgroundDrawList();
+  const float fontSize = iFont ? iFont->LegacySize : 22.0f;
+  const ImVec2 textSize = iFont ? iFont->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, iLabel)
+                                : ImGui::CalcTextSize(iLabel);
+
+  const float padX = 16.0f;
+  const float padY = 5.0f;
+  const ImVec2 boxMin(screenPos.x - textSize.x * 0.5f - padX, screenPos.y - textSize.y * 0.5f - padY);
+  const ImVec2 boxMax(screenPos.x + textSize.x * 0.5f + padX, screenPos.y + textSize.y * 0.5f + padY);
+  const ImVec2 textPos(screenPos.x - textSize.x * 0.5f, screenPos.y - textSize.y * 0.5f);
+
+  bgList->AddRectFilled(boxMin, boxMax, IM_COL32(10, 14, 22, 215), 5.0f);
+  bgList->AddRect(boxMin, boxMax, iBorderCol, 5.0f, 0, 1.5f);
+
+  if ( iFont )
+  {
+    bgList->AddText(iFont, fontSize, ImVec2(textPos.x + 1.5f, textPos.y + 1.5f), IM_COL32(0, 0, 0, 220), iLabel);
+    bgList->AddText(iFont, fontSize, textPos, iTextCol, iLabel);
+  }
+  else
+  {
+    bgList->AddText(textPos, iTextCol, iLabel);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// DrawFrameLabel3D
+// ----------------------------------------------------------------------------
+void DrawFrameLabel3D( Scene & ioScene,
+                       const Vec3 & iWorldPos,
+                       const char * iLabel,
+                       ImFont * iFont,
+                       const GameUITheme & iTheme )
+{
+  (void)iTheme;
+  DrawFrameLabel3DColored(ioScene, iWorldPos, iLabel, iFont, IM_COL32(0, 228, 245, 165));
+}
+
+// ----------------------------------------------------------------------------
+// DrawGarbageMeter3D
+// ----------------------------------------------------------------------------
+void DrawGarbageMeter3D( Scene & ioScene,
+                         const Vec3 & iBoardOrigin,
+                         int iPendingGarbage,
+                         ImFont * iFont )
+{
+  ImVec2 botPos, topPos;
+  if ( !ProjectWorldToScreen(ioScene, iBoardOrigin + Vec3(-5.55f, 0.0f, 0.2f), botPos) ||
+       !ProjectWorldToScreen(ioScene, iBoardOrigin + Vec3(-5.55f, 20.0f, 0.2f), topPos) )
+  {
+    return;
+  }
+
+  ImDrawList * bgList = ImGui::GetBackgroundDrawList();
+  const float barHalfW = std::max(4.5f, std::fabs(botPos.y - topPos.y) * 0.016f);
+  const float minX = botPos.x - barHalfW;
+  const float maxX = botPos.x + barHalfW;
+  const float topY = std::min(topPos.y, botPos.y);
+  const float botY = std::max(topPos.y, botPos.y);
+  const float totalH = botY - topY;
+  if ( totalH <= 10.0f )
+    return;
+
+  // Outer dark track
+  bgList->AddRectFilled(ImVec2(minX - 2.0f, topY - 2.0f), ImVec2(maxX + 2.0f, botY + 2.0f), IM_COL32(8, 12, 18, 210), 4.0f);
+  bgList->AddRect(ImVec2(minX - 2.0f, topY - 2.0f), ImVec2(maxX + 2.0f, botY + 2.0f),
+                  ( iPendingGarbage > 0 ) ? IM_COL32(255, 75, 65, 220) : IM_COL32(70, 85, 105, 140),
+                  4.0f, 0, 1.5f);
+
+  if ( iPendingGarbage <= 0 )
+    return;
+
+  const int clampedLines = std::min(20, iPendingGarbage);
+  const float segH = totalH / 20.0f;
+
+  for ( int i = 0; i < clampedLines; ++i )
+  {
+    const float segBot = botY - static_cast<float>(i) * segH;
+    const float segTop = segBot - segH + 1.5f;
+    const ImU32 segCol = ( i >= 8 )
+                         ? IM_COL32(255, 45, 45, 245)
+                         : IM_COL32(255, 135, 35, 240);
+    bgList->AddRectFilled(ImVec2(minX, segTop), ImVec2(maxX, segBot), segCol, 2.0f);
+  }
+
+  char badgeBuf[16];
+  std::snprintf(badgeBuf, sizeof(badgeBuf), "! +%d", iPendingGarbage);
+  const float fontSize = iFont ? ( iFont->LegacySize * 0.85f ) : 18.0f;
+  const ImVec2 txtSize = iFont ? iFont->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, badgeBuf)
+                               : ImGui::CalcTextSize(badgeBuf);
+  const ImVec2 badgePos(botPos.x - txtSize.x * 0.5f, botY + 6.0f);
+  bgList->AddRectFilled(ImVec2(badgePos.x - 6.0f, badgePos.y - 2.0f),
+                        ImVec2(badgePos.x + txtSize.x + 6.0f, badgePos.y + txtSize.y + 2.0f),
+                        IM_COL32(45, 10, 10, 230), 4.0f);
+  if ( iFont )
+    bgList->AddText(iFont, fontSize, badgePos, IM_COL32(255, 90, 80, 255), badgeBuf);
+  else
+    bgList->AddText(badgePos, IM_COL32(255, 90, 80, 255), badgeBuf);
+}
+
+// ----------------------------------------------------------------------------
+// DrawBoardActionBanner3D
+// ----------------------------------------------------------------------------
+void DrawBoardActionBanner3D( Scene & ioScene,
+                              const Vec3 & iBoardOrigin,
+                              const TetrisGameLogic & iLogic,
+                              ImFont * iTitleFont )
+{
+  const float alpha = iLogic.GetActionBannerAlpha();
+  if ( ( alpha <= 0.01f ) || iLogic.GetActionBannerText().empty() )
+    return;
+
+  ImVec2 center;
+  if ( !ProjectWorldToScreen(ioScene, iBoardOrigin + Vec3(0.0f, 12.5f, 0.5f), center) )
+    return;
+
+  ImDrawList * drawList = ImGui::GetForegroundDrawList();
+  std::string text = iLogic.GetActionBannerText();
+  if ( ( TetrisGameMode::Versus == iLogic.GetGameMode() ) && ( iLogic.GetLastAttackLinesSent() > 0 ) )
+  {
+    text += " (+" + std::to_string(iLogic.GetLastAttackLinesSent()) + " ATK)";
+  }
+
+  ImFont * font = iTitleFont ? iTitleFont : ImGui::GetFont();
+  const float fontSize = font ? ( font->LegacySize * 0.62f ) : 26.0f;
+  const ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text.c_str());
+  const ImVec2 textPos(center.x - textSize.x * 0.5f, center.y - textSize.y * 0.5f);
+
+  const ImU32 shadowCol = IM_COL32(0, 0, 0, static_cast<int>(220.f * alpha));
+  const ImU32 mainCol   = IM_COL32(255, 240, 95, static_cast<int>(255.f * alpha));
+
+  drawList->AddText(font, fontSize, ImVec2(textPos.x + 2.5f, textPos.y + 2.5f), shadowCol, text.c_str());
+  drawList->AddText(font, fontSize, textPos, mainCol, text.c_str());
+}
+
 } // anonymous namespace
 
 // ----------------------------------------------------------------------------
@@ -59,6 +234,35 @@ TetrisHud::TetrisHud()
 
 TetrisHud::~TetrisHud()
 {
+}
+
+// ----------------------------------------------------------------------------
+// GetControlDeviceName / GetControlDeviceShortBadge
+// ----------------------------------------------------------------------------
+const char * TetrisHud::GetControlDeviceName( TetrisControlDevice iDevice )
+{
+  switch ( iDevice )
+  {
+    case TetrisControlDevice::KeyboardFull:  return "Full Keyboard (Arrows + WASD)";
+    case TetrisControlDevice::KeyboardLeft:  return "Left Keyboard (A/D/S, Space=Drop, G/H/V=Rot, LShift=Hold)";
+    case TetrisControlDevice::KeyboardRight: return "Right Keyboard (Arrows, RShift/Enter=Drop, Up/Num1/2=Rot, RCtrl=Hold)";
+    case TetrisControlDevice::Gamepad1:      return "Xbox Controller #1 (D-Pad / L-Stick, A/B=Rot, LB/RB=Hold)";
+    case TetrisControlDevice::Gamepad2:      return "Xbox Controller #2 (D-Pad / L-Stick, A/B=Rot, LB/RB=Hold)";
+    default:                                 return "Unassigned (Connect Controller or Switch Preset)";
+  }
+}
+
+const char * TetrisHud::GetControlDeviceShortBadge( TetrisControlDevice iDevice )
+{
+  switch ( iDevice )
+  {
+    case TetrisControlDevice::KeyboardFull:  return "KEYBOARD";
+    case TetrisControlDevice::KeyboardLeft:  return "KB LEFT (WASD)";
+    case TetrisControlDevice::KeyboardRight: return "KB RIGHT (ARROWS)";
+    case TetrisControlDevice::Gamepad1:      return "GAMEPAD 1";
+    case TetrisControlDevice::Gamepad2:      return "GAMEPAD 2";
+    default:                                 return "NO DEVICE";
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -94,44 +298,60 @@ void TetrisHud::DrawMainMenuPage( TetrisAppState & ioAppState,
                                   bool & oRequestExit )
 {
   const ImGuiIO & io = ImGui::GetIO();
-  const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.57f);
-  const Vec2 panelSize(520.0f, 0.0f);
+  const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.58f);
+  const Vec2 panelSize(550.0f, 0.0f);
 
   if ( GameMenuUI::BeginMenuPanel("##TetrisMainMenu", "MAIN MENU", center, panelSize, _Theme, _Fonts) )
   {
     const std::vector<GameMenuItem> items =
     {
-      { "PLAY GAME",           "Choose Marathon, Sprint 40L, or Ultra 2m mode",     "3 MODES",  true, false },
-      { "QUICK START",         "Jump straight into Marathon mode at Level 1",       "MARATHON", true, false },
-      { "HIGH SCORES & STATS", "View personal best records and session statistics", "",         true, false },
-      { "OPTIONS",             "Configure handling (DAS/ARR), renderer & controls", "F1",       true, false },
-      { "EXIT TO DESKTOP",     "Close application",                                 "",         true, true  }
+      { "SINGLE PLAYER (1P)",     "Marathon 150L, Sprint 40L, or Ultra 2m solo modes",      "1P SOLO",   true, false },
+      { "LOCAL MULTIPLAYER (2P)", "Split-screen VS Garbage Battle, Sprint Race & Ultra",    "2 PLAYERS", true, false },
+      { "QUICK START (1P)",       "Jump straight into solo Marathon mode at Level 1",       "MARATHON",  true, false },
+      { "HIGH SCORES & STATS",    "View personal best records and session statistics",      "",          true, false },
+      { "OPTIONS",                "Configure handling (DAS/ARR), renderer, audio & inputs", "F1",        true, false },
+      { "EXIT TO DESKTOP",        "Close application",                                      "",          true, true  }
     };
 
-    const int activated = GameMenuUI::DrawMenuButtonList(items, _MainMenuNav, iMenuInput, _Theme, _Fonts, 56.0f);
+    const int activated = GameMenuUI::DrawMenuButtonList(items, _MainMenuNav, iMenuInput, _Theme, _Fonts, 52.0f);
     if ( ( activated >= 0 ) && _Audio && !iMenuInput._Confirm )
       _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
 
     if ( 0 == activated )
     {
-      _SelectedModeIndex = static_cast<int>(ioLogic.GetGameMode());
+      if ( _SelectedModeIndex > 2 )
+        _SelectedModeIndex = 0;
       SetMenuPage(TetrisMenuPage::ModeSelect);
     }
     else if ( 1 == activated )
     {
-      ioLogic.StartNewGame(TetrisGameMode::Marathon, 1, 0);
-      ioAppState = TetrisAppState::InGame;
-      _ShowInGameOptions = false;
+      SetMenuPage(TetrisMenuPage::MultiplayerLobby);
     }
     else if ( 2 == activated )
     {
-      SetMenuPage(TetrisMenuPage::HighScores);
+      if ( _MpState )
+      {
+        _MpState->_NumPlayers      = 1;
+        _MpState->_Requested1PMode = TetrisGameMode::Marathon;
+        _MpState->_StartLevel      = 1;
+        _MpState->_RequestStart1P  = true;
+      }
+      else
+      {
+        ioLogic.StartNewGame(TetrisGameMode::Marathon, 1, 0);
+      }
+      ioAppState = TetrisAppState::InGame;
+      _ShowInGameOptions = false;
     }
     else if ( 3 == activated )
     {
-      SetMenuPage(TetrisMenuPage::Options);
+      SetMenuPage(TetrisMenuPage::HighScores);
     }
     else if ( 4 == activated )
+    {
+      SetMenuPage(TetrisMenuPage::Options);
+    }
+    else if ( 5 == activated )
     {
       oRequestExit = true;
     }
@@ -171,7 +391,7 @@ void TetrisHud::DrawModeSelectPage( TetrisAppState & ioAppState,
                                    : "Best Time: --:--.--";
   const std::string ultraBest    = "Best Score: " + std::to_string(stats._BestUltraScore);
 
-  if ( GameMenuUI::BeginMenuPanel("##TetrisModeSelect", "SELECT GAME MODE", center, panelSize, _Theme, _Fonts) )
+  if ( GameMenuUI::BeginMenuPanel("##TetrisModeSelect", "SINGLE PLAYER - SELECT MODE", center, panelSize, _Theme, _Fonts) )
   {
     const std::vector<GameSelectionCard> cards =
     {
@@ -242,7 +462,17 @@ void TetrisHud::DrawModeSelectPage( TetrisAppState & ioAppState,
         _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
 
       const TetrisGameMode chosenMode = static_cast<TetrisGameMode>(_SelectedModeIndex);
-      ioLogic.StartNewGame(chosenMode, ioLogic.GetStartLevel(), 0);
+      if ( _MpState )
+      {
+        _MpState->_NumPlayers      = 1;
+        _MpState->_Requested1PMode = chosenMode;
+        _MpState->_StartLevel      = ioLogic.GetStartLevel();
+        _MpState->_RequestStart1P  = true;
+      }
+      else
+      {
+        ioLogic.StartNewGame(chosenMode, ioLogic.GetStartLevel(), 0);
+      }
       ioAppState = TetrisAppState::InGame;
       _ShowInGameOptions = false;
     }
@@ -252,6 +482,161 @@ void TetrisHud::DrawModeSelectPage( TetrisAppState & ioAppState,
   GameMenuUI::DrawFooterBar(
     "SELECT MODE & LAUNCH",
     "[LEFT/RIGHT] Select Mode    [ENTER] Launch Game    [ESC] Back",
+    _Theme,
+    _Fonts
+  );
+}
+
+// ----------------------------------------------------------------------------
+// DrawMultiplayerLobbyPage
+// ----------------------------------------------------------------------------
+void TetrisHud::DrawMultiplayerLobbyPage( TetrisAppState & ioAppState,
+                                          const GameMenuInput & iMenuInput )
+{
+  if ( iMenuInput._Back && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId) )
+  {
+    SetMenuPage(TetrisMenuPage::MainMenu);
+    return;
+  }
+
+  const ImGuiIO & io = ImGui::GetIO();
+  const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.55f);
+  const Vec2 panelSize(920.0f, 0.0f);
+
+  if ( GameMenuUI::BeginMenuPanel("##TetrisMpLobby", "LOCAL MULTIPLAYER LOBBY (2 PLAYERS)", center, panelSize, _Theme, _Fonts) )
+  {
+    const std::vector<GameSelectionCard> cards =
+    {
+      {
+        "VS BATTLE",
+        "GUIDELINE GARBAGE WARS",
+        "Clear Doubles, Triples, Tetrises, and T-Spins to send garbage lines to your opponent. Counter incoming attacks before locking!",
+        "Win: Top Out Opponent",
+        Vec4(1.00f, 0.35f, 0.30f, 1.0f)
+      },
+      {
+        "SPRINT RACE",
+        "40 LINES HEAD-TO-HEAD",
+        "Both players receive the exact same 7-Bag piece sequence. Race to clear 40 lines first without topping out!",
+        "Win: First to 40 Lines",
+        Vec4(1.00f, 0.65f, 0.10f, 1.0f)
+      },
+      {
+        "SCORE ATTACK",
+        "2-MINUTE ULTRA DUEL",
+        "Two minutes on the clock with identical piece bags. Outscore your rival using T-Spins, Back-to-Backs, and high combos.",
+        "Win: Highest Score in 2:00",
+        Vec4(0.75f, 0.35f, 1.00f, 1.0f)
+      },
+      {
+        "MARATHON DUEL",
+        "150 LINES ENDURANCE",
+        "Parallel 15-level Guideline progression on side-by-side boards. Survive accelerating gravity and reach 150 lines first.",
+        "Win: 150 Lines / Survival",
+        Vec4(0.00f, 0.90f, 0.95f, 1.0f)
+      }
+    };
+
+    bool cardConfirmed = false;
+    if ( GameMenuUI::DrawSelectionCards(cards, _SelectedMpModeIndex, iMenuInput, _Theme, _Fonts, &cardConfirmed) )
+    {
+      if ( _Audio && !iMenuInput._NavLeft && !iMenuInput._NavRight )
+        _Audio->PlaySound2D("ui_nav", 0.65f, 1.0f);
+    }
+
+    if ( _MpState )
+    {
+      if ( 0 == _SelectedMpModeIndex )      _MpState->_MpMode = TetrisGameMode::Versus;
+      else if ( 1 == _SelectedMpModeIndex ) _MpState->_MpMode = TetrisGameMode::Sprint;
+      else if ( 2 == _SelectedMpModeIndex ) _MpState->_MpMode = TetrisGameMode::Ultra;
+      else                                  _MpState->_MpMode = TetrisGameMode::Marathon;
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 8.0f));
+    ImGui::Separator();
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+    if ( _MpState )
+    {
+      ImGui::TextDisabled("Controller & Keyboard Assignment");
+      int presetIdx = static_cast<int>(_MpState->_Preset);
+      const char * presetNames[] =
+      {
+        "Auto-Detect (Smart P1 / P2 Assignment)",
+        "Gamepad 1 (P1)  +  Gamepad 2 (P2)",
+        "Gamepad 1 (P1)  +  Keyboard (P2)",
+        "Keyboard (P1)   +  Gamepad 1 (P2)",
+        "Split Keyboard: Left WASD (P1) + Right Arrows (P2)"
+      };
+      ImGui::SetNextItemWidth(420.0f);
+      if ( ImGui::Combo("Control Preset", &presetIdx, presetNames, IM_ARRAYSIZE(presetNames)) )
+      {
+        _MpState->_Preset = static_cast<TetrisMultiplayerPreset>(presetIdx);
+      }
+
+      ImGui::SameLine(0.0f, 28.0f);
+      const bool gp1Conn = _Gamepad && _Gamepad->IsConnected();
+      const bool gp2Conn = _Gamepad2 && _Gamepad2->IsConnected();
+      ImGui::TextColored(gp1Conn ? ImVec4(0.25f, 0.95f, 0.55f, 1.0f) : ImVec4(0.55f, 0.60f, 0.68f, 1.0f),
+                         "GP1: %s", gp1Conn ? "Connected" : "None");
+      ImGui::SameLine(0.0f, 16.0f);
+      ImGui::TextColored(gp2Conn ? ImVec4(0.25f, 0.95f, 0.55f, 1.0f) : ImVec4(0.55f, 0.60f, 0.68f, 1.0f),
+                         "GP2: %s", gp2Conn ? "Connected" : "None");
+
+      ImGui::Dummy(ImVec2(0.0f, 3.0f));
+      ImGui::TextColored(ImVec4(0.00f, 0.90f, 0.96f, 1.0f), "PLAYER 1 (Left Board)  :");
+      ImGui::SameLine();
+      ImGui::Text("%s", GetControlDeviceName(_MpState->_PlayerDevices[0]));
+
+      ImGui::TextColored(ImVec4(1.00f, 0.60f, 0.20f, 1.0f), "PLAYER 2 (Right Board) :");
+      ImGui::SameLine();
+      ImGui::Text("%s", GetControlDeviceName(_MpState->_PlayerDevices[1]));
+
+      ImGui::Dummy(ImVec2(0.0f, 6.0f));
+      ImGui::Separator();
+      ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+      ImGui::SetNextItemWidth(220.0f);
+      ImGui::SliderInt("Series Target (Wins)", &_MpState->_TargetRoundWins, 1, 5, "First to %d Wins");
+
+      ImGui::SameLine(0.0f, 32.0f);
+      ImGui::SetNextItemWidth(220.0f);
+      ImGui::SliderInt("Starting Level", &_MpState->_StartLevel, 1, 15);
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
+    const float availW = ImGui::GetContentRegionAvail().x;
+    const float btnW = ( availW - 16.0f ) * 0.5f;
+
+    if ( GameMenuUI::DrawActionButton("BACK TO MENU (ESC)", Vec2(btnW, 46.0f), false, _Theme, _Fonts) )
+    {
+      if ( _Audio && !iMenuInput._Back )
+        _Audio->PlaySound2D("ui_back", 0.8f, 1.0f);
+      SetMenuPage(TetrisMenuPage::MainMenu);
+    }
+
+    ImGui::SameLine(0.0f, 16.0f);
+
+    if ( GameMenuUI::DrawActionButton("START 2P MATCH (ENTER)", Vec2(btnW, 46.0f), true, _Theme, _Fonts) || cardConfirmed )
+    {
+      if ( _Audio && !iMenuInput._Confirm )
+        _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+
+      if ( _MpState )
+      {
+        _MpState->_NumPlayers     = 2;
+        _MpState->_RequestStart2P = true;
+      }
+      ioAppState = TetrisAppState::InGame;
+      _ShowInGameOptions = false;
+    }
+  }
+  GameMenuUI::EndMenuPanel();
+
+  GameMenuUI::DrawFooterBar(
+    "2-PLAYER LOCAL SPLIT-SCREEN",
+    "[LEFT/RIGHT] Select Mode    [ENTER / START] Launch Match    [ESC / B] Back",
     _Theme,
     _Fonts
   );
@@ -604,44 +989,63 @@ void TetrisHud::DrawOptionsPage( TetrisGameLogic & ioLogic,
 
         if ( _Gamepad->IsConnected() )
         {
-          ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f), "Controller Connected: %s (Slot %d)",
+          ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f), "Controller #1 Connected: %s (GLFW Slot %d)",
                              _Gamepad->GetName().c_str(), _Gamepad->GetJoystickId() + 1);
         }
         else
         {
-          ImGui::TextColored(ImVec4(0.65f, 0.70f, 0.78f, 1.0f), "No Gamepad Detected (Connect an Xbox Controller to play)");
+          ImGui::TextColored(ImVec4(0.65f, 0.70f, 0.78f, 1.0f), "Controller #1: Not Connected");
+        }
+
+        if ( _Gamepad2 )
+        {
+          if ( _Gamepad2->IsConnected() )
+          {
+            ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f), "Controller #2 Connected: %s (GLFW Slot %d)",
+                               _Gamepad2->GetName().c_str(), _Gamepad2->GetJoystickId() + 1);
+          }
+          else
+          {
+            ImGui::TextColored(ImVec4(0.65f, 0.70f, 0.78f, 1.0f), "Controller #2: Not Connected");
+          }
         }
 
         bool stickHardDrop = _Gamepad->GetAllowStickHardDrop();
         if ( ImGui::Checkbox("Allow Left Stick Up for Hard Drop (Strict Vertical Gate)", &stickHardDrop) )
+        {
           _Gamepad->SetAllowStickHardDrop(stickHardDrop);
+          if ( _Gamepad2 )
+            _Gamepad2->SetAllowStickHardDrop(stickHardDrop);
+        }
 
         ImGui::SameLine(0.0f, 24.0f);
         float deadzone = _Gamepad->GetStickDeadzone();
         ImGui::SetNextItemWidth(160.0f);
         if ( ImGui::SliderFloat("Stick Deadzone", &deadzone, 0.05f, 0.45f, "%.2f") )
+        {
           _Gamepad->SetStickDeadzone(deadzone);
+          if ( _Gamepad2 )
+            _Gamepad2->SetStickDeadzone(deadzone);
+        }
 
         ImGui::Dummy(ImVec2(0.0f, 6.0f));
       }
 
       const std::vector<GameKeybindEntry> bindings =
       {
-        { "PIECE MOVEMENT",     "Move Left",                   "LEFT ARROW",  "A",          "D-PAD / L-STICK LEFT"  },
-        { "PIECE MOVEMENT",     "Move Right",                  "RIGHT ARROW", "D",          "D-PAD / L-STICK RIGHT" },
-        { "PIECE MOVEMENT",     "Soft Drop",                   "DOWN ARROW",  "S",          "D-PAD / L-STICK DOWN"  },
-        { "PIECE MOVEMENT",     "Hard Drop (Instant Lock)",    "SPACE",       "",           "D-PAD UP / L-STICK UP" },
-        { "ROTATION & HOLD",    "Rotate Clockwise (90 CW)",    "UP ARROW",    "X",          "B BUTTON"              },
-        { "ROTATION & HOLD",    "Rotate Counter-Clockwise",    "Z",           "LEFT CTRL",  "A BUTTON"              },
-        { "ROTATION & HOLD",    "Rotate 180 Degrees",          "W",           "",           "X / Y BUTTON"          },
-        { "ROTATION & HOLD",    "Hold Active Piece",           "LEFT SHIFT",  "C",          "LB / RB / LT / RT"     },
-        { "SYSTEM & RENDERERS", "Pause / Back",                "ESCAPE",      "P",          "START (MENU) / B"      },
-        { "SYSTEM & RENDERERS", "Quick Restart Match",         "R",           "",           "BACK (VIEW)"           },
-        { "SYSTEM & RENDERERS", "Options Menu",                "F1",          "",           "START -> OPTIONS"      },
-        { "SYSTEM & RENDERERS", "Switch to Deferred Renderer", "F2",          "",           ""                      },
-        { "SYSTEM & RENDERERS", "Switch to Path Tracer",       "F3",          "",           ""                      },
-        { "SYSTEM & RENDERERS", "Switch to Software Raster",   "F4",          "",           ""                      },
-        { "SYSTEM & RENDERERS", "Cycle / Orbit 3D Camera",     "V / MOUSE",   "",           "R3 / RIGHT STICK"      }
+        { "1P / 2P MOVEMENT",   "Move Left (P1 Left / P2 Right)",    "A",           "LEFT ARROW",        "D-PAD / L-STICK LEFT"  },
+        { "1P / 2P MOVEMENT",   "Move Right (P1 Left / P2 Right)",   "D",           "RIGHT ARROW",       "D-PAD / L-STICK RIGHT" },
+        { "1P / 2P MOVEMENT",   "Soft Drop (P1 Left / P2 Right)",    "S",           "DOWN ARROW",        "D-PAD / L-STICK DOWN"  },
+        { "1P / 2P MOVEMENT",   "Hard Drop (P1 Left / P2 Right)",    "SPACE",       "R-SHIFT / ENTER",   "D-PAD UP / L-STICK UP" },
+        { "ROTATION & HOLD",    "Rotate Clockwise (90 CW)",          "H / X",       "UP / NUM 2 / /",    "B BUTTON"              },
+        { "ROTATION & HOLD",    "Rotate Counter-Clockwise",          "G / Z",       "NUM 1 / . / R-ALT", "A BUTTON"              },
+        { "ROTATION & HOLD",    "Rotate 180 Degrees",                "W / Y",       "NUM 3 / ,",         "X / Y BUTTON"          },
+        { "ROTATION & HOLD",    "Hold Active Piece",                 "L-SHIFT / C", "R-CTRL / NUM 0",    "LB / RB / LT / RT"     },
+        { "SYSTEM & RENDERERS", "Pause / Back",                      "ESCAPE",      "P",                 "START (MENU) / B"      },
+        { "SYSTEM & RENDERERS", "Quick Restart Match",               "R",           "",                  "BACK (VIEW)"           },
+        { "SYSTEM & RENDERERS", "Options Menu",                      "F1",          "",                  "START -> OPTIONS"      },
+        { "SYSTEM & RENDERERS", "Switch Renderer (Def / PT / SW)",   "F2 / F3 / F4","",                  ""                      },
+        { "SYSTEM & RENDERERS", "Cycle / Orbit 3D Camera",           "V / MOUSE",   "",                  "R3 / RIGHT STICK"      }
       };
 
       GameMenuUI::DrawKeybindingTable(bindings, _Theme, _Fonts);
@@ -702,6 +1106,10 @@ void TetrisHud::DrawTitleScreenMenus( TetrisAppState & ioAppState,
   {
     DrawModeSelectPage(ioAppState, ioLogic, iMenuInput);
   }
+  else if ( TetrisMenuPage::MultiplayerLobby == _MenuPage )
+  {
+    DrawMultiplayerLobbyPage(ioAppState, iMenuInput);
+  }
   else if ( TetrisMenuPage::HighScores == _MenuPage )
   {
     DrawHighScoresPage(ioLogic, iMenuInput);
@@ -730,57 +1138,159 @@ void TetrisHud::DrawTitleScreenMenus( TetrisAppState & ioAppState,
 }
 
 // ----------------------------------------------------------------------------
-// DrawFrameLabel3D
+// DrawMultiplayerGameplayOverlay
 // ----------------------------------------------------------------------------
-static void DrawFrameLabel3D( Scene & ioScene,
-                              const Vec3 & iWorldPos,
-                              const char * iLabel,
-                              ImFont * iFont,
-                              const GameUITheme & iTheme )
+void TetrisHud::DrawMultiplayerGameplayOverlay( Scene & ioScene )
 {
-  const ImGuiIO & io = ImGui::GetIO();
-  if ( ( io.DisplaySize.x <= 0.0f ) || ( io.DisplaySize.y <= 0.0f ) )
+  if ( !_Logics || !_MpState )
     return;
 
-  Camera & cam = ioScene.GetCamera();
-  Mat4x4 viewM(1.0f);
-  Mat4x4 projM(1.0f);
-  cam.ComputeLookAtMatrix(viewM);
-  cam.ComputeProjMatrix(io.DisplaySize.x / io.DisplaySize.y, projM);
+  const Vec3 originP1 = TetrisSceneManager::GetBoardOrigin(0, 2);
+  const Vec3 originP2 = TetrisSceneManager::GetBoardOrigin(1, 2);
 
-  const Vec4 clip = projM * viewM * Vec4(iWorldPos, 1.0f);
-  if ( clip.w <= 0.01f )
-    return;
+  // 1. 3D-Projected Board Headers, Hold/Next Labels, Garbage Danger Meters & Action Banners
+  DrawFrameLabel3DColored(ioScene, originP1 + Vec3( 0.0f, 21.35f, -0.2f), "PLAYER 1", _Fonts._HeaderFont, IM_COL32(0, 228, 245, 220), IM_COL32(180, 248, 255, 255));
+  DrawFrameLabel3DColored(ioScene, originP1 + Vec3(-8.0f, 20.85f, -0.2f), "HOLD",     _Fonts._HeaderFont, IM_COL32(0, 228, 245, 150));
+  DrawFrameLabel3DColored(ioScene, originP1 + Vec3( 8.0f, 20.85f, -0.2f), "NEXT",     _Fonts._HeaderFont, IM_COL32(0, 228, 245, 150));
 
-  const Vec3 ndc = Vec3(clip) / clip.w;
-  const float sx = ( ndc.x * 0.5f + 0.5f ) * io.DisplaySize.x;
-  const float sy = ( 1.0f - ( ndc.y * 0.5f + 0.5f ) ) * io.DisplaySize.y;
+  DrawFrameLabel3DColored(ioScene, originP2 + Vec3( 0.0f, 21.35f, -0.2f), "PLAYER 2", _Fonts._HeaderFont, IM_COL32(255, 150, 45, 220), IM_COL32(255, 230, 190, 255));
+  DrawFrameLabel3DColored(ioScene, originP2 + Vec3(-8.0f, 20.85f, -0.2f), "HOLD",     _Fonts._HeaderFont, IM_COL32(255, 150, 45, 150));
+  DrawFrameLabel3DColored(ioScene, originP2 + Vec3( 8.0f, 20.85f, -0.2f), "NEXT",     _Fonts._HeaderFont, IM_COL32(255, 150, 45, 150));
 
-  ImDrawList * bgList = ImGui::GetBackgroundDrawList();
-  const float fontSize = iFont ? iFont->LegacySize : 22.0f;
-  const ImVec2 textSize = iFont ? iFont->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, iLabel)
-                                : ImGui::CalcTextSize(iLabel);
+  DrawGarbageMeter3D(ioScene, originP1, _Logics[0].GetPendingGarbage(), _Fonts._HeaderFont);
+  DrawGarbageMeter3D(ioScene, originP2, _Logics[1].GetPendingGarbage(), _Fonts._HeaderFont);
 
-  const float padX = 16.0f;
-  const float padY = 5.0f;
-  const ImVec2 boxMin(sx - textSize.x * 0.5f - padX, sy - textSize.y * 0.5f - padY);
-  const ImVec2 boxMax(sx + textSize.x * 0.5f + padX, sy + textSize.y * 0.5f + padY);
-  const ImVec2 textPos(sx - textSize.x * 0.5f, sy - textSize.y * 0.5f);
+  DrawBoardActionBanner3D(ioScene, originP1, _Logics[0], _Fonts._TitleFont);
+  DrawBoardActionBanner3D(ioScene, originP2, _Logics[1], _Fonts._TitleFont);
 
-  bgList->AddRectFilled(boxMin, boxMax, IM_COL32(10, 14, 22, 215), 5.0f);
-  bgList->AddRect(boxMin, boxMax, IM_COL32(0, 228, 245, 165), 5.0f, 0, 1.5f);
+  ImGuiIO & io = ImGui::GetIO();
+  const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration
+                               | ImGuiWindowFlags_AlwaysAutoResize
+                               | ImGuiWindowFlags_NoSavedSettings
+                               | ImGuiWindowFlags_NoFocusOnAppearing
+                               | ImGuiWindowFlags_NoNav
+                               | ImGuiWindowFlags_NoMove;
 
-  if ( iFont )
+  GameMenuUI::PushThemeStyle(_Theme);
+
+  const float pad = 16.0f;
+
+  // 2. Top-Center VS Scoreboard
+  ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, pad), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
+  ImGui::SetNextWindowSize(ImVec2(310.0f, 0.0f), ImGuiCond_Always);
+  ImGui::SetNextWindowBgAlpha(0.84f);
+
+  if ( ImGui::Begin("##TetrisVsScoreboard", nullptr, flags) )
   {
-    bgList->AddText(iFont, fontSize, ImVec2(textPos.x + 1.5f, textPos.y + 1.5f), IM_COL32(0, 0, 0, 220), iLabel);
-    bgList->AddText(iFont, fontSize, textPos, IM_COL32(240, 248, 255, 255), iLabel);
-  }
-  else
-  {
-    bgList->AddText(textPos, IM_COL32(240, 248, 255, 255), iLabel);
-  }
+    const TetrisGameMode mode = _Logics[0].GetGameMode();
+    const char * modeTitle = "VS GARBAGE BATTLE";
+    if ( TetrisGameMode::Sprint == mode )        modeTitle = "SPRINT 40L RACE";
+    else if ( TetrisGameMode::Ultra == mode )    modeTitle = "ULTRA 2:00 DUEL";
+    else if ( TetrisGameMode::Marathon == mode ) modeTitle = "MARATHON 150L DUEL";
 
-  (void)iTheme;
+    const float titleW = ImGui::CalcTextSize(modeTitle).x;
+    ImGui::SetCursorPosX(std::max(8.0f, ( 310.0f - titleW ) * 0.5f));
+    ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.25f, 1.0f), "%s", modeTitle);
+    ImGui::Separator();
+
+    char scoreBuf[64];
+    std::snprintf(scoreBuf, sizeof(scoreBuf), "P1  [ %d ]   -   [ %d ]  P2",
+                  _MpState->_RoundWins[0], _MpState->_RoundWins[1]);
+    if ( _Fonts._HeaderFont ) ImGui::PushFont(_Fonts._HeaderFont);
+    const float scW = ImGui::CalcTextSize(scoreBuf).x;
+    ImGui::SetCursorPosX(std::max(8.0f, ( 310.0f - scW ) * 0.5f));
+    ImGui::Text("%s", scoreBuf);
+    if ( _Fonts._HeaderFont ) ImGui::PopFont();
+
+    const std::string timeStr = ( TetrisGameMode::Ultra == mode )
+                                ? ( "TIME LEFT: " + FormatTime(_Logics[0].GetRemainingTime()) )
+                                : ( "TIME: " + FormatTime(_Logics[0].GetElapsedTime()) + "   |   FIRST TO " + std::to_string(_MpState->_TargetRoundWins) );
+    const float tmW = ImGui::CalcTextSize(timeStr.c_str()).x;
+    ImGui::SetCursorPosX(std::max(8.0f, ( 310.0f - tmW ) * 0.5f));
+    ImGui::TextDisabled("%s", timeStr.c_str());
+  }
+  ImGui::End();
+
+  // 3. Left Telemetry Panel (Player 1)
+  ImGui::SetNextWindowPos(ImVec2(pad, pad), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(220.0f, 0.0f), ImGuiCond_Always);
+  ImGui::SetNextWindowBgAlpha(0.78f);
+
+  if ( ImGui::Begin("##TetrisP1Telemetry", nullptr, flags) )
+  {
+    if ( _Fonts._HeaderFont ) ImGui::PushFont(_Fonts._HeaderFont);
+    ImGui::TextColored(ImVec4(0.0f, 0.90f, 0.96f, 1.0f), "PLAYER 1");
+    if ( _Fonts._HeaderFont ) ImGui::PopFont();
+    ImGui::SameLine();
+    ImGui::TextDisabled("[%s]", GetControlDeviceShortBadge(_MpState->_PlayerDevices[0]));
+    ImGui::Separator();
+
+    ImGui::TextDisabled("SCORE");
+    if ( _Fonts._MonoFont ) ImGui::PushFont(_Fonts._MonoFont);
+    ImGui::Text("%lld", _Logics[0].GetScore());
+    if ( _Fonts._MonoFont ) ImGui::PopFont();
+
+    ImGui::Text("LEVEL : %d", _Logics[0].GetLevel());
+    if ( TetrisGameMode::Sprint == _Logics[0].GetGameMode() )
+      ImGui::Text("LINES : %d / 40", _Logics[0].GetLinesCleared());
+    else
+      ImGui::Text("LINES : %d", _Logics[0].GetLinesCleared());
+
+    if ( TetrisGameMode::Versus == _Logics[0].GetGameMode() )
+    {
+      ImGui::TextColored(ImVec4(0.35f, 0.95f, 0.60f, 1.0f), "ATK SENT : %d", _Logics[0].GetTotalAttacksSent());
+      if ( _Logics[0].GetPendingGarbage() > 0 )
+        ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "DANGER   : +%d GARBAGE", _Logics[0].GetPendingGarbage());
+    }
+
+    if ( _Logics[0].GetComboCount() > 0 )
+      ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "COMBO : %dx", _Logics[0].GetComboCount());
+    if ( _Logics[0].IsBackToBackActive() )
+      ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.95f, 1.0f), "[BACK-TO-BACK]");
+  }
+  ImGui::End();
+
+  // 4. Right Telemetry Panel (Player 2)
+  const float rightW = 220.0f;
+  ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - rightW - pad, pad), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(rightW, 0.0f), ImGuiCond_Always);
+  ImGui::SetNextWindowBgAlpha(0.78f);
+
+  if ( ImGui::Begin("##TetrisP2Telemetry", nullptr, flags) )
+  {
+    if ( _Fonts._HeaderFont ) ImGui::PushFont(_Fonts._HeaderFont);
+    ImGui::TextColored(ImVec4(1.0f, 0.60f, 0.20f, 1.0f), "PLAYER 2");
+    if ( _Fonts._HeaderFont ) ImGui::PopFont();
+    ImGui::SameLine();
+    ImGui::TextDisabled("[%s]", GetControlDeviceShortBadge(_MpState->_PlayerDevices[1]));
+    ImGui::Separator();
+
+    ImGui::TextDisabled("SCORE");
+    if ( _Fonts._MonoFont ) ImGui::PushFont(_Fonts._MonoFont);
+    ImGui::Text("%lld", _Logics[1].GetScore());
+    if ( _Fonts._MonoFont ) ImGui::PopFont();
+
+    ImGui::Text("LEVEL : %d", _Logics[1].GetLevel());
+    if ( TetrisGameMode::Sprint == _Logics[1].GetGameMode() )
+      ImGui::Text("LINES : %d / 40", _Logics[1].GetLinesCleared());
+    else
+      ImGui::Text("LINES : %d", _Logics[1].GetLinesCleared());
+
+    if ( TetrisGameMode::Versus == _Logics[1].GetGameMode() )
+    {
+      ImGui::TextColored(ImVec4(0.35f, 0.95f, 0.60f, 1.0f), "ATK SENT : %d", _Logics[1].GetTotalAttacksSent());
+      if ( _Logics[1].GetPendingGarbage() > 0 )
+        ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "DANGER   : +%d GARBAGE", _Logics[1].GetPendingGarbage());
+    }
+
+    if ( _Logics[1].GetComboCount() > 0 )
+      ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "COMBO : %dx", _Logics[1].GetComboCount());
+    if ( _Logics[1].IsBackToBackActive() )
+      ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.95f, 1.0f), "[BACK-TO-BACK]");
+  }
+  ImGui::End();
+
+  GameMenuUI::PopThemeStyle();
 }
 
 // ----------------------------------------------------------------------------
@@ -788,6 +1298,12 @@ static void DrawFrameLabel3D( Scene & ioScene,
 // ----------------------------------------------------------------------------
 void TetrisHud::DrawGameplayOverlay( const TetrisGameLogic & iLogic, Scene & ioScene )
 {
+  if ( _MpState && ( 2 == _MpState->_NumPlayers ) )
+  {
+    DrawMultiplayerGameplayOverlay(ioScene);
+    return;
+  }
+
   // Draw 3D-anchored "HOLD" and "NEXT" headers above the Hold and Next frames
   DrawFrameLabel3D(ioScene, Vec3(-8.0f, 20.85f, -0.2f), "HOLD", _Fonts._HeaderFont, _Theme);
   DrawFrameLabel3D(ioScene, Vec3( 8.0f, 20.85f, -0.2f), "NEXT", _Fonts._HeaderFont, _Theme);
@@ -892,6 +1408,9 @@ void TetrisHud::DrawGameplayOverlay( const TetrisGameLogic & iLogic, Scene & ioS
 // ----------------------------------------------------------------------------
 void TetrisHud::DrawActionBanner( const TetrisGameLogic & iLogic )
 {
+  if ( _MpState && ( 2 == _MpState->_NumPlayers ) )
+    return;
+
   const float alpha = iLogic.GetActionBannerAlpha();
   if ( ( alpha <= 0.01f ) || iLogic.GetActionBannerText().empty() )
     return;
@@ -959,15 +1478,23 @@ void TetrisHud::DrawInGamePauseOrEndModal( TetrisAppState & ioAppState,
   const ImGuiIO & io = ImGui::GetIO();
   const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.52f);
 
+  const bool is2P = _MpState && ( 2 == _MpState->_NumPlayers ) && _Logics;
+  const bool anyEnded = is2P
+                        ? ( _Logics[0].IsGameOver() || _Logics[0].IsVictory() || _Logics[1].IsGameOver() || _Logics[1].IsVictory() )
+                        : ( ioLogic.IsGameOver() || ioLogic.IsVictory() );
+  const bool isPaused = is2P
+                        ? ( ( _Logics[0].IsPaused() || _Logics[1].IsPaused() ) && !anyEnded )
+                        : ( ioLogic.IsPaused() && !anyEnded );
+
   // 1. Pause Menu
-  if ( ioLogic.IsPaused() && !ioLogic.IsGameOver() && !ioLogic.IsVictory() )
+  if ( isPaused )
   {
     if ( GameMenuUI::BeginMenuPanel("##TetrisPauseModal", "GAME PAUSED", center, Vec2(480.0f, 0.0f), _Theme, _Fonts) )
     {
       const std::vector<GameMenuItem> pauseItems =
       {
         { "RESUME GAME",            "Return to active match",                 "ESC / P", true, false },
-        { "RESTART MATCH",          "Start a fresh board in current mode",    "R",       true, false },
+        { "RESTART ROUND",          "Start a fresh board in current mode",    "R",       true, false },
         { "OPTIONS",                "Configure handling, renderer & visuals", "F1",      true, false },
         { "RETURN TO TITLE SCREEN", "Exit match and return to Main Menu",     "",        true, true  }
       };
@@ -979,10 +1506,15 @@ void TetrisHud::DrawInGamePauseOrEndModal( TetrisAppState & ioAppState,
       if ( 0 == act )
       {
         ioLogic.SetPaused(false);
+        if ( is2P )
+          _Logics[1].SetPaused(false);
       }
       else if ( 1 == act )
       {
-        ioLogic.Reset();
+        if ( is2P )
+          _MpState->_RequestNextRound = true;
+        else
+          ioLogic.Reset();
       }
       else if ( 2 == act )
       {
@@ -991,6 +1523,8 @@ void TetrisHud::DrawInGamePauseOrEndModal( TetrisAppState & ioAppState,
       else if ( 3 == act )
       {
         ioLogic.SetPaused(false);
+        if ( is2P )
+          _Logics[1].SetPaused(false);
         SetMenuPage(TetrisMenuPage::MainMenu);
         ioAppState = TetrisAppState::TitleScreen;
       }
@@ -999,7 +1533,102 @@ void TetrisHud::DrawInGamePauseOrEndModal( TetrisAppState & ioAppState,
     return;
   }
 
-  // 2. Game Over / Victory Summary Modal
+  // 2. 2-Player Round Over / Series Winner Modal
+  if ( is2P && anyEnded )
+  {
+    const bool seriesWon = ( _MpState->_RoundWins[0] >= _MpState->_TargetRoundWins ) ||
+                           ( _MpState->_RoundWins[1] >= _MpState->_TargetRoundWins );
+
+    std::string headerTitle = "ROUND COMPLETE";
+    if ( seriesWon )
+    {
+      if ( _MpState->_RoundWins[0] > _MpState->_RoundWins[1] )
+        headerTitle = "PLAYER 1 WINS THE MATCH!";
+      else
+        headerTitle = "PLAYER 2 WINS THE MATCH!";
+    }
+    else
+    {
+      if ( 0 == _MpState->_LastRoundWinner )
+        headerTitle = "PLAYER 1 WINS THE ROUND!";
+      else if ( 1 == _MpState->_LastRoundWinner )
+        headerTitle = "PLAYER 2 WINS THE ROUND!";
+      else
+        headerTitle = "ROUND DRAW!";
+    }
+
+    if ( GameMenuUI::BeginMenuPanel("##Tetris2PEndModal", headerTitle.c_str(), center, Vec2(620.0f, 0.0f), _Theme, _Fonts) )
+    {
+      ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.25f, 1.0f),
+                         "SERIES SCORE :   PLAYER 1  [ %d ]   -   [ %d ]  PLAYER 2   (First to %d)",
+                         _MpState->_RoundWins[0], _MpState->_RoundWins[1], _MpState->_TargetRoundWins);
+      ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+      const std::vector<GameStatCard> summaryCards =
+      {
+        {
+          "PLAYER 1 STATS",
+          "Score: " + std::to_string(_Logics[0].GetScore()),
+          "Lines: " + std::to_string(_Logics[0].GetLinesCleared()) + "  |  Atk: " + std::to_string(_Logics[0].GetTotalAttacksSent()),
+          _Logics[0].IsVictory() ? "ROUND WINNER" : _Logics[0].GetGameOverReason(),
+          Vec4(0.00f, 0.90f, 0.95f, 1.0f)
+        },
+        {
+          "PLAYER 2 STATS",
+          "Score: " + std::to_string(_Logics[1].GetScore()),
+          "Lines: " + std::to_string(_Logics[1].GetLinesCleared()) + "  |  Atk: " + std::to_string(_Logics[1].GetTotalAttacksSent()),
+          _Logics[1].IsVictory() ? "ROUND WINNER" : _Logics[1].GetGameOverReason(),
+          Vec4(1.00f, 0.60f, 0.20f, 1.0f)
+        }
+      };
+      GameMenuUI::DrawStatCardsGrid(summaryCards, 2, _Theme, _Fonts);
+
+      ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+      std::vector<GameMenuItem> endItems;
+      if ( !seriesWon )
+      {
+        endItems =
+        {
+          { "NEXT ROUND",             "Start next round in the series",          "ENTER / R", true, false },
+          { "REMATCH (RESET 0-0)",    "Reset series score and start fresh",      "",          true, false },
+          { "MULTIPLAYER LOBBY",      "Change 2P mode, level, or controls",      "",          true, false },
+          { "RETURN TO TITLE SCREEN", "Exit to Main Menu",                       "",          true, true  }
+        };
+      }
+      else
+      {
+        endItems =
+        {
+          { "PLAY REMATCH SERIES",    "Start a new series in current mode",      "ENTER / R", true, false },
+          { "MULTIPLAYER LOBBY",      "Change 2P mode, level, or controls",      "",          true, false },
+          { "RETURN TO TITLE SCREEN", "Exit to Main Menu",                       "",          true, true  }
+        };
+      }
+
+      const int act = GameMenuUI::DrawMenuButtonList(endItems, _GameOverMenuNav, iMenuInput, _Theme, _Fonts, 52.0f);
+      if ( ( act >= 0 ) && _Audio && !iMenuInput._Confirm )
+        _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+
+      if ( !seriesWon )
+      {
+        if ( 0 == act )      _MpState->_RequestNextRound = true;
+        else if ( 1 == act ) _MpState->_RequestRematch   = true;
+        else if ( 2 == act ) { SetMenuPage(TetrisMenuPage::MultiplayerLobby); ioAppState = TetrisAppState::TitleScreen; }
+        else if ( 3 == act ) { SetMenuPage(TetrisMenuPage::MainMenu);         ioAppState = TetrisAppState::TitleScreen; }
+      }
+      else
+      {
+        if ( 0 == act )      _MpState->_RequestRematch   = true;
+        else if ( 1 == act ) { SetMenuPage(TetrisMenuPage::MultiplayerLobby); ioAppState = TetrisAppState::TitleScreen; }
+        else if ( 2 == act ) { SetMenuPage(TetrisMenuPage::MainMenu);         ioAppState = TetrisAppState::TitleScreen; }
+      }
+    }
+    GameMenuUI::EndMenuPanel();
+    return;
+  }
+
+  // 3. 1-Player Game Over / Victory Summary Modal
   if ( ioLogic.IsGameOver() || ioLogic.IsVictory() )
   {
     const char * headerTitle = ioLogic.IsVictory() ? "OBJECTIVE COMPLETE - VICTORY!" : "GAME OVER";
@@ -1081,10 +1710,15 @@ int TetrisHud::Draw( TetrisAppState & ioAppState,
 {
   oRequestExit = false;
 
+  const bool is2P = _MpState && ( 2 == _MpState->_NumPlayers ) && _Logics;
+  const bool inModal = is2P
+                       ? ( _Logics[0].IsPaused() || _Logics[0].IsGameOver() || _Logics[0].IsVictory() ||
+                           _Logics[1].IsPaused() || _Logics[1].IsGameOver() || _Logics[1].IsVictory() || _ShowInGameOptions )
+                       : ( ioLogic.IsPaused() || ioLogic.IsGameOver() || ioLogic.IsVictory() || _ShowInGameOptions );
+
   if ( _Audio )
   {
-    const bool inMenu = ( TetrisAppState::TitleScreen == ioAppState ) ||
-                        ioLogic.IsPaused() || ioLogic.IsGameOver() || ioLogic.IsVictory() || _ShowInGameOptions;
+    const bool inMenu = ( TetrisAppState::TitleScreen == ioAppState ) || inModal;
     if ( inMenu )
     {
       if ( iMenuInput._NavUp || iMenuInput._NavDown || iMenuInput._NavLeft || iMenuInput._NavRight || iMenuInput._PrevTab || iMenuInput._NextTab )
@@ -1126,7 +1760,7 @@ int TetrisHud::Draw( TetrisAppState & ioAppState,
     DrawGameplayOverlay(ioLogic, ioScene);
     DrawActionBanner(ioLogic);
 
-    if ( ioLogic.IsPaused() || ioLogic.IsGameOver() || ioLogic.IsVictory() || _ShowInGameOptions )
+    if ( inModal )
     {
       DrawInGamePauseOrEndModal(
         ioAppState,
