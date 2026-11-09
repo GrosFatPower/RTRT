@@ -69,3 +69,36 @@ endif()
 target_link_libraries(imguizmo
   PUBLIC imgui
 )
+
+set(enet_dir enet)
+add_library(enet STATIC
+  ${enet_dir}/callbacks.c
+  ${enet_dir}/compress.c
+  ${enet_dir}/host.c
+  ${enet_dir}/list.c
+  ${enet_dir}/packet.c
+  ${enet_dir}/peer.c
+  ${enet_dir}/protocol.c
+  ${enet_dir}/unix.c
+  ${enet_dir}/win32.c
+)
+
+target_include_directories(enet
+  PUBLIC ${enet_dir}/include
+)
+
+if (WIN32)
+  target_compile_definitions(enet PRIVATE _WINSOCK_DEPRECATED_NO_WARNINGS)
+  target_link_libraries(enet PUBLIC ws2_32 winmm)
+elseif (UNIX AND NOT APPLE)
+  target_compile_definitions(enet PRIVATE
+    HAS_FCNTL=1
+    HAS_POLL=1
+    HAS_GETADDRINFO=1
+    HAS_GETNAMEINFO=1
+    HAS_INET_PTON=1
+    HAS_INET_NTOP=1
+    HAS_MSGHDR_FLAGS=1
+    HAS_SOCKLEN_T=1
+  )
+endif()

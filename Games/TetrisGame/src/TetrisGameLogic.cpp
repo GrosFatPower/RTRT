@@ -1,6 +1,8 @@
 #include "TetrisGameLogic.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstring>
 
 namespace Tetris
 {
@@ -90,6 +92,8 @@ void TetrisGameLogic::StartNewGame( TetrisGameMode iMode, int iStartLevel, unsig
   _TotalAttacksSent = 0;
   _GarbageRngState  = ( iSeed != 0 ) ? ( iSeed ^ 0xA5A5A5A5u ) : 0x9E3779B9u;
   _GarbageHoleColumn = static_cast<int>( _GarbageRngState % 10u );
+  _LastAppliedNetSequence = 0;
+  _UseNetNextOverride     = false;
 
   SpawnNextPiece();
 }
@@ -862,6 +866,199 @@ void TetrisGameLogic::Update( float iDeltaTime, const TetrisInputState & iInput,
   }
   else
     _LockTimer = 0.f;
+}
+
+// ----------------------------------------------------------------------------
+// Online Multiplayer State Synchronization
+// ----------------------------------------------------------------------------
+void TetrisGameLogic::ExportNetSnapshot( uint32_t iSequence, TetrisNetBoardSnapshotPacket & oPacket ) const
+{
+  oPacket = TetrisNetBoardSnapshotPacket();
+  oPacket._Type     = static_cast<uint8_t>( TetrisNetPacketType::BoardSnapshot );
+  oPacket._Sequence = iSequence;
+
+  // Pack 200 visible cells (y=0..19, x=0..9) as 4-bit nibbles into 100 bytes
+  for ( int y = 0; y < TetrisMatrix::S_VisibleHeight; ++y )
+  {
+    for ( int x = 0; x < TetrisMatrix::S_Width; ++x )
+    {
+      const int cellIdx = y * TetrisMatrix::S_Width + x;
+      const uint8_t val = static_cast<uint8_t>( _Matrix.GetCell( x, y ) ) & 0x0Fu;
+      const int byteIdx = cellIdx / 2;
+      if ( ( cellIdx & 1 ) == 0 )
+        oPacket._Cells[byteIdx] |= val;
+      else
+        oPacket._Cells[byteIdx] |= static_cast<uint8_t>( val << 4 );
+    }
+  }
+
+  oPacket._ActivePiece    = static_cast<int8_t>( _ActivePiece );
+  oPacket._ActiveRotation = static_cast<int8_t>( _ActiveRotation );
+  oPacket._ActiveX        = static_cast<int8_t>( _ActiveOrigin.x );
+  oPacket._ActiveY        = static_cast<int8_t>( _ActiveOrigin.y );
+  oPacket._GhostY         = static_cast<int8_t>( _GhostY );
+  oPacket._HoldPiece      = static_cast<int8_t>( _HoldPiece );
+
+  for ( int i = 0; i < 5; ++i )
+    oPacket._NextQueue[i] = static_cast<uint8_t>( PeekNextPiece( i ) );
+
+  oPacket._Score            = static_cast<int64_t>( _Score );
+  oPacket._LinesCleared     = static_cast<int32_t>( _LinesCleared );
+  oPacket._Level            = static_cast<int16_t>( _Level );
+  oPacket._ComboCount       = static_cast<int16_t>( _ComboCount );
+  oPacket._PendingGarbage   = static_cast<int16_t>( _PendingGarbage );
+  oPacket._TotalAttacksSent = static_cast<int16_t>( _TotalAttacksSent );
+  oPacket._ElapsedTime      = static_cast<float>( _ElapsedTime );
+  oPacket._RemainingTime    = static_cast<float>( _RemainingTime );
+  oPacket._LockEventId      = static_cast<uint32_t>( _LockEventId );
+
+  uint8_t flags = 0;
+  if ( _BackToBackActive )     flags |= kNetSnapFlag_BackToBack;
+  if ( _GameOver )             flags |= kNetSnapFlag_GameOver;
+  if ( _Victory )              flags |= kNetSnapFlag_Victory;
+  if ( _LastLockFromHardDrop ) flags |= kNetSnapFlag_LastLockHardDrop;
+  if ( _CanHold )              flags |= kNetSnapFlag_CanHold;
+  oPacket._Flags = flags;
+}
+
+void TetrisGameLogic::ApplyNetSnapshot( const TetrisNetBoardSnapshotPacket & iPacket )
+{
+  if ( iPacket._Sequence != 0 && _LastAppliedNetSequence != 0 && iPacket._Sequence < _LastAppliedNetSequence )
+    return;
+  _LastAppliedNetSequence = iPacket._Sequence;
+
+  _Matrix.Clear();
+  for ( int y = 0; y < TetrisMatrix::S_VisibleHeight; ++y )
+  {
+    for ( int x = 0; x < TetrisMatrix::S_Width; ++x )
+    {
+      const int cellIdx = y * TetrisMatrix::S_Width + x;
+      const int byteIdx = cellIdx / 2;
+      const uint8_t rawByte = iPacket._Cells[byteIdx];
+      const uint8_t nibble  = ( ( cellIdx & 1 ) == 0 ) ? ( rawByte & 0x0Fu ) : ( ( rawByte >> 4 ) & 0x0Fu );
+      if ( nibble < static_cast<uint8_t>( TetrisPieceType::Count ) )
+        _Matrix.SetCell( x, y, static_cast<TetrisPieceType>( nibble ) );
+    }
+  }
+
+  _ActivePiece    = static_cast<TetrisPieceType>( MathUtil::Clamp( static_cast<int>( iPacket._ActivePiece ), 0, static_cast<int>( TetrisPieceType::Count ) - 1 ) );
+  _ActiveRotation = static_cast<TetrisRotation>( MathUtil::Clamp( static_cast<int>( iPacket._ActiveRotation ), 0, 3 ) );
+  _ActiveOrigin   = Vec2i( static_cast<int>( iPacket._ActiveX ), static_cast<int>( iPacket._ActiveY ) );
+  _GhostY         = static_cast<int>( iPacket._GhostY );
+  _HoldPiece      = static_cast<TetrisPieceType>( MathUtil::Clamp( static_cast<int>( iPacket._HoldPiece ), 0, static_cast<int>( TetrisPieceType::Count ) - 1 ) );
+
+  _UseNetNextOverride = true;
+  for ( int i = 0; i < 5; ++i )
+  {
+    const int p = MathUtil::Clamp( static_cast<int>( iPacket._NextQueue[i] ), 0, static_cast<int>( TetrisPieceType::Count ) - 1 );
+    _NetNextOverride[i] = static_cast<TetrisPieceType>( p );
+  }
+
+  const unsigned int prevLockId = _LockEventId;
+  _LockEventId          = iPacket._LockEventId;
+  _LastLockFromHardDrop = ( iPacket._Flags & kNetSnapFlag_LastLockHardDrop ) != 0;
+  if ( _LockEventId > prevLockId && _LastLockFromHardDrop )
+    _ScreenShakeImpulse = std::min( 1.f, _ScreenShakeImpulse + 0.35f );
+
+  _Score            = static_cast<long long>( iPacket._Score );
+  if ( _Score > _HighScore )
+    _HighScore = _Score;
+  _LinesCleared     = static_cast<int>( iPacket._LinesCleared );
+  _Level            = MathUtil::Clamp( static_cast<int>( iPacket._Level ), 1, 20 );
+  _ComboCount       = static_cast<int>( iPacket._ComboCount );
+  _PendingGarbage   = std::max( 0, static_cast<int>( iPacket._PendingGarbage ) );
+  _TotalAttacksSent = std::max( 0, static_cast<int>( iPacket._TotalAttacksSent ) );
+  _ElapsedTime      = static_cast<double>( iPacket._ElapsedTime );
+  _RemainingTime    = static_cast<double>( iPacket._RemainingTime );
+
+  _BackToBackActive = ( iPacket._Flags & kNetSnapFlag_BackToBack ) != 0;
+  _CanHold          = ( iPacket._Flags & kNetSnapFlag_CanHold ) != 0;
+
+  const bool netGameOver = ( iPacket._Flags & kNetSnapFlag_GameOver ) != 0;
+  const bool netVictory  = ( iPacket._Flags & kNetSnapFlag_Victory ) != 0;
+  if ( netGameOver && !_GameOver )
+  {
+    _GameOver       = true;
+    _GameOverReason = "Top Out";
+  }
+  if ( netVictory && !_Victory )
+  {
+    _Victory = true;
+  }
+}
+
+void TetrisGameLogic::ExportNetLineClearFx( TetrisNetLineClearFxPacket & oPacket ) const
+{
+  oPacket = TetrisNetLineClearFxPacket();
+  oPacket._Type         = static_cast<uint8_t>( TetrisNetPacketType::LineClearFx );
+  oPacket._NumRows      = static_cast<uint8_t>( std::min<size_t>( 4, _LastClearedRowData.size() ) );
+  oPacket._TSpinType    = static_cast<uint8_t>( _LastClearTSpin );
+  oPacket._PerfectClear = _LastClearPerfect ? 1 : 0;
+  oPacket._ComboCount   = static_cast<int16_t>( _ComboCount );
+
+  for ( uint8_t r = 0; r < oPacket._NumRows; ++r )
+  {
+    oPacket._RowY[r] = static_cast<int8_t>( _LastClearedRowData[r]._RowY );
+    for ( int x = 0; x < 10; ++x )
+      oPacket._RowCells[r][x] = static_cast<uint8_t>( _LastClearedRowData[r]._Cells[x] );
+  }
+
+  std::snprintf( oPacket._BannerText, sizeof( oPacket._BannerText ), "%s", _ActionBannerText.c_str() );
+}
+
+void TetrisGameLogic::ApplyNetLineClearFx( const TetrisNetLineClearFxPacket & iPacket )
+{
+  _LastClearedRows.clear();
+  _LastClearedRowData.clear();
+
+  const int numRows = MathUtil::Clamp( static_cast<int>( iPacket._NumRows ), 0, 4 );
+  for ( int r = 0; r < numRows; ++r )
+  {
+    TetrisClearedRow rowData;
+    rowData._RowY = static_cast<int>( iPacket._RowY[r] );
+    for ( int x = 0; x < 10; ++x )
+    {
+      const int c = MathUtil::Clamp( static_cast<int>( iPacket._RowCells[r][x] ), 0, static_cast<int>( TetrisPieceType::Count ) - 1 );
+      rowData._Cells[x] = static_cast<TetrisPieceType>( c );
+    }
+    _LastClearedRows.push_back( rowData._RowY );
+    _LastClearedRowData.push_back( rowData );
+  }
+
+  if ( numRows > 0 )
+  {
+    _LineClearEventId++;
+    _LastClearTSpin   = static_cast<TetrisTSpinType>( MathUtil::Clamp( static_cast<int>( iPacket._TSpinType ), 0, 2 ) );
+    _LastClearPerfect = ( iPacket._PerfectClear != 0 );
+    _ComboCount       = static_cast<int>( iPacket._ComboCount );
+
+    if ( _LastClearPerfect )
+      _ScreenShakeImpulse = 1.0f;
+    else if ( numRows >= 4 )
+      _ScreenShakeImpulse = std::min( 1.f, _ScreenShakeImpulse + 0.65f );
+  }
+
+  if ( iPacket._BannerText[0] != '\0' )
+  {
+    _ActionBannerText  = iPacket._BannerText;
+    _ActionBannerTimer = 1.8f;
+    _ActionBannerAlpha = 1.0f;
+  }
+}
+
+void TetrisGameLogic::TickVisualFeedbackOnly( float iDeltaTime )
+{
+  if ( _ActionBannerTimer > 0.f )
+  {
+    _ActionBannerTimer = std::max( 0.f, _ActionBannerTimer - iDeltaTime );
+    _ActionBannerAlpha = MathUtil::Clamp( _ActionBannerTimer, 0.f, 1.f );
+  }
+  else
+  {
+    _ActionBannerAlpha = 0.f;
+  }
+
+  _ScreenShakeImpulse = std::max( 0.f, _ScreenShakeImpulse - iDeltaTime * 4.0f );
 }
 
 }

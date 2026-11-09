@@ -19,3 +19,6 @@
 [submodule "Dependencies/miniaudio"]
 	path = Dependencies/miniaudio
 	url = https://github.com/mackron/miniaudio.git
+[submodule "Dependencies/enet"]
+	path = Dependencies/enet
+	url = https://github.com/lsalzman/enet.git

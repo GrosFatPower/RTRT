@@ -16,6 +16,7 @@ target_include_directories(RTRTFramework
     ${CMAKE_SOURCE_DIR}/Dependencies/imgui/backends
     ${CMAKE_SOURCE_DIR}/Dependencies/nativefiledialog/src/include
     ${CMAKE_SOURCE_DIR}/Dependencies/miniaudio
+    ${CMAKE_SOURCE_DIR}/Dependencies/enet/include
 )
 
 target_compile_definitions(RTRTFramework
@@ -35,4 +36,5 @@ target_link_libraries(RTRTFramework
     imgui
     nativefiledialog
     glfw
+    enet
 )

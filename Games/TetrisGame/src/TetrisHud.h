@@ -3,6 +3,7 @@
 
 #include "GameMenuUI.h"
 #include "GamepadInput.h"
+#include "NetSession.h"
 #include "RenderSettings.h"
 #include "RenderStatsUI.h"
 #include "TetrisGameLogic.h"
@@ -21,19 +22,34 @@ using namespace RTRT;
 
 struct TetrisMultiplayerState
 {
-  int                     _NumPlayers      = 1;
-  TetrisGameMode          _MpMode          = TetrisGameMode::Versus;
-  TetrisMultiplayerPreset _Preset          = TetrisMultiplayerPreset::Auto;
-  TetrisControlDevice     _PlayerDevices[2] = { TetrisControlDevice::KeyboardFull, TetrisControlDevice::None };
-  int                     _TargetRoundWins = 2;
-  int                     _RoundWins[2]    = { 0, 0 };
-  int                     _LastRoundWinner = -1; // -1 = tie/none, 0 = P1, 1 = P2
-  int                     _StartLevel      = 1;
-  bool                    _RequestStart1P  = false;
-  TetrisGameMode          _Requested1PMode = TetrisGameMode::Marathon;
-  bool                    _RequestStart2P  = false;
-  bool                    _RequestNextRound = false;
-  bool                    _RequestRematch  = false;
+  int                     _NumPlayers          = 1;
+  TetrisGameMode          _MpMode              = TetrisGameMode::Versus;
+  TetrisMultiplayerPreset _Preset              = TetrisMultiplayerPreset::Auto;
+  TetrisControlDevice     _PlayerDevices[2]    = { TetrisControlDevice::KeyboardFull, TetrisControlDevice::None };
+  int                     _TargetRoundWins     = 2;
+  int                     _RoundWins[2]        = { 0, 0 };
+  int                     _LastRoundWinner     = -1; // -1 = tie/none, 0 = P1 (or Local), 1 = P2 (or Remote)
+  int                     _StartLevel          = 1;
+  bool                    _RequestStart1P      = false;
+  TetrisGameMode          _Requested1PMode     = TetrisGameMode::Marathon;
+  bool                    _RequestStart2P      = false;
+  bool                    _RequestNextRound    = false;
+  bool                    _RequestRematch      = false;
+
+  // Online 2-Player Multiplayer state
+  bool                    _IsOnlineMatch          = false;
+  char                    _LocalPlayerName[32]    = "PLAYER 1";
+  std::string             _RemotePlayerName       = "OPPONENT";
+  char                    _JoinAddressBuf[64]     = "127.0.0.1";
+  int                     _OnlinePort             = 27015;
+  int                     _OnlineLobbyTab         = 0; // 0 = Host Match, 1 = Join Match
+  bool                    _ShowOnlineInGameMenu   = false;
+  bool                    _PeerDisconnectedModal  = false;
+  bool                    _RequestHostOnline      = false;
+  bool                    _RequestStopHost        = false;
+  bool                    _RequestJoinOnline      = false;
+  bool                    _RequestDisconnectOnline= false;
+  bool                    _RequestStartOnlineMatch= false;
 };
 
 class TetrisHud
@@ -63,6 +79,7 @@ public:
   void SetGamepadInputs( GamepadInput * iGamepad1, GamepadInput * iGamepad2 ) { _Gamepad = iGamepad1; _Gamepad2 = iGamepad2; }
   void SetPlayerLogics( TetrisGameLogic * iLogics ) { _Logics = iLogics; }
   void SetMultiplayerState( TetrisMultiplayerState * iMpState ) { _MpState = iMpState; }
+  void SetNetSession( NetSession * iNetSession ) { _NetSession = iNetSession; }
   void SetAudioEngine( AudioEngine * iAudio ) { _Audio = iAudio; }
 
   bool IsSettingsOpen() const { return _ShowInGameOptions; }
@@ -100,8 +117,13 @@ protected:
                            TetrisGameLogic & ioLogic,
                            const GameMenuInput & iMenuInput );
 
+  void DrawMultiplayerTypeSelectPage( const GameMenuInput & iMenuInput );
+
   void DrawMultiplayerLobbyPage( TetrisAppState & ioAppState,
                                  const GameMenuInput & iMenuInput );
+
+  void DrawOnlineLobbyPage( TetrisAppState & ioAppState,
+                            const GameMenuInput & iMenuInput );
 
   void DrawHighScoresPage( TetrisGameLogic & ioLogic,
                            const GameMenuInput & iMenuInput );
@@ -144,6 +166,7 @@ protected:
 
   TetrisMenuPage           _MenuPage          = TetrisMenuPage::MainMenu;
   GameMenuNavState         _MainMenuNav;
+  GameMenuNavState         _MpTypeMenuNav;
   GameMenuNavState         _PauseMenuNav;
   GameMenuNavState         _GameOverMenuNav;
 
@@ -155,6 +178,7 @@ protected:
   GamepadInput *           _Gamepad2            = nullptr;
   TetrisGameLogic *        _Logics              = nullptr;
   TetrisMultiplayerState * _MpState             = nullptr;
+  NetSession *             _NetSession          = nullptr;
   AudioEngine *            _Audio               = nullptr;
 
   RenderStatsUIState       _StatsUIState;

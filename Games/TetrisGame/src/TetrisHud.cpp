@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -286,6 +287,7 @@ void TetrisHud::SetMenuPage( TetrisMenuPage iPage )
 {
   _MenuPage = iPage;
   _MainMenuNav.Reset();
+  _MpTypeMenuNav.Reset();
 }
 
 // ----------------------------------------------------------------------------
@@ -299,18 +301,18 @@ void TetrisHud::DrawMainMenuPage( TetrisAppState & ioAppState,
 {
   const ImGuiIO & io = ImGui::GetIO();
   const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.58f);
-  const Vec2 panelSize(550.0f, 0.0f);
+  const Vec2 panelSize(560.0f, 0.0f);
 
   if ( GameMenuUI::BeginMenuPanel("##TetrisMainMenu", "MAIN MENU", center, panelSize, _Theme, _Fonts) )
   {
     const std::vector<GameMenuItem> items =
     {
-      { "SINGLE PLAYER (1P)",     "Marathon 150L, Sprint 40L, or Ultra 2m solo modes",      "1P SOLO",   true, false },
-      { "LOCAL MULTIPLAYER (2P)", "Split-screen VS Garbage Battle, Sprint Race & Ultra",    "2 PLAYERS", true, false },
-      { "QUICK START (1P)",       "Jump straight into solo Marathon mode at Level 1",       "MARATHON",  true, false },
-      { "HIGH SCORES & STATS",    "View personal best records and session statistics",      "",          true, false },
-      { "OPTIONS",                "Configure handling (DAS/ARR), renderer, audio & inputs", "F1",        true, false },
-      { "EXIT TO DESKTOP",        "Close application",                                      "",          true, true  }
+      { "SINGLE PLAYER (1P)",   "Marathon 150L, Sprint 40L, or Ultra 2m solo modes",      "1P SOLO",   true, false },
+      { "MULTIPLAYER (2P)",     "Play 2-Player Local Split-Screen or Online (LAN / WAN)", "2 PLAYERS", true, false },
+      { "QUICK START (1P)",     "Jump straight into solo Marathon mode at Level 1",       "MARATHON",  true, false },
+      { "HIGH SCORES & STATS",  "View personal best records and session statistics",      "",          true, false },
+      { "OPTIONS",              "Configure handling (DAS/ARR), renderer, audio & inputs", "F1",        true, false },
+      { "EXIT TO DESKTOP",      "Close application",                                      "",          true, true  }
     };
 
     const int activated = GameMenuUI::DrawMenuButtonList(items, _MainMenuNav, iMenuInput, _Theme, _Fonts, 52.0f);
@@ -325,13 +327,14 @@ void TetrisHud::DrawMainMenuPage( TetrisAppState & ioAppState,
     }
     else if ( 1 == activated )
     {
-      SetMenuPage(TetrisMenuPage::MultiplayerLobby);
+      SetMenuPage(TetrisMenuPage::MultiplayerTypeSelect);
     }
     else if ( 2 == activated )
     {
       if ( _MpState )
       {
         _MpState->_NumPlayers      = 1;
+        _MpState->_IsOnlineMatch   = false;
         _MpState->_Requested1PMode = TetrisGameMode::Marathon;
         _MpState->_StartLevel      = 1;
         _MpState->_RequestStart1P  = true;
@@ -362,6 +365,57 @@ void TetrisHud::DrawMainMenuPage( TetrisAppState & ioAppState,
   GameMenuUI::DrawFooterBar(
     leftStatus.c_str(),
     "[UP/DOWN] Navigate    [ENTER] Select    [F2/F3/F4] Switch Renderer",
+    _Theme,
+    _Fonts
+  );
+}
+
+// ----------------------------------------------------------------------------
+// DrawMultiplayerTypeSelectPage
+// ----------------------------------------------------------------------------
+void TetrisHud::DrawMultiplayerTypeSelectPage( const GameMenuInput & iMenuInput )
+{
+  if ( iMenuInput._Back )
+  {
+    SetMenuPage(TetrisMenuPage::MainMenu);
+    return;
+  }
+
+  const ImGuiIO & io = ImGui::GetIO();
+  const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.56f);
+  const Vec2 panelSize(560.0f, 0.0f);
+
+  if ( GameMenuUI::BeginMenuPanel("##TetrisMpTypeSelect", "2-PLAYER MULTIPLAYER - SELECT MODE", center, panelSize, _Theme, _Fonts) )
+  {
+    const std::vector<GameMenuItem> items =
+    {
+      { "LOCAL MULTIPLAYER",    "Same-screen 2P split board (Keyboard / Gamepad)",      "SAME PC",   true, false },
+      { "ONLINE MULTIPLAYER",   "Host or join a 2P match over LAN or Internet",         "LAN / WAN", true, false },
+      { "BACK TO MAIN MENU",    "Return to main title screen",                          "ESC",       true, false }
+    };
+
+    const int activated = GameMenuUI::DrawMenuButtonList(items, _MpTypeMenuNav, iMenuInput, _Theme, _Fonts, 56.0f);
+    if ( ( activated >= 0 ) && _Audio && !iMenuInput._Confirm )
+      _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+
+    if ( 0 == activated )
+    {
+      SetMenuPage(TetrisMenuPage::MultiplayerLobby);
+    }
+    else if ( 1 == activated )
+    {
+      SetMenuPage(TetrisMenuPage::OnlineLobby);
+    }
+    else if ( 2 == activated )
+    {
+      SetMenuPage(TetrisMenuPage::MainMenu);
+    }
+  }
+  GameMenuUI::EndMenuPanel();
+
+  GameMenuUI::DrawFooterBar(
+    "SELECT MULTIPLAYER CONNECTION TYPE",
+    "[UP/DOWN] Navigate    [ENTER] Select    [ESC] Back to Main Menu",
     _Theme,
     _Fonts
   );
@@ -465,6 +519,7 @@ void TetrisHud::DrawModeSelectPage( TetrisAppState & ioAppState,
       if ( _MpState )
       {
         _MpState->_NumPlayers      = 1;
+        _MpState->_IsOnlineMatch   = false;
         _MpState->_Requested1PMode = chosenMode;
         _MpState->_StartLevel      = ioLogic.GetStartLevel();
         _MpState->_RequestStart1P  = true;
@@ -495,7 +550,7 @@ void TetrisHud::DrawMultiplayerLobbyPage( TetrisAppState & ioAppState,
 {
   if ( iMenuInput._Back && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId) )
   {
-    SetMenuPage(TetrisMenuPage::MainMenu);
+    SetMenuPage(TetrisMenuPage::MultiplayerTypeSelect);
     return;
   }
 
@@ -609,11 +664,11 @@ void TetrisHud::DrawMultiplayerLobbyPage( TetrisAppState & ioAppState,
     const float availW = ImGui::GetContentRegionAvail().x;
     const float btnW = ( availW - 16.0f ) * 0.5f;
 
-    if ( GameMenuUI::DrawActionButton("BACK TO MENU (ESC)", Vec2(btnW, 46.0f), false, _Theme, _Fonts) )
+    if ( GameMenuUI::DrawActionButton("BACK (ESC)", Vec2(btnW, 46.0f), false, _Theme, _Fonts) )
     {
       if ( _Audio && !iMenuInput._Back )
         _Audio->PlaySound2D("ui_back", 0.8f, 1.0f);
-      SetMenuPage(TetrisMenuPage::MainMenu);
+      SetMenuPage(TetrisMenuPage::MultiplayerTypeSelect);
     }
 
     ImGui::SameLine(0.0f, 16.0f);
@@ -626,6 +681,7 @@ void TetrisHud::DrawMultiplayerLobbyPage( TetrisAppState & ioAppState,
       if ( _MpState )
       {
         _MpState->_NumPlayers     = 2;
+        _MpState->_IsOnlineMatch  = false;
         _MpState->_RequestStart2P = true;
       }
       ioAppState = TetrisAppState::InGame;
@@ -637,6 +693,316 @@ void TetrisHud::DrawMultiplayerLobbyPage( TetrisAppState & ioAppState,
   GameMenuUI::DrawFooterBar(
     "2-PLAYER LOCAL SPLIT-SCREEN",
     "[LEFT/RIGHT] Select Mode    [ENTER / START] Launch Match    [ESC / B] Back",
+    _Theme,
+    _Fonts
+  );
+}
+
+// ----------------------------------------------------------------------------
+// DrawOnlineLobbyPage
+// ----------------------------------------------------------------------------
+void TetrisHud::DrawOnlineLobbyPage( TetrisAppState & ioAppState,
+                                     const GameMenuInput & iMenuInput )
+{
+  (void)ioAppState;
+  if ( !_MpState )
+    return;
+
+  if ( iMenuInput._Back && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId) && !ImGui::IsAnyItemActive() )
+  {
+    SetMenuPage(TetrisMenuPage::MultiplayerTypeSelect);
+    return;
+  }
+
+  if ( iMenuInput._PrevTab && !ImGui::IsAnyItemActive() )
+    _MpState->_OnlineLobbyTab = 0;
+  if ( iMenuInput._NextTab && !ImGui::IsAnyItemActive() )
+    _MpState->_OnlineLobbyTab = 1;
+
+  const ImGuiIO & io = ImGui::GetIO();
+  const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.55f);
+  const Vec2 panelSize(920.0f, 0.0f);
+
+  if ( GameMenuUI::BeginMenuPanel("##TetrisOnlineLobby", "ONLINE 2-PLAYER MULTIPLAYER (LAN & INTERNET)", center, panelSize, _Theme, _Fonts) )
+  {
+    // 1. Top Identity & Live Connection Bar
+    ImGui::SetNextItemWidth(220.0f);
+    ImGui::InputText("Your Nickname", _MpState->_LocalPlayerName, sizeof(_MpState->_LocalPlayerName));
+    if ( _MpState->_LocalPlayerName[0] == '\0' )
+      std::snprintf(_MpState->_LocalPlayerName, sizeof(_MpState->_LocalPlayerName), "PLAYER 1");
+
+    ImGui::SameLine(0.0f, 32.0f);
+    const NetState netState = _NetSession ? _NetSession->GetState() : NetState::Disconnected;
+    if ( NetState::Connected == netState )
+    {
+      ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f),
+                         "STATUS: Connected to %s (%s)  |  PING: %u ms",
+                         _MpState->_RemotePlayerName.c_str(),
+                         _NetSession->GetPeerAddressString().c_str(),
+                         _NetSession->GetPingMs());
+    }
+    else if ( NetState::Hosting == netState )
+    {
+      ImGui::TextColored(ImVec4(1.00f, 0.85f, 0.25f, 1.0f),
+                         "STATUS: Hosting on %s:%u  (Waiting for Challenger...)",
+                         _NetSession ? _NetSession->GetLocalIPv4Address().c_str() : "127.0.0.1",
+                         _NetSession ? _NetSession->GetBoundPort() : static_cast<unsigned int>(_MpState->_OnlinePort));
+    }
+    else if ( NetState::Connecting == netState )
+    {
+      ImGui::TextColored(ImVec4(0.25f, 0.85f, 1.00f, 1.0f),
+                         "STATUS: Connecting to %s:%d...",
+                         _MpState->_JoinAddressBuf, _MpState->_OnlinePort);
+    }
+    else
+    {
+      ImGui::TextDisabled("STATUS: Idle (Host a Room or Join a Room below)");
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+    const std::vector<const char *> lobbyTabs = { "HOST MATCH", "JOIN MATCH (LAN & DIRECT IP)" };
+    if ( GameMenuUI::DrawTabBar(lobbyTabs, _MpState->_OnlineLobbyTab, _Theme, _Fonts) )
+    {
+      if ( _Audio )
+        _Audio->PlaySound2D("ui_nav", 0.65f, 1.0f);
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+    if ( 0 == _MpState->_OnlineLobbyTab )
+    {
+      // --- HOST MATCH TAB ---
+      const std::vector<GameSelectionCard> cards =
+      {
+        {
+          "VS BATTLE",
+          "GUIDELINE GARBAGE WARS",
+          "Clear Doubles, Triples, Tetrises, and T-Spins to send garbage lines to your opponent. Counter incoming attacks before locking!",
+          "Win: Top Out Opponent",
+          Vec4(1.00f, 0.35f, 0.30f, 1.0f)
+        },
+        {
+          "SPRINT RACE",
+          "40 LINES HEAD-TO-HEAD",
+          "Both players receive the exact same 7-Bag piece sequence. Race to clear 40 lines first without topping out!",
+          "Win: First to 40 Lines",
+          Vec4(1.00f, 0.65f, 0.10f, 1.0f)
+        },
+        {
+          "SCORE ATTACK",
+          "2-MINUTE ULTRA DUEL",
+          "Two minutes on the clock with identical piece bags. Outscore your rival using T-Spins, Back-to-Backs, and high combos.",
+          "Win: Highest Score in 2:00",
+          Vec4(0.75f, 0.35f, 1.00f, 1.0f)
+        },
+        {
+          "MARATHON DUEL",
+          "150 LINES ENDURANCE",
+          "Parallel 15-level Guideline progression on side-by-side boards. Survive accelerating gravity and reach 150 lines first.",
+          "Win: 150 Lines / Survival",
+          Vec4(0.00f, 0.90f, 0.95f, 1.0f)
+        }
+      };
+
+      bool cardConfirmed = false;
+      GameMenuInput navInput = iMenuInput;
+      if ( ImGui::IsAnyItemActive() )
+      {
+        navInput._NavLeft  = false;
+        navInput._NavRight = false;
+        navInput._Confirm  = false;
+      }
+
+      if ( GameMenuUI::DrawSelectionCards(cards, _SelectedMpModeIndex, navInput, _Theme, _Fonts, &cardConfirmed) )
+      {
+        if ( _Audio && !navInput._NavLeft && !navInput._NavRight )
+          _Audio->PlaySound2D("ui_nav", 0.65f, 1.0f);
+      }
+
+      if ( 0 == _SelectedMpModeIndex )      _MpState->_MpMode = TetrisGameMode::Versus;
+      else if ( 1 == _SelectedMpModeIndex ) _MpState->_MpMode = TetrisGameMode::Sprint;
+      else if ( 2 == _SelectedMpModeIndex ) _MpState->_MpMode = TetrisGameMode::Ultra;
+      else                                  _MpState->_MpMode = TetrisGameMode::Marathon;
+
+      ImGui::Dummy(ImVec2(0.0f, 6.0f));
+      ImGui::Separator();
+      ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+      ImGui::SetNextItemWidth(200.0f);
+      ImGui::SliderInt("Series Target", &_MpState->_TargetRoundWins, 1, 5, "First to %d Wins");
+
+      ImGui::SameLine(0.0f, 24.0f);
+      ImGui::SetNextItemWidth(180.0f);
+      ImGui::SliderInt("Start Level", &_MpState->_StartLevel, 1, 15);
+
+      ImGui::SameLine(0.0f, 24.0f);
+      ImGui::SetNextItemWidth(110.0f);
+      if ( ImGui::InputInt("UDP Port", &_MpState->_OnlinePort, 0, 0) )
+        _MpState->_OnlinePort = MathUtil::Clamp(_MpState->_OnlinePort, 1024, 65535);
+
+      ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+      const bool isHostRole = _NetSession && ( _NetSession->GetRole() == NetRole::Host );
+      const bool peerReady  = isHostRole && ( NetState::Connected == netState );
+
+      if ( !isHostRole )
+      {
+        if ( GameMenuUI::DrawActionButton("OPEN ROOM & START HOSTING", Vec2(320.0f, 42.0f), true, _Theme, _Fonts) )
+        {
+          if ( _Audio ) _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+          _MpState->_RequestHostOnline = true;
+        }
+        ImGui::SameLine(0.0f, 18.0f);
+        ImGui::TextDisabled("Broadcasts automatically on LAN & accepts direct IP connections.");
+      }
+      else
+      {
+        if ( GameMenuUI::DrawActionButton("STOP HOSTING", Vec2(220.0f, 42.0f), false, _Theme, _Fonts) )
+        {
+          if ( _Audio ) _Audio->PlaySound2D("ui_back", 0.8f, 1.0f);
+          _MpState->_RequestStopHost = true;
+        }
+        ImGui::SameLine(0.0f, 18.0f);
+        if ( peerReady )
+        {
+          ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f),
+                             "CHALLENGER READY: %s  (Ping: %u ms) - Ready to Launch!",
+                             _MpState->_RemotePlayerName.c_str(),
+                             _NetSession->GetPingMs());
+        }
+        else
+        {
+          ImGui::TextColored(ImVec4(1.00f, 0.85f, 0.25f, 1.0f),
+                             "Broadcasting LAN Room on %s:%u — waiting for opponent...",
+                             _NetSession->GetLocalIPv4Address().c_str(),
+                             _NetSession->GetBoundPort());
+        }
+      }
+
+      ImGui::Dummy(ImVec2(0.0f, 10.0f));
+      const float availW = ImGui::GetContentRegionAvail().x;
+      const float btnW = ( availW - 16.0f ) * 0.5f;
+
+      if ( GameMenuUI::DrawActionButton("BACK (ESC)", Vec2(btnW, 46.0f), false, _Theme, _Fonts) )
+      {
+        if ( _Audio ) _Audio->PlaySound2D("ui_back", 0.8f, 1.0f);
+        SetMenuPage(TetrisMenuPage::MultiplayerTypeSelect);
+      }
+
+      ImGui::SameLine(0.0f, 16.0f);
+      ImGui::BeginDisabled(!peerReady);
+      if ( GameMenuUI::DrawActionButton(peerReady ? "LAUNCH ONLINE MATCH (ENTER)" : "WAITING FOR OPPONENT TO JOIN...", Vec2(btnW, 46.0f), peerReady, _Theme, _Fonts) ||
+           ( peerReady && cardConfirmed ) )
+      {
+        if ( _Audio ) _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+        _MpState->_RequestStartOnlineMatch = true;
+      }
+      ImGui::EndDisabled();
+    }
+    else
+    {
+      // --- JOIN MATCH TAB ---
+      ImGui::TextColored(ImVec4(0.00f, 0.90f, 0.96f, 1.0f), "AUTOMATIC LAN ROOM DISCOVERY (UDP Port 27016)");
+      ImGui::Separator();
+
+      ImGui::BeginChild("##LanRoomsList", ImVec2(0.0f, 165.0f), true);
+      const std::vector<LanRoomInfo> emptyRooms;
+      const std::vector<LanRoomInfo> & rooms = _NetSession ? _NetSession->GetDiscoveredLanRooms() : emptyRooms;
+
+      if ( rooms.empty() )
+      {
+        ImGui::Dummy(ImVec2(0.0f, 42.0f));
+        const char * scanMsg = "Scanning local network (and localhost 127.0.0.1) for active rooms...";
+        const float tw = ImGui::CalcTextSize(scanMsg).x;
+        ImGui::SetCursorPosX(std::max(12.0f, ( ImGui::GetContentRegionAvail().x - tw ) * 0.5f));
+        ImGui::TextDisabled("%s", scanMsg);
+      }
+      else
+      {
+        for ( size_t i = 0; i < rooms.size(); ++i )
+        {
+          const LanRoomInfo & r = rooms[i];
+          ImGui::PushID(static_cast<int>(i));
+          ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f), "[LAN ROOM]");
+          ImGui::SameLine();
+          ImGui::Text("Host: %s", r._HostName.c_str());
+          ImGui::SameLine(280.0f);
+          ImGui::TextColored(ImVec4(1.00f, 0.85f, 0.25f, 1.0f), "%s", r._RoomInfo.c_str());
+          ImGui::SameLine(560.0f);
+          ImGui::TextDisabled("%s:%u", r._Address.c_str(), static_cast<unsigned int>(r._GamePort));
+          ImGui::SameLine(ImGui::GetContentRegionAvail().x - 125.0f);
+          if ( ImGui::Button("JOIN ROOM", ImVec2(120.0f, 28.0f)) )
+          {
+            if ( _Audio ) _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+            std::snprintf(_MpState->_JoinAddressBuf, sizeof(_MpState->_JoinAddressBuf), "%s", r._Address.c_str());
+            _MpState->_OnlinePort        = static_cast<int>(r._GamePort);
+            _MpState->_RequestJoinOnline = true;
+          }
+          ImGui::Separator();
+          ImGui::PopID();
+        }
+      }
+      ImGui::EndChild();
+
+      ImGui::Dummy(ImVec2(0.0f, 6.0f));
+      ImGui::TextColored(ImVec4(0.00f, 0.90f, 0.96f, 1.0f), "DIRECT IP / INTERNET CONNECTION");
+      ImGui::Separator();
+      ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+      ImGui::SetNextItemWidth(260.0f);
+      ImGui::InputText("Host IP / Hostname", _MpState->_JoinAddressBuf, sizeof(_MpState->_JoinAddressBuf));
+
+      ImGui::SameLine(0.0f, 24.0f);
+      ImGui::SetNextItemWidth(110.0f);
+      if ( ImGui::InputInt("Port##JoinPort", &_MpState->_OnlinePort, 0, 0) )
+        _MpState->_OnlinePort = MathUtil::Clamp(_MpState->_OnlinePort, 1024, 65535);
+
+      ImGui::SameLine(0.0f, 24.0f);
+      const bool isClientOrConnecting = _NetSession && ( _NetSession->GetRole() == NetRole::Client ) &&
+                                        ( NetState::Connecting == netState || NetState::Connected == netState );
+      if ( !isClientOrConnecting )
+      {
+        if ( GameMenuUI::DrawActionButton("CONNECT TO HOST", Vec2(210.0f, 38.0f), true, _Theme, _Fonts) )
+        {
+          if ( _Audio ) _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+          _MpState->_RequestJoinOnline = true;
+        }
+      }
+      else
+      {
+        if ( GameMenuUI::DrawActionButton("DISCONNECT", Vec2(210.0f, 38.0f), false, _Theme, _Fonts) )
+        {
+          if ( _Audio ) _Audio->PlaySound2D("ui_back", 0.8f, 1.0f);
+          _MpState->_RequestDisconnectOnline = true;
+        }
+      }
+
+      ImGui::Dummy(ImVec2(0.0f, 6.0f));
+      if ( NetState::Connected == netState && _NetSession && _NetSession->GetRole() == NetRole::Client )
+      {
+        ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f),
+                           "CONNECTED TO HOST '%s' (Ping: %u ms) — Waiting for Host to launch match...",
+                           _MpState->_RemotePlayerName.c_str(),
+                           _NetSession->GetPingMs());
+      }
+      else
+      {
+        ImGui::TextDisabled("Tip: In Online matches, your board is always on the LEFT (Full Keyboard + Gamepad 1).");
+      }
+
+      ImGui::Dummy(ImVec2(0.0f, 10.0f));
+      if ( GameMenuUI::DrawActionButton("BACK (ESC)", Vec2(260.0f, 44.0f), false, _Theme, _Fonts) )
+      {
+        if ( _Audio ) _Audio->PlaySound2D("ui_back", 0.8f, 1.0f);
+        SetMenuPage(TetrisMenuPage::MultiplayerTypeSelect);
+      }
+    }
+  }
+  GameMenuUI::EndMenuPanel();
+
+  GameMenuUI::DrawFooterBar(
+    "ONLINE 2-PLAYER LOBBY (ENET UDP)",
+    "[LB / RB] Switch Host/Join Tab    [ENTER] Action    [ESC] Back to Menu",
     _Theme,
     _Fonts
   );
@@ -1106,9 +1472,17 @@ void TetrisHud::DrawTitleScreenMenus( TetrisAppState & ioAppState,
   {
     DrawModeSelectPage(ioAppState, ioLogic, iMenuInput);
   }
+  else if ( TetrisMenuPage::MultiplayerTypeSelect == _MenuPage )
+  {
+    DrawMultiplayerTypeSelectPage(iMenuInput);
+  }
   else if ( TetrisMenuPage::MultiplayerLobby == _MenuPage )
   {
     DrawMultiplayerLobbyPage(ioAppState, iMenuInput);
+  }
+  else if ( TetrisMenuPage::OnlineLobby == _MenuPage )
+  {
+    DrawOnlineLobbyPage(ioAppState, iMenuInput);
   }
   else if ( TetrisMenuPage::HighScores == _MenuPage )
   {
@@ -1148,14 +1522,17 @@ void TetrisHud::DrawMultiplayerGameplayOverlay( Scene & ioScene )
   const Vec3 originP1 = TetrisSceneManager::GetBoardOrigin(0, 2);
   const Vec3 originP2 = TetrisSceneManager::GetBoardOrigin(1, 2);
 
-  // 1. 3D-Projected Board Headers, Hold/Next Labels, Garbage Danger Meters & Action Banners
-  DrawFrameLabel3DColored(ioScene, originP1 + Vec3( 0.0f, 21.35f, -0.2f), "PLAYER 1", _Fonts._HeaderFont, IM_COL32(0, 228, 245, 220), IM_COL32(180, 248, 255, 255));
-  DrawFrameLabel3DColored(ioScene, originP1 + Vec3(-8.0f, 20.85f, -0.2f), "HOLD",     _Fonts._HeaderFont, IM_COL32(0, 228, 245, 150));
-  DrawFrameLabel3DColored(ioScene, originP1 + Vec3( 8.0f, 20.85f, -0.2f), "NEXT",     _Fonts._HeaderFont, IM_COL32(0, 228, 245, 150));
+  const char * p1Name = _MpState->_IsOnlineMatch ? _MpState->_LocalPlayerName : "PLAYER 1";
+  const char * p2Name = _MpState->_IsOnlineMatch ? _MpState->_RemotePlayerName.c_str() : "PLAYER 2";
 
-  DrawFrameLabel3DColored(ioScene, originP2 + Vec3( 0.0f, 21.35f, -0.2f), "PLAYER 2", _Fonts._HeaderFont, IM_COL32(255, 150, 45, 220), IM_COL32(255, 230, 190, 255));
-  DrawFrameLabel3DColored(ioScene, originP2 + Vec3(-8.0f, 20.85f, -0.2f), "HOLD",     _Fonts._HeaderFont, IM_COL32(255, 150, 45, 150));
-  DrawFrameLabel3DColored(ioScene, originP2 + Vec3( 8.0f, 20.85f, -0.2f), "NEXT",     _Fonts._HeaderFont, IM_COL32(255, 150, 45, 150));
+  // 1. 3D-Projected Board Headers, Hold/Next Labels, Garbage Danger Meters & Action Banners
+  DrawFrameLabel3DColored(ioScene, originP1 + Vec3( 0.0f, 21.35f, -0.2f), p1Name, _Fonts._HeaderFont, IM_COL32(0, 228, 245, 220), IM_COL32(180, 248, 255, 255));
+  DrawFrameLabel3DColored(ioScene, originP1 + Vec3(-8.0f, 20.85f, -0.2f), "HOLD", _Fonts._HeaderFont, IM_COL32(0, 228, 245, 150));
+  DrawFrameLabel3DColored(ioScene, originP1 + Vec3( 8.0f, 20.85f, -0.2f), "NEXT", _Fonts._HeaderFont, IM_COL32(0, 228, 245, 150));
+
+  DrawFrameLabel3DColored(ioScene, originP2 + Vec3( 0.0f, 21.35f, -0.2f), p2Name, _Fonts._HeaderFont, IM_COL32(255, 150, 45, 220), IM_COL32(255, 230, 190, 255));
+  DrawFrameLabel3DColored(ioScene, originP2 + Vec3(-8.0f, 20.85f, -0.2f), "HOLD", _Fonts._HeaderFont, IM_COL32(255, 150, 45, 150));
+  DrawFrameLabel3DColored(ioScene, originP2 + Vec3( 8.0f, 20.85f, -0.2f), "NEXT", _Fonts._HeaderFont, IM_COL32(255, 150, 45, 150));
 
   DrawGarbageMeter3D(ioScene, originP1, _Logics[0].GetPendingGarbage(), _Fonts._HeaderFont);
   DrawGarbageMeter3D(ioScene, originP2, _Logics[1].GetPendingGarbage(), _Fonts._HeaderFont);
@@ -1176,53 +1553,61 @@ void TetrisHud::DrawMultiplayerGameplayOverlay( Scene & ioScene )
   const float pad = 16.0f;
 
   // 2. Top-Center VS Scoreboard
+  const float scoreW = 360.0f;
   ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, pad), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
-  ImGui::SetNextWindowSize(ImVec2(310.0f, 0.0f), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(scoreW, 0.0f), ImGuiCond_Always);
   ImGui::SetNextWindowBgAlpha(0.84f);
 
   if ( ImGui::Begin("##TetrisVsScoreboard", nullptr, flags) )
   {
     const TetrisGameMode mode = _Logics[0].GetGameMode();
-    const char * modeTitle = "VS GARBAGE BATTLE";
-    if ( TetrisGameMode::Sprint == mode )        modeTitle = "SPRINT 40L RACE";
-    else if ( TetrisGameMode::Ultra == mode )    modeTitle = "ULTRA 2:00 DUEL";
-    else if ( TetrisGameMode::Marathon == mode ) modeTitle = "MARATHON 150L DUEL";
+    const char * modeTitle = _MpState->_IsOnlineMatch ? "ONLINE VS GARBAGE BATTLE" : "VS GARBAGE BATTLE";
+    if ( TetrisGameMode::Sprint == mode )        modeTitle = _MpState->_IsOnlineMatch ? "ONLINE SPRINT 40L RACE" : "SPRINT 40L RACE";
+    else if ( TetrisGameMode::Ultra == mode )    modeTitle = _MpState->_IsOnlineMatch ? "ONLINE ULTRA 2:00 DUEL" : "ULTRA 2:00 DUEL";
+    else if ( TetrisGameMode::Marathon == mode ) modeTitle = _MpState->_IsOnlineMatch ? "ONLINE MARATHON DUEL" : "MARATHON 150L DUEL";
 
     const float titleW = ImGui::CalcTextSize(modeTitle).x;
-    ImGui::SetCursorPosX(std::max(8.0f, ( 310.0f - titleW ) * 0.5f));
+    ImGui::SetCursorPosX(std::max(8.0f, ( scoreW - titleW ) * 0.5f));
     ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.25f, 1.0f), "%s", modeTitle);
     ImGui::Separator();
 
-    char scoreBuf[64];
-    std::snprintf(scoreBuf, sizeof(scoreBuf), "P1  [ %d ]   -   [ %d ]  P2",
-                  _MpState->_RoundWins[0], _MpState->_RoundWins[1]);
+    char scoreBuf[128];
+    std::snprintf(scoreBuf, sizeof(scoreBuf), "%s  [ %d ]   -   [ %d ]  %s",
+                  p1Name, _MpState->_RoundWins[0], _MpState->_RoundWins[1], p2Name);
     if ( _Fonts._HeaderFont ) ImGui::PushFont(_Fonts._HeaderFont);
     const float scW = ImGui::CalcTextSize(scoreBuf).x;
-    ImGui::SetCursorPosX(std::max(8.0f, ( 310.0f - scW ) * 0.5f));
+    ImGui::SetCursorPosX(std::max(8.0f, ( scoreW - scW ) * 0.5f));
     ImGui::Text("%s", scoreBuf);
     if ( _Fonts._HeaderFont ) ImGui::PopFont();
 
-    const std::string timeStr = ( TetrisGameMode::Ultra == mode )
-                                ? ( "TIME LEFT: " + FormatTime(_Logics[0].GetRemainingTime()) )
-                                : ( "TIME: " + FormatTime(_Logics[0].GetElapsedTime()) + "   |   FIRST TO " + std::to_string(_MpState->_TargetRoundWins) );
+    std::string timeStr = ( TetrisGameMode::Ultra == mode )
+                          ? ( "TIME LEFT: " + FormatTime(_Logics[0].GetRemainingTime()) )
+                          : ( "TIME: " + FormatTime(_Logics[0].GetElapsedTime()) + "  |  FIRST TO " + std::to_string(_MpState->_TargetRoundWins) );
+    if ( _MpState->_IsOnlineMatch && _NetSession )
+    {
+      timeStr += "  |  PING: " + std::to_string(_NetSession->GetPingMs()) + " ms";
+    }
     const float tmW = ImGui::CalcTextSize(timeStr.c_str()).x;
-    ImGui::SetCursorPosX(std::max(8.0f, ( 310.0f - tmW ) * 0.5f));
+    ImGui::SetCursorPosX(std::max(8.0f, ( scoreW - tmW ) * 0.5f));
     ImGui::TextDisabled("%s", timeStr.c_str());
   }
   ImGui::End();
 
-  // 3. Left Telemetry Panel (Player 1)
+  // 3. Left Telemetry Panel (Local Player / Player 1)
   ImGui::SetNextWindowPos(ImVec2(pad, pad), ImGuiCond_Always);
-  ImGui::SetNextWindowSize(ImVec2(220.0f, 0.0f), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(230.0f, 0.0f), ImGuiCond_Always);
   ImGui::SetNextWindowBgAlpha(0.78f);
 
   if ( ImGui::Begin("##TetrisP1Telemetry", nullptr, flags) )
   {
     if ( _Fonts._HeaderFont ) ImGui::PushFont(_Fonts._HeaderFont);
-    ImGui::TextColored(ImVec4(0.0f, 0.90f, 0.96f, 1.0f), "PLAYER 1");
+    ImGui::TextColored(ImVec4(0.0f, 0.90f, 0.96f, 1.0f), "%s", p1Name);
     if ( _Fonts._HeaderFont ) ImGui::PopFont();
     ImGui::SameLine();
-    ImGui::TextDisabled("[%s]", GetControlDeviceShortBadge(_MpState->_PlayerDevices[0]));
+    if ( _MpState->_IsOnlineMatch )
+      ImGui::TextDisabled("[YOU]");
+    else
+      ImGui::TextDisabled("[%s]", GetControlDeviceShortBadge(_MpState->_PlayerDevices[0]));
     ImGui::Separator();
 
     ImGui::TextDisabled("SCORE");
@@ -1250,8 +1635,8 @@ void TetrisHud::DrawMultiplayerGameplayOverlay( Scene & ioScene )
   }
   ImGui::End();
 
-  // 4. Right Telemetry Panel (Player 2)
-  const float rightW = 220.0f;
+  // 4. Right Telemetry Panel (Remote Opponent / Player 2)
+  const float rightW = 230.0f;
   ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - rightW - pad, pad), ImGuiCond_Always);
   ImGui::SetNextWindowSize(ImVec2(rightW, 0.0f), ImGuiCond_Always);
   ImGui::SetNextWindowBgAlpha(0.78f);
@@ -1259,10 +1644,13 @@ void TetrisHud::DrawMultiplayerGameplayOverlay( Scene & ioScene )
   if ( ImGui::Begin("##TetrisP2Telemetry", nullptr, flags) )
   {
     if ( _Fonts._HeaderFont ) ImGui::PushFont(_Fonts._HeaderFont);
-    ImGui::TextColored(ImVec4(1.0f, 0.60f, 0.20f, 1.0f), "PLAYER 2");
+    ImGui::TextColored(ImVec4(1.0f, 0.60f, 0.20f, 1.0f), "%s", p2Name);
     if ( _Fonts._HeaderFont ) ImGui::PopFont();
     ImGui::SameLine();
-    ImGui::TextDisabled("[%s]", GetControlDeviceShortBadge(_MpState->_PlayerDevices[1]));
+    if ( _MpState->_IsOnlineMatch )
+      ImGui::TextDisabled("[ONLINE]");
+    else
+      ImGui::TextDisabled("[%s]", GetControlDeviceShortBadge(_MpState->_PlayerDevices[1]));
     ImGui::Separator();
 
     ImGui::TextDisabled("SCORE");
@@ -1479,14 +1867,87 @@ void TetrisHud::DrawInGamePauseOrEndModal( TetrisAppState & ioAppState,
   const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.52f);
 
   const bool is2P = _MpState && ( 2 == _MpState->_NumPlayers ) && _Logics;
+  const bool isOnline = is2P && _MpState->_IsOnlineMatch;
+
+  // 0. Opponent Disconnected Modal (Online Only)
+  if ( isOnline && _MpState->_PeerDisconnectedModal )
+  {
+    if ( GameMenuUI::BeginMenuPanel("##TetrisPeerDiscModal", "OPPONENT DISCONNECTED", center, Vec2(500.0f, 0.0f), _Theme, _Fonts) )
+    {
+      ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f),
+                         "Connection with '%s' was closed.", _MpState->_RemotePlayerName.c_str());
+      ImGui::Dummy(ImVec2(0.0f, 10.0f));
+      if ( GameMenuUI::DrawActionButton("RETURN TO ONLINE LOBBY (ENTER)", Vec2(450.0f, 48.0f), true, _Theme, _Fonts) ||
+           iMenuInput._Confirm || iMenuInput._Back )
+      {
+        _MpState->_PeerDisconnectedModal = false;
+        _MpState->_ShowOnlineInGameMenu  = false;
+        _MpState->_IsOnlineMatch         = false;
+        _MpState->_NumPlayers            = 1;
+        SetMenuPage(TetrisMenuPage::OnlineLobby);
+        ioAppState = TetrisAppState::TitleScreen;
+      }
+    }
+    GameMenuUI::EndMenuPanel();
+    return;
+  }
+
   const bool anyEnded = is2P
                         ? ( _Logics[0].IsGameOver() || _Logics[0].IsVictory() || _Logics[1].IsGameOver() || _Logics[1].IsVictory() )
                         : ( ioLogic.IsGameOver() || ioLogic.IsVictory() );
+
+  // 0b. Online Non-Blocking ESC Menu (Match Continues Underneath)
+  if ( isOnline && _MpState->_ShowOnlineInGameMenu && !anyEnded )
+  {
+    if ( iMenuInput._Back )
+    {
+      _MpState->_ShowOnlineInGameMenu = false;
+      return;
+    }
+
+    if ( GameMenuUI::BeginMenuPanel("##TetrisOnlineMenuModal", "ONLINE MATCH MENU (LIVE)", center, Vec2(480.0f, 0.0f), _Theme, _Fonts) )
+    {
+      ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.25f, 1.0f), "Note: Online matches remain live while this menu is open.");
+      ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+      const std::vector<GameMenuItem> onlineItems =
+      {
+        { "RESUME MATCH",             "Return to active online board",           "ESC", true, false },
+        { "OPTIONS",                  "Configure handling, renderer & audio",    "F1",  true, false },
+        { "DISCONNECT & LEAVE MATCH", "Close connection and return to Lobby",    "",    true, true  }
+      };
+
+      const int act = GameMenuUI::DrawMenuButtonList(onlineItems, _PauseMenuNav, iMenuInput, _Theme, _Fonts, 54.0f);
+      if ( ( act >= 0 ) && _Audio && !iMenuInput._Confirm )
+        _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+
+      if ( 0 == act )
+      {
+        _MpState->_ShowOnlineInGameMenu = false;
+      }
+      else if ( 1 == act )
+      {
+        _ShowInGameOptions = true;
+      }
+      else if ( 2 == act )
+      {
+        _MpState->_ShowOnlineInGameMenu    = false;
+        _MpState->_RequestDisconnectOnline = true;
+        _MpState->_IsOnlineMatch           = false;
+        _MpState->_NumPlayers              = 1;
+        SetMenuPage(TetrisMenuPage::OnlineLobby);
+        ioAppState = TetrisAppState::TitleScreen;
+      }
+    }
+    GameMenuUI::EndMenuPanel();
+    return;
+  }
+
   const bool isPaused = is2P
-                        ? ( ( _Logics[0].IsPaused() || _Logics[1].IsPaused() ) && !anyEnded )
+                        ? ( !isOnline && ( _Logics[0].IsPaused() || _Logics[1].IsPaused() ) && !anyEnded )
                         : ( ioLogic.IsPaused() && !anyEnded );
 
-  // 1. Pause Menu
+  // 1. Pause Menu (1P & Local 2P)
   if ( isPaused )
   {
     if ( GameMenuUI::BeginMenuPanel("##TetrisPauseModal", "GAME PAUSED", center, Vec2(480.0f, 0.0f), _Theme, _Fonts) )
@@ -1533,9 +1994,12 @@ void TetrisHud::DrawInGamePauseOrEndModal( TetrisAppState & ioAppState,
     return;
   }
 
-  // 2. 2-Player Round Over / Series Winner Modal
+  // 2. 2-Player Round Over / Series Winner Modal (Local & Online)
   if ( is2P && anyEnded )
   {
+    const std::string p1Name = isOnline ? std::string(_MpState->_LocalPlayerName) : "PLAYER 1";
+    const std::string p2Name = isOnline ? _MpState->_RemotePlayerName : "PLAYER 2";
+
     const bool seriesWon = ( _MpState->_RoundWins[0] >= _MpState->_TargetRoundWins ) ||
                            ( _MpState->_RoundWins[1] >= _MpState->_TargetRoundWins );
 
@@ -1543,16 +2007,16 @@ void TetrisHud::DrawInGamePauseOrEndModal( TetrisAppState & ioAppState,
     if ( seriesWon )
     {
       if ( _MpState->_RoundWins[0] > _MpState->_RoundWins[1] )
-        headerTitle = "PLAYER 1 WINS THE MATCH!";
+        headerTitle = p1Name + " WINS THE MATCH!";
       else
-        headerTitle = "PLAYER 2 WINS THE MATCH!";
+        headerTitle = p2Name + " WINS THE MATCH!";
     }
     else
     {
       if ( 0 == _MpState->_LastRoundWinner )
-        headerTitle = "PLAYER 1 WINS THE ROUND!";
+        headerTitle = p1Name + " WINS THE ROUND!";
       else if ( 1 == _MpState->_LastRoundWinner )
-        headerTitle = "PLAYER 2 WINS THE ROUND!";
+        headerTitle = p2Name + " WINS THE ROUND!";
       else
         headerTitle = "ROUND DRAW!";
     }
@@ -1560,21 +2024,21 @@ void TetrisHud::DrawInGamePauseOrEndModal( TetrisAppState & ioAppState,
     if ( GameMenuUI::BeginMenuPanel("##Tetris2PEndModal", headerTitle.c_str(), center, Vec2(620.0f, 0.0f), _Theme, _Fonts) )
     {
       ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.25f, 1.0f),
-                         "SERIES SCORE :   PLAYER 1  [ %d ]   -   [ %d ]  PLAYER 2   (First to %d)",
-                         _MpState->_RoundWins[0], _MpState->_RoundWins[1], _MpState->_TargetRoundWins);
+                         "SERIES SCORE :   %s  [ %d ]   -   [ %d ]  %s   (First to %d)",
+                         p1Name.c_str(), _MpState->_RoundWins[0], _MpState->_RoundWins[1], p2Name.c_str(), _MpState->_TargetRoundWins);
       ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
       const std::vector<GameStatCard> summaryCards =
       {
         {
-          "PLAYER 1 STATS",
+          p1Name + " STATS",
           "Score: " + std::to_string(_Logics[0].GetScore()),
           "Lines: " + std::to_string(_Logics[0].GetLinesCleared()) + "  |  Atk: " + std::to_string(_Logics[0].GetTotalAttacksSent()),
           _Logics[0].IsVictory() ? "ROUND WINNER" : _Logics[0].GetGameOverReason(),
           Vec4(0.00f, 0.90f, 0.95f, 1.0f)
         },
         {
-          "PLAYER 2 STATS",
+          p2Name + " STATS",
           "Score: " + std::to_string(_Logics[1].GetScore()),
           "Lines: " + std::to_string(_Logics[1].GetLinesCleared()) + "  |  Atk: " + std::to_string(_Logics[1].GetTotalAttacksSent()),
           _Logics[1].IsVictory() ? "ROUND WINNER" : _Logics[1].GetGameOverReason(),
@@ -1585,43 +2049,114 @@ void TetrisHud::DrawInGamePauseOrEndModal( TetrisAppState & ioAppState,
 
       ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
-      std::vector<GameMenuItem> endItems;
-      if ( !seriesWon )
+      const bool isOnlineClient = isOnline && _NetSession && !_NetSession->IsHost();
+      if ( isOnlineClient )
       {
-        endItems =
+        ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f),
+                           "Waiting for Host (%s) to launch the next round or rematch...",
+                           p2Name.c_str());
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+        const std::vector<GameMenuItem> clientEndItems =
         {
-          { "NEXT ROUND",             "Start next round in the series",          "ENTER / R", true, false },
-          { "REMATCH (RESET 0-0)",    "Reset series score and start fresh",      "",          true, false },
-          { "MULTIPLAYER LOBBY",      "Change 2P mode, level, or controls",      "",          true, false },
-          { "RETURN TO TITLE SCREEN", "Exit to Main Menu",                       "",          true, true  }
+          { "DISCONNECT & RETURN TO LOBBY", "Leave match and return to Online Lobby", "", true, true }
         };
+        const int act = GameMenuUI::DrawMenuButtonList(clientEndItems, _GameOverMenuNav, iMenuInput, _Theme, _Fonts, 52.0f);
+        if ( 0 == act )
+        {
+          _MpState->_RequestDisconnectOnline = true;
+          _MpState->_IsOnlineMatch           = false;
+          _MpState->_NumPlayers              = 1;
+          SetMenuPage(TetrisMenuPage::OnlineLobby);
+          ioAppState = TetrisAppState::TitleScreen;
+        }
       }
       else
       {
-        endItems =
+        std::vector<GameMenuItem> endItems;
+        if ( !seriesWon )
         {
-          { "PLAY REMATCH SERIES",    "Start a new series in current mode",      "ENTER / R", true, false },
-          { "MULTIPLAYER LOBBY",      "Change 2P mode, level, or controls",      "",          true, false },
-          { "RETURN TO TITLE SCREEN", "Exit to Main Menu",                       "",          true, true  }
-        };
-      }
+          endItems =
+          {
+            { "NEXT ROUND",             "Start next round in the series",          "ENTER / R", true, false },
+            { "REMATCH (RESET 0-0)",    "Reset series score and start fresh",      "",          true, false },
+            { isOnline ? "RETURN TO ONLINE LOBBY" : "MULTIPLAYER LOBBY",
+              isOnline ? "Disconnect or reconfigure online match" : "Change 2P mode, level, or controls",
+              "", true, false },
+            { "RETURN TO TITLE SCREEN", "Exit to Main Menu",                       "",          true, true  }
+          };
+        }
+        else
+        {
+          endItems =
+          {
+            { "PLAY REMATCH SERIES",    "Start a new series in current mode",      "ENTER / R", true, false },
+            { isOnline ? "RETURN TO ONLINE LOBBY" : "MULTIPLAYER LOBBY",
+              isOnline ? "Disconnect or reconfigure online match" : "Change 2P mode, level, or controls",
+              "", true, false },
+            { "RETURN TO TITLE SCREEN", "Exit to Main Menu",                       "",          true, true  }
+          };
+        }
 
-      const int act = GameMenuUI::DrawMenuButtonList(endItems, _GameOverMenuNav, iMenuInput, _Theme, _Fonts, 52.0f);
-      if ( ( act >= 0 ) && _Audio && !iMenuInput._Confirm )
-        _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+        const int act = GameMenuUI::DrawMenuButtonList(endItems, _GameOverMenuNav, iMenuInput, _Theme, _Fonts, 52.0f);
+        if ( ( act >= 0 ) && _Audio && !iMenuInput._Confirm )
+          _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
 
-      if ( !seriesWon )
-      {
-        if ( 0 == act )      _MpState->_RequestNextRound = true;
-        else if ( 1 == act ) _MpState->_RequestRematch   = true;
-        else if ( 2 == act ) { SetMenuPage(TetrisMenuPage::MultiplayerLobby); ioAppState = TetrisAppState::TitleScreen; }
-        else if ( 3 == act ) { SetMenuPage(TetrisMenuPage::MainMenu);         ioAppState = TetrisAppState::TitleScreen; }
-      }
-      else
-      {
-        if ( 0 == act )      _MpState->_RequestRematch   = true;
-        else if ( 1 == act ) { SetMenuPage(TetrisMenuPage::MultiplayerLobby); ioAppState = TetrisAppState::TitleScreen; }
-        else if ( 2 == act ) { SetMenuPage(TetrisMenuPage::MainMenu);         ioAppState = TetrisAppState::TitleScreen; }
+        if ( !seriesWon )
+        {
+          if ( 0 == act )      _MpState->_RequestNextRound = true;
+          else if ( 1 == act ) _MpState->_RequestRematch   = true;
+          else if ( 2 == act )
+          {
+            if ( isOnline )
+            {
+              _MpState->_IsOnlineMatch = false;
+              _MpState->_NumPlayers    = 1;
+              SetMenuPage(TetrisMenuPage::OnlineLobby);
+            }
+            else
+              SetMenuPage(TetrisMenuPage::MultiplayerLobby);
+            ioAppState = TetrisAppState::TitleScreen;
+          }
+          else if ( 3 == act )
+          {
+            if ( isOnline )
+            {
+              _MpState->_RequestDisconnectOnline = true;
+              _MpState->_IsOnlineMatch           = false;
+              _MpState->_NumPlayers              = 1;
+            }
+            SetMenuPage(TetrisMenuPage::MainMenu);
+            ioAppState = TetrisAppState::TitleScreen;
+          }
+        }
+        else
+        {
+          if ( 0 == act )      _MpState->_RequestRematch   = true;
+          else if ( 1 == act )
+          {
+            if ( isOnline )
+            {
+              _MpState->_IsOnlineMatch = false;
+              _MpState->_NumPlayers    = 1;
+              SetMenuPage(TetrisMenuPage::OnlineLobby);
+            }
+            else
+              SetMenuPage(TetrisMenuPage::MultiplayerLobby);
+            ioAppState = TetrisAppState::TitleScreen;
+          }
+          else if ( 2 == act )
+          {
+            if ( isOnline )
+            {
+              _MpState->_RequestDisconnectOnline = true;
+              _MpState->_IsOnlineMatch           = false;
+              _MpState->_NumPlayers              = 1;
+            }
+            SetMenuPage(TetrisMenuPage::MainMenu);
+            ioAppState = TetrisAppState::TitleScreen;
+          }
+        }
       }
     }
     GameMenuUI::EndMenuPanel();
@@ -1711,9 +2246,13 @@ int TetrisHud::Draw( TetrisAppState & ioAppState,
   oRequestExit = false;
 
   const bool is2P = _MpState && ( 2 == _MpState->_NumPlayers ) && _Logics;
+  const bool isOnline = is2P && _MpState->_IsOnlineMatch;
   const bool inModal = is2P
-                       ? ( _Logics[0].IsPaused() || _Logics[0].IsGameOver() || _Logics[0].IsVictory() ||
-                           _Logics[1].IsPaused() || _Logics[1].IsGameOver() || _Logics[1].IsVictory() || _ShowInGameOptions )
+                       ? ( ( !isOnline && ( _Logics[0].IsPaused() || _Logics[1].IsPaused() ) ) ||
+                           _Logics[0].IsGameOver() || _Logics[0].IsVictory() ||
+                           _Logics[1].IsGameOver() || _Logics[1].IsVictory() ||
+                           _ShowInGameOptions ||
+                           ( isOnline && ( _MpState->_ShowOnlineInGameMenu || _MpState->_PeerDisconnectedModal ) ) )
                        : ( ioLogic.IsPaused() || ioLogic.IsGameOver() || ioLogic.IsVictory() || _ShowInGameOptions );
 
   if ( _Audio )

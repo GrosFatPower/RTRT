@@ -36,7 +36,7 @@ enum class TetrisGameMode : int
   Marathon = 0,
   Sprint   = 1, // 40 Lines
   Ultra    = 2, // 2-minute score attack
-  Versus   = 3  // 2-Player Local Battle (Garbage Wars)
+  Versus   = 3  // 2-Player Battle (Garbage Wars)
 };
 
 enum class TetrisControlDevice : int
@@ -111,11 +111,13 @@ enum class TetrisAppState : int
 
 enum class TetrisMenuPage : int
 {
-  MainMenu         = 0,
-  ModeSelect       = 1,
-  HighScores       = 2,
-  Options          = 3,
-  MultiplayerLobby = 4
+  MainMenu              = 0,
+  ModeSelect            = 1,
+  HighScores            = 2,
+  Options               = 3,
+  MultiplayerLobby      = 4,
+  OnlineLobby           = 5,
+  MultiplayerTypeSelect = 6
 };
 
 struct TetrisSessionStats

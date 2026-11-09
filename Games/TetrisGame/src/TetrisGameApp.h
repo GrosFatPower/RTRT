@@ -6,11 +6,13 @@
 #include "GamepadInput.h"
 #include "KeyInput.h"
 #include "MouseInput.h"
+#include "NetSession.h"
 #include "Renderer.h"
 #include "RenderSettings.h"
 #include "Scene.h"
 #include "TetrisGameLogic.h"
 #include "TetrisHud.h"
+#include "TetrisNetProtocol.h"
 #include "TetrisSceneManager.h"
 #include "TetrisTypes.h"
 
@@ -101,8 +103,11 @@ protected:
 
   void ResolvePlayerDevices();
   void PollGamepadForPlayer( GamepadInput & ioGamepad, TetrisInputState & ioInput, bool iInActiveGameplay );
-  void StartMatch( int iNumPlayers, TetrisGameMode iMode, int iStartLevel, bool iResetSeries );
+  void StartMatch( int iNumPlayers, TetrisGameMode iMode, int iStartLevel, bool iResetSeries, unsigned int iExplicitSeed = 0 );
   void CheckPendingMatchRequests();
+  void UpdateNetwork( float iDeltaTime );
+  void SendHelloPacket();
+  void HostLaunchOnlineMatch( bool iResetSeries );
   void EvaluatePlayerAudio( int iPlayerIdx, const Vec3 & iBoardPos, bool iUseSpatial3D );
   bool IsInActiveGameplay() const;
 
@@ -127,9 +132,14 @@ protected:
   TetrisSceneManager          _SceneManager;
   TetrisHud                   _Hud;
   AudioEngine                 _Audio;
+  NetSession                  _NetSession;
 
   TetrisMultiplayerState      _MpState;
-  bool                        _RoundResolved = false;
+  bool                        _RoundResolved    = false;
+  float                       _NetSnapshotTimer = 0.0f;
+  uint32_t                    _NetOutboundSeq   = 0;
+  uint32_t                    _NetAttackEventSeq= 0;
+  std::string                 _LastSentNickname;
 
   TetrisAppState              _AppState     = TetrisAppState::TitleScreen;
   TetrisAppState              _PrevAppState = TetrisAppState::TitleScreen;

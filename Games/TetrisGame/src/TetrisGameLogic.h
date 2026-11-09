@@ -2,9 +2,11 @@
 #define _TetrisGameLogic_
 
 #include "TetrisMatrix.h"
+#include "TetrisNetProtocol.h"
 #include "TetrisPiece.h"
 #include "TetrisRandomizer.h"
 #include "TetrisTypes.h"
+#include <array>
 #include <string>
 #include <vector>
 
@@ -39,7 +41,19 @@ public:
   TetrisPieceType GetHoldPiece() const { return _HoldPiece; }
   bool CanHold() const { return _CanHold; }
 
-  TetrisPieceType PeekNextPiece( int iIndex = 0 ) const { return _Randomizer.Peek(iIndex); }
+  TetrisPieceType PeekNextPiece( int iIndex = 0 ) const
+  {
+    if ( _UseNetNextOverride && iIndex >= 0 && iIndex < 5 )
+      return _NetNextOverride[iIndex];
+    return _Randomizer.Peek(iIndex);
+  }
+
+  // Online Multiplayer State Synchronization
+  void ExportNetSnapshot( uint32_t iSequence, TetrisNetBoardSnapshotPacket & oPacket ) const;
+  void ApplyNetSnapshot( const TetrisNetBoardSnapshotPacket & iPacket );
+  void ExportNetLineClearFx( TetrisNetLineClearFxPacket & oPacket ) const;
+  void ApplyNetLineClearFx( const TetrisNetLineClearFxPacket & iPacket );
+  void TickVisualFeedbackOnly( float iDeltaTime );
 
   TetrisGameMode GetGameMode() const { return _Mode; }
   void SetGameMode( TetrisGameMode iMode ) { _Mode = iMode; }
@@ -173,6 +187,9 @@ protected:
   int                           _TotalAttacksSent   = 0;
   int                           _GarbageHoleColumn  = 4;
   unsigned int                  _GarbageRngState    = 0x9E3779B9u;
+  uint32_t                      _LastAppliedNetSequence = 0;
+  bool                          _UseNetNextOverride = false;
+  std::array<TetrisPieceType, 5> _NetNextOverride   = {};
   TetrisSessionStats            _SessionStats;
 };
 

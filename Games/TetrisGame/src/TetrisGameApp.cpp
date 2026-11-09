@@ -15,6 +15,8 @@
 #include "PathUtils.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <random>
@@ -24,6 +26,21 @@
 namespace Tetris
 {
 using namespace RTRT;
+
+namespace
+{
+const char * GetModeShortName( TetrisGameMode iMode )
+{
+  switch ( iMode )
+  {
+    case TetrisGameMode::Sprint:   return "Sprint 40L";
+    case TetrisGameMode::Ultra:    return "Ultra 2m";
+    case TetrisGameMode::Marathon: return "Marathon 150L";
+    case TetrisGameMode::Versus:
+    default:                       return "VS Battle";
+  }
+}
+} // namespace
 
 // ----------------------------------------------------------------------------
 // ResolveDevicesForPreset
@@ -188,9 +205,12 @@ bool TetrisGameApp::IsInActiveGameplay() const
 
   if ( 2 == _MpState._NumPlayers )
   {
+    if ( _MpState._IsOnlineMatch && ( _MpState._ShowOnlineInGameMenu || _MpState._PeerDisconnectedModal ) )
+      return false;
+
     const bool anyEnded  = _GameLogic[0].IsGameOver() || _GameLogic[0].IsVictory() ||
                            _GameLogic[1].IsGameOver() || _GameLogic[1].IsVictory();
-    const bool anyPaused = _GameLogic[0].IsPaused() || _GameLogic[1].IsPaused();
+    const bool anyPaused = !_MpState._IsOnlineMatch && ( _GameLogic[0].IsPaused() || _GameLogic[1].IsPaused() );
     return !anyEnded && !anyPaused;
   }
 
@@ -238,7 +258,7 @@ void TetrisGameApp::KeyCallback( GLFWwindow * iWindow, int iKey, int, int iActio
     if ( inActiveGameplay )
     {
       app->ResolvePlayerDevices();
-      if ( 1 == app->_MpState._NumPlayers )
+      if ( ( 1 == app->_MpState._NumPlayers ) || app->_MpState._IsOnlineMatch )
       {
         RouteKeyPressToInput(iKey, TetrisControlDevice::KeyboardFull, app->_InputState[0]);
       }
@@ -248,11 +268,11 @@ void TetrisGameApp::KeyCallback( GLFWwindow * iWindow, int iKey, int, int iActio
         RouteKeyPressToInput(iKey, app->_MpState._PlayerDevices[1], app->_InputState[1]);
       }
 
-      if ( GLFW_KEY_R == iKey )
+      if ( ( GLFW_KEY_R == iKey ) && !app->_MpState._IsOnlineMatch )
         app->_InputState[0]._ResetPressed = true;
     }
 
-    // Pause toggle during InGame
+    // Pause / Online Menu toggle during InGame
     const bool anyEnded = ( 2 == app->_MpState._NumPlayers )
                           ? ( app->_GameLogic[0].IsGameOver() || app->_GameLogic[0].IsVictory() ||
                               app->_GameLogic[1].IsGameOver() || app->_GameLogic[1].IsVictory() )
@@ -260,7 +280,7 @@ void TetrisGameApp::KeyCallback( GLFWwindow * iWindow, int iKey, int, int iActio
 
     if ( ( TetrisAppState::InGame == app->_AppState ) && !anyEnded )
     {
-      if ( GLFW_KEY_P == iKey )
+      if ( ( GLFW_KEY_P == iKey ) && !app->_MpState._IsOnlineMatch )
       {
         app->_InputState[0]._PausePressed = true;
       }
@@ -268,6 +288,8 @@ void TetrisGameApp::KeyCallback( GLFWwindow * iWindow, int iKey, int, int iActio
       {
         if ( app->_Hud.IsSettingsOpen() )
           app->_Hud.ToggleSettings();
+        else if ( app->_MpState._IsOnlineMatch )
+          app->_MpState._ShowOnlineInGameMenu = !app->_MpState._ShowOnlineInGameMenu;
         else
           app->_InputState[0]._PausePressed = true;
       }
@@ -286,7 +308,7 @@ void TetrisGameApp::KeyCallback( GLFWwindow * iWindow, int iKey, int, int iActio
       else
       {
         app->_Hud.ToggleSettings();
-        if ( app->_Hud.IsSettingsOpen() && !app->_GameLogic[0].IsPaused() )
+        if ( app->_Hud.IsSettingsOpen() && !app->_MpState._IsOnlineMatch && !app->_GameLogic[0].IsPaused() )
         {
           app->_GameLogic[0].SetPaused(true);
           app->_GameLogic[1].SetPaused(true);
@@ -408,6 +430,8 @@ TetrisGameApp::TetrisGameApp( std::shared_ptr<GLFWwindow> iMainWindow, int iScre
 // ----------------------------------------------------------------------------
 TetrisGameApp::~TetrisGameApp()
 {
+  _NetSession.StopLanDiscovery();
+  _NetSession.Disconnect();
 }
 
 // ----------------------------------------------------------------------------
@@ -415,6 +439,13 @@ TetrisGameApp::~TetrisGameApp()
 // ----------------------------------------------------------------------------
 void TetrisGameApp::ResolvePlayerDevices()
 {
+  if ( _MpState._IsOnlineMatch && ( 2 == _MpState._NumPlayers ) )
+  {
+    _MpState._PlayerDevices[0] = TetrisControlDevice::KeyboardFull;
+    _MpState._PlayerDevices[1] = TetrisControlDevice::None;
+    return;
+  }
+
   ResolveDevicesForPreset(
     _MpState._Preset,
     _MpState._NumPlayers,
@@ -428,7 +459,11 @@ void TetrisGameApp::ResolvePlayerDevices()
 // ----------------------------------------------------------------------------
 // StartMatch
 // ----------------------------------------------------------------------------
-void TetrisGameApp::StartMatch( int iNumPlayers, TetrisGameMode iMode, int iStartLevel, bool iResetSeries )
+void TetrisGameApp::StartMatch( int iNumPlayers,
+                                TetrisGameMode iMode,
+                                int iStartLevel,
+                                bool iResetSeries,
+                                unsigned int iExplicitSeed )
 {
   _MpState._NumPlayers = std::clamp(iNumPlayers, 1, 2);
   if ( iResetSeries )
@@ -438,12 +473,19 @@ void TetrisGameApp::StartMatch( int iNumPlayers, TetrisGameMode iMode, int iStar
     _MpState._LastRoundWinner = -1;
   }
 
-  _RoundResolved = false;
+  _RoundResolved                  = false;
+  _MpState._ShowOnlineInGameMenu  = false;
+  _MpState._PeerDisconnectedModal = false;
+  _NetSnapshotTimer               = 0.0f;
 
-  std::random_device rd;
-  unsigned int sharedSeed = rd();
+  unsigned int sharedSeed = iExplicitSeed;
   if ( 0 == sharedSeed )
-    sharedSeed = 1337u;
+  {
+    std::random_device rd;
+    sharedSeed = rd();
+    if ( 0 == sharedSeed )
+      sharedSeed = 1337u;
+  }
 
   _GameLogic[0].StartNewGame(iMode, iStartLevel, sharedSeed);
   _GameLogic[1].StartNewGame(iMode, iStartLevel, sharedSeed);
@@ -463,6 +505,48 @@ void TetrisGameApp::StartMatch( int iNumPlayers, TetrisGameMode iMode, int iStar
 }
 
 // ----------------------------------------------------------------------------
+// SendHelloPacket / HostLaunchOnlineMatch
+// ----------------------------------------------------------------------------
+void TetrisGameApp::SendHelloPacket()
+{
+  if ( !_NetSession.IsConnected() )
+    return;
+
+  TetrisNetHelloPacket pkt;
+  pkt._Type = static_cast<uint8_t>( TetrisNetPacketType::HelloHandshake );
+  std::snprintf( pkt._Nickname, sizeof( pkt._Nickname ), "%s",
+                 ( _MpState._LocalPlayerName[0] != '\0' ) ? _MpState._LocalPlayerName : "PLAYER" );
+  _NetSession.SendReliable( 0, &pkt, sizeof( pkt ) );
+  _LastSentNickname = pkt._Nickname;
+}
+
+void TetrisGameApp::HostLaunchOnlineMatch( bool iResetSeries )
+{
+  if ( !_NetSession.IsConnected() || !_NetSession.IsHost() )
+    return;
+
+  std::random_device rd;
+  uint32_t sharedSeed = rd();
+  if ( 0 == sharedSeed )
+    sharedSeed = 1337u;
+
+  TetrisNetMatchStartPacket startPkt;
+  startPkt._Type            = static_cast<uint8_t>( TetrisNetPacketType::MatchStart );
+  startPkt._GameMode        = static_cast<uint8_t>( _MpState._MpMode );
+  startPkt._StartLevel      = static_cast<uint8_t>( MathUtil::Clamp( _MpState._StartLevel, 1, 15 ) );
+  startPkt._TargetRoundWins = static_cast<uint8_t>( MathUtil::Clamp( _MpState._TargetRoundWins, 1, 5 ) );
+  startPkt._ResetSeries     = iResetSeries ? 1 : 0;
+  startPkt._SharedSeed      = sharedSeed;
+
+  _NetSession.SendReliable( 0, &startPkt, sizeof( startPkt ) );
+
+  _MpState._IsOnlineMatch = true;
+  StartMatch( 2, _MpState._MpMode, _MpState._StartLevel, iResetSeries, sharedSeed );
+  _AppState     = TetrisAppState::InGame;
+  _PrevAppState = TetrisAppState::InGame;
+}
+
+// ----------------------------------------------------------------------------
 // CheckPendingMatchRequests
 // ----------------------------------------------------------------------------
 void TetrisGameApp::CheckPendingMatchRequests()
@@ -470,22 +554,279 @@ void TetrisGameApp::CheckPendingMatchRequests()
   if ( _MpState._RequestStart1P )
   {
     _MpState._RequestStart1P = false;
+    _MpState._IsOnlineMatch  = false;
     StartMatch(1, _MpState._Requested1PMode, _MpState._StartLevel, true);
   }
   else if ( _MpState._RequestStart2P )
   {
     _MpState._RequestStart2P = false;
+    _MpState._IsOnlineMatch  = false;
     StartMatch(2, _MpState._MpMode, _MpState._StartLevel, true);
+  }
+  else if ( _MpState._RequestStartOnlineMatch )
+  {
+    _MpState._RequestStartOnlineMatch = false;
+    HostLaunchOnlineMatch(true);
   }
   else if ( _MpState._RequestNextRound )
   {
     _MpState._RequestNextRound = false;
-    StartMatch(_MpState._NumPlayers, _GameLogic[0].GetGameMode(), _GameLogic[0].GetStartLevel(), false);
+    if ( _MpState._IsOnlineMatch )
+    {
+      if ( _NetSession.IsHost() && _NetSession.IsConnected() )
+        HostLaunchOnlineMatch(false);
+    }
+    else
+    {
+      StartMatch(_MpState._NumPlayers, _GameLogic[0].GetGameMode(), _GameLogic[0].GetStartLevel(), false);
+    }
   }
   else if ( _MpState._RequestRematch )
   {
     _MpState._RequestRematch = false;
-    StartMatch(_MpState._NumPlayers, _GameLogic[0].GetGameMode(), _GameLogic[0].GetStartLevel(), true);
+    if ( _MpState._IsOnlineMatch )
+    {
+      if ( _NetSession.IsHost() && _NetSession.IsConnected() )
+        HostLaunchOnlineMatch(true);
+    }
+    else
+    {
+      StartMatch(_MpState._NumPlayers, _GameLogic[0].GetGameMode(), _GameLogic[0].GetStartLevel(), true);
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
+// UpdateNetwork
+// ----------------------------------------------------------------------------
+void TetrisGameApp::UpdateNetwork( float iDeltaTime )
+{
+  (void)iDeltaTime;
+  const double curTimeSec = glfwGetTime();
+
+  // 1. Handle UI Connection Requests
+  if ( _MpState._RequestHostOnline )
+  {
+    _MpState._RequestHostOnline = false;
+    char roomDesc[96] = {};
+    std::snprintf( roomDesc, sizeof( roomDesc ), "%s | First to %d | Lvl %d",
+                   GetModeShortName( _MpState._MpMode ),
+                   _MpState._TargetRoundWins,
+                   _MpState._StartLevel );
+    _NetSession.StopLanDiscovery();
+    _NetSession.StartHost( static_cast<uint16_t>( _MpState._OnlinePort ),
+                           _MpState._LocalPlayerName,
+                           roomDesc );
+  }
+
+  if ( _MpState._RequestStopHost || _MpState._RequestDisconnectOnline )
+  {
+    _MpState._RequestStopHost         = false;
+    _MpState._RequestDisconnectOnline = false;
+    _NetSession.Disconnect();
+    _MpState._IsOnlineMatch = false;
+  }
+
+  if ( _MpState._RequestJoinOnline )
+  {
+    _MpState._RequestJoinOnline = false;
+    _NetSession.StopLanDiscovery();
+    _NetSession.StartClient( _MpState._JoinAddressBuf, static_cast<uint16_t>( _MpState._OnlinePort ) );
+  }
+
+  // 2. Manage LAN Discovery when browsing the Join Tab on OnlineLobby
+  const bool shouldScanLan = ( TetrisAppState::TitleScreen == _AppState ) &&
+                             ( TetrisMenuPage::OnlineLobby == _Hud.GetMenuPage() ) &&
+                             ( 1 == _MpState._OnlineLobbyTab ) &&
+                             ( NetState::Disconnected == _NetSession.GetState() );
+  if ( shouldScanLan )
+  {
+    if ( !_NetSession.IsLanDiscoveryActive() )
+      _NetSession.StartLanDiscovery();
+  }
+  else
+  {
+    if ( _NetSession.IsLanDiscoveryActive() )
+      _NetSession.StopLanDiscovery();
+  }
+
+  // Keep Host beacon room description fresh if settings change in the lobby
+  if ( _NetSession.IsHosting() )
+  {
+    char roomDesc[96] = {};
+    std::snprintf( roomDesc, sizeof( roomDesc ), "%s | First to %d | Lvl %d",
+                   GetModeShortName( _MpState._MpMode ),
+                   _MpState._TargetRoundWins,
+                   _MpState._StartLevel );
+    _NetSession.UpdateHostRoomInfo( _MpState._LocalPlayerName, roomDesc );
+  }
+
+  // 3. Poll ENet events
+  std::vector<NetPacketEvent> packets;
+  bool peerConnected    = false;
+  bool peerDisconnected = false;
+  _NetSession.Poll( curTimeSec, packets, peerConnected, peerDisconnected );
+
+  if ( peerConnected )
+  {
+    _Audio.PlaySound2D( "ui_confirm", 0.85f, 1.15f );
+    SendHelloPacket();
+  }
+
+  // If the local player edits their nickname while connected in the lobby, sync it
+  if ( _NetSession.IsConnected() && ( TetrisAppState::TitleScreen == _AppState ) &&
+       ( _LastSentNickname != _MpState._LocalPlayerName ) )
+  {
+    SendHelloPacket();
+  }
+
+  if ( peerDisconnected )
+  {
+    _Audio.PlaySound2D( "ui_back", 0.85f, 0.9f );
+    if ( ( TetrisAppState::InGame == _AppState ) && _MpState._IsOnlineMatch )
+    {
+      _MpState._PeerDisconnectedModal = true;
+    }
+  }
+
+  // 4. Process Incoming Packets
+  for ( const NetPacketEvent & ev : packets )
+  {
+    if ( ev._Data.empty() )
+      continue;
+
+    const TetrisNetPacketType pktType = static_cast<TetrisNetPacketType>( ev._Data[0] );
+    switch ( pktType )
+    {
+      case TetrisNetPacketType::HelloHandshake:
+      {
+        if ( ev._Data.size() >= sizeof( TetrisNetHelloPacket ) )
+        {
+          TetrisNetHelloPacket hello;
+          std::memcpy( &hello, ev._Data.data(), sizeof( hello ) );
+          hello._Nickname[sizeof( hello._Nickname ) - 1] = '\0';
+          _MpState._RemotePlayerName = ( hello._Nickname[0] != '\0' ) ? hello._Nickname : "OPPONENT";
+        }
+        break;
+      }
+
+      case TetrisNetPacketType::MatchStart:
+      {
+        if ( ev._Data.size() >= sizeof( TetrisNetMatchStartPacket ) )
+        {
+          TetrisNetMatchStartPacket startPkt;
+          std::memcpy( &startPkt, ev._Data.data(), sizeof( startPkt ) );
+
+          const TetrisGameMode mode = static_cast<TetrisGameMode>( MathUtil::Clamp( static_cast<int>( startPkt._GameMode ), 0, 3 ) );
+          const int startLevel      = MathUtil::Clamp( static_cast<int>( startPkt._StartLevel ), 1, 15 );
+          const int targetWins      = MathUtil::Clamp( static_cast<int>( startPkt._TargetRoundWins ), 1, 5 );
+          const bool resetSeries    = ( startPkt._ResetSeries != 0 );
+
+          _MpState._MpMode          = mode;
+          _MpState._StartLevel      = startLevel;
+          _MpState._TargetRoundWins = targetWins;
+          _MpState._IsOnlineMatch   = true;
+
+          StartMatch( 2, mode, startLevel, resetSeries, startPkt._SharedSeed );
+          _AppState     = TetrisAppState::InGame;
+          _PrevAppState = TetrisAppState::InGame;
+          _Audio.PlaySound2D( "ui_confirm", 0.9f, 1.0f );
+        }
+        break;
+      }
+
+      case TetrisNetPacketType::BoardSnapshot:
+      {
+        if ( _MpState._IsOnlineMatch && ( 2 == _MpState._NumPlayers ) &&
+             ( ev._Data.size() >= sizeof( TetrisNetBoardSnapshotPacket ) ) )
+        {
+          TetrisNetBoardSnapshotPacket snapPkt;
+          std::memcpy( &snapPkt, ev._Data.data(), sizeof( snapPkt ) );
+          _GameLogic[1].ApplyNetSnapshot( snapPkt );
+        }
+        break;
+      }
+
+      case TetrisNetPacketType::GarbageAttack:
+      {
+        if ( _MpState._IsOnlineMatch && ( 2 == _MpState._NumPlayers ) &&
+             ( ev._Data.size() >= sizeof( TetrisNetGarbageAttackPacket ) ) )
+        {
+          TetrisNetGarbageAttackPacket atkPkt;
+          std::memcpy( &atkPkt, ev._Data.data(), sizeof( atkPkt ) );
+          if ( atkPkt._AttackLines > 0 && !_RoundResolved )
+          {
+            _GameLogic[0].AddPendingGarbage( static_cast<int>( atkPkt._AttackLines ) );
+          }
+        }
+        break;
+      }
+
+      case TetrisNetPacketType::LineClearFx:
+      {
+        if ( _MpState._IsOnlineMatch && ( 2 == _MpState._NumPlayers ) &&
+             ( ev._Data.size() >= sizeof( TetrisNetLineClearFxPacket ) ) )
+        {
+          TetrisNetLineClearFxPacket fxPkt;
+          std::memcpy( &fxPkt, ev._Data.data(), sizeof( fxPkt ) );
+          fxPkt._BannerText[sizeof( fxPkt._BannerText ) - 1] = '\0';
+          _GameLogic[1].ApplyNetLineClearFx( fxPkt );
+        }
+        break;
+      }
+
+      case TetrisNetPacketType::RoundResult:
+      {
+        if ( _MpState._IsOnlineMatch && ( 2 == _MpState._NumPlayers ) &&
+             ( ev._Data.size() >= sizeof( TetrisNetRoundResultPacket ) ) )
+        {
+          TetrisNetRoundResultPacket resPkt;
+          std::memcpy( &resPkt, ev._Data.data(), sizeof( resPkt ) );
+          resPkt._Reason[sizeof( resPkt._Reason ) - 1] = '\0';
+
+          _RoundResolved = true;
+          const bool localIsHost = _NetSession.IsHost();
+          if ( localIsHost )
+          {
+            _MpState._RoundWins[0] = static_cast<int>( resPkt._HostWins );
+            _MpState._RoundWins[1] = static_cast<int>( resPkt._ClientWins );
+          }
+          else
+          {
+            _MpState._RoundWins[0] = static_cast<int>( resPkt._ClientWins );
+            _MpState._RoundWins[1] = static_cast<int>( resPkt._HostWins );
+          }
+
+          int localWinner = -1;
+          if ( resPkt._WinnerRole == 1 )
+            localWinner = localIsHost ? 0 : 1;
+          else if ( resPkt._WinnerRole == 2 )
+            localWinner = localIsHost ? 1 : 0;
+
+          _MpState._LastRoundWinner = localWinner;
+
+          if ( 0 == localWinner )
+          {
+            _GameLogic[0].ForceVictory();
+            _GameLogic[1].ForceGameOver( resPkt._Reason[0] ? resPkt._Reason : "Defeated" );
+          }
+          else if ( 1 == localWinner )
+          {
+            _GameLogic[1].ForceVictory();
+            _GameLogic[0].ForceGameOver( resPkt._Reason[0] ? resPkt._Reason : "Defeated" );
+          }
+          else
+          {
+            _GameLogic[0].ForceGameOver( "Round Draw" );
+            _GameLogic[1].ForceGameOver( "Round Draw" );
+          }
+        }
+        break;
+      }
+
+      default:
+        break;
+    }
   }
 }
 
@@ -890,6 +1231,7 @@ int TetrisGameApp::InitializeUI()
   _Hud.SetGamepadInputs(&_GamepadInputs[0], &_GamepadInputs[1]);
   _Hud.SetPlayerLogics(_GameLogic);
   _Hud.SetMultiplayerState(&_MpState);
+  _Hud.SetNetSession(&_NetSession);
   _Hud.SetAudioEngine(&_Audio);
 
   const char * glslVersion = "#version 410";
@@ -1007,7 +1349,7 @@ void TetrisGameApp::PollGamepadForPlayer( GamepadInput & ioGamepad,
     ioInput._HoldPressed = true;
   }
 
-  if ( ioGamepad.IsButtonPressed(GLFW_GAMEPAD_BUTTON_BACK) )
+  if ( ioGamepad.IsButtonPressed(GLFW_GAMEPAD_BUTTON_BACK) && !_MpState._IsOnlineMatch )
     _InputState[0]._ResetPressed = true;
 }
 
@@ -1083,6 +1425,8 @@ int TetrisGameApp::ProcessInput()
                               : ( _GameLogic[0].IsGameOver() || _GameLogic[0].IsVictory() );
         if ( _Hud.IsSettingsOpen() )
           _Hud.ToggleSettings();
+        else if ( _MpState._IsOnlineMatch && !anyEnded )
+          _MpState._ShowOnlineInGameMenu = !_MpState._ShowOnlineInGameMenu;
         else if ( !anyEnded )
           _InputState[0]._PausePressed = true;
         else
@@ -1115,8 +1459,8 @@ int TetrisGameApp::ProcessInput()
     }
   }
 
-  // Gameplay input routing for 1P or 2P
-  if ( 1 == _MpState._NumPlayers )
+  // Gameplay input routing for 1P, Local 2P, or Online 2P
+  if ( ( 1 == _MpState._NumPlayers ) || _MpState._IsOnlineMatch )
   {
     PollHeldKeysForDevice(_KeyInput, TetrisControlDevice::KeyboardFull,
                           _InputState[0]._LeftHeld, _InputState[0]._RightHeld, _InputState[0]._SoftDropHeld);
@@ -1268,6 +1612,7 @@ void TetrisGameApp::EvaluatePlayerAudio( int iPlayerIdx, const Vec3 & iBoardPos,
 int TetrisGameApp::UpdateGame( float iDeltaTime )
 {
   CheckPendingMatchRequests();
+  UpdateNetwork(iDeltaTime);
 
   if ( _Scene && ( _AppState != _PrevAppState ) )
   {
@@ -1330,6 +1675,161 @@ int TetrisGameApp::UpdateGame( float iDeltaTime )
 
       _SceneManager.SyncScene(*_Scene, _GameLogic, 1, iDeltaTime);
       _SceneManager.SyncCamera(*_Scene, _GameLogic, 1);
+    }
+  }
+  else if ( _MpState._IsOnlineMatch )
+  {
+    // 2-Player Online Multiplayer Update (Local Player = _GameLogic[0] on Left, Remote Opponent = _GameLogic[1] on Right)
+    _InputState[0]._PausePressed = false;
+    _InputState[0]._ResetPressed = false;
+
+    const unsigned int prevClearId0 = _GameLogic[0].GetLineClearEventId();
+    const unsigned int prevLockId0  = _GameLogic[0].GetLockEventId();
+    const bool prevDead0            = _GameLogic[0].IsGameOver();
+    const bool prevWon0             = _GameLogic[0].IsVictory();
+
+    if ( !_RoundResolved && !_MpState._PeerDisconnectedModal )
+    {
+      TetrisInputState localInput = _InputState[0];
+      if ( _Hud.IsSettingsOpen() || _MpState._ShowOnlineInGameMenu )
+        localInput = TetrisInputState();
+
+      _GameLogic[0].Update(iDeltaTime, localInput, _HandlingConfig);
+      _GameLogic[1].TickVisualFeedbackOnly(iDeltaTime);
+
+      const bool lineClearedNow = ( _GameLogic[0].GetLineClearEventId() != prevClearId0 );
+      const bool lockedNow      = ( _GameLogic[0].GetLockEventId() != prevLockId0 );
+      const bool stateEndedNow  = ( _GameLogic[0].IsGameOver() != prevDead0 ) || ( _GameLogic[0].IsVictory() != prevWon0 );
+
+      // Send reliable LineClearFx & GarbageAttack immediately when local player clears lines
+      if ( lineClearedNow && _NetSession.IsConnected() )
+      {
+        TetrisNetLineClearFxPacket fxPkt;
+        _GameLogic[0].ExportNetLineClearFx(fxPkt);
+        _NetSession.SendReliable(0, &fxPkt, sizeof(fxPkt));
+
+        if ( ( TetrisGameMode::Versus == _GameLogic[0].GetGameMode() ) &&
+             ( _GameLogic[0].GetLastAttackLinesSent() > 0 ) )
+        {
+          TetrisNetGarbageAttackPacket atkPkt;
+          atkPkt._Type        = static_cast<uint8_t>(TetrisNetPacketType::GarbageAttack);
+          atkPkt._AttackLines = static_cast<uint8_t>(_GameLogic[0].GetLastAttackLinesSent());
+          atkPkt._EventId     = ++_NetAttackEventSeq;
+          _NetSession.SendReliable(0, &atkPkt, sizeof(atkPkt));
+        }
+      }
+
+      // Send 30 Hz Unreliable Sequenced Board Snapshot (or immediately on piece lock / game end)
+      _NetSnapshotTimer += iDeltaTime;
+      if ( _NetSession.IsConnected() && ( _NetSnapshotTimer >= 0.033f || lockedNow || stateEndedNow ) )
+      {
+        _NetSnapshotTimer = 0.0f;
+        TetrisNetBoardSnapshotPacket snapPkt;
+        _GameLogic[0].ExportNetSnapshot(++_NetOutboundSeq, snapPkt);
+        if ( stateEndedNow )
+          _NetSession.SendReliable(0, &snapPkt, sizeof(snapPkt));
+        else
+          _NetSession.SendUnreliableSequenced(1, &snapPkt, sizeof(snapPkt));
+      }
+
+      // Host-Authoritative Round Arbitration
+      if ( _NetSession.IsHost() && _NetSession.IsConnected() )
+      {
+        const bool p0Dead = _GameLogic[0].IsGameOver();
+        const bool p1Dead = _GameLogic[1].IsGameOver();
+        const bool p0Won  = _GameLogic[0].IsVictory();
+        const bool p1Won  = _GameLogic[1].IsVictory();
+
+        if ( p0Dead || p1Dead || p0Won || p1Won )
+        {
+          _RoundResolved = true;
+          int localWinner = -1; // 0 = Host (local), 1 = Client (remote), -1 = Draw
+          std::string reason = "";
+
+          if ( p0Dead && !p1Dead )
+          {
+            _GameLogic[1].ForceVictory();
+            localWinner = 1;
+            reason = _GameLogic[0].GetGameOverReason();
+          }
+          else if ( p1Dead && !p0Dead )
+          {
+            _GameLogic[0].ForceVictory();
+            localWinner = 0;
+            reason = "Opponent Topped Out";
+          }
+          else if ( p0Won && !p1Won )
+          {
+            _GameLogic[1].ForceGameOver("Opponent Completed Objective First");
+            localWinner = 0;
+            reason = "Completed Objective First";
+          }
+          else if ( p1Won && !p0Won )
+          {
+            _GameLogic[0].ForceGameOver("Opponent Completed Objective First");
+            localWinner = 1;
+            reason = "Completed Objective First";
+          }
+          else
+          {
+            if ( _GameLogic[0].GetScore() > _GameLogic[1].GetScore() )
+            {
+              _GameLogic[0].ForceVictory();
+              _GameLogic[1].ForceGameOver("Outscored");
+              localWinner = 0;
+              reason = "Higher Score";
+            }
+            else if ( _GameLogic[1].GetScore() > _GameLogic[0].GetScore() )
+            {
+              _GameLogic[1].ForceVictory();
+              _GameLogic[0].ForceGameOver("Outscored");
+              localWinner = 1;
+              reason = "Higher Score";
+            }
+            else
+            {
+              localWinner = -1;
+              reason = "Round Draw";
+            }
+          }
+
+          _MpState._LastRoundWinner = localWinner;
+          if ( 0 == localWinner || 1 == localWinner )
+            _MpState._RoundWins[localWinner]++;
+
+          TetrisNetRoundResultPacket resPkt;
+          resPkt._Type       = static_cast<uint8_t>(TetrisNetPacketType::RoundResult);
+          resPkt._WinnerRole = ( 0 == localWinner ) ? 1 : ( ( 1 == localWinner ) ? 2 : -1 );
+          resPkt._HostWins   = static_cast<uint8_t>(_MpState._RoundWins[0]);
+          resPkt._ClientWins = static_cast<uint8_t>(_MpState._RoundWins[1]);
+          std::snprintf(resPkt._Reason, sizeof(resPkt._Reason), "%s", reason.c_str());
+          _NetSession.SendReliable(0, &resPkt, sizeof(resPkt));
+        }
+      }
+    }
+
+    // 3D Spatialized Audio for Local Board (Left) and Remote Board (Right)
+    _Audio.UpdateListener(Vec3(0.0f, 10.0f, 18.0f), Vec3(0.0f, 0.0f, -1.0f), Vec3(0.0f, 1.0f, 0.0f));
+    EvaluatePlayerAudio(0, TetrisSceneManager::GetBoardOrigin(0, 2) + Vec3(0.0f, 10.0f, 0.0f), true);
+    EvaluatePlayerAudio(1, TetrisSceneManager::GetBoardOrigin(1, 2) + Vec3(0.0f, 10.0f, 0.0f), true);
+
+    if ( _Scene )
+    {
+      const int maxLevel = std::max(_GameLogic[0].GetLevel(), _GameLogic[1].GetLevel());
+      if ( _SceneManager.GetRotateBackgroundOnLevelUp() && ( maxLevel > _PrevLevel ) )
+      {
+        _SceneManager.SelectNextRandomBackground(*_Scene, _Settings, _Renderer.get());
+      }
+      _PrevLevel = maxLevel;
+
+      if ( !_RoundResolved )
+      {
+        const float curTime = static_cast<float>(glfwGetTime());
+        _SceneManager.UpdateBackgroundMotion(_Settings, curTime);
+      }
+
+      _SceneManager.SyncScene(*_Scene, _GameLogic, 2, iDeltaTime);
+      _SceneManager.SyncCamera(*_Scene, _GameLogic, 2);
     }
   }
   else

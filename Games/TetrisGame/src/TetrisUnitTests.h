@@ -19,6 +19,8 @@ protected:
   static bool TestMatrixAddGarbageLines();
   static bool TestGarbageCalculationAndCancellation();
   static bool TestMultiplayerInputMapping();
+  static bool TestNetSnapshotSerialization();
+  static bool TestOnlineLoopbackSession();
 };
 
 }
