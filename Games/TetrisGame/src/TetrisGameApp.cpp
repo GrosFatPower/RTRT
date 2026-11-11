@@ -754,37 +754,32 @@ void TetrisGameApp::UpdateNetwork( float iDeltaTime )
               std::snprintf( rejectPkt._ClientGameVersion, sizeof( rejectPkt._ClientGameVersion ), "%s", hello._GameVersion );
               std::snprintf( rejectPkt._Reason, sizeof( rejectPkt._Reason ), "%s", reason );
               _NetSession.SendReliable( 0, &rejectPkt, sizeof( rejectPkt ) );
+              _NetSession.DisconnectPeer();
+            }
+            else
+            {
+              _NetSession.Disconnect();
             }
 
             _MpState._VersionMismatchError   = true;
             _MpState._VersionMismatchMessage = reason;
             _Audio.PlaySound2D( "ui_back", 0.9f, 1.0f );
-            _NetSession.Disconnect();
             break;
           }
 
           _MpState._RemotePlayerName  = ( hello._Nickname[0] != '\0' ) ? hello._Nickname : "OPPONENT";
           _MpState._RemoteGameVersion = ( hello._GameVersion[0] != '\0' ) ? hello._GameVersion : "1.0.0";
         }
-        else
+        else if ( ev._Data.size() >= sizeof( TetrisNetLegacyHelloPacket ) )
         {
-          // Legacy handshake without protocol version header (Proto 0)
-          char reason[96] = {};
-          std::snprintf( reason, sizeof( reason ),
-                         "Version mismatch: Peer runs legacy version without protocol header" );
-          if ( _NetSession.IsHost() )
-          {
-            TetrisNetVersionMismatchPacket rejectPkt;
-            rejectPkt._HostProtocolVersion = kTetrisProtocolVersion;
-            std::snprintf( rejectPkt._HostGameVersion, sizeof( rejectPkt._HostGameVersion ), "%s", kTetrisGameVersionStr );
-            std::snprintf( rejectPkt._ClientGameVersion, sizeof( rejectPkt._ClientGameVersion ), "legacy" );
-            std::snprintf( rejectPkt._Reason, sizeof( rejectPkt._Reason ), "%s", reason );
-            _NetSession.SendReliable( 0, &rejectPkt, sizeof( rejectPkt ) );
-          }
-          _MpState._VersionMismatchError   = true;
-          _MpState._VersionMismatchMessage = reason;
-          _Audio.PlaySound2D( "ui_back", 0.9f, 1.0f );
-          _NetSession.Disconnect();
+          // Backward compatibility: Peer runs early v1.0.0 build (commit 755b926) without protocol version header.
+          // Since simulation, rules, and in-game packet structs are 100% identical, allow connection gracefully!
+          TetrisNetLegacyHelloPacket legacy;
+          std::memcpy( &legacy, ev._Data.data(), sizeof( legacy ) );
+          legacy._Nickname[sizeof( legacy._Nickname ) - 1] = '\0';
+
+          _MpState._RemotePlayerName  = ( legacy._Nickname[0] != '\0' ) ? legacy._Nickname : "OPPONENT";
+          _MpState._RemoteGameVersion = "1.0.0 (legacy)";
         }
         break;
       }

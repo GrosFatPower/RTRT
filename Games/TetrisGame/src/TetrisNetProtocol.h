@@ -28,13 +28,24 @@ static const char kTetrisGameVersionStr[]    = "1.0.0";
 
 #pragma pack( push, 1 )
 
+// Legacy handshake packet layout used in initial v1.0.0 builds (commit 755b926 and earlier)
+struct TetrisNetLegacyHelloPacket
+{
+  uint8_t _Type         = static_cast<uint8_t>( TetrisNetPacketType::HelloHandshake );
+  char    _Nickname[32] = {};
+};
+
+// Handshake packet with protocol versioning and magic header.
+// NOTE: _Nickname is deliberately placed at offset 1 (immediately after _Type) so that
+// earlier v1.0.0 builds reading only the first 33 bytes parse the nickname cleanly
+// without seeing binary magic bytes, enabling bidirectional cross-version play.
 struct TetrisNetHelloPacket
 {
   uint8_t  _Type            = static_cast<uint8_t>( TetrisNetPacketType::HelloHandshake );
+  char     _Nickname[32]    = {};
   uint32_t _Magic           = kTetrisNetMagic;
   uint32_t _ProtocolVersion = kTetrisProtocolVersion;
   char     _GameVersion[16] = {};
-  char     _Nickname[32]    = {};
 };
 
 struct TetrisNetVersionMismatchPacket

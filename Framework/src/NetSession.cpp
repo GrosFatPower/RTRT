@@ -212,6 +212,29 @@ void NetSession::Disconnect()
 }
 
 // ----------------------------------------------------------------------------
+// DisconnectPeer
+// ----------------------------------------------------------------------------
+void NetSession::DisconnectPeer()
+{
+  if ( _Impl->_Peer )
+  {
+    enet_peer_disconnect_later( _Impl->_Peer, 0 );
+    if ( _Impl->_Host )
+      enet_host_flush( _Impl->_Host );
+    _Impl->_Peer = nullptr;
+  }
+
+  if ( _Role == NetRole::Host )
+  {
+    _State = NetState::Hosting;
+  }
+  else
+  {
+    Disconnect();
+  }
+}
+
+// ----------------------------------------------------------------------------
 // StartLanDiscovery / StopLanDiscovery
 // ----------------------------------------------------------------------------
 bool NetSession::StartLanDiscovery( uint16_t iDiscoveryPort )

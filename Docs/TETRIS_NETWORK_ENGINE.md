@@ -601,12 +601,14 @@ Transmitted reliably on Channel 0 immediately after ENet connection establishmen
 struct TetrisNetHelloPacket
 {
   uint8_t  _Type            = 1;
+  char     _Nickname[32]    = "PLAYER";   // Deliberately at offset 1 for backward compatibility
   uint32_t _Magic           = 0x54455452; // 'TETR'
   uint32_t _ProtocolVersion = 1;
   char     _GameVersion[16] = "1.0.0";
-  char     _Nickname[32]    = "PLAYER";
 };
 ```
+> [!NOTE]
+> **Backward Compatibility Grace Mode:** Early v1.0.0 clients (commit `755b926`) transmit a 33-byte `TetrisNetLegacyHelloPacket` (`_Type` + `_Nickname[32]`). Because simulation and packet layouts are identical, the engine gracefully accepts legacy handshakes as `"1.0.0 (legacy)"` without breaking existing clients.
 
 #### Incompatibility Rejection (`TetrisNetVersionMismatchPacket`, Type `7`)
 If the Host inspects the incoming `HelloHandshake` and detects that `_ProtocolVersion != kTetrisProtocolVersion`, the Host sends:
@@ -620,7 +622,7 @@ struct TetrisNetVersionMismatchPacket
   char     _Reason[96]          = "Version mismatch: Host is 1.0.0 (Proto 1), Peer is 0.9.0 (Proto 0)";
 };
 ```
-The Host then immediately closes the peer connection.
+The Host then disconnects only that peer (`NetSession::DisconnectPeer()`), preserving the host server socket and UPnP port mapping so the room remains open for compatible opponents.
 
 ### 11.3 HUD & User Feedback
 - **Lobby & Title Screen:** Shows current build version: `v1.0.0 (NetProto 1)` in the online lobby header and main menu footer.
