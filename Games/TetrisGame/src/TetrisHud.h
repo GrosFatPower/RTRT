@@ -56,11 +56,6 @@ struct TetrisMultiplayerState
   bool                    _EnableUpnp             = true;
   UpnpStatusInfo          _UpnpInfo;
   float                   _CopiedFeedbackTimer    = 0.0f;
-
-  // Version compatibility & mismatch notification
-  bool                    _VersionMismatchError   = false;
-  std::string             _VersionMismatchMessage = "";
-  std::string             _RemoteGameVersion      = "";
 };
 
 class TetrisHud

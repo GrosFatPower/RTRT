@@ -58,7 +58,6 @@ public:
   bool StartClient( const std::string & iAddress, uint16_t iPort );
 
   void Disconnect();
-  void DisconnectPeer();
 
   bool StartLanDiscovery( uint16_t iDiscoveryPort = 27016 );
   void StopLanDiscovery();

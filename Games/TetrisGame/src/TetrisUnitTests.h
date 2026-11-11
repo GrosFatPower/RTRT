@@ -23,7 +23,6 @@ protected:
   static bool TestOnlineLoopbackSession();
   static bool TestRoomCodeEncodingAndDecoding();
   static bool TestUpnpServiceLifecycle();
-  static bool TestProtocolVersionHandshakeAndRejection();
 };
 
 }
