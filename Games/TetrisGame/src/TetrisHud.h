@@ -50,6 +50,11 @@ struct TetrisMultiplayerState
   bool                    _RequestJoinOnline      = false;
   bool                    _RequestDisconnectOnline= false;
   bool                    _RequestStartOnlineMatch= false;
+
+  // Automatic port forwarding (UPnP) & room code
+  bool                    _EnableUpnp             = true;
+  UpnpStatusInfo          _UpnpInfo;
+  float                   _CopiedFeedbackTimer    = 0.0f;
 };
 
 class TetrisHud

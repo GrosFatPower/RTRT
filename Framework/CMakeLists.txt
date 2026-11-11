@@ -37,4 +37,5 @@ target_link_libraries(RTRTFramework
     nativefiledialog
     glfw
     enet
+    miniupnpc
 )

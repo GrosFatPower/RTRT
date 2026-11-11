@@ -90,7 +90,8 @@ NetSession::~NetSession()
 bool NetSession::StartHost( uint16_t iPort,
                             const std::string & iHostName,
                             const std::string & iRoomInfo,
-                            uint16_t iDiscoveryPort )
+                            uint16_t iDiscoveryPort,
+                            bool iEnableUpnp )
 {
   Disconnect();
 
@@ -118,6 +119,11 @@ bool NetSession::StartHost( uint16_t iPort,
     enet_socket_set_option( _Impl->_BeaconSocket, ENET_SOCKOPT_NONBLOCK, 1 );
     enet_socket_set_option( _Impl->_BeaconSocket, ENET_SOCKOPT_BROADCAST, 1 );
   }
+
+  // Ask the home router to open the game port (non-blocking, runs in a background thread)
+  _UpnpEnabled = iEnableUpnp;
+  if ( _UpnpEnabled )
+    _Upnp.StartMappingAsync( iPort, iPort, "RTRT Game", GetLocalIPv4Address() );
 
   return true;
 }
@@ -176,6 +182,9 @@ bool NetSession::StartClient( const std::string & iAddress, uint16_t iPort )
 // ----------------------------------------------------------------------------
 void NetSession::Disconnect()
 {
+  _Upnp.StopMappingAsync();
+  _UpnpEnabled = false;
+
   if ( _Impl->_BeaconSocket != ENET_SOCKET_NULL )
   {
     enet_socket_destroy( _Impl->_BeaconSocket );

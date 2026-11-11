@@ -3,6 +3,7 @@
 
 #include "PathTracer.h"
 #include "Renderer.h"
+#include "RoomCode.h"
 #include "Scene.h"
 
 #include "imgui.h"
@@ -847,6 +848,9 @@ void TetrisHud::DrawOnlineLobbyPage( TetrisAppState & ioAppState,
 
       if ( !isHostRole )
       {
+        ImGui::Checkbox("Automatic port forwarding (UPnP)", &_MpState->_EnableUpnp);
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
         if ( GameMenuUI::DrawActionButton("OPEN ROOM & START HOSTING", Vec2(320.0f, 42.0f), true, _Theme, _Fonts) )
         {
           if ( _Audio ) _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
@@ -876,6 +880,54 @@ void TetrisHud::DrawOnlineLobbyPage( TetrisAppState & ioAppState,
                              "Broadcasting LAN Room on %s:%u — waiting for opponent...",
                              _NetSession->GetLocalIPv4Address().c_str(),
                              _NetSession->GetBoundPort());
+        }
+
+        // --- UPnP status & room code ---
+        const UpnpStatusInfo & upnp = _MpState->_UpnpInfo;
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
+        if ( !_NetSession->IsUpnpEnabled() )
+        {
+          ImGui::TextDisabled("UPnP disabled: Internet players need a manual port forward (UDP %u) or a VPN.",
+                              _NetSession->GetBoundPort());
+        }
+        else if ( UpnpState::Discovering == upnp._State || UpnpState::Mapping == upnp._State )
+        {
+          ImGui::TextColored(ImVec4(1.00f, 0.85f, 0.25f, 1.0f), "[UPnP] %s", upnp._StatusMessage.c_str());
+        }
+        else if ( UpnpState::Success == upnp._State )
+        {
+          ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f), "[UPnP] UDP port %u open", static_cast<unsigned int>(upnp._ExternalPort));
+          if ( !upnp._ExternalIP.empty() )
+          {
+            ImGui::SameLine(0.0f, 14.0f);
+            ImGui::Text("Public IP: %s", upnp._ExternalIP.c_str());
+            ImGui::TextColored(ImVec4(0.00f, 0.90f, 0.96f, 1.0f), "ROOM CODE: %s", upnp._RoomCode.c_str());
+            ImGui::SameLine(0.0f, 14.0f);
+            if ( ImGui::Button("COPY ROOM CODE") )
+            {
+              ImGui::SetClipboardText(upnp._RoomCode.c_str());
+              _MpState->_CopiedFeedbackTimer = 2.0f;
+            }
+            ImGui::SameLine();
+            if ( ImGui::Button("COPY IP:PORT") )
+            {
+              char ipPort[96] = {};
+              std::snprintf(ipPort, sizeof(ipPort), "%s:%u", upnp._ExternalIP.c_str(), static_cast<unsigned int>(upnp._ExternalPort));
+              ImGui::SetClipboardText(ipPort);
+              _MpState->_CopiedFeedbackTimer = 2.0f;
+            }
+            if ( _MpState->_CopiedFeedbackTimer > 0.0f )
+            {
+              ImGui::SameLine();
+              ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f), "Copied!");
+            }
+          }
+        }
+        else if ( UpnpState::NotAvailable == upnp._State || UpnpState::Failed == upnp._State )
+        {
+          ImGui::TextColored(ImVec4(1.00f, 0.55f, 0.25f, 1.0f),
+                             "[UPnP] %s - manual port forward (UDP %u) or VPN required for Internet play.",
+                             upnp._StatusMessage.c_str(), _NetSession->GetBoundPort());
         }
       }
 
@@ -950,7 +1002,19 @@ void TetrisHud::DrawOnlineLobbyPage( TetrisAppState & ioAppState,
       ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
       ImGui::SetNextItemWidth(260.0f);
-      ImGui::InputText("Host IP / Hostname", _MpState->_JoinAddressBuf, sizeof(_MpState->_JoinAddressBuf));
+      ImGui::InputText("Host IP / Hostname / Room Code", _MpState->_JoinAddressBuf, sizeof(_MpState->_JoinAddressBuf));
+
+      std::string resolvedIP;
+      uint16_t    resolvedPort = 0;
+      const bool  isRoomCode   = RoomCode::Decode(_MpState->_JoinAddressBuf, resolvedIP, resolvedPort);
+      if ( isRoomCode )
+      {
+        ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f), "Room code OK -> %s:%u", resolvedIP.c_str(), static_cast<unsigned int>(resolvedPort));
+      }
+      else if ( RoomCode::LooksLikeRoomCode(_MpState->_JoinAddressBuf) )
+      {
+        ImGui::TextColored(ImVec4(1.00f, 0.55f, 0.25f, 1.0f), "Invalid room code (typo?)");
+      }
 
       ImGui::SameLine(0.0f, 24.0f);
       ImGui::SetNextItemWidth(110.0f);

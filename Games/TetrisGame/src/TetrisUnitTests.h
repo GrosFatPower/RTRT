@@ -21,6 +21,8 @@ protected:
   static bool TestMultiplayerInputMapping();
   static bool TestNetSnapshotSerialization();
   static bool TestOnlineLoopbackSession();
+  static bool TestRoomCodeEncodingAndDecoding();
+  static bool TestUpnpServiceLifecycle();
 };
 
 }

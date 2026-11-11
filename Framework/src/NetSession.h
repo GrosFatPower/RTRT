@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "UpnpService.h"
+
 namespace RTRT
 {
 
@@ -48,7 +50,8 @@ public:
   bool StartHost( uint16_t iPort,
                   const std::string & iHostName,
                   const std::string & iRoomInfo,
-                  uint16_t iDiscoveryPort = 27016 );
+                  uint16_t iDiscoveryPort = 27016,
+                  bool iEnableUpnp = true );
 
   void UpdateHostRoomInfo( const std::string & iHostName, const std::string & iRoomInfo );
 
@@ -81,6 +84,9 @@ public:
   std::string GetPeerAddressString() const;
   std::string GetLocalIPv4Address() const;
 
+  UpnpStatusInfo GetUpnpStatus() const { return _Upnp.GetStatus(); }
+  bool IsUpnpEnabled() const { return _UpnpEnabled; }
+
 protected:
   void BroadcastLanBeacon( double iCurrentTimeSec );
   void PollLanDiscovery( double iCurrentTimeSec );
@@ -98,6 +104,9 @@ protected:
   double                   _LastBeaconSentSec   = 0.0;
   double                   _ConnectStartTimeSec = 0.0;
   std::vector<LanRoomInfo> _DiscoveredRooms;
+
+  UpnpService              _Upnp;
+  bool                     _UpnpEnabled         = false;
 };
 
 } // namespace RTRT

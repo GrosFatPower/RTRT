@@ -13,6 +13,7 @@
 #include <GLFW/glfw3.h>
 
 #include "PathUtils.h"
+#include "RoomCode.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -601,7 +602,6 @@ void TetrisGameApp::CheckPendingMatchRequests()
 // ----------------------------------------------------------------------------
 void TetrisGameApp::UpdateNetwork( float iDeltaTime )
 {
-  (void)iDeltaTime;
   const double curTimeSec = glfwGetTime();
 
   // 1. Handle UI Connection Requests
@@ -616,7 +616,9 @@ void TetrisGameApp::UpdateNetwork( float iDeltaTime )
     _NetSession.StopLanDiscovery();
     _NetSession.StartHost( static_cast<uint16_t>( _MpState._OnlinePort ),
                            _MpState._LocalPlayerName,
-                           roomDesc );
+                           roomDesc,
+                           27016,
+                           _MpState._EnableUpnp );
   }
 
   if ( _MpState._RequestStopHost || _MpState._RequestDisconnectOnline )
@@ -631,8 +633,23 @@ void TetrisGameApp::UpdateNetwork( float iDeltaTime )
   {
     _MpState._RequestJoinOnline = false;
     _NetSession.StopLanDiscovery();
-    _NetSession.StartClient( _MpState._JoinAddressBuf, static_cast<uint16_t>( _MpState._OnlinePort ) );
+
+    // Accept a room code, an IPv4 address or a host name
+    std::string joinAddress = _MpState._JoinAddressBuf;
+    uint16_t    joinPort    = static_cast<uint16_t>( _MpState._OnlinePort );
+    std::string decodedIP;
+    uint16_t    decodedPort = 0;
+    if ( RoomCode::Decode( joinAddress, decodedIP, decodedPort ) )
+    {
+      joinAddress = decodedIP;
+      joinPort    = decodedPort;
+    }
+    _NetSession.StartClient( joinAddress, joinPort );
   }
+
+  _MpState._UpnpInfo = _NetSession.GetUpnpStatus();
+  if ( _MpState._CopiedFeedbackTimer > 0.0f )
+    _MpState._CopiedFeedbackTimer = std::max( 0.0f, _MpState._CopiedFeedbackTimer - iDeltaTime );
 
   // 2. Manage LAN Discovery when browsing the Join Tab on OnlineLobby
   const bool shouldScanLan = ( TetrisAppState::TitleScreen == _AppState ) &&

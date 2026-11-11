@@ -2,6 +2,8 @@
 #include "AudioEngine.h"
 #include "GamepadInput.h"
 #include "NetSession.h"
+#include "RoomCode.h"
+#include "UpnpService.h"
 #include "TetrisGameApp.h"
 #include "TetrisGameLogic.h"
 #include "TetrisMatrix.h"
@@ -11,6 +13,7 @@
 
 #include <GLFW/glfw3.h>
 #include <chrono>
+#include <cctype>
 #include <cstring>
 #include <iostream>
 #include <set>
@@ -710,6 +713,111 @@ bool TetrisUnitTests::TestOnlineLoopbackSession()
 }
 
 // ----------------------------------------------------------------------------
+// TestRoomCodeEncodingAndDecoding
+// ----------------------------------------------------------------------------
+bool TetrisUnitTests::TestRoomCodeEncodingAndDecoding()
+{
+  using namespace RTRT;
+
+  const char * ips[] = { "82.64.12.34", "1.2.3.4", "255.255.255.255", "0.0.0.0", "192.168.0.107" };
+  const uint16_t ports[] = { 27015, 27099, 1024, 65535 };
+
+  for ( const char * ip : ips )
+  {
+    for ( uint16_t port : ports )
+    {
+      const std::string code = RoomCode::Encode(ip, port);
+      std::string outIP;
+      uint16_t outPort = 0;
+      if ( code.empty() || !RoomCode::Decode(code, outIP, outPort) || outIP != ip || outPort != port )
+      {
+        std::cerr << "TestRoomCodeEncodingAndDecoding: round trip failed for " << ip << ":" << port << " (code '" << code << "')" << std::endl;
+        return false;
+      }
+
+      // Lowercase and missing hyphens must be tolerated
+      std::string lower;
+      for ( char ch : code )
+      {
+        if ( ch != '-' )
+          lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+      }
+      if ( !RoomCode::Decode(lower, outIP, outPort) || outIP != ip || outPort != port )
+      {
+        std::cerr << "TestRoomCodeEncodingAndDecoding: lowercase decode failed for '" << lower << "'" << std::endl;
+        return false;
+      }
+
+      // Every single-character substitution must be rejected or decode to something different
+      std::string corrupted = code;
+      corrupted[0] = ( corrupted[0] == '7' ) ? '8' : '7';
+      if ( RoomCode::Decode(corrupted, outIP, outPort) && outIP == ip && outPort == port )
+      {
+        std::cerr << "TestRoomCodeEncodingAndDecoding: corrupted code was accepted as original" << std::endl;
+        return false;
+      }
+    }
+  }
+
+  std::string outIP;
+  uint16_t outPort = 0;
+  if ( RoomCode::Decode("82.64.12.34", outIP, outPort) || RoomCode::Decode("localhost", outIP, outPort) ||
+       RoomCode::Decode("", outIP, outPort) || RoomCode::Decode("ABC", outIP, outPort) )
+  {
+    std::cerr << "TestRoomCodeEncodingAndDecoding: invalid input was accepted" << std::endl;
+    return false;
+  }
+
+  if ( !RoomCode::Encode("not.an.ip", 27015).empty() )
+  {
+    std::cerr << "TestRoomCodeEncodingAndDecoding: invalid IPv4 was encoded" << std::endl;
+    return false;
+  }
+
+  std::cout << "[PASS] Room code encoding, decoding & checksum validation passed." << std::endl;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// TestUpnpServiceLifecycle
+// ----------------------------------------------------------------------------
+bool TetrisUnitTests::TestUpnpServiceLifecycle()
+{
+  using namespace RTRT;
+
+  {
+    UpnpService service;
+    if ( service.GetStatus()._State != UpnpState::Idle )
+    {
+      std::cerr << "TestUpnpServiceLifecycle: initial state is not Idle" << std::endl;
+      return false;
+    }
+
+    const auto t0 = std::chrono::steady_clock::now();
+    service.StartMappingAsync(27097, 27097, "RTRT Unit Test");
+    const auto callMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+    if ( callMs > 250 )
+    {
+      std::cerr << "TestUpnpServiceLifecycle: StartMappingAsync blocked the caller (" << callMs << " ms)" << std::endl;
+      return false;
+    }
+
+    const UpnpState early = service.GetStatus()._State;
+    if ( early == UpnpState::Idle )
+    {
+      std::cerr << "TestUpnpServiceLifecycle: state did not leave Idle after start" << std::endl;
+      return false;
+    }
+
+    service.StopMappingAsync();
+    // Destructor joins the worker (discovery is bounded to ~2 s)
+  }
+
+  std::cout << "[PASS] UPnP service async start/stop lifecycle passed." << std::endl;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
 // RunAll
 // ----------------------------------------------------------------------------
 int TetrisUnitTests::RunAll()
@@ -730,11 +838,13 @@ int TetrisUnitTests::RunAll()
   ok = ok && TestMultiplayerInputMapping();
   ok = ok && TestNetSnapshotSerialization();
   ok = ok && TestOnlineLoopbackSession();
+  ok = ok && TestRoomCodeEncodingAndDecoding();
+  ok = ok && TestUpnpServiceLifecycle();
 
   std::cout << "==========================================" << std::endl;
   if ( ok )
   {
-    std::cout << "ALL TETRIS GUIDELINE, AUDIO & MULTIPLAYER TESTS PASSED (11/11)" << std::endl;
+    std::cout << "ALL TETRIS GUIDELINE, AUDIO & MULTIPLAYER TESTS PASSED (13/13)" << std::endl;
     std::cout << "==========================================" << std::endl;
     return 0;
   }

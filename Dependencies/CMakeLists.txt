@@ -102,3 +102,52 @@ elseif (UNIX AND NOT APPLE)
     HAS_SOCKLEN_T=1
   )
 endif()
+
+
+# ---------------------------------------------------------------------------
+# miniupnpc (UPnP IGD client, Windows / macOS / Linux)
+# ---------------------------------------------------------------------------
+set(miniupnpc_dir ${CMAKE_CURRENT_SOURCE_DIR}/miniupnpc)
+set(PROJECT_VERSION 2.3.3)
+configure_file(${miniupnpc_dir}/miniupnpcstrings.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/miniupnpc_gen/miniupnpcstrings.h)
+
+add_library(miniupnpc STATIC
+  ${miniupnpc_dir}/src/igd_desc_parse.c
+  ${miniupnpc_dir}/src/miniupnpc.c
+  ${miniupnpc_dir}/src/minixml.c
+  ${miniupnpc_dir}/src/minisoap.c
+  ${miniupnpc_dir}/src/minissdpc.c
+  ${miniupnpc_dir}/src/miniwget.c
+  ${miniupnpc_dir}/src/upnpcommands.c
+  ${miniupnpc_dir}/src/upnpdev.c
+  ${miniupnpc_dir}/src/upnpreplyparse.c
+  ${miniupnpc_dir}/src/upnperrors.c
+  ${miniupnpc_dir}/src/connecthostport.c
+  ${miniupnpc_dir}/src/portlistingparse.c
+  ${miniupnpc_dir}/src/receivedata.c
+  ${miniupnpc_dir}/src/addr_is_reserved.c
+)
+
+target_include_directories(miniupnpc
+  PUBLIC  ${miniupnpc_dir}/include
+  PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/miniupnpc_gen
+)
+
+target_compile_definitions(miniupnpc PUBLIC MINIUPNP_STATICLIB)
+
+if (WIN32)
+  target_compile_definitions(miniupnpc PRIVATE _CRT_SECURE_NO_WARNINGS _WINSOCK_DEPRECATED_NO_WARNINGS _WIN32_WINNT=0x0601)
+  target_link_libraries(miniupnpc PUBLIC ws2_32 iphlpapi)
+else()
+  target_compile_definitions(miniupnpc PRIVATE
+    MINIUPNPC_SET_SOCKET_TIMEOUT
+    MINIUPNPC_GET_SRC_ADDR
+    _BSD_SOURCE
+    _DEFAULT_SOURCE
+  )
+  if (APPLE)
+    target_compile_definitions(miniupnpc PRIVATE _DARWIN_C_SOURCE)
+  else()
+    target_compile_definitions(miniupnpc PRIVATE _XOPEN_SOURCE=600)
+  endif()
+endif()

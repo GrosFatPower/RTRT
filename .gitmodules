@@ -22,3 +22,6 @@
 [submodule "Dependencies/enet"]
 	path = Dependencies/enet
 	url = https://github.com/lsalzman/enet.git
+[submodule "Dependencies/miniupnpc"]
+	path = Dependencies/miniupnpc
+	url = https://github.com/transmission/miniupnpc.git
