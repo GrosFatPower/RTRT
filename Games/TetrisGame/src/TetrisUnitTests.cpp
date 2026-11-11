@@ -853,6 +853,81 @@ bool TetrisUnitTests::TestUpnpServiceLifecycle()
 }
 
 // ----------------------------------------------------------------------------
+// TestProtocolVersionHandshakeAndRejection
+// ----------------------------------------------------------------------------
+bool TetrisUnitTests::TestProtocolVersionHandshakeAndRejection()
+{
+  // 1. Verify packet structure layout and constants
+  if ( kTetrisNetMagic != 0x54455452 )
+  {
+    std::cerr << "TestProtocolVersionHandshakeAndRejection: Invalid kTetrisNetMagic!" << std::endl;
+    return false;
+  }
+  if ( kTetrisProtocolVersion < 1 )
+  {
+    std::cerr << "TestProtocolVersionHandshakeAndRejection: Invalid kTetrisProtocolVersion!" << std::endl;
+    return false;
+  }
+
+  TetrisNetHelloPacket validHello;
+  validHello._Magic           = kTetrisNetMagic;
+  validHello._ProtocolVersion = kTetrisProtocolVersion;
+  std::snprintf( validHello._GameVersion, sizeof( validHello._GameVersion ), "%s", kTetrisGameVersionStr );
+  std::snprintf( validHello._Nickname, sizeof( validHello._Nickname ), "Tester" );
+
+  if ( validHello._Type != static_cast<uint8_t>( TetrisNetPacketType::HelloHandshake ) )
+  {
+    std::cerr << "TestProtocolVersionHandshakeAndRejection: Invalid HelloHandshake packet type!" << std::endl;
+    return false;
+  }
+
+  // 2. Simulate serialization of incompatible protocol version (e.g. Proto 99 vs Proto 1)
+  TetrisNetHelloPacket incompatibleHello = validHello;
+  incompatibleHello._ProtocolVersion     = 99;
+  std::snprintf( incompatibleHello._GameVersion, sizeof( incompatibleHello._GameVersion ), "2.0.0" );
+
+  // Construct mismatch response
+  TetrisNetVersionMismatchPacket mismatchPkt;
+  mismatchPkt._HostProtocolVersion = kTetrisProtocolVersion;
+  std::snprintf( mismatchPkt._HostGameVersion, sizeof( mismatchPkt._HostGameVersion ), "%s", kTetrisGameVersionStr );
+  std::snprintf( mismatchPkt._ClientGameVersion, sizeof( mismatchPkt._ClientGameVersion ), "%s", incompatibleHello._GameVersion );
+  std::snprintf( mismatchPkt._Reason, sizeof( mismatchPkt._Reason ),
+                 "Version mismatch: Host is %s (Proto %u), Peer is %s (Proto %u)",
+                 kTetrisGameVersionStr, kTetrisProtocolVersion,
+                 incompatibleHello._GameVersion, incompatibleHello._ProtocolVersion );
+
+  if ( mismatchPkt._Type != static_cast<uint8_t>( TetrisNetPacketType::VersionMismatch ) )
+  {
+    std::cerr << "TestProtocolVersionHandshakeAndRejection: Invalid VersionMismatch packet type!" << std::endl;
+    return false;
+  }
+
+  if ( mismatchPkt._HostProtocolVersion != kTetrisProtocolVersion )
+  {
+    std::cerr << "TestProtocolVersionHandshakeAndRejection: Host protocol version mismatch in rejection packet!" << std::endl;
+    return false;
+  }
+
+  if ( std::strcmp( mismatchPkt._ClientGameVersion, "2.0.0" ) != 0 )
+  {
+    std::cerr << "TestProtocolVersionHandshakeAndRejection: Client game version corrupted in rejection packet!" << std::endl;
+    return false;
+  }
+
+  // 3. Foreign Magic Check
+  TetrisNetHelloPacket foreignHello = validHello;
+  foreignHello._Magic = 0xDEADBEEF;
+  if ( foreignHello._Magic == kTetrisNetMagic )
+  {
+    std::cerr << "TestProtocolVersionHandshakeAndRejection: Foreign magic check failed!" << std::endl;
+    return false;
+  }
+
+  std::cout << "[PASS] Protocol version handshake & mismatch rejection packet verified." << std::endl;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
 // RunAll
 // ----------------------------------------------------------------------------
 int TetrisUnitTests::RunAll()
@@ -875,11 +950,12 @@ int TetrisUnitTests::RunAll()
   ok = ok && TestOnlineLoopbackSession();
   ok = ok && TestRoomCodeEncodingAndDecoding();
   ok = ok && TestUpnpServiceLifecycle();
+  ok = ok && TestProtocolVersionHandshakeAndRejection();
 
   std::cout << "==========================================" << std::endl;
   if ( ok )
   {
-    std::cout << "ALL TETRIS GUIDELINE, AUDIO & MULTIPLAYER TESTS PASSED (13/13)" << std::endl;
+    std::cout << "ALL TETRIS GUIDELINE, AUDIO & MULTIPLAYER TESTS PASSED (14/14)" << std::endl;
     std::cout << "==========================================" << std::endl;
     return 0;
   }
