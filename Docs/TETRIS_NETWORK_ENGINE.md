@@ -526,30 +526,49 @@ For fast navigation in IDEs and codebase exploration:
 
 ---
 
-## 10. Internet Hosting: UPnP Port Forwarding & Room Codes
+## 10. Internet Hosting: UPnP Port Forwarding, STUN Discovery & Room Codes
 
-Hosting over the Internet needs the host's router to forward the game port (UDP `27015`). [`RTRT::UpnpService`](file:///d:/Users/GRIFFON/Documents/Dev/RTRT/Framework/src/UpnpService.h) does this automatically through UPnP IGD (`Dependencies/miniupnpc`, Windows / macOS / Linux). No external server is involved.
+Hosting over the Internet needs the host's router to forward the game port (UDP `27015`) and the players to have an easy way to exchange addresses without typing raw IP addresses. [`RTRT::UpnpService`](file:///d:/Users/GRIFFON/Documents/Dev/RTRT/Framework/src/UpnpService.h) and [`RTRT::RoomCode`](file:///d:/Users/GRIFFON/Documents/Dev/RTRT/Framework/src/RoomCode.h) achieve this automatically without requiring external relay servers.
 
-### 10.1 UpnpService lifecycle
-`NetSession::StartHost( ..., iEnableUpnp )` calls `UpnpService::StartMappingAsync`. A background thread then:
+### 10.1 UpnpService & STUN Discovery Lifecycle
+When `NetSession::StartHost( ..., iEnableUpnp )` is called, [`UpnpService::StartMappingAsync`](file:///d:/Users/GRIFFON/Documents/Dev/RTRT/Framework/src/UpnpService.cpp) launches an asynchronous background thread:
 
-1. Discovers the router with `upnpDiscover` (SSDP, 2 s). The UI thread is never blocked.
-2. Validates the IGD with `UPNP_GetValidIGD`. A CGNAT router (private WAN IP) or a disconnected router is reported as `NotAvailable`.
-3. Reads the public IP with `UPNP_GetExternalIPAddress`.
-4. Calls `UPNP_AddPortMapping` for UDP. It requests a 7200 s lease first and falls back to a permanent lease for routers that refuse timed leases.
-5. Waits until `StopMappingAsync` (called from `NetSession::Disconnect`), then calls `UPNP_DeletePortMapping`.
+1. **Instant WAN IP Resolution via STUN (RFC 5389):**
+   Immediately sends a 20-byte UDP STUN binding request to `stun.l.google.com:19302` (and `stun.cloudflare.com:3478`). In ~20 ms, the real public WAN IP is discovered and the true Internet Room Code is generated before IGD discovery even completes.
+2. **HTTP Trailing-Slash Fallback:**
+   If STUN is filtered by an enterprise firewall, plain HTTP reflection endpoints (`http://api.ipify.org/`, `http://checkip.amazonaws.com/`, `http://icanhazip.com/`) are queried via `miniwget`.
+3. **Router Discovery & Port Mapping (UPnP IGD):**
+   Discovers the home gateway device via SSDP (`upnpDiscover`, targeting the active local network interface).
+4. **Double NAT Resilience:**
+   If the local router's WAN IP is in a private subnet (e.g. `192.168.x.x` behind an upstream modem), the port is mapped on the local router while the room code continues to use the verified public IP.
+5. **Port Forwarding:**
+   Calls `UPNP_AddPortMapping` for UDP `27015` with a 7200 s lease, falling back to a permanent lease (0) if timed leases are refused.
+6. **Graceful Teardown:**
+   When hosting stops or the application exits, `UPNP_DeletePortMapping` cleanly unmaps the port.
 
-States: `Idle`, `Discovering`, `Mapping`, `Success`, `NotAvailable`, `Failed`. The state is polled through `NetSession::GetUpnpStatus()` and shown in the Host tab.
+### 10.2 Room Code System ([`RoomCode`](file:///d:/Users/GRIFFON/Documents/Dev/RTRT/Framework/src/RoomCode.h))
+`(IPv4, Port)` is encoded using Crockford Base32 (no `I L O U`, case-insensitive, hyphen/space tolerant) with a 4-bit checksum.
 
-### 10.2 Room code ([`RoomCode`](file:///d:/Users/GRIFFON/Documents/Dev/RTRT/Framework/src/RoomCode.h))
-`(IPv4, Port)` is encoded as Crockford Base32 (no `I L O U`, case-insensitive) with a 4-bit checksum.
+| Port | Payload | Format | Example |
+|---|---|---|---|
+| `27015` (default) | IPv4 (32) + checksum (4) = 36 bits | `XXXX-XXXX` (8 chars) | `0Q5W-6AK1` |
+| custom port | IPv4 (32) + port (16) + checksum (4) = 52 bits | `XXXX-XXXX-XXX` (11 chars) | `0Q5W-6AK1-9B2` |
 
-| Port | Payload | Format |
-|---|---|---|
-| `27015` (default) | IPv4 (32) + checksum (4) = 36 bits | `XXXX-XXXX` (8 chars) |
-| other | IPv4 (32) + port (16) + checksum (4) = 52 bits | `XXXX-XXXX-XXX` (11 chars) |
+- **IP Classification:** [`RoomCode::IsPublicInternetIP()`](file:///d:/Users/GRIFFON/Documents/Dev/RTRT/Framework/src/RoomCode.h) and `RoomCode::IsPrivateOrReservedIP()` distinguish private LAN/CGNAT addresses (RFC 1918, RFC 5735, RFC 6598) from globally routable public IPs.
+- **HUD Join Card:** Features a dedicated `JOIN VIA ROOM CODE` card with an input field, a one-click **`[ PASTE ]`** button, live green checkmark validation, and immediate connect button.
 
-In the Join tab, `Host IP / Hostname / Room Code` accepts a room code, an IPv4 address or a host name. `RoomCode::Decode` is tried first. If it fails (bad length, alphabet or checksum), the text is used as a normal address.
-
-### 10.3 Tests
-`TestRoomCodeEncodingAndDecoding` covers round trips, case and hyphen tolerance, corruption and invalid input. `TestUpnpServiceLifecycle` checks that start is non-blocking and that stop and destruction do not hang.
+### 10.3 Test Suite Coverage
+All 13 automated headless tests pass in [`TetrisUnitTests.cpp`](file:///d:/Users/GRIFFON/Documents/Dev/RTRT/Games/TetrisGame/src/TetrisUnitTests.cpp):
+1. 7-Bag Randomizer uniformity & starvation.
+2. SRS Wall & Floor Kick verification.
+3. 3-Corner T-Spin detection geometry.
+4. Extended placement (15 manipulation limit) lock delay.
+5. Guideline Line Clear & Perfect Clear check.
+6. AudioEngine synthesis & sound bank lifecycle.
+7. Matrix upward shift & garbage line insertion.
+8. Guideline VS Garbage attack table, cancellation & shared-seed parity.
+9. Local Multiplayer device assignment & split keyboard isolation.
+10. Online 4-bit board snapshot serialization & sequence guard.
+11. ENet Loopback Host/Client handshake & dual-channel packet delivery.
+12. Room code encoding, decoding, checksum validation & IP classification.
+13. UPnP service async start/stop lifecycle & STUN WAN IP resolution.
