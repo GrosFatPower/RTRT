@@ -882,8 +882,61 @@ void TetrisHud::DrawOnlineLobbyPage( TetrisAppState & ioAppState,
                              _NetSession->GetBoundPort());
         }
 
-        // --- UPnP status & room code ---
+        // --- Prominent Room Code Card ---
         const UpnpStatusInfo & upnp = _MpState->_UpnpInfo;
+        std::string activeIp = upnp._ExternalIP;
+        std::string activeRoomCode = upnp._RoomCode;
+        bool isInternetCode = !activeIp.empty() && ( activeRoomCode.size() >= 8 );
+
+        if ( !isInternetCode )
+        {
+          activeIp = _NetSession->GetLocalIPv4Address();
+          activeRoomCode = RoomCode::Encode( activeIp, static_cast<uint16_t>(_NetSession->GetBoundPort()) );
+        }
+
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+        ImGui::BeginChild("##RoomCodeCard", ImVec2(0.0f, 84.0f), true, ImGuiWindowFlags_NoScrollbar);
+        {
+          ImGui::SetCursorPos(ImVec2(16.0f, 10.0f));
+          ImGui::TextColored(ImVec4(0.60f, 0.75f, 0.90f, 1.0f),
+                             isInternetCode ? "ONLINE ROOM CODE (INTERNET PLAY):" : "ROOM CODE (LAN / DIRECT CONNECT):");
+
+          ImGui::SetCursorPos(ImVec2(16.0f, 30.0f));
+          ImFont * bigFont = _Fonts._MonoFont ? _Fonts._MonoFont : ( _Fonts._HeaderFont ? _Fonts._HeaderFont : ImGui::GetFont() );
+          ImGui::PushFont(bigFont);
+          ImGui::TextColored(ImVec4(0.00f, 0.95f, 1.00f, 1.0f), "%s", activeRoomCode.c_str());
+          ImGui::PopFont();
+
+          ImGui::SameLine(0.0f, 14.0f);
+          ImGui::SetCursorPosY(36.0f);
+          ImGui::TextDisabled("(%s:%u)", activeIp.c_str(), static_cast<unsigned int>(_NetSession->GetBoundPort()));
+
+          const float cardW = ImGui::GetWindowWidth();
+          ImGui::SetCursorPos(ImVec2(std::max(16.0f, cardW - 350.0f), 24.0f));
+          if ( ImGui::Button("COPY ROOM CODE", ImVec2(160.0f, 38.0f)) )
+          {
+            if ( _Audio ) _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+            ImGui::SetClipboardText(activeRoomCode.c_str());
+            _MpState->_CopiedFeedbackTimer = 2.5f;
+          }
+          ImGui::SameLine(0.0f, 10.0f);
+          if ( ImGui::Button("COPY IP:PORT", ImVec2(130.0f, 38.0f)) )
+          {
+            if ( _Audio ) _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+            char ipPort[96] = {};
+            std::snprintf(ipPort, sizeof(ipPort), "%s:%u", activeIp.c_str(), static_cast<unsigned int>(_NetSession->GetBoundPort()));
+            ImGui::SetClipboardText(ipPort);
+            _MpState->_CopiedFeedbackTimer = 2.5f;
+          }
+          if ( _MpState->_CopiedFeedbackTimer > 0.0f )
+          {
+            ImGui::SetCursorPos(ImVec2(std::max(16.0f, cardW - 350.0f), 65.0f));
+            ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f), "Copied to clipboard!");
+          }
+        }
+        ImGui::EndChild();
+
+        // --- UPnP Status Banner ---
         ImGui::Dummy(ImVec2(0.0f, 4.0f));
         if ( !_NetSession->IsUpnpEnabled() )
         {
@@ -896,32 +949,10 @@ void TetrisHud::DrawOnlineLobbyPage( TetrisAppState & ioAppState,
         }
         else if ( UpnpState::Success == upnp._State )
         {
-          ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f), "[UPnP] UDP port %u open", static_cast<unsigned int>(upnp._ExternalPort));
-          if ( !upnp._ExternalIP.empty() )
-          {
-            ImGui::SameLine(0.0f, 14.0f);
-            ImGui::Text("Public IP: %s", upnp._ExternalIP.c_str());
-            ImGui::TextColored(ImVec4(0.00f, 0.90f, 0.96f, 1.0f), "ROOM CODE: %s", upnp._RoomCode.c_str());
-            ImGui::SameLine(0.0f, 14.0f);
-            if ( ImGui::Button("COPY ROOM CODE") )
-            {
-              ImGui::SetClipboardText(upnp._RoomCode.c_str());
-              _MpState->_CopiedFeedbackTimer = 2.0f;
-            }
-            ImGui::SameLine();
-            if ( ImGui::Button("COPY IP:PORT") )
-            {
-              char ipPort[96] = {};
-              std::snprintf(ipPort, sizeof(ipPort), "%s:%u", upnp._ExternalIP.c_str(), static_cast<unsigned int>(upnp._ExternalPort));
-              ImGui::SetClipboardText(ipPort);
-              _MpState->_CopiedFeedbackTimer = 2.0f;
-            }
-            if ( _MpState->_CopiedFeedbackTimer > 0.0f )
-            {
-              ImGui::SameLine();
-              ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f), "Copied!");
-            }
-          }
+          ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f),
+                             "[UPnP] UDP port %u open | %s",
+                             static_cast<unsigned int>(upnp._ExternalPort),
+                             upnp._StatusMessage.c_str());
         }
         else if ( UpnpState::NotAvailable == upnp._State || UpnpState::Failed == upnp._State )
         {
@@ -954,16 +985,98 @@ void TetrisHud::DrawOnlineLobbyPage( TetrisAppState & ioAppState,
     else
     {
       // --- JOIN MATCH TAB ---
-      ImGui::TextColored(ImVec4(0.00f, 0.90f, 0.96f, 1.0f), "AUTOMATIC LAN ROOM DISCOVERY (UDP Port 27016)");
+      const bool isClientOrConnecting = _NetSession && ( _NetSession->GetRole() == NetRole::Client ) &&
+                                        ( NetState::Connecting == netState || NetState::Connected == netState );
+
+      // 1. PRIMARY: JOIN VIA ROOM CODE
+      ImGui::TextColored(ImVec4(0.00f, 0.95f, 1.00f, 1.0f), "JOIN VIA ROOM CODE");
+      ImGui::Separator();
+      ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+      ImGui::BeginChild("##JoinCodeCard", ImVec2(0.0f, 96.0f), true, ImGuiWindowFlags_NoScrollbar);
+      {
+        ImGui::SetCursorPos(ImVec2(16.0f, 10.0f));
+        ImGui::TextColored(ImVec4(0.70f, 0.80f, 0.90f, 1.0f), "Enter or paste the Room Code provided by the host:");
+
+        ImGui::SetCursorPos(ImVec2(16.0f, 30.0f));
+        ImGui::SetNextItemWidth(260.0f);
+        ImFont * monoFont = _Fonts._MonoFont ? _Fonts._MonoFont : ImGui::GetFont();
+        ImGui::PushFont(monoFont);
+        ImGui::InputTextWithHint("##RoomCodeInput", "e.g. 92FA-K49B", _MpState->_RoomCodeInputBuf, sizeof(_MpState->_RoomCodeInputBuf));
+        ImGui::PopFont();
+
+        ImGui::SameLine(0.0f, 10.0f);
+        if ( ImGui::Button("PASTE", ImVec2(80.0f, 32.0f)) )
+        {
+          const char * clip = ImGui::GetClipboardText();
+          if ( clip )
+          {
+            std::snprintf(_MpState->_RoomCodeInputBuf, sizeof(_MpState->_RoomCodeInputBuf), "%s", clip);
+            // Trim whitespace
+            char * end = _MpState->_RoomCodeInputBuf + std::strlen(_MpState->_RoomCodeInputBuf) - 1;
+            while ( end >= _MpState->_RoomCodeInputBuf && ( *end == ' ' || *end == '\r' || *end == '\n' || *end == '\t' ) )
+            {
+              *end = '\0';
+              --end;
+            }
+          }
+        }
+
+        std::string resolvedIP;
+        uint16_t    resolvedPort = 0;
+        const bool  hasValidCode = RoomCode::Decode(_MpState->_RoomCodeInputBuf, resolvedIP, resolvedPort);
+
+        ImGui::SameLine(0.0f, 16.0f);
+        if ( !isClientOrConnecting )
+        {
+          ImGui::BeginDisabled(!hasValidCode);
+          if ( ImGui::Button("CONNECT VIA ROOM CODE", ImVec2(240.0f, 32.0f)) )
+          {
+            if ( _Audio ) _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
+            std::snprintf(_MpState->_JoinAddressBuf, sizeof(_MpState->_JoinAddressBuf), "%s", resolvedIP.c_str());
+            _MpState->_OnlinePort = resolvedPort;
+            _MpState->_RequestJoinOnline = true;
+          }
+          ImGui::EndDisabled();
+        }
+        else
+        {
+          if ( ImGui::Button("DISCONNECT", ImVec2(240.0f, 32.0f)) )
+          {
+            if ( _Audio ) _Audio->PlaySound2D("ui_back", 0.8f, 1.0f);
+            _MpState->_RequestDisconnectOnline = true;
+          }
+        }
+
+        // Live validation feedback
+        ImGui::SetCursorPos(ImVec2(16.0f, 68.0f));
+        if ( hasValidCode )
+        {
+          ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f), "Valid Room Code -> resolves to %s:%u", resolvedIP.c_str(), static_cast<unsigned int>(resolvedPort));
+        }
+        else if ( _MpState->_RoomCodeInputBuf[0] != '\0' )
+        {
+          ImGui::TextColored(ImVec4(1.00f, 0.55f, 0.25f, 1.0f), "Invalid room code format (check for typos, e.g. 92FA-K49B)");
+        }
+        else
+        {
+          ImGui::TextDisabled("Codes are 8 or 11 characters (case-insensitive, hyphens optional).");
+        }
+      }
+      ImGui::EndChild();
+
+      // 2. SECONDARY: AUTOMATIC LAN DISCOVERY
+      ImGui::Dummy(ImVec2(0.0f, 6.0f));
+      ImGui::TextColored(ImVec4(0.00f, 0.90f, 0.96f, 1.0f), "LOCAL NETWORK (LAN) DISCOVERY");
       ImGui::Separator();
 
-      ImGui::BeginChild("##LanRoomsList", ImVec2(0.0f, 165.0f), true);
+      ImGui::BeginChild("##LanRoomsList", ImVec2(0.0f, 110.0f), true);
       const std::vector<LanRoomInfo> emptyRooms;
       const std::vector<LanRoomInfo> & rooms = _NetSession ? _NetSession->GetDiscoveredLanRooms() : emptyRooms;
 
       if ( rooms.empty() )
       {
-        ImGui::Dummy(ImVec2(0.0f, 42.0f));
+        ImGui::Dummy(ImVec2(0.0f, 24.0f));
         const char * scanMsg = "Scanning local network (and localhost 127.0.0.1) for active rooms...";
         const float tw = ImGui::CalcTextSize(scanMsg).x;
         ImGui::SetCursorPosX(std::max(12.0f, ( ImGui::GetContentRegionAvail().x - tw ) * 0.5f));
@@ -983,7 +1096,7 @@ void TetrisHud::DrawOnlineLobbyPage( TetrisAppState & ioAppState,
           ImGui::SameLine(560.0f);
           ImGui::TextDisabled("%s:%u", r._Address.c_str(), static_cast<unsigned int>(r._GamePort));
           ImGui::SameLine(ImGui::GetContentRegionAvail().x - 125.0f);
-          if ( ImGui::Button("JOIN ROOM", ImVec2(120.0f, 28.0f)) )
+          if ( ImGui::Button("JOIN ROOM", ImVec2(120.0f, 26.0f)) )
           {
             if ( _Audio ) _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
             std::snprintf(_MpState->_JoinAddressBuf, sizeof(_MpState->_JoinAddressBuf), "%s", r._Address.c_str());
@@ -996,37 +1109,21 @@ void TetrisHud::DrawOnlineLobbyPage( TetrisAppState & ioAppState,
       }
       ImGui::EndChild();
 
-      ImGui::Dummy(ImVec2(0.0f, 6.0f));
-      ImGui::TextColored(ImVec4(0.00f, 0.90f, 0.96f, 1.0f), "DIRECT IP / INTERNET CONNECTION");
-      ImGui::Separator();
+      // 3. TERTIARY: DIRECT IP / PORT
       ImGui::Dummy(ImVec2(0.0f, 4.0f));
-
+      ImGui::TextColored(ImVec4(0.70f, 0.80f, 0.90f, 1.0f), "Direct IP / VPN Connection:");
       ImGui::SetNextItemWidth(260.0f);
-      ImGui::InputText("Host IP / Hostname / Room Code", _MpState->_JoinAddressBuf, sizeof(_MpState->_JoinAddressBuf));
+      ImGui::InputText("##DirectIP", _MpState->_JoinAddressBuf, sizeof(_MpState->_JoinAddressBuf));
 
-      std::string resolvedIP;
-      uint16_t    resolvedPort = 0;
-      const bool  isRoomCode   = RoomCode::Decode(_MpState->_JoinAddressBuf, resolvedIP, resolvedPort);
-      if ( isRoomCode )
-      {
-        ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f), "Room code OK -> %s:%u", resolvedIP.c_str(), static_cast<unsigned int>(resolvedPort));
-      }
-      else if ( RoomCode::LooksLikeRoomCode(_MpState->_JoinAddressBuf) )
-      {
-        ImGui::TextColored(ImVec4(1.00f, 0.55f, 0.25f, 1.0f), "Invalid room code (typo?)");
-      }
-
-      ImGui::SameLine(0.0f, 24.0f);
-      ImGui::SetNextItemWidth(110.0f);
+      ImGui::SameLine(0.0f, 14.0f);
+      ImGui::SetNextItemWidth(100.0f);
       if ( ImGui::InputInt("Port##JoinPort", &_MpState->_OnlinePort, 0, 0) )
         _MpState->_OnlinePort = MathUtil::Clamp(_MpState->_OnlinePort, 1024, 65535);
 
-      ImGui::SameLine(0.0f, 24.0f);
-      const bool isClientOrConnecting = _NetSession && ( _NetSession->GetRole() == NetRole::Client ) &&
-                                        ( NetState::Connecting == netState || NetState::Connected == netState );
+      ImGui::SameLine(0.0f, 16.0f);
       if ( !isClientOrConnecting )
       {
-        if ( GameMenuUI::DrawActionButton("CONNECT TO HOST", Vec2(210.0f, 38.0f), true, _Theme, _Fonts) )
+        if ( ImGui::Button("DIRECT CONNECT", ImVec2(160.0f, 26.0f)) )
         {
           if ( _Audio ) _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
           _MpState->_RequestJoinOnline = true;
@@ -1034,7 +1131,7 @@ void TetrisHud::DrawOnlineLobbyPage( TetrisAppState & ioAppState,
       }
       else
       {
-        if ( GameMenuUI::DrawActionButton("DISCONNECT", Vec2(210.0f, 38.0f), false, _Theme, _Fonts) )
+        if ( ImGui::Button("DISCONNECT##Direct", ImVec2(160.0f, 26.0f)) )
         {
           if ( _Audio ) _Audio->PlaySound2D("ui_back", 0.8f, 1.0f);
           _MpState->_RequestDisconnectOnline = true;

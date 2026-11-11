@@ -52,6 +52,7 @@ struct TetrisMultiplayerState
   bool                    _RequestStartOnlineMatch= false;
 
   // Automatic port forwarding (UPnP) & room code
+  char                    _RoomCodeInputBuf[32]   = "";
   bool                    _EnableUpnp             = true;
   UpnpStatusInfo          _UpnpInfo;
   float                   _CopiedFeedbackTimer    = 0.0f;

@@ -150,7 +150,8 @@ bool NetSession::StartClient( const std::string & iAddress, uint16_t iPort )
 
   ENetAddress address;
   address.port = iPort;
-  if ( enet_address_set_host( &address, iAddress.c_str() ) != 0 )
+  if ( enet_address_set_host_ip( &address, iAddress.c_str() ) != 0 &&
+       enet_address_set_host( &address, iAddress.c_str() ) != 0 )
   {
     enet_host_destroy( _Impl->_Host );
     _Impl->_Host = nullptr;
@@ -168,6 +169,8 @@ bool NetSession::StartClient( const std::string & iAddress, uint16_t iPort )
   // Ping frequently for accurate low-latency RTT telemetry
   enet_peer_ping_interval( _Impl->_Peer, 250 );
   enet_peer_timeout( _Impl->_Peer, 16, 3000, 8000 );
+
+  enet_host_flush( _Impl->_Host );
 
   _Role                = NetRole::Client;
   _State               = NetState::Connecting;
@@ -467,6 +470,11 @@ void NetSession::Poll( double iCurrentTimeSec,
     default:
       break;
     }
+  }
+
+  if ( _Impl->_Host )
+  {
+    enet_host_flush( _Impl->_Host );
   }
 }
 

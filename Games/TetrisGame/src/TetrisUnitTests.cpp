@@ -605,7 +605,7 @@ bool TetrisUnitTests::TestOnlineLoopbackSession()
   const uint16_t testGamePort = 27098;
   const uint16_t testDiscPort = 27099;
 
-  if ( !hostSession.StartHost(testGamePort, "UnitTestHost", "VS Battle | Lvl 1", testDiscPort) )
+  if ( !hostSession.StartHost(testGamePort, "UnitTestHost", "VS Battle | Lvl 1", testDiscPort, false /* disable UPnP for unit test */) )
   {
     std::cout << "[INFO] Loopback UDP bind restricted in current environment. Skipping live socket loopback check." << std::endl;
     return true;
@@ -623,7 +623,7 @@ bool TetrisUnitTests::TestOnlineLoopbackSession()
   bool discA = false, discB = false;
 
   double simTime = 1.0;
-  for ( int step = 0; step < 50; ++step )
+  for ( int step = 0; step < 100; ++step )
   {
     bool connH = false, connC = false;
     hostSession.Poll(simTime, hostPkts, connH, discA);
