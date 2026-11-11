@@ -2,6 +2,11 @@
 #include "TetrisGameApp.h"
 #include "TetrisUnitTests.h"
 
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
@@ -36,6 +41,16 @@ static void glfw_error_callback( int error, const char * description )
 // ----------------------------------------------------------------------------
 int main( int iArgc, char ** iArgv )
 {
+#if defined(_WIN32)
+  if ( AttachConsole(ATTACH_PARENT_PROCESS) )
+  {
+    FILE * dummy = nullptr;
+    freopen_s(&dummy, "CONOUT$", "w", stdout);
+    freopen_s(&dummy, "CONOUT$", "w", stderr);
+    std::ios::sync_with_stdio();
+  }
+#endif
+
   RTRT::PathUtils::Initialize( ( iArgc > 0 ) ? iArgv[0] : nullptr );
 
   std::string screenshotPath;

@@ -67,8 +67,7 @@ static bool IsValidRepoRoot( const fs::path & iPath )
 {
   std::error_code ec;
   return fs::exists( iPath / "Assets", ec ) &&
-         fs::exists( iPath / "Shaders", ec ) &&
-         fs::exists( iPath / "Resources", ec );
+         fs::exists( iPath / "Shaders", ec );
 }
 
 // ----------------------------------------------------------------------------
@@ -138,7 +137,7 @@ static fs::path ResolveRepoRoot()
 
   if ( !S_DidWarnMissingRepoRoot )
   {
-    std::cerr << "PathUtils : Failed to locate repo root containing Assets/Shaders/Resources."
+    std::cerr << "PathUtils : Failed to locate repo root containing Assets/Shaders."
               << " Current working directory is " << fs::current_path().string();
     if ( !S_ExecutableDir.empty() )
       std::cerr << " executable directory is " << S_ExecutableDir.string();

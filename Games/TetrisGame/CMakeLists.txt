@@ -73,6 +73,10 @@ if(WIN32)
   set_target_properties(TetrisGame PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "$(Project)$(Configuration)"
   )
+  # Hide console window in Release builds while preserving standard main() entry point
+  target_link_options(TetrisGame PRIVATE
+    "$<$<CONFIG:Release>:/SUBSYSTEM:WINDOWS;/ENTRY:mainCRTStartup>"
+  )
 endif()
 
 if(RTRT_HAS_OIDN AND OIDN_RUNTIME_FILES)
@@ -97,3 +101,71 @@ if(BUILD_TESTING)
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   )
 endif()
+
+# -----------------------------------------------------------------------------
+# Installation & Packaging rules (CPack Component: TetrisGame)
+# -----------------------------------------------------------------------------
+install(TARGETS TetrisGame
+  RUNTIME DESTINATION .
+  COMPONENT TetrisGame
+)
+
+if(RTRT_HAS_OIDN AND OIDN_RUNTIME_FILES)
+  install(FILES ${OIDN_RUNTIME_FILES}
+    DESTINATION .
+    COMPONENT TetrisGame
+  )
+endif()
+
+# Shaders
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/Shaders
+  DESTINATION .
+  COMPONENT TetrisGame
+  PATTERN "*.tmp" EXCLUDE
+  PATTERN ".DS_Store" EXCLUDE
+)
+
+# Packaged Background HDRs (6 curated skyboxes)
+install(FILES
+  ${CMAKE_SOURCE_DIR}/Assets/HDR/syferfontein_18d_clear_1k.hdr
+  ${CMAKE_SOURCE_DIR}/Assets/HDR/alps_field_2k.hdr
+  ${CMAKE_SOURCE_DIR}/Assets/HDR/konzerthaus_4k.hdr
+  ${CMAKE_SOURCE_DIR}/Assets/HDR/peppermint_powerplant_4k.hdr
+  ${CMAKE_SOURCE_DIR}/Assets/HDR/sunset.hdr
+  ${CMAKE_SOURCE_DIR}/Assets/HDR/artist_workshop_1k.hdr
+  DESTINATION Assets/HDR
+  COMPONENT TetrisGame
+)
+
+# UI Fonts
+install(FILES
+  ${CMAKE_SOURCE_DIR}/Dependencies/imgui/misc/fonts/Roboto-Medium.ttf
+  ${CMAKE_SOURCE_DIR}/Dependencies/imgui/misc/fonts/Cousine-Regular.ttf
+  DESTINATION Assets/Fonts
+  COMPONENT TetrisGame
+)
+install(FILES
+  ${CMAKE_SOURCE_DIR}/Dependencies/imgui/misc/fonts/Roboto-Medium.ttf
+  ${CMAKE_SOURCE_DIR}/Dependencies/imgui/misc/fonts/Cousine-Regular.ttf
+  DESTINATION Dependencies/imgui/misc/fonts
+  COMPONENT TetrisGame
+)
+
+# Resources directory for backward compatibility
+install(DIRECTORY DESTINATION Resources COMPONENT TetrisGame)
+
+# Player README
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/README_DIST.txt
+  DESTINATION .
+  RENAME README.txt
+  COMPONENT TetrisGame
+)
+
+# Microsoft Visual C++ Redistributable (if downloaded or present)
+if(EXISTS "${CMAKE_BINARY_DIR}/vc_redist.x64.exe")
+  install(FILES "${CMAKE_BINARY_DIR}/vc_redist.x64.exe"
+    DESTINATION .
+    COMPONENT TetrisGame
+  )
+endif()
+

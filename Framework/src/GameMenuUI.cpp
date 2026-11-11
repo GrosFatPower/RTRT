@@ -41,6 +41,7 @@ std::string ResolveFontPath( const std::string & iFontFile )
   namespace fs = std::filesystem;
   const std::vector<fs::path> candidates =
   {
+    fs::path(PathUtils::GetAssetPath("Fonts/" + iFontFile)),
     fs::path("Dependencies") / "imgui" / "misc" / "fonts" / iFontFile,
     fs::path("..") / "Dependencies" / "imgui" / "misc" / "fonts" / iFontFile,
     fs::path("..") / ".." / "Dependencies" / "imgui" / "misc" / "fonts" / iFontFile,

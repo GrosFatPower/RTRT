@@ -216,3 +216,38 @@ elseif(ARCH_X64)
 else()
   message(STATUS "SIMD Support: Scalar fallback")
 endif()
+
+# -----------------------------------------------------------------------------
+# CPack Packaging Configuration
+# -----------------------------------------------------------------------------
+set(CPACK_PACKAGE_NAME "TetrisGame")
+set(CPACK_PACKAGE_VENDOR "RTRT Project")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Real-Time Path-Traced Multiplayer Tetris")
+set(CPACK_PACKAGE_VERSION_MAJOR "1")
+set(CPACK_PACKAGE_VERSION_MINOR "0")
+set(CPACK_PACKAGE_VERSION_PATCH "0")
+set(CPACK_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "TetrisGame")
+set(CPACK_STRIP_FILES TRUE)
+set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/Games/TetrisGame/README_DIST.txt")
+
+# Package only the TetrisGame component
+set(CPACK_COMPONENTS_ALL TetrisGame)
+set(CPACK_ARCHIVE_COMPONENT_INSTALL OFF)
+
+# Default archive generators
+set(CPACK_GENERATOR "ZIP;7Z")
+set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-v${CPACK_PACKAGE_VERSION}-win64")
+
+# Optional NSIS installer support if makensis is available
+find_program(MAKENSIS_EXECUTABLE makensis)
+if(MAKENSIS_EXECUTABLE)
+  list(APPEND CPACK_GENERATOR "NSIS")
+  set(CPACK_NSIS_DISPLAY_NAME "Tetris Game (Path-Traced)")
+  set(CPACK_NSIS_PACKAGE_NAME "TetrisGame")
+  set(CPACK_NSIS_MODIFY_PATH OFF)
+  set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+  set(CPACK_NSIS_MENU_LINKS "TetrisGame.exe" "Tetris Game" "README.txt" "How to Play")
+endif()
+
+include(CPack)

@@ -122,11 +122,8 @@ TetrisSceneManager::TetrisSceneManager()
     "alps_field_2k.hdr",
     "konzerthaus_4k.hdr",
     "peppermint_powerplant_4k.hdr",
-    "spiaggia_di_mondello_4k_new.hdr",
     "sunset.hdr",
-    "white_cliff_top_1k.hdr",
-    "artist_workshop_1k.hdr",
-    "studio_small_05_1k.hdr"
+    "artist_workshop_1k.hdr"
   };
 
   RefillBackgroundBag();

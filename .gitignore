@@ -29,6 +29,7 @@ Assets/.DS_Store?
 .vs/
 Bin/
 Build/
+Dist/
 tmp/
 Screenshots/
 Tests/Artifacts/
