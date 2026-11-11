@@ -7,6 +7,8 @@
 #include <upnpcommands.h>
 #include <upnperrors.h>
 
+#include <iostream>
+
 extern "C" int addr_is_reserved( const char * addr_str );
 
 #ifdef _WIN32
@@ -186,7 +188,10 @@ std::string UpnpService::ResolvePublicIP( unsigned int iTimeoutMs )
   for ( const auto & s : stunServers )
   {
     if ( QueryStunServer( s.host, s.port, iTimeoutMs, publicIp ) )
+    {
+      std::cout << "[NET-STUN] Public WAN IP discovered via STUN (" << s.host << "): " << publicIp << std::endl;
       break;
+    }
   }
 
   // 2. Secondary: Plain HTTP with trailing slashes if STUN is blocked
@@ -200,7 +205,10 @@ std::string UpnpService::ResolvePublicIP( unsigned int iTimeoutMs )
     for ( const char * url : httpEndpoints )
     {
       if ( QueryHttpServer( url, publicIp ) )
+      {
+        std::cout << "[NET-HTTP] Public WAN IP discovered via HTTP fallback (" << url << "): " << publicIp << std::endl;
         break;
+      }
     }
   }
 
@@ -313,6 +321,9 @@ void UpnpService::RunMapping( uint16_t iInternalPort, uint16_t iExternalPort, co
 {
   UpnpStatusInfo status = GetStatus();
 
+  std::cout << "[UPnP] Worker starting for UDP internal port " << iInternalPort << " -> external port " << iExternalPort
+            << " (PerformMapping: " << ( iPerformPortMapping ? "yes" : "no" ) << ")" << std::endl;
+
   auto stopRequested = [this]() {
     std::lock_guard<std::mutex> lock( _Mutex );
     return _StopRequested;
@@ -325,6 +336,11 @@ void UpnpService::RunMapping( uint16_t iInternalPort, uint16_t iExternalPort, co
     status._ExternalIP = routableIp;
     status._RoomCode   = RoomCode::Encode( routableIp, iExternalPort );
     SetStatus( status );
+    std::cout << "[UPnP] Public WAN IP verified: " << routableIp << " -> Room Code: " << status._RoomCode << std::endl;
+  }
+  else
+  {
+    std::cerr << "[UPnP] Warning: Failed to discover public WAN IP via STUN or HTTP reflection!" << std::endl;
   }
 
   if ( !iPerformPortMapping || stopRequested() )
@@ -343,9 +359,12 @@ void UpnpService::RunMapping( uint16_t iInternalPort, uint16_t iExternalPort, co
   int discoverError = 0;
   UPNPDev * devList = nullptr;
 
-  if ( !iLocalInterface.empty() && iLocalInterface != "127.0.0.1" )
+  const std::string iface = ( !iLocalInterface.empty() && iLocalInterface != "127.0.0.1" ) ? iLocalInterface : "";
+  std::cout << "[UPnP] Searching for IGD router via SSDP (interface: " << ( iface.empty() ? "auto" : iface ) << ")..." << std::endl;
+
+  if ( !iface.empty() )
   {
-    devList = upnpDiscover( 2000, iLocalInterface.c_str(), nullptr, UPNP_LOCAL_PORT_ANY, 0, 2, &discoverError );
+    devList = upnpDiscover( 2000, iface.c_str(), nullptr, UPNP_LOCAL_PORT_ANY, 0, 2, &discoverError );
   }
 
   if ( !devList && !stopRequested() )
@@ -362,7 +381,19 @@ void UpnpService::RunMapping( uint16_t iInternalPort, uint16_t iExternalPort, co
   int  igdStatus    = UPNP_NO_IGD;
 
   if ( devList )
+  {
     igdStatus = UPNP_GetValidIGD( devList, &urls, &data, lanAddr, sizeof( lanAddr ), wanAddr, sizeof( wanAddr ) );
+    std::cout << "[UPnP] SSDP device discovery finished. UPNP_GetValidIGD status code: " << igdStatus
+              << " (1=Valid IGD, 2=Double NAT / Private WAN, 3=Connected, 0=No IGD)" << std::endl;
+    std::cout << "[UPnP] Router local LAN IP: " << ( lanAddr[0] ? lanAddr : "none" )
+              << ", Router WAN IP: " << ( wanAddr[0] ? wanAddr : "none" ) << std::endl;
+    if ( urls.controlURL )
+      std::cout << "[UPnP] Router Control URL: " << urls.controlURL << std::endl;
+  }
+  else
+  {
+    std::cerr << "[UPnP] SSDP discovery found no UPnP devices on local network (discoverError=" << discoverError << ")." << std::endl;
+  }
 
   if ( devList )
     freeUPNPDevlist( devList );
@@ -384,6 +415,7 @@ void UpnpService::RunMapping( uint16_t iInternalPort, uint16_t iExternalPort, co
     status._State         = UpnpState::NotAvailable;
     status._StatusMessage = "No UPnP router found (UPnP disabled on router?)";
     SetStatus( status );
+    std::cerr << "[UPnP] " << status._StatusMessage << std::endl;
     _Running = false;
     return;
   }
@@ -398,18 +430,28 @@ void UpnpService::RunMapping( uint16_t iInternalPort, uint16_t iExternalPort, co
   const int ipResult = UPNP_GetExternalIPAddress( urls.controlURL, data.first.servicetype, externalIp );
   const bool hasExternalIp = ( UPNPCOMMAND_SUCCESS == ipResult ) && ( externalIp[0] != '\0' );
 
+  std::cout << "[UPnP] UPNP_GetExternalIPAddress result: " << ( hasExternalIp ? externalIp : "failed/empty" )
+            << " (ipResult=" << ipResult << ")" << std::endl;
+
   if ( igdStatus == UPNP_DISCONNECTED_IGD )
   {
     FreeUPNPUrls( &urls );
     status._State         = UpnpState::NotAvailable;
     status._StatusMessage = "Router reports no Internet connection";
     SetStatus( status );
+    std::cerr << "[UPnP] " << status._StatusMessage << std::endl;
     _Running = false;
     return;
   }
 
   const bool isDoubleNat = ( igdStatus == UPNP_PRIVATEIP_IGD ) ||
                            ( hasExternalIp && ( 0 != addr_is_reserved( externalIp ) ) );
+  if ( isDoubleNat )
+  {
+    std::cout << "[UPnP] Notice: Double NAT / CGNAT detected. Router external IP ("
+              << ( externalIp[0] ? externalIp : "none" ) << ") is private/reserved, while public WAN IP is "
+              << routableIp << "." << std::endl;
+  }
 
   // 4. Port mapping (UDP). Some routers refuse a timed lease, so fall back to permanent (0).
   char extPortStr[16] = {};
@@ -417,10 +459,13 @@ void UpnpService::RunMapping( uint16_t iInternalPort, uint16_t iExternalPort, co
   std::snprintf( extPortStr, sizeof( extPortStr ), "%u", static_cast<unsigned int>( iExternalPort ) );
   std::snprintf( intPortStr, sizeof( intPortStr ), "%u", static_cast<unsigned int>( iInternalPort ) );
 
+  std::cout << "[UPnP] Requesting port mapping: UDP external " << extPortStr << " -> " << lanAddr << ":" << intPortStr << "..." << std::endl;
+
   int mapResult = UPNP_AddPortMapping( urls.controlURL, data.first.servicetype, extPortStr, intPortStr,
                                        lanAddr, iDescription.c_str(), "UDP", nullptr, "7200" );
   if ( UPNPCOMMAND_SUCCESS != mapResult )
   {
+    std::cout << "[UPnP] Lease 7200s returned " << mapResult << " (" << strupnperror( mapResult ) << "), retrying with permanent lease 0s..." << std::endl;
     mapResult = UPNP_AddPortMapping( urls.controlURL, data.first.servicetype, extPortStr, intPortStr,
                                      lanAddr, iDescription.c_str(), "UDP", nullptr, "0" );
   }
@@ -433,9 +478,12 @@ void UpnpService::RunMapping( uint16_t iInternalPort, uint16_t iExternalPort, co
     status._State         = UpnpState::Failed;
     status._StatusMessage = msg;
     SetStatus( status );
+    std::cerr << "[UPnP] ERROR: " << msg << " (code: " << mapResult << ")" << std::endl;
     _Running = false;
     return;
   }
+
+  std::cout << "[UPnP] SUCCESS: UDP port " << extPortStr << " mapped successfully on router!" << std::endl;
 
   // Prefer STUN's verified public IP; fall back to router's external IP only if it's genuinely public
   if ( routableIp.empty() && hasExternalIp && ( 0 == addr_is_reserved( externalIp ) ) )

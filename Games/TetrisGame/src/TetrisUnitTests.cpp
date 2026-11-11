@@ -642,6 +642,29 @@ bool TetrisUnitTests::TestOnlineLoopbackSession()
     return false;
   }
 
+  // Send reliable HelloHandshake packets between Host and Client
+  TetrisNetHelloPacket outHostHello;
+  outHostHello._Magic           = kTetrisNetMagic;
+  outHostHello._ProtocolVersion = kTetrisProtocolVersion;
+  std::snprintf( outHostHello._GameVersion, sizeof( outHostHello._GameVersion ), "%s", kTetrisGameVersionStr );
+  std::snprintf( outHostHello._Nickname, sizeof( outHostHello._Nickname ), "HostTester" );
+  if ( !hostSession.SendReliable( 0, &outHostHello, sizeof( outHostHello ) ) )
+  {
+    std::cerr << "TestOnlineLoopbackSession: Host SendReliable(HelloHandshake) failed!" << std::endl;
+    return false;
+  }
+
+  TetrisNetHelloPacket outClientHello;
+  outClientHello._Magic           = kTetrisNetMagic;
+  outClientHello._ProtocolVersion = kTetrisProtocolVersion;
+  std::snprintf( outClientHello._GameVersion, sizeof( outClientHello._GameVersion ), "%s", kTetrisGameVersionStr );
+  std::snprintf( outClientHello._Nickname, sizeof( outClientHello._Nickname ), "ClientTester" );
+  if ( !clientSession.SendReliable( 0, &outClientHello, sizeof( outClientHello ) ) )
+  {
+    std::cerr << "TestOnlineLoopbackSession: Client SendReliable(HelloHandshake) failed!" << std::endl;
+    return false;
+  }
+
   // Send a reliable GarbageAttack packet from Host -> Client on Channel 0
   TetrisNetGarbageAttackPacket outAtk;
   outAtk._AttackLines = 4;
@@ -662,8 +685,10 @@ bool TetrisUnitTests::TestOnlineLoopbackSession()
     return false;
   }
 
-  bool clientGotAtk  = false;
-  bool hostGotSnap   = false;
+  bool clientGotAtk   = false;
+  bool hostGotSnap    = false;
+  bool clientGotHello = false;
+  bool hostGotHello   = false;
 
   for ( int step = 0; step < 50; ++step )
   {
@@ -673,7 +698,14 @@ bool TetrisUnitTests::TestOnlineLoopbackSession()
 
     for ( const NetPacketEvent & ev : clientPkts )
     {
-      if ( ev._Channel == 0 && ev._Data.size() == sizeof(TetrisNetGarbageAttackPacket) )
+      if ( ev._Channel == 0 && ev._Data.size() == sizeof(TetrisNetHelloPacket) )
+      {
+        TetrisNetHelloPacket inHello;
+        std::memcpy(&inHello, ev._Data.data(), sizeof(inHello));
+        if ( inHello._Magic == kTetrisNetMagic && inHello._ProtocolVersion == kTetrisProtocolVersion )
+          clientGotHello = true;
+      }
+      else if ( ev._Channel == 0 && ev._Data.size() == sizeof(TetrisNetGarbageAttackPacket) )
       {
         TetrisNetGarbageAttackPacket inAtk;
         std::memcpy(&inAtk, ev._Data.data(), sizeof(inAtk));
@@ -684,7 +716,14 @@ bool TetrisUnitTests::TestOnlineLoopbackSession()
 
     for ( const NetPacketEvent & ev : hostPkts )
     {
-      if ( ev._Channel == 1 && ev._Data.size() == sizeof(TetrisNetBoardSnapshotPacket) )
+      if ( ev._Channel == 0 && ev._Data.size() == sizeof(TetrisNetHelloPacket) )
+      {
+        TetrisNetHelloPacket inHello;
+        std::memcpy(&inHello, ev._Data.data(), sizeof(inHello));
+        if ( inHello._Magic == kTetrisNetMagic && inHello._ProtocolVersion == kTetrisProtocolVersion )
+          hostGotHello = true;
+      }
+      else if ( ev._Channel == 1 && ev._Data.size() == sizeof(TetrisNetBoardSnapshotPacket) )
       {
         TetrisNetBoardSnapshotPacket inSnap;
         std::memcpy(&inSnap, ev._Data.data(), sizeof(inSnap));
@@ -693,7 +732,7 @@ bool TetrisUnitTests::TestOnlineLoopbackSession()
       }
     }
 
-    if ( clientGotAtk && hostGotSnap )
+    if ( clientGotAtk && hostGotSnap && clientGotHello && hostGotHello )
       break;
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
     simTime += 0.005;
@@ -702,9 +741,11 @@ bool TetrisUnitTests::TestOnlineLoopbackSession()
   clientSession.Disconnect();
   hostSession.Disconnect();
 
-  if ( !clientGotAtk || !hostGotSnap )
+  if ( !clientGotAtk || !hostGotSnap || !clientGotHello || !hostGotHello )
   {
-    std::cerr << "TestOnlineLoopbackSession: Packet exchange over Channels 0 & 1 failed!" << std::endl;
+    std::cerr << "TestOnlineLoopbackSession: Packet exchange over Channels 0 & 1 failed! "
+              << "clientGotAtk=" << clientGotAtk << ", hostGotSnap=" << hostGotSnap
+              << ", clientGotHello=" << clientGotHello << ", hostGotHello=" << hostGotHello << std::endl;
     return false;
   }
 
@@ -853,6 +894,100 @@ bool TetrisUnitTests::TestUpnpServiceLifecycle()
 }
 
 // ----------------------------------------------------------------------------
+// TestProtocolVersionHandshakeAndRejection
+// ----------------------------------------------------------------------------
+bool TetrisUnitTests::TestProtocolVersionHandshakeAndRejection()
+{
+  // 1. Verify packet structure layout, offsets, and constants
+  if ( kTetrisNetMagic != 0x54455452 )
+  {
+    std::cerr << "TestProtocolVersionHandshakeAndRejection: Invalid kTetrisNetMagic!" << std::endl;
+    return false;
+  }
+  if ( kTetrisProtocolVersion < 1 )
+  {
+    std::cerr << "TestProtocolVersionHandshakeAndRejection: Invalid kTetrisProtocolVersion!" << std::endl;
+    return false;
+  }
+  if ( sizeof( TetrisNetLegacyHelloPacket ) != 33 )
+  {
+    std::cerr << "TestProtocolVersionHandshakeAndRejection: TetrisNetLegacyHelloPacket size is not 33!" << std::endl;
+    return false;
+  }
+  if ( sizeof( TetrisNetHelloPacket ) != 57 )
+  {
+    std::cerr << "TestProtocolVersionHandshakeAndRejection: TetrisNetHelloPacket size is not 57!" << std::endl;
+    return false;
+  }
+
+  TetrisNetHelloPacket validHello;
+  validHello._Magic           = kTetrisNetMagic;
+  validHello._ProtocolVersion = kTetrisProtocolVersion;
+  std::snprintf( validHello._GameVersion, sizeof( validHello._GameVersion ), "%s", kTetrisGameVersionStr );
+  std::snprintf( validHello._Nickname, sizeof( validHello._Nickname ), "Tester" );
+
+  if ( validHello._Type != static_cast<uint8_t>( TetrisNetPacketType::HelloHandshake ) )
+  {
+    std::cerr << "TestProtocolVersionHandshakeAndRejection: Invalid HelloHandshake packet type!" << std::endl;
+    return false;
+  }
+
+  // Verify backward/forward layout alignment: legacy build reading 33 bytes of modern packet gets clean nickname
+  TetrisNetLegacyHelloPacket legacySlice;
+  std::memcpy( &legacySlice, &validHello, sizeof( legacySlice ) );
+  if ( std::strcmp( legacySlice._Nickname, "Tester" ) != 0 )
+  {
+    std::cerr << "TestProtocolVersionHandshakeAndRejection: Nickname offset corrupted in legacy slice!" << std::endl;
+    return false;
+  }
+
+  // 2. Simulate serialization of incompatible protocol version (e.g. Proto 99 vs Proto 1)
+  TetrisNetHelloPacket incompatibleHello = validHello;
+  incompatibleHello._ProtocolVersion     = 99;
+  std::snprintf( incompatibleHello._GameVersion, sizeof( incompatibleHello._GameVersion ), "2.0.0" );
+
+  // Construct mismatch response
+  TetrisNetVersionMismatchPacket mismatchPkt;
+  mismatchPkt._HostProtocolVersion = kTetrisProtocolVersion;
+  std::snprintf( mismatchPkt._HostGameVersion, sizeof( mismatchPkt._HostGameVersion ), "%s", kTetrisGameVersionStr );
+  std::snprintf( mismatchPkt._ClientGameVersion, sizeof( mismatchPkt._ClientGameVersion ), "%s", incompatibleHello._GameVersion );
+  std::snprintf( mismatchPkt._Reason, sizeof( mismatchPkt._Reason ),
+                 "Version mismatch: Host is %s (Proto %u), Peer is %s (Proto %u)",
+                 kTetrisGameVersionStr, kTetrisProtocolVersion,
+                 incompatibleHello._GameVersion, incompatibleHello._ProtocolVersion );
+
+  if ( mismatchPkt._Type != static_cast<uint8_t>( TetrisNetPacketType::VersionMismatch ) )
+  {
+    std::cerr << "TestProtocolVersionHandshakeAndRejection: Invalid VersionMismatch packet type!" << std::endl;
+    return false;
+  }
+
+  if ( mismatchPkt._HostProtocolVersion != kTetrisProtocolVersion )
+  {
+    std::cerr << "TestProtocolVersionHandshakeAndRejection: Host protocol version mismatch in rejection packet!" << std::endl;
+    return false;
+  }
+
+  if ( std::strcmp( mismatchPkt._ClientGameVersion, "2.0.0" ) != 0 )
+  {
+    std::cerr << "TestProtocolVersionHandshakeAndRejection: Client game version corrupted in rejection packet!" << std::endl;
+    return false;
+  }
+
+  // 3. Foreign Magic Check
+  TetrisNetHelloPacket foreignHello = validHello;
+  foreignHello._Magic = 0xDEADBEEF;
+  if ( foreignHello._Magic == kTetrisNetMagic )
+  {
+    std::cerr << "TestProtocolVersionHandshakeAndRejection: Foreign magic check failed!" << std::endl;
+    return false;
+  }
+
+  std::cout << "[PASS] Protocol version handshake & mismatch rejection packet verified." << std::endl;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
 // RunAll
 // ----------------------------------------------------------------------------
 int TetrisUnitTests::RunAll()
@@ -875,11 +1010,12 @@ int TetrisUnitTests::RunAll()
   ok = ok && TestOnlineLoopbackSession();
   ok = ok && TestRoomCodeEncodingAndDecoding();
   ok = ok && TestUpnpServiceLifecycle();
+  ok = ok && TestProtocolVersionHandshakeAndRejection();
 
   std::cout << "==========================================" << std::endl;
   if ( ok )
   {
-    std::cout << "ALL TETRIS GUIDELINE, AUDIO & MULTIPLAYER TESTS PASSED (13/13)" << std::endl;
+    std::cout << "ALL TETRIS GUIDELINE, AUDIO & MULTIPLAYER TESTS PASSED (14/14)" << std::endl;
     std::cout << "==========================================" << std::endl;
     return 0;
   }

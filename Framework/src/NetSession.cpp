@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
 #include <sstream>
 
 #ifdef _WIN32
@@ -102,7 +103,10 @@ bool NetSession::StartHost( uint16_t iPort,
   // 1 peer connection slot, 2 channels (0 = Reliable Ordered, 1 = Unreliable Sequenced)
   _Impl->_Host = enet_host_create( &address, 1, 2, 0, 0 );
   if ( !_Impl->_Host )
+  {
+    std::cerr << "[NET] Error: Failed to create ENet host on port " << iPort << "!" << std::endl;
     return false;
+  }
 
   _Role              = NetRole::Host;
   _State             = NetState::Hosting;
@@ -111,6 +115,9 @@ bool NetSession::StartHost( uint16_t iPort,
   _HostName          = SanitizeField( iHostName.empty() ? "Host" : iHostName );
   _RoomInfo          = SanitizeField( iRoomInfo.empty() ? "VS Battle" : iRoomInfo );
   _LastBeaconSentSec = 0.0;
+
+  std::cout << "[NET] Host started: listening on UDP port " << iPort << " (Local IP: " << GetLocalIPv4Address()
+            << ", UPnP: " << ( iEnableUpnp ? "enabled" : "disabled" ) << ")" << std::endl;
 
   // Create UDP broadcast socket for LAN room discovery beacon
   _Impl->_BeaconSocket = enet_socket_create( ENET_SOCKET_TYPE_DATAGRAM );
@@ -145,13 +152,17 @@ bool NetSession::StartClient( const std::string & iAddress, uint16_t iPort )
 
   _Impl->_Host = enet_host_create( nullptr, 1, 2, 0, 0 );
   if ( !_Impl->_Host )
+  {
+    std::cerr << "[NET] Error: Failed to create client ENet host!" << std::endl;
     return false;
+  }
 
   ENetAddress address;
   address.port = iPort;
   if ( enet_address_set_host_ip( &address, iAddress.c_str() ) != 0 &&
        enet_address_set_host( &address, iAddress.c_str() ) != 0 )
   {
+    std::cerr << "[NET] Error: Failed to resolve address: " << iAddress << std::endl;
     enet_host_destroy( _Impl->_Host );
     _Impl->_Host = nullptr;
     return false;
@@ -160,10 +171,13 @@ bool NetSession::StartClient( const std::string & iAddress, uint16_t iPort )
   _Impl->_Peer = enet_host_connect( _Impl->_Host, &address, 2, 0 );
   if ( !_Impl->_Peer )
   {
+    std::cerr << "[NET] Error: enet_host_connect failed for " << iAddress << ":" << iPort << "!" << std::endl;
     enet_host_destroy( _Impl->_Host );
     _Impl->_Host = nullptr;
     return false;
   }
+
+  std::cout << "[NET] Client started: connecting to " << iAddress << ":" << iPort << " (timeout: 6.0s)..." << std::endl;
 
   // Ping frequently for accurate low-latency RTT telemetry
   enet_peer_ping_interval( _Impl->_Peer, 250 );
@@ -184,6 +198,12 @@ bool NetSession::StartClient( const std::string & iAddress, uint16_t iPort )
 // ----------------------------------------------------------------------------
 void NetSession::Disconnect()
 {
+  if ( _Role != NetRole::None || _State != NetState::Disconnected )
+  {
+    std::cout << "[NET] Disconnecting session. (Role=" << ( _Role == NetRole::Host ? "Host" : ( _Role == NetRole::Client ? "Client" : "None" ) )
+              << ", State=" << static_cast<int>( _State ) << ")" << std::endl;
+  }
+
   _Upnp.StopMappingAsync();
   _UpnpEnabled = false;
 
@@ -209,6 +229,30 @@ void NetSession::Disconnect()
 
   _Role  = NetRole::None;
   _State = NetState::Disconnected;
+}
+
+// ----------------------------------------------------------------------------
+// DisconnectPeer
+// ----------------------------------------------------------------------------
+void NetSession::DisconnectPeer()
+{
+  std::cout << "[NET] Disconnecting current peer while preserving host listening socket." << std::endl;
+  if ( _Impl->_Peer )
+  {
+    enet_peer_disconnect_later( _Impl->_Peer, 0 );
+    if ( _Impl->_Host )
+      enet_host_flush( _Impl->_Host );
+    _Impl->_Peer = nullptr;
+  }
+
+  if ( _Role == NetRole::Host )
+  {
+    _State = NetState::Hosting;
+  }
+  else
+  {
+    Disconnect();
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -411,9 +455,14 @@ void NetSession::Poll( double iCurrentTimeSec,
   if ( _State == NetState::Connecting )
   {
     if ( _ConnectStartTimeSec <= 0.0 )
+    {
       _ConnectStartTimeSec = iCurrentTimeSec;
+      std::cout << "[NET] Initiating connection handshake..." << std::endl;
+    }
     else if ( ( iCurrentTimeSec - _ConnectStartTimeSec ) > 6.0 )
     {
+      std::cerr << "[NET] Connection TIMEOUT after 6.0s! No response from target host on UDP port "
+                << _BoundPort << ". (Host unreachable or incoming UDP blocked by router / Windows Firewall)." << std::endl;
       Disconnect();
       oPeerDisconnected = true;
       return;
@@ -432,6 +481,11 @@ void NetSession::Poll( double iCurrentTimeSec,
       enet_peer_timeout( _Impl->_Peer, 16, 3000, 8000 );
       _State         = NetState::Connected;
       oPeerConnected = true;
+
+      char ipBuf[64] = {};
+      enet_address_get_host_ip( &netEvent.peer->address, ipBuf, sizeof( ipBuf ) );
+      std::cout << "[NET] ENet CONNECT: connected to " << ipBuf << ":" << netEvent.peer->address.port
+                << " (Role=" << ( _Role == NetRole::Host ? "Host" : "Client" ) << ")" << std::endl;
       break;
     }
 
@@ -443,6 +497,9 @@ void NetSession::Poll( double iCurrentTimeSec,
         pkt._Channel = netEvent.channelID;
         pkt._Data.assign( netEvent.packet->data,
                           netEvent.packet->data + netEvent.packet->dataLength );
+        std::cout << "[NET] Packet received on Channel " << static_cast<int>( netEvent.channelID )
+                  << " (type " << static_cast<int>( netEvent.packet->data[0] )
+                  << ", " << netEvent.packet->dataLength << " bytes)" << std::endl;
         oReceivedPackets.push_back( std::move( pkt ) );
       }
       if ( netEvent.packet )
@@ -452,6 +509,7 @@ void NetSession::Poll( double iCurrentTimeSec,
 
     case ENET_EVENT_TYPE_DISCONNECT:
     {
+      std::cout << "[NET] ENet DISCONNECT from peer." << std::endl;
       _Impl->_Peer      = nullptr;
       oPeerDisconnected = true;
       if ( _Role == NetRole::Host )
@@ -494,6 +552,10 @@ bool NetSession::SendReliable( uint8_t iChannel, const void * iData, size_t iSiz
     enet_packet_destroy( packet );
     return false;
   }
+
+  std::cout << "[NET] Sent reliable packet on Channel " << static_cast<int>( iChannel )
+            << " (type " << static_cast<int>( static_cast<const uint8_t *>( iData )[0] )
+            << ", " << iSize << " bytes)" << std::endl;
 
   enet_host_flush( _Impl->_Host );
   return true;

@@ -514,9 +514,14 @@ void TetrisGameApp::SendHelloPacket()
     return;
 
   TetrisNetHelloPacket pkt;
-  pkt._Type = static_cast<uint8_t>( TetrisNetPacketType::HelloHandshake );
+  pkt._Type            = static_cast<uint8_t>( TetrisNetPacketType::HelloHandshake );
+  pkt._Magic           = kTetrisNetMagic;
+  pkt._ProtocolVersion = kTetrisProtocolVersion;
+  std::snprintf( pkt._GameVersion, sizeof( pkt._GameVersion ), "%s", kTetrisGameVersionStr );
   std::snprintf( pkt._Nickname, sizeof( pkt._Nickname ), "%s",
                  ( _MpState._LocalPlayerName[0] != '\0' ) ? _MpState._LocalPlayerName : "PLAYER" );
+  std::cout << "[APP-NET] Sending HelloHandshake: Nickname='" << pkt._Nickname << "', Proto="
+            << pkt._ProtocolVersion << ", Ver='" << pkt._GameVersion << "'" << std::endl;
   _NetSession.SendReliable( 0, &pkt, sizeof( pkt ) );
   _LastSentNickname = pkt._Nickname;
 }
@@ -607,7 +612,9 @@ void TetrisGameApp::UpdateNetwork( float iDeltaTime )
   // 1. Handle UI Connection Requests
   if ( _MpState._RequestHostOnline )
   {
-    _MpState._RequestHostOnline = false;
+    _MpState._RequestHostOnline      = false;
+    _MpState._VersionMismatchError   = false;
+    _MpState._VersionMismatchMessage.clear();
     char roomDesc[96] = {};
     std::snprintf( roomDesc, sizeof( roomDesc ), "%s | First to %d | Lvl %d",
                    GetModeShortName( _MpState._MpMode ),
@@ -631,7 +638,9 @@ void TetrisGameApp::UpdateNetwork( float iDeltaTime )
 
   if ( _MpState._RequestJoinOnline )
   {
-    _MpState._RequestJoinOnline = false;
+    _MpState._RequestJoinOnline      = false;
+    _MpState._VersionMismatchError   = false;
+    _MpState._VersionMismatchMessage.clear();
     _NetSession.StopLanDiscovery();
 
     // Accept a room code, an IPv4 address or a host name
@@ -641,8 +650,14 @@ void TetrisGameApp::UpdateNetwork( float iDeltaTime )
     uint16_t    decodedPort = 0;
     if ( RoomCode::Decode( joinAddress, decodedIP, decodedPort ) )
     {
+      std::cout << "[APP-NET] Room code decoded: '" << joinAddress << "' -> " << decodedIP << ":" << decodedPort
+                << ( RoomCode::IsPublicInternetIP( decodedIP ) ? " (Public WAN IP)" : " (Local LAN IP)" ) << std::endl;
       joinAddress = decodedIP;
       joinPort    = decodedPort;
+    }
+    else
+    {
+      std::cout << "[APP-NET] Direct join address: " << joinAddress << ":" << joinPort << std::endl;
     }
     _NetSession.StartClient( joinAddress, joinPort );
   }
@@ -721,8 +736,83 @@ void TetrisGameApp::UpdateNetwork( float iDeltaTime )
         {
           TetrisNetHelloPacket hello;
           std::memcpy( &hello, ev._Data.data(), sizeof( hello ) );
-          hello._Nickname[sizeof( hello._Nickname ) - 1] = '\0';
-          _MpState._RemotePlayerName = ( hello._Nickname[0] != '\0' ) ? hello._Nickname : "OPPONENT";
+          hello._Nickname[sizeof( hello._Nickname ) - 1]       = '\0';
+          hello._GameVersion[sizeof( hello._GameVersion ) - 1] = '\0';
+
+          std::cout << "[APP-NET] Received HelloHandshake: Nickname='" << hello._Nickname << "', Magic=0x"
+                    << std::hex << hello._Magic << std::dec << ", Proto=" << hello._ProtocolVersion
+                    << ", Ver='" << hello._GameVersion << "'" << std::endl;
+
+          if ( hello._Magic != kTetrisNetMagic )
+          {
+            std::cerr << "[APP-NET] Warning: Received HelloHandshake with invalid magic 0x" << std::hex << hello._Magic << std::dec << "! Discarding." << std::endl;
+            break;
+          }
+
+          if ( hello._ProtocolVersion != kTetrisProtocolVersion )
+          {
+            char reason[96] = {};
+            std::snprintf( reason, sizeof( reason ),
+                           "Version mismatch: Host is %s (Proto %u), Peer is %s (Proto %u)",
+                           kTetrisGameVersionStr, kTetrisProtocolVersion,
+                           hello._GameVersion[0] != '\0' ? hello._GameVersion : "unknown",
+                           hello._ProtocolVersion );
+
+            std::cerr << "[APP-NET] " << reason << std::endl;
+
+            if ( _NetSession.IsHost() )
+            {
+              TetrisNetVersionMismatchPacket rejectPkt;
+              rejectPkt._HostProtocolVersion = kTetrisProtocolVersion;
+              std::snprintf( rejectPkt._HostGameVersion, sizeof( rejectPkt._HostGameVersion ), "%s", kTetrisGameVersionStr );
+              std::snprintf( rejectPkt._ClientGameVersion, sizeof( rejectPkt._ClientGameVersion ), "%s", hello._GameVersion );
+              std::snprintf( rejectPkt._Reason, sizeof( rejectPkt._Reason ), "%s", reason );
+              _NetSession.SendReliable( 0, &rejectPkt, sizeof( rejectPkt ) );
+              _NetSession.DisconnectPeer();
+            }
+            else
+            {
+              _NetSession.Disconnect();
+            }
+
+            _MpState._VersionMismatchError   = true;
+            _MpState._VersionMismatchMessage = reason;
+            _Audio.PlaySound2D( "ui_back", 0.9f, 1.0f );
+            break;
+          }
+
+          _MpState._RemotePlayerName  = ( hello._Nickname[0] != '\0' ) ? hello._Nickname : "OPPONENT";
+          _MpState._RemoteGameVersion = ( hello._GameVersion[0] != '\0' ) ? hello._GameVersion : "1.0.0";
+          std::cout << "[APP-NET] Handshake complete! Remote player: '" << _MpState._RemotePlayerName
+                    << "' [v" << _MpState._RemoteGameVersion << "]" << std::endl;
+        }
+        else if ( ev._Data.size() >= sizeof( TetrisNetLegacyHelloPacket ) )
+        {
+          // Backward compatibility: Peer runs early v1.0.0 build (commit 755b926) without protocol version header.
+          // Since simulation, rules, and in-game packet structs are 100% identical, allow connection gracefully!
+          TetrisNetLegacyHelloPacket legacy;
+          std::memcpy( &legacy, ev._Data.data(), sizeof( legacy ) );
+          legacy._Nickname[sizeof( legacy._Nickname ) - 1] = '\0';
+
+          _MpState._RemotePlayerName  = ( legacy._Nickname[0] != '\0' ) ? legacy._Nickname : "OPPONENT";
+          _MpState._RemoteGameVersion = "1.0.0 (legacy)";
+          std::cout << "[APP-NET] Handshake complete (legacy v1.0.0 peer)! Remote player: '"
+                    << _MpState._RemotePlayerName << "' [v" << _MpState._RemoteGameVersion << "]" << std::endl;
+        }
+        break;
+      }
+
+      case TetrisNetPacketType::VersionMismatch:
+      {
+        if ( ev._Data.size() >= sizeof( TetrisNetVersionMismatchPacket ) )
+        {
+          TetrisNetVersionMismatchPacket mis;
+          std::memcpy( &mis, ev._Data.data(), sizeof( mis ) );
+          mis._Reason[sizeof( mis._Reason ) - 1] = '\0';
+          _MpState._VersionMismatchError   = true;
+          _MpState._VersionMismatchMessage = ( mis._Reason[0] != '\0' ) ? mis._Reason : "Version incompatibility detected with host.";
+          _Audio.PlaySound2D( "ui_back", 0.9f, 1.0f );
+          _NetSession.Disconnect();
         }
         break;
       }

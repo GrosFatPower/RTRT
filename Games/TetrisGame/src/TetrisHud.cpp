@@ -5,6 +5,7 @@
 #include "Renderer.h"
 #include "RoomCode.h"
 #include "Scene.h"
+#include "TetrisNetProtocol.h"
 
 #include "imgui.h"
 
@@ -362,7 +363,7 @@ void TetrisHud::DrawMainMenuPage( TetrisAppState & ioAppState,
   }
   GameMenuUI::EndMenuPanel();
 
-  const std::string leftStatus = std::string("ACTIVE BACKEND: ") + GetRendererModeLabel(iRendererMode);
+  const std::string leftStatus = std::string("ACTIVE BACKEND: ") + GetRendererModeLabel(iRendererMode) + " | v" + kTetrisGameVersionStr;
   GameMenuUI::DrawFooterBar(
     leftStatus.c_str(),
     "[UP/DOWN] Navigate    [ENTER] Select    [F2/F3/F4] Switch Renderer",
@@ -727,18 +728,20 @@ void TetrisHud::DrawOnlineLobbyPage( TetrisAppState & ioAppState,
   if ( GameMenuUI::BeginMenuPanel("##TetrisOnlineLobby", "ONLINE 2-PLAYER MULTIPLAYER (LAN & INTERNET)", center, panelSize, _Theme, _Fonts) )
   {
     // 1. Top Identity & Live Connection Bar
-    ImGui::SetNextItemWidth(220.0f);
+    ImGui::SetNextItemWidth(200.0f);
     ImGui::InputText("Your Nickname", _MpState->_LocalPlayerName, sizeof(_MpState->_LocalPlayerName));
     if ( _MpState->_LocalPlayerName[0] == '\0' )
       std::snprintf(_MpState->_LocalPlayerName, sizeof(_MpState->_LocalPlayerName), "PLAYER 1");
 
-    ImGui::SameLine(0.0f, 32.0f);
+    ImGui::SameLine(0.0f, 20.0f);
     const NetState netState = _NetSession ? _NetSession->GetState() : NetState::Disconnected;
     if ( NetState::Connected == netState )
     {
+      const std::string remoteVer = _MpState->_RemoteGameVersion.empty() ? "" : ( " [v" + _MpState->_RemoteGameVersion + "]" );
       ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f),
-                         "STATUS: Connected to %s (%s)  |  PING: %u ms",
+                         "STATUS: Connected to %s%s (%s)  |  PING: %u ms",
                          _MpState->_RemotePlayerName.c_str(),
+                         remoteVer.c_str(),
                          _NetSession->GetPeerAddressString().c_str(),
                          _NetSession->GetPingMs());
     }
@@ -758,6 +761,37 @@ void TetrisHud::DrawOnlineLobbyPage( TetrisAppState & ioAppState,
     else
     {
       ImGui::TextDisabled("STATUS: Idle (Host a Room or Join a Room below)");
+    }
+
+    // Version Tag on far right
+    const std::string verTag = std::string("v") + kTetrisGameVersionStr + " (NetProto " + std::to_string(kTetrisProtocolVersion) + ")";
+    const float verTagW = ImGui::CalcTextSize(verTag.c_str()).x;
+    ImGui::SameLine(std::max(0.0f, ImGui::GetWindowWidth() - verTagW - 24.0f));
+    ImGui::TextDisabled("%s", verTag.c_str());
+
+    // Version Incompatibility Alert Banner
+    if ( _MpState->_VersionMismatchError )
+    {
+      ImGui::Dummy(ImVec2(0.0f, 4.0f));
+      ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.35f, 0.08f, 0.08f, 0.95f));
+      ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1.00f, 0.35f, 0.30f, 1.0f));
+      ImGui::BeginChild("##VersionMismatchAlert", ImVec2(0.0f, 52.0f), true, ImGuiWindowFlags_NoScrollbar);
+      {
+        ImGui::SetCursorPos(ImVec2(14.0f, 8.0f));
+        ImGui::TextColored(ImVec4(1.00f, 0.35f, 0.30f, 1.0f), "VERSION INCOMPATIBILITY DETECTED");
+        ImGui::SetCursorPos(ImVec2(14.0f, 26.0f));
+        ImGui::TextColored(ImVec4(1.00f, 0.85f, 0.85f, 1.0f), "%s", _MpState->_VersionMismatchMessage.c_str());
+
+        const float bannerW = ImGui::GetWindowWidth();
+        ImGui::SetCursorPos(ImVec2(std::max(14.0f, bannerW - 100.0f), 12.0f));
+        if ( ImGui::Button("DISMISS", ImVec2(86.0f, 28.0f)) )
+        {
+          _MpState->_VersionMismatchError = false;
+          _MpState->_VersionMismatchMessage.clear();
+        }
+      }
+      ImGui::EndChild();
+      ImGui::PopStyleColor(2);
     }
 
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
@@ -1205,6 +1239,12 @@ void TetrisHud::DrawOnlineLobbyPage( TetrisAppState & ioAppState,
                            "CONNECTED TO HOST '%s' (Ping: %u ms) — Waiting for Host to launch match...",
                            _MpState->_RemotePlayerName.c_str(),
                            _NetSession->GetPingMs());
+      }
+      else if ( NetState::Connecting == netState && _NetSession && _NetSession->GetRole() == NetRole::Client )
+      {
+        ImGui::TextColored(ImVec4(1.00f, 0.85f, 0.25f, 1.0f),
+                           "CONNECTING TO HOST (%s:%u)... Sending UDP handshake across Internet (timeout: 6s)...",
+                           _MpState->_JoinAddressBuf, static_cast<unsigned int>(_MpState->_OnlinePort));
       }
       else
       {

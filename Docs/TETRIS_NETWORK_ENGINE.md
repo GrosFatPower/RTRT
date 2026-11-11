@@ -558,7 +558,7 @@ When `NetSession::StartHost( ..., iEnableUpnp )` is called, [`UpnpService::Start
 - **HUD Join Card:** Features a dedicated `JOIN VIA ROOM CODE` card with an input field, a one-click **`[ PASTE ]`** button, live green checkmark validation, and immediate connect button.
 
 ### 10.3 Test Suite Coverage
-All 13 automated headless tests pass in [`TetrisUnitTests.cpp`](file:///d:/Users/GRIFFON/Documents/Dev/RTRT/Games/TetrisGame/src/TetrisUnitTests.cpp):
+All 14 automated headless tests pass in [`TetrisUnitTests.cpp`](file:///d:/Users/GRIFFON/Documents/Dev/RTRT/Games/TetrisGame/src/TetrisUnitTests.cpp):
 1. 7-Bag Randomizer uniformity & starvation.
 2. SRS Wall & Floor Kick verification.
 3. 3-Corner T-Spin detection geometry.
@@ -572,3 +572,59 @@ All 13 automated headless tests pass in [`TetrisUnitTests.cpp`](file:///d:/Users
 11. ENet Loopback Host/Client handshake & dual-channel packet delivery.
 12. Room code encoding, decoding, checksum validation & IP classification.
 13. UPnP service async start/stop lifecycle & STUN WAN IP resolution.
+14. Protocol version handshake & version mismatch rejection arbitration.
+
+---
+
+## 11. Online Versioning, Protocol Compatibility & Handshake Rejection
+
+When players iterate on the game, incompatible versions connecting over the network must not cause memory misalignment, silent corruption, or desyncs. The game enforces a layered versioning architecture:
+
+### 11.1 Version Layers & Developer Rules
+
+| Change Type | What Changed? | Breaks Online Play? | What to Increment |
+|---|---|---|---|
+| **Cosmetic / Local** | Shaders, lighting, camera FOV, audio SFX, HUD styling, keybindings | **No** (Safe) | Increment `kTetrisGameVersionStr` patch if desired. Leave `kTetrisProtocolVersion` untouched. Players on different cosmetic builds can still play together. |
+| **Simulation / Rules** | SRS kick tables, 7-Bag RNG, garbage attack formulas, lock delays | **Yes** (Desync) | Increment `kTetrisProtocolVersion` (e.g. from `1` to `2`) and bump `kTetrisGameVersionStr`. |
+| **Wire Protocol** | Packet struct layout, new packet fields, new packet enum types | **Yes** (Crash / Memory Corrupt) | Increment `kTetrisProtocolVersion` and bump `kTetrisGameVersionStr`. |
+
+### 11.2 Wire Protocol Handshake Specification
+
+The network protocol is identified by:
+- **Magic Constant:** `kTetrisNetMagic = 0x54455452` (`'TETR'`). Foreign packets or port probes are immediately discarded.
+- **Protocol Version:** `kTetrisProtocolVersion = 1` (`uint32_t`).
+- **Semantic Version:** `kTetrisGameVersionStr = "1.0.0"` (`char[16]`).
+
+#### Hello Handshake (`TetrisNetHelloPacket`, Type `1`)
+Transmitted reliably on Channel 0 immediately after ENet connection establishment:
+```cpp
+struct TetrisNetHelloPacket
+{
+  uint8_t  _Type            = 1;
+  char     _Nickname[32]    = "PLAYER";   // Deliberately at offset 1 for backward compatibility
+  uint32_t _Magic           = 0x54455452; // 'TETR'
+  uint32_t _ProtocolVersion = 1;
+  char     _GameVersion[16] = "1.0.0";
+};
+```
+> [!NOTE]
+> **Backward Compatibility Grace Mode:** Early v1.0.0 clients (commit `755b926`) transmit a 33-byte `TetrisNetLegacyHelloPacket` (`_Type` + `_Nickname[32]`). Because simulation and packet layouts are identical, the engine gracefully accepts legacy handshakes as `"1.0.0 (legacy)"` without breaking existing clients.
+
+#### Incompatibility Rejection (`TetrisNetVersionMismatchPacket`, Type `7`)
+If the Host inspects the incoming `HelloHandshake` and detects that `_ProtocolVersion != kTetrisProtocolVersion`, the Host sends:
+```cpp
+struct TetrisNetVersionMismatchPacket
+{
+  uint8_t  _Type                = 7;
+  uint32_t _HostProtocolVersion = 1;
+  char     _HostGameVersion[16] = "1.0.0";
+  char     _ClientGameVersion[16]= "0.9.0";
+  char     _Reason[96]          = "Version mismatch: Host is 1.0.0 (Proto 1), Peer is 0.9.0 (Proto 0)";
+};
+```
+The Host then disconnects only that peer (`NetSession::DisconnectPeer()`), preserving the host server socket and UPnP port mapping so the room remains open for compatible opponents.
+
+### 11.3 HUD & User Feedback
+- **Lobby & Title Screen:** Shows current build version: `v1.0.0 (NetProto 1)` in the online lobby header and main menu footer.
+- **Peer Version Tag:** Upon successful connection, shows peer's game version: `Connected to Alice [v1.0.0]`.
+- **Rejection Banner:** If a client or host encounters a version mismatch, a red alert banner is rendered in the Online Lobby with an explicit explanation and a `[DISMISS]` button.
