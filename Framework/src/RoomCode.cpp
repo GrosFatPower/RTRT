@@ -183,4 +183,33 @@ bool RoomCode::LooksLikeRoomCode( const std::string & iText )
   return ( chars.size() == kShortChars || chars.size() == kLongChars );
 }
 
+// ----------------------------------------------------------------------------
+// IsPrivateOrReservedIP / IsPublicInternetIP
+// ----------------------------------------------------------------------------
+bool RoomCode::IsPrivateOrReservedIP( const std::string & iIPv4 )
+{
+  uint32_t ip = 0;
+  if ( !ParseIPv4( iIPv4, ip ) )
+    return true; // Malformed IPv4 -> not a valid public address
+
+  const uint8_t b0 = static_cast<uint8_t>( ( ip >> 24 ) & 0xFF );
+  const uint8_t b1 = static_cast<uint8_t>( ( ip >> 16 ) & 0xFF );
+
+  if ( b0 == 0 ) return true;                              // 0.0.0.0/8
+  if ( b0 == 10 ) return true;                             // 10.0.0.0/8 (RFC 1918)
+  if ( b0 == 127 ) return true;                            // 127.0.0.0/8 (Loopback)
+  if ( b0 == 169 && b1 == 254 ) return true;               // 169.254.0.0/16 (Link Local)
+  if ( b0 == 172 && ( b1 >= 16 && b1 <= 31 ) ) return true; // 172.16.0.0/12 (RFC 1918)
+  if ( b0 == 192 && b1 == 168 ) return true;               // 192.168.0.0/16 (RFC 1918)
+  if ( b0 == 100 && ( b1 >= 64 && b1 <= 127 ) ) return true; // 100.64.0.0/10 (CGNAT RFC 6598)
+  if ( b0 >= 224 ) return true;                            // Multicast (224-239) & Reserved (240+)
+
+  return false;
+}
+
+bool RoomCode::IsPublicInternetIP( const std::string & iIPv4 )
+{
+  return !IsPrivateOrReservedIP( iIPv4 );
+}
+
 } // namespace RTRT

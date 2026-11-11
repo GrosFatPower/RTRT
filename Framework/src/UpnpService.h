@@ -44,7 +44,8 @@ public:
   void StartMappingAsync( uint16_t iInternalPort,
                           uint16_t iExternalPort,
                           const std::string & iDescription = "RTRT Game",
-                          const std::string & iLocalInterface = "" );
+                          const std::string & iLocalInterface = "",
+                          bool iPerformPortMapping = true );
 
   // Requests the removal of the mapping. Returns immediately; the worker is joined on the next start or on destruction.
   void StopMappingAsync();
@@ -52,9 +53,12 @@ public:
   UpnpStatusInfo GetStatus() const;
   bool IsBusy() const;
 
+  // Resolves the public, globally routable WAN IPv4 address via STUN (and HTTP fallback).
+  static std::string ResolvePublicIP( unsigned int iTimeoutMs = 1500 );
+
 private:
-  void WorkerMain( uint16_t iInternalPort, uint16_t iExternalPort, std::string iDescription, std::string iLocalInterface );
-  void RunMapping( uint16_t iInternalPort, uint16_t iExternalPort, const std::string & iDescription, const std::string & iLocalInterface );
+  void WorkerMain( uint16_t iInternalPort, uint16_t iExternalPort, std::string iDescription, std::string iLocalInterface, bool iPerformPortMapping );
+  void RunMapping( uint16_t iInternalPort, uint16_t iExternalPort, const std::string & iDescription, const std::string & iLocalInterface, bool iPerformPortMapping );
   void SetStatus( const UpnpStatusInfo & iStatus );
   void JoinWorker();
 

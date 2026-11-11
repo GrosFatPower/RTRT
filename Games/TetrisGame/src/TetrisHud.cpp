@@ -884,43 +884,73 @@ void TetrisHud::DrawOnlineLobbyPage( TetrisAppState & ioAppState,
 
         // --- Prominent Room Code Card ---
         const UpnpStatusInfo & upnp = _MpState->_UpnpInfo;
-        std::string activeIp = upnp._ExternalIP;
-        std::string activeRoomCode = upnp._RoomCode;
-        bool isInternetCode = !activeIp.empty() && ( activeRoomCode.size() >= 8 );
+        const bool hasPublicIp = RoomCode::IsPublicInternetIP( upnp._ExternalIP ) && ( upnp._RoomCode.size() >= 8 );
+        const std::string lanIp = _NetSession->GetLocalIPv4Address();
+        const std::string lanRoomCode = RoomCode::Encode( lanIp, static_cast<uint16_t>( _NetSession->GetBoundPort() ) );
 
-        if ( !isInternetCode )
+        std::string activeIp;
+        std::string activeRoomCode;
+        bool isInternetCode = false;
+        bool isResolving = false;
+
+        if ( hasPublicIp )
         {
-          activeIp = _NetSession->GetLocalIPv4Address();
-          activeRoomCode = RoomCode::Encode( activeIp, static_cast<uint16_t>(_NetSession->GetBoundPort()) );
+          activeIp       = upnp._ExternalIP;
+          activeRoomCode = upnp._RoomCode;
+          isInternetCode = true;
+        }
+        else if ( upnp._State == UpnpState::Discovering || upnp._State == UpnpState::Mapping )
+        {
+          activeIp       = "Resolving...";
+          activeRoomCode = "RESOLVING...";
+          isResolving    = true;
+        }
+        else
+        {
+          activeIp       = lanIp;
+          activeRoomCode = lanRoomCode;
+          isInternetCode = false;
         }
 
         ImGui::Dummy(ImVec2(0.0f, 6.0f));
-        ImGui::BeginChild("##RoomCodeCard", ImVec2(0.0f, 84.0f), true, ImGuiWindowFlags_NoScrollbar);
+        ImGui::BeginChild("##RoomCodeCard", ImVec2(0.0f, 96.0f), true, ImGuiWindowFlags_NoScrollbar);
         {
-          ImGui::SetCursorPos(ImVec2(16.0f, 10.0f));
-          ImGui::TextColored(ImVec4(0.60f, 0.75f, 0.90f, 1.0f),
-                             isInternetCode ? "ONLINE ROOM CODE (INTERNET PLAY):" : "ROOM CODE (LAN / DIRECT CONNECT):");
+          ImGui::SetCursorPos(ImVec2(16.0f, 8.0f));
+          if ( isInternetCode )
+          {
+            ImGui::TextColored(ImVec4(0.00f, 0.95f, 1.00f, 1.0f), "ONLINE ROOM CODE (INTERNET PLAY):");
+          }
+          else if ( isResolving )
+          {
+            ImGui::TextColored(ImVec4(1.00f, 0.85f, 0.25f, 1.0f), "RESOLVING PUBLIC INTERNET IP (STUN)...");
+          }
+          else
+          {
+            ImGui::TextColored(ImVec4(1.00f, 0.65f, 0.25f, 1.0f), "LOCAL ROOM CODE (LAN / DIRECT IP ONLY - NO INTERNET):");
+          }
 
-          ImGui::SetCursorPos(ImVec2(16.0f, 30.0f));
+          ImGui::SetCursorPos(ImVec2(16.0f, 28.0f));
           ImFont * bigFont = _Fonts._MonoFont ? _Fonts._MonoFont : ( _Fonts._HeaderFont ? _Fonts._HeaderFont : ImGui::GetFont() );
           ImGui::PushFont(bigFont);
-          ImGui::TextColored(ImVec4(0.00f, 0.95f, 1.00f, 1.0f), "%s", activeRoomCode.c_str());
+          ImGui::TextColored(isResolving ? ImVec4(0.70f, 0.70f, 0.70f, 1.0f) : ImVec4(0.00f, 0.95f, 1.00f, 1.0f),
+                             "%s", activeRoomCode.c_str());
           ImGui::PopFont();
 
           ImGui::SameLine(0.0f, 14.0f);
-          ImGui::SetCursorPosY(36.0f);
+          ImGui::SetCursorPosY(34.0f);
           ImGui::TextDisabled("(%s:%u)", activeIp.c_str(), static_cast<unsigned int>(_NetSession->GetBoundPort()));
 
           const float cardW = ImGui::GetWindowWidth();
-          ImGui::SetCursorPos(ImVec2(std::max(16.0f, cardW - 350.0f), 24.0f));
-          if ( ImGui::Button("COPY ROOM CODE", ImVec2(160.0f, 38.0f)) )
+          ImGui::SetCursorPos(ImVec2(std::max(16.0f, cardW - 350.0f), 22.0f));
+          ImGui::BeginDisabled(isResolving);
+          if ( ImGui::Button("COPY ROOM CODE", ImVec2(160.0f, 36.0f)) )
           {
             if ( _Audio ) _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
             ImGui::SetClipboardText(activeRoomCode.c_str());
             _MpState->_CopiedFeedbackTimer = 2.5f;
           }
           ImGui::SameLine(0.0f, 10.0f);
-          if ( ImGui::Button("COPY IP:PORT", ImVec2(130.0f, 38.0f)) )
+          if ( ImGui::Button("COPY IP:PORT", ImVec2(130.0f, 36.0f)) )
           {
             if ( _Audio ) _Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
             char ipPort[96] = {};
@@ -928,6 +958,24 @@ void TetrisHud::DrawOnlineLobbyPage( TetrisAppState & ioAppState,
             ImGui::SetClipboardText(ipPort);
             _MpState->_CopiedFeedbackTimer = 2.5f;
           }
+          ImGui::EndDisabled();
+
+          // Bottom helper row
+          ImGui::SetCursorPos(ImVec2(16.0f, 68.0f));
+          if ( isInternetCode )
+          {
+            ImGui::TextDisabled("Same Wi-Fi? Local LAN Code: %s (%s:%u)",
+                                lanRoomCode.c_str(), lanIp.c_str(), static_cast<unsigned int>(_NetSession->GetBoundPort()));
+          }
+          else if ( isResolving )
+          {
+            ImGui::TextDisabled("Querying STUN (stun.l.google.com) to find your globally routable public address...");
+          }
+          else
+          {
+            ImGui::TextDisabled("Share this with players on the same local network / Wi-Fi, or setup port forwarding.");
+          }
+
           if ( _MpState->_CopiedFeedbackTimer > 0.0f )
           {
             ImGui::SetCursorPos(ImVec2(std::max(16.0f, cardW - 350.0f), 65.0f));
@@ -1052,7 +1100,19 @@ void TetrisHud::DrawOnlineLobbyPage( TetrisAppState & ioAppState,
         ImGui::SetCursorPos(ImVec2(16.0f, 68.0f));
         if ( hasValidCode )
         {
-          ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f), "Valid Room Code -> resolves to %s:%u", resolvedIP.c_str(), static_cast<unsigned int>(resolvedPort));
+          const bool isPublic = RoomCode::IsPublicInternetIP( resolvedIP );
+          if ( isPublic )
+          {
+            ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f),
+                               "Valid Internet Code -> resolves to %s:%u (Public IP)",
+                               resolvedIP.c_str(), static_cast<unsigned int>(resolvedPort));
+          }
+          else
+          {
+            ImGui::TextColored(ImVec4(1.00f, 0.75f, 0.20f, 1.0f),
+                               "Valid LAN Code -> resolves to %s:%u (Private LAN IP - only works on same Wi-Fi!)",
+                               resolvedIP.c_str(), static_cast<unsigned int>(resolvedPort));
+          }
         }
         else if ( _MpState->_RoomCodeInputBuf[0] != '\0' )
         {

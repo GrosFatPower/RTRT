@@ -774,6 +774,29 @@ bool TetrisUnitTests::TestRoomCodeEncodingAndDecoding()
     return false;
   }
 
+  // Verify private vs public IP classification
+  const char * privateIPs[] = { "192.168.0.107", "10.200.50.1", "172.20.1.5", "127.0.0.1", "100.64.0.1" };
+  for ( const char * priv : privateIPs )
+  {
+    if ( !RoomCode::IsPrivateOrReservedIP(priv) || RoomCode::IsPublicInternetIP(priv) )
+    {
+      std::cerr << "TestRoomCodeEncodingAndDecoding: private IP was not classified as private: " << priv << std::endl;
+      return false;
+    }
+  }
+
+  const char * publicIPs[] = { "92.188.50.166", "8.8.8.8", "1.1.1.1", "82.64.12.34" };
+  for ( const char * pub : publicIPs )
+  {
+    if ( RoomCode::IsPrivateOrReservedIP(pub) || !RoomCode::IsPublicInternetIP(pub) )
+    {
+      std::cerr << "TestRoomCodeEncodingAndDecoding: public IP was not classified as public: " << pub << std::endl;
+      return false;
+    }
+  }
+
+  std::cout << "[INFO] Example Public Room Code for 92.188.50.166:27015: " << RoomCode::Encode("92.188.50.166", 27015) << std::endl;
+
   std::cout << "[PASS] Room code encoding, decoding & checksum validation passed." << std::endl;
   return true;
 }
@@ -811,6 +834,18 @@ bool TetrisUnitTests::TestUpnpServiceLifecycle()
 
     service.StopMappingAsync();
     // Destructor joins the worker (discovery is bounded to ~2 s)
+  }
+
+  // Verify public IP resolution via STUN reflection
+  const std::string resolvedPubIP = UpnpService::ResolvePublicIP(1500);
+  if ( !resolvedPubIP.empty() )
+  {
+    if ( !RoomCode::IsPublicInternetIP(resolvedPubIP) )
+    {
+      std::cerr << "TestUpnpServiceLifecycle: ResolvePublicIP returned non-public IP: " << resolvedPubIP << std::endl;
+      return false;
+    }
+    std::cout << "[PASS] Verified public WAN IP resolution: " << resolvedPubIP << std::endl;
   }
 
   std::cout << "[PASS] UPnP service async start/stop lifecycle passed." << std::endl;

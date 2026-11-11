@@ -120,10 +120,9 @@ bool NetSession::StartHost( uint16_t iPort,
     enet_socket_set_option( _Impl->_BeaconSocket, ENET_SOCKOPT_BROADCAST, 1 );
   }
 
-  // Ask the home router to open the game port (non-blocking, runs in a background thread)
+  // Discover public WAN IP and optionally request UPnP port mapping
   _UpnpEnabled = iEnableUpnp;
-  if ( _UpnpEnabled )
-    _Upnp.StartMappingAsync( iPort, iPort, "RTRT Game", GetLocalIPv4Address() );
+  _Upnp.StartMappingAsync( iPort, iPort, "RTRT Game", GetLocalIPv4Address(), _UpnpEnabled );
 
   return true;
 }

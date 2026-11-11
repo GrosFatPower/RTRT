@@ -28,6 +28,10 @@ public:
 
   static bool ParseIPv4( const std::string & iIPv4, uint32_t & oValue );
   static std::string FormatIPv4( uint32_t iValue );
+
+  // Identifies RFC 1918 / 5735 / 6598 private, loopback, multicast, or link-local IPs
+  static bool IsPrivateOrReservedIP( const std::string & iIPv4 );
+  static bool IsPublicInternetIP( const std::string & iIPv4 );
 };
 
 } // namespace RTRT
