@@ -437,6 +437,13 @@ TetrisGameApp::TetrisGameApp( std::shared_ptr<GLFWwindow> iMainWindow, int iScre
 // ----------------------------------------------------------------------------
 TetrisGameApp::~TetrisGameApp()
 {
+  if ( _Scene )
+  {
+    _Preferences.CaptureFrom( _Settings, &_Audio );
+    _Preferences.CaptureFromTetris( _SceneManager, _HandlingConfig, _GameLogic[0], _RendererMode );
+    _Preferences.SaveToFile( TetrisPreferences::GetDefaultFilePath() );
+  }
+
   _NetSession.StopLanDiscovery();
   _NetSession.Disconnect();
 }
@@ -2167,6 +2174,17 @@ int TetrisGameApp::Run( const std::string & iCapturePath, int iMaxFrames )
 
   _Audio.Initialize();
   InitializeSoundBank();
+
+  // Load and apply persistent user preferences (Language, Audio, Display, Handling, Visuals)
+  if ( _Preferences.LoadFromFile( TetrisPreferences::GetDefaultFilePath() ) )
+  {
+    _Preferences.ApplyTo( _Settings, &_Audio );
+    _Preferences.ApplyToTetris( _SceneManager, *_Scene, _HandlingConfig, _GameLogic[0], _RendererMode );
+    if ( _Preferences._RendererMode != TetrisRendererMode::Deferred )
+      SetRendererMode( _Preferences._RendererMode );
+    if ( _Preferences._FullScreen && _MainWindow )
+      SetFullscreen( true );
+  }
 
   SyncFramebufferResolution(true);
   glDisable(GL_DEPTH_TEST);

@@ -13,6 +13,7 @@
 #include "TetrisGameLogic.h"
 #include "TetrisHud.h"
 #include "TetrisNetProtocol.h"
+#include "TetrisPreferences.h"
 #include "TetrisSceneManager.h"
 #include "TetrisTypes.h"
 
@@ -151,6 +152,7 @@ protected:
   double                      _PrevElapsed  = 0.0;
   TetrisRendererMode          _RendererMode = TetrisRendererMode::Deferred;
   TetrisHandlingConfig        _HandlingConfig;
+  TetrisPreferences           _Preferences;
   TetrisInputState            _InputState[2];
   GameMenuInput               _MenuInput;
 

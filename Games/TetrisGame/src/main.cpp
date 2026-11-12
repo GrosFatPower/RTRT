@@ -42,12 +42,17 @@ static void glfw_error_callback( int error, const char * description )
 int main( int iArgc, char ** iArgv )
 {
 #if defined(_WIN32)
-  if ( AttachConsole(ATTACH_PARENT_PROCESS) )
+  HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+  DWORD fileType = ( hOut != INVALID_HANDLE_VALUE && hOut != nullptr ) ? GetFileType(hOut) : FILE_TYPE_UNKNOWN;
+  if ( ( fileType != FILE_TYPE_PIPE ) && ( fileType != FILE_TYPE_DISK ) )
   {
-    FILE * dummy = nullptr;
-    freopen_s(&dummy, "CONOUT$", "w", stdout);
-    freopen_s(&dummy, "CONOUT$", "w", stderr);
-    std::ios::sync_with_stdio();
+    if ( AttachConsole(ATTACH_PARENT_PROCESS) )
+    {
+      FILE * dummy = nullptr;
+      freopen_s(&dummy, "CONOUT$", "w", stdout);
+      freopen_s(&dummy, "CONOUT$", "w", stderr);
+      std::ios::sync_with_stdio();
+    }
   }
 #endif
 

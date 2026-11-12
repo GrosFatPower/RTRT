@@ -1,0 +1,46 @@
+{
+  "audio": {
+    "master_volume": 1.0,
+    "music_volume": 0.699999988079071,
+    "muted": false,
+    "sfx_volume": 0.800000011920929
+  },
+  "graphics": {
+    "custom_render_height": 0,
+    "custom_render_width": 0,
+    "enable_skybox": true,
+    "exposure": 1.5,
+    "fullscreen": false,
+    "fxaa": false,
+    "gamma": 2.0,
+    "render_scale": 100,
+    "tone_mapping": true,
+    "vsync": true
+  },
+  "handling": {
+    "arr": 0.032999999821186066,
+    "das": 0.16699999570846558,
+    "lock_delay": 0.5,
+    "sdf": 20.0
+  },
+  "language": "fr",
+  "tetris": {
+    "backplate_opacity": 0.44999998807907104,
+    "board_edge_color": [
+      0.11999999731779099,
+      0.14000000059604645,
+      0.18000000715255737
+    ],
+    "board_sway_amplitude": 0.0,
+    "camera_motion": true,
+    "camera_motion_speed": 1.0,
+    "camera_preset": 0,
+    "dynamic_lighting": true,
+    "line_clear_anim": 0,
+    "material_preset": 0,
+    "renderer_mode": 0,
+    "show_ghost": true,
+    "start_level": 1
+  },
+  "version": 1
+}

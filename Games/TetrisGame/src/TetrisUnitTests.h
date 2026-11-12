@@ -24,6 +24,8 @@ protected:
   static bool TestRoomCodeEncodingAndDecoding();
   static bool TestUpnpServiceLifecycle();
   static bool TestProtocolVersionHandshakeAndRejection();
+  static bool TestLocalizationCompletenessAndSwitching();
+  static bool TestUserPreferencesPersistence();
 };
 
 }

@@ -1,6 +1,7 @@
 #include "GameMenuUI.h"
 
 #include "AudioEngine.h"
+#include "Localization.h"
 #include "PathTracer.h"
 #include "PathUtils.h"
 #include "Renderer.h"
@@ -149,16 +150,33 @@ void InitializeFonts( GameUIFonts & oFonts )
   const std::string robotoPath = ResolveFontPath("Roboto-Medium.ttf");
   const std::string cousinePath = ResolveFontPath("Cousine-Regular.ttf");
 
+  // Build extended glyph ranges: Default Latin + Latin Extended-A (œ, Œ) + Punctuation
+  ImFontGlyphRangesBuilder builder;
+  builder.AddRanges(io.Fonts->GetGlyphRangesDefault());
+
+  static const ImWchar kExtraRanges[] =
+  {
+    0x0100, 0x017F, // Latin Extended-A (œ, Œ, etc.)
+    0x2010, 0x2026, // General punctuation (quotes, dashes, ellipsis)
+    0x00AB, 0x00BB, // French guillemets («, »)
+    0
+  };
+  builder.AddRanges(kExtraRanges);
+
+  static ImVector<ImWchar> s_GlyphRanges;
+  s_GlyphRanges.clear();
+  builder.BuildRanges(&s_GlyphRanges);
+
   if ( !robotoPath.empty() )
   {
-    oFonts._BodyFont   = io.Fonts->AddFontFromFileTTF(robotoPath.c_str(), 17.0f);
-    oFonts._HeaderFont = io.Fonts->AddFontFromFileTTF(robotoPath.c_str(), 24.0f);
-    oFonts._TitleFont  = io.Fonts->AddFontFromFileTTF(robotoPath.c_str(), 46.0f);
+    oFonts._BodyFont   = io.Fonts->AddFontFromFileTTF(robotoPath.c_str(), 17.0f, nullptr, s_GlyphRanges.Data);
+    oFonts._HeaderFont = io.Fonts->AddFontFromFileTTF(robotoPath.c_str(), 24.0f, nullptr, s_GlyphRanges.Data);
+    oFonts._TitleFont  = io.Fonts->AddFontFromFileTTF(robotoPath.c_str(), 46.0f, nullptr, s_GlyphRanges.Data);
   }
 
   if ( !cousinePath.empty() )
   {
-    oFonts._MonoFont = io.Fonts->AddFontFromFileTTF(cousinePath.c_str(), 22.0f);
+    oFonts._MonoFont = io.Fonts->AddFontFromFileTTF(cousinePath.c_str(), 22.0f, nullptr, s_GlyphRanges.Data);
   }
 
   ImFont * defaultFont = oFonts._BodyFont ? oFonts._BodyFont : io.Fonts->AddFontDefault();
@@ -957,10 +975,10 @@ void DrawAudioSettings( AudioEngine & ioAudio,
                         const GameUITheme & iTheme,
                         const GameUIFonts & iFonts )
 {
-  DrawSectionHeader( "AUDIO OUTPUT & VOLUME", iTheme, iFonts );
+  DrawSectionHeader( Loc::Tr(LocId::Option_AudioHeader), iTheme, iFonts );
 
   bool muted = ioAudio.IsMuted();
-  if ( ImGui::Checkbox( "Mute All Audio", &muted ) )
+  if ( ImGui::Checkbox( Loc::Tr(LocId::Option_MuteAll), &muted ) )
   {
     ioAudio.SetMuted( muted );
   }
@@ -968,25 +986,25 @@ void DrawAudioSettings( AudioEngine & ioAudio,
   ImGui::Spacing();
 
   float masterVol = ioAudio.GetMasterVolume() * 100.0f;
-  if ( ImGui::SliderFloat( "Master Volume", &masterVol, 0.0f, 100.0f, "%.0f%%" ) )
+  if ( ImGui::SliderFloat( Loc::Tr(LocId::Option_MasterVolume), &masterVol, 0.0f, 100.0f, "%.0f%%" ) )
   {
     ioAudio.SetMasterVolume( masterVol / 100.0f );
   }
 
   float sfxVol = ioAudio.GetSfxVolume() * 100.0f;
-  if ( ImGui::SliderFloat( "SFX Volume", &sfxVol, 0.0f, 100.0f, "%.0f%%" ) )
+  if ( ImGui::SliderFloat( Loc::Tr(LocId::Option_SfxVolume), &sfxVol, 0.0f, 100.0f, "%.0f%%" ) )
   {
     ioAudio.SetSfxVolume( sfxVol / 100.0f );
   }
 
   float musicVol = ioAudio.GetMusicVolume() * 100.0f;
-  if ( ImGui::SliderFloat( "Music Volume", &musicVol, 0.0f, 100.0f, "%.0f%%" ) )
+  if ( ImGui::SliderFloat( Loc::Tr(LocId::Option_MusicVolume), &musicVol, 0.0f, 100.0f, "%.0f%%" ) )
   {
     ioAudio.SetMusicVolume( musicVol / 100.0f );
   }
 
   ImGui::Spacing();
-  if ( ImGui::Button( "Test SFX", ImVec2( 120.0f, 32.0f ) ) )
+  if ( ImGui::Button( Loc::Tr(LocId::Option_TestSfx), ImVec2( 120.0f, 32.0f ) ) )
   {
     if ( ioAudio.HasSound( "ui_confirm" ) )
     {
@@ -1014,7 +1032,7 @@ void DrawSharedRendererSettings( Scene & ioScene,
   if ( iRendererModeNames && ( iRendererModeCount > 0 ) )
   {
     int currentRenderer = ioRendererModeIndex;
-    if ( ImGui::Combo("Active Renderer Backend", &currentRenderer, iRendererModeNames, iRendererModeCount) )
+    if ( ImGui::Combo(Loc::Tr(LocId::Option_ActiveRenderer), &currentRenderer, iRendererModeNames, iRendererModeCount) )
     {
       if ( currentRenderer != ioRendererModeIndex )
       {
@@ -1085,7 +1103,7 @@ void DrawSharedRendererSettings( Scene & ioScene,
   else
     previewValue = customLabel;
 
-  if ( ImGui::BeginCombo("Render Resolution", previewValue) )
+  if ( ImGui::BeginCombo(Loc::Tr(LocId::Option_RenderResolution), previewValue) )
   {
     const bool isNativeSelected = ( 0 == currentPresetIdx );
     if ( ImGui::Selectable(nativeLabel, isNativeSelected) )
@@ -1123,7 +1141,7 @@ void DrawSharedRendererSettings( Scene & ioScene,
   }
 
   const int prevScale = ioSettings._RenderScale;
-  settingsDirty |= ImGui::SliderInt("Render Scale (%)", &ioSettings._RenderScale, 25, 100);
+  settingsDirty |= ImGui::SliderInt(Loc::Tr(LocId::Option_RenderScale), &ioSettings._RenderScale, 25, 100);
 
   if ( settingsDirty || ( prevScale != ioSettings._RenderScale ) )
   {
@@ -1139,7 +1157,7 @@ void DrawSharedRendererSettings( Scene & ioScene,
   const bool isCurrentlyFullscreen = currentWin ? ( glfwGetWindowMonitor(currentWin) != nullptr ) : ioSettings._FullScreen;
   ioSettings._FullScreen = isCurrentlyFullscreen;
   bool fsToggle = isCurrentlyFullscreen;
-  if ( ImGui::Checkbox("Fullscreen", &fsToggle) )
+  if ( ImGui::Checkbox(Loc::Tr(LocId::Option_Fullscreen), &fsToggle) )
   {
     if ( currentWin )
       SetWindowFullscreen(currentWin, fsToggle, ioSettings);
@@ -1148,42 +1166,42 @@ void DrawSharedRendererSettings( Scene & ioScene,
     settingsDirty = true;
   }
   ImGui::SameLine();
-  if ( ImGui::Checkbox("VSync", &ioSettings._VSync) )
+  if ( ImGui::Checkbox(Loc::Tr(LocId::Option_VSync), &ioSettings._VSync) )
   {
     glfwSwapInterval(ioSettings._VSync ? 1 : 0);
   }
   ImGui::SameLine();
-  settingsDirty |= ImGui::Checkbox("Tone Mapping", &ioSettings._ToneMapping);
+  settingsDirty |= ImGui::Checkbox(Loc::Tr(LocId::Option_ToneMapping), &ioSettings._ToneMapping);
   ImGui::SameLine();
-  settingsDirty |= ImGui::Checkbox("FXAA", &ioSettings._FXAA);
+  settingsDirty |= ImGui::Checkbox(Loc::Tr(LocId::Option_FXAA), &ioSettings._FXAA);
   ImGui::SameLine();
-  settingsDirty |= ImGui::Checkbox("Skybox Background", &ioSettings._EnableSkybox);
+  settingsDirty |= ImGui::Checkbox(Loc::Tr(LocId::Option_Skybox), &ioSettings._EnableSkybox);
 
-  settingsDirty |= ImGui::SliderFloat("Exposure", &ioSettings._Exposure, 0.1f, 4.0f, "%.2f");
-  settingsDirty |= ImGui::SliderFloat("Gamma", &ioSettings._Gamma, 1.0f, 3.0f, "%.2f");
+  settingsDirty |= ImGui::SliderFloat(Loc::Tr(LocId::Option_Exposure), &ioSettings._Exposure, 0.1f, 4.0f, "%.2f");
+  settingsDirty |= ImGui::SliderFloat(Loc::Tr(LocId::Option_Gamma), &ioSettings._Gamma, 1.0f, 3.0f, "%.2f");
 
   if ( ioRenderer && ioRenderer->AsDeferredRenderer() )
   {
     ImGui::Separator();
-    ImGui::TextDisabled("Deferred Renderer Features");
-    settingsDirty |= ImGui::Checkbox("Shadow Mapping", &ioSettings._ShadowMapping);
+    ImGui::TextDisabled("%s", Loc::Tr(LocId::Option_DeferredFeatures));
+    settingsDirty |= ImGui::Checkbox(Loc::Tr(LocId::Option_ShadowMapping), &ioSettings._ShadowMapping);
     ImGui::SameLine();
-    settingsDirty |= ImGui::Checkbox("SSAO", &ioSettings._SSAO);
+    settingsDirty |= ImGui::Checkbox(Loc::Tr(LocId::Option_SSAO), &ioSettings._SSAO);
     ImGui::SameLine();
-    settingsDirty |= ImGui::Checkbox("SSR Reflections", &ioSettings._SSR);
-    settingsDirty |= ImGui::Checkbox("Transparency Pass", &ioSettings._Transparency);
+    settingsDirty |= ImGui::Checkbox(Loc::Tr(LocId::Option_SSR), &ioSettings._SSR);
+    settingsDirty |= ImGui::Checkbox(Loc::Tr(LocId::Option_Transparency), &ioSettings._Transparency);
     ImGui::SameLine();
-    settingsDirty |= ImGui::Checkbox("Refraction", &ioSettings._Refraction);
+    settingsDirty |= ImGui::Checkbox(Loc::Tr(LocId::Option_Refraction), &ioSettings._Refraction);
   }
   else if ( ioRenderer && ioRenderer->AsPathTracer() )
   {
     ImGui::Separator();
-    ImGui::TextDisabled("Path Tracer Features");
-    settingsDirty |= ImGui::SliderInt("Max Bounces", &ioSettings._Bounces, 1, 8);
-    settingsDirty |= ImGui::SliderInt("Samples Per Pixel", &ioSettings._NbSamplesPerPixel, 1, 8);
-    settingsDirty |= ImGui::Checkbox("Temporal Accumulation", &ioSettings._Accumulate);
+    ImGui::TextDisabled("%s", Loc::Tr(LocId::Option_PathTracerFeatures));
+    settingsDirty |= ImGui::SliderInt(Loc::Tr(LocId::Option_MaxBounces), &ioSettings._Bounces, 1, 8);
+    settingsDirty |= ImGui::SliderInt(Loc::Tr(LocId::Option_SamplesPerPixel), &ioSettings._NbSamplesPerPixel, 1, 8);
+    settingsDirty |= ImGui::Checkbox(Loc::Tr(LocId::Option_Accumulation), &ioSettings._Accumulate);
     ImGui::SameLine();
-    settingsDirty |= ImGui::Checkbox("Enable Denoiser", &ioSettings._Denoise);
+    settingsDirty |= ImGui::Checkbox(Loc::Tr(LocId::Option_Denoiser), &ioSettings._Denoise);
 
     if ( ioSettings._Denoise )
     {
@@ -1238,10 +1256,10 @@ void DrawSharedRendererSettings( Scene & ioScene,
   else if ( ioRenderer && ioRenderer->AsSoftwareRasterizer() )
   {
     ImGui::Separator();
-    ImGui::TextDisabled("Software Rasterizer Features");
-    settingsDirty |= ImGui::Checkbox("Tiled Multithreading", &ioSettings._TiledRendering);
+    ImGui::TextDisabled("%s", Loc::Tr(LocId::Option_SoftwareFeatures));
+    settingsDirty |= ImGui::Checkbox(Loc::Tr(LocId::Option_TiledRendering), &ioSettings._TiledRendering);
     ImGui::SameLine();
-    settingsDirty |= ImGui::Checkbox("Transparency", &ioSettings._Transparency);
+    settingsDirty |= ImGui::Checkbox(Loc::Tr(LocId::Option_Transparency), &ioSettings._Transparency);
   }
 
   if ( settingsDirty && ioRenderer )

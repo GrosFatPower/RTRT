@@ -38,4 +38,5 @@ target_link_libraries(RTRTFramework
     glfw
     enet
     miniupnpc
+    nlohmann_json
 )
