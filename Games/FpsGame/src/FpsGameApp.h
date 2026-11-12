@@ -15,6 +15,7 @@
 #include "Renderer.h"
 #include "RenderSettings.h"
 #include "Scene.h"
+#include "UserPreferences.h"
 
 #include <filesystem>
 #include <memory>
@@ -123,6 +124,7 @@ protected:
 
   std::unique_ptr<Scene>    _Scene;
   RenderSettings            _Settings;
+  UserPreferences           _Preferences;
   std::unique_ptr<Renderer> _Renderer;
   bool                      _ReloadScene = false;
   bool                      _ReloadBoids = false;

@@ -1,6 +1,7 @@
 #pragma warning(disable : 4100) // unreferenced formal parameter
 
 #include "FpsGameApp.h"
+#include "Localization.h"
 
 #include "DeferredRenderer.h"
 #include "DroppedFileUtils.h"
@@ -355,6 +356,9 @@ FpsGameApp::FpsGameApp( std::shared_ptr<GLFWwindow> iMainWindow, int iScreenWidt
 FpsGameApp::~FpsGameApp()
 {
   SetMouseCaptured(false);
+  _Preferences.CaptureFrom(_Settings, &_Audio);
+  _Preferences._Language = Loc::GetLanguage();
+  _Preferences.SaveToFile(UserPreferences::GetDefaultFilePath("fps_preferences.json"));
 }
 
 // ----------------------------------------------------------------------------
@@ -2262,38 +2266,38 @@ int FpsGameApp::DrawMainMenuBar()
   if ( !ImGui::BeginMainMenuBar() )
     return 0;
 
-  if ( ImGui::BeginMenu("File") )
+  if ( ImGui::BeginMenu(Loc::Tr(LocId::Fps_Bar_File)) )
   {
     FpsGameEditorContext editorContext = MakeEditorContext();
-    if ( ImGui::MenuItem(_Editor.IsEnabled() ? "Exit editor" : "Enter editor", "F3") )
+    if ( ImGui::MenuItem(_Editor.IsEnabled() ? Loc::Tr(LocId::Fps_Bar_ExitEditor) : Loc::Tr(LocId::Fps_Bar_EnterEditor), "F3") )
       SetEditorMode(!_Editor.IsEnabled());
 
     ImGui::Separator();
-    if ( ImGui::MenuItem("Open map...") )
+    if ( ImGui::MenuItem(Loc::Tr(LocId::Fps_Bar_OpenMap)) )
       _Editor.LoadMapFromDialog(editorContext);
 
     if ( _Editor.IsEnabled() )
     {
       ImGui::Separator();
-      if ( ImGui::MenuItem("Save") )
+      if ( ImGui::MenuItem(Loc::Tr(LocId::Fps_Bar_Save)) )
         _Editor.SaveMap(editorContext);
-      if ( ImGui::MenuItem("Save as...") )
+      if ( ImGui::MenuItem(Loc::Tr(LocId::Fps_Bar_SaveAs)) )
         _Editor.SaveMapAsDialog(editorContext);
-      if ( ImGui::MenuItem("Load prop...") )
+      if ( ImGui::MenuItem(Loc::Tr(LocId::Fps_Bar_LoadProp)) )
         _Editor.LoadPropFromDialog(editorContext);
     }
 
     ImGui::Separator();
-    if ( ImGui::MenuItem("Exit") )
+    if ( ImGui::MenuItem(Loc::Tr(LocId::Fps_Bar_Exit)) )
       _ExitToTestSelection = true;
     ImGui::EndMenu();
   }
 
-  if ( ImGui::BeginMenu("View") )
+  if ( ImGui::BeginMenu(Loc::Tr(LocId::Fps_Bar_View)) )
   {
-    ImGui::MenuItem("FPS Debug", nullptr, &_ShowDebugPanel);
-    ImGui::MenuItem("Render Settings", nullptr, &_ShowRenderSettingsPanel);
-    ImGui::MenuItem("Rendering Stats", nullptr, &_ShowRenderStatsPanel);
+    ImGui::MenuItem(Loc::Tr(LocId::Fps_Bar_Debug), nullptr, &_ShowDebugPanel);
+    ImGui::MenuItem(Loc::Tr(LocId::Fps_Bar_RenderSettings), nullptr, &_ShowRenderSettingsPanel);
+    ImGui::MenuItem(Loc::Tr(LocId::Fps_Bar_RenderStats), nullptr, &_ShowRenderStatsPanel);
 
     if ( _Editor.IsEnabled() )
     {
@@ -2303,21 +2307,21 @@ int FpsGameApp::DrawMainMenuBar()
     ImGui::EndMenu();
   }
 
-  if ( ImGui::BeginMenu("Render") )
+  if ( ImGui::BeginMenu(Loc::Tr(LocId::Fps_Bar_Render)) )
   {
-    if ( ImGui::MenuItem("Deferred", nullptr, FpsRendererMode::Deferred == _GameSettings._RendererMode)
+    if ( ImGui::MenuItem(Loc::Tr(LocId::Fps_Renderer_Deferred), nullptr, FpsRendererMode::Deferred == _GameSettings._RendererMode)
       && ( FpsRendererMode::Deferred != _GameSettings._RendererMode ) )
     {
       SetRendererMode(FpsRendererMode::Deferred);
     }
-    if ( ImGui::MenuItem("Software", nullptr, FpsRendererMode::Software == _GameSettings._RendererMode)
+    if ( ImGui::MenuItem(Loc::Tr(LocId::Fps_Renderer_Software), nullptr, FpsRendererMode::Software == _GameSettings._RendererMode)
       && ( FpsRendererMode::Software != _GameSettings._RendererMode ) )
     {
       SetRendererMode(FpsRendererMode::Software);
     }
 
     ImGui::Separator();
-    if ( ImGui::MenuItem("Photo Mode (Path Tracer)", "L / F12", FpsPhotoModeState::Inactive != _PhotoModeState, ( FpsAppState::InGame == _AppState ) && !_Editor.IsEnabled()) )
+    if ( ImGui::MenuItem(Loc::Tr(LocId::Fps_Key_PhotoMode), "L / F12", FpsPhotoModeState::Inactive != _PhotoModeState, ( FpsAppState::InGame == _AppState ) && !_Editor.IsEnabled()) )
     {
       if ( FpsPhotoModeState::Inactive == _PhotoModeState )
         EnterPhotoMode();
@@ -2326,7 +2330,7 @@ int FpsGameApp::DrawMainMenuBar()
     }
 
     ImGui::Separator();
-    if ( ImGui::MenuItem("Capture image") )
+    if ( ImGui::MenuItem(Loc::Tr(LocId::Fps_Bar_CaptureImage)) )
     {
       _CaptureOutputPath = "./Test6_" + std::to_string(_NbRenderedFrames) + "frames.png";
       _RenderToFile = true;
@@ -2334,9 +2338,23 @@ int FpsGameApp::DrawMainMenuBar()
     ImGui::EndMenu();
   }
 
-  if ( ImGui::BeginMenu("Help") )
+  if ( ImGui::BeginMenu(Loc::Tr(LocId::Option_Language)) )
   {
-    if ( ImGui::MenuItem("About & Controls...") )
+    Language currentLang = Loc::GetLanguage();
+    if ( ImGui::MenuItem("English", nullptr, currentLang == Language::English) )
+    {
+      Loc::SetLanguage(Language::English);
+    }
+    if ( ImGui::MenuItem("Français", nullptr, currentLang == Language::French) )
+    {
+      Loc::SetLanguage(Language::French);
+    }
+    ImGui::EndMenu();
+  }
+
+  if ( ImGui::BeginMenu(Loc::Tr(LocId::Fps_Bar_Help)) )
+  {
+    if ( ImGui::MenuItem(Loc::Tr(LocId::Fps_Bar_About)) )
       _ShowHelpDialog = true;
     ImGui::EndMenu();
   }
@@ -2802,6 +2820,14 @@ int FpsGameApp::Run()
       ret = 1;
       break;
     }
+
+    _Preferences.LoadFromFile(UserPreferences::GetDefaultFilePath("fps_preferences.json"));
+    Loc::SetLanguage(_Preferences._Language);
+    _Preferences.ApplyTo(_Settings, &_Audio);
+    if ( _Settings._VSync )
+      glfwSwapInterval(1);
+    else
+      glfwSwapInterval(0);
 
     glewExperimental = GL_TRUE;
     if ( glewInit() != GLEW_OK )

@@ -1,6 +1,7 @@
 #include "FpsGameHud.h"
 
 #include "AudioEngine.h"
+#include "Localization.h"
 #include "Renderer.h"
 #include "Scene.h"
 
@@ -27,8 +28,8 @@ const char * GetRendererModeLabel( FpsRendererMode iMode )
 {
   switch ( iMode )
   {
-    case FpsRendererMode::Software: return "Software Rasterizer (CPU SIMD)";
-    default:                        return "Deferred Renderer (Real-Time PBR)";
+    case FpsRendererMode::Software: return Loc::Tr(LocId::Fps_Renderer_Software);
+    default:                        return Loc::Tr(LocId::Fps_Renderer_Deferred);
   }
 }
 
@@ -79,15 +80,15 @@ void FpsGameHud::DrawMainMenuPage( FpsGameHudContext & ioContext )
   const ImGuiIO & io = ImGui::GetIO();
   const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.57f);
 
-  if ( GameMenuUI::BeginMenuPanel("##FpsMainMenu", "MAIN MENU", center, Vec2(520.0f, 0.0f), _Theme, _Fonts) )
+  if ( GameMenuUI::BeginMenuPanel("##FpsMainMenu", Loc::Tr(LocId::Fps_MainMenuTitle), center, Vec2(520.0f, 0.0f), _Theme, _Fonts) )
   {
     const std::vector<GameMenuItem> items =
     {
-      { "DEPLOY / SELECT MAP", "Choose an arena or load a custom .fpsmap file",         "MAPS", true, false },
-      { "QUICK START",         "Deploy immediately into the active arena",              "PLAY", true, false },
-      { "MAP EDITOR",          "Open the interactive scene, prop, light & material editor", "F3", true, false },
-      { "OPTIONS",             "Configure gameplay, renderer backend & controls",       "F1",   true, false },
-      { "EXIT TO DESKTOP",     "Close application",                                     "",     true, true  }
+      { Loc::Tr(LocId::Fps_Menu_Deploy),     Loc::Tr(LocId::Fps_Menu_DeployDesc),     Loc::Tr(LocId::Fps_Menu_DeployBadge),     true, false },
+      { Loc::Tr(LocId::Fps_Menu_QuickStart), Loc::Tr(LocId::Fps_Menu_QuickStartDesc), Loc::Tr(LocId::Fps_Menu_QuickStartBadge), true, false },
+      { Loc::Tr(LocId::Fps_Menu_Editor),     Loc::Tr(LocId::Fps_Menu_EditorDesc),     "F3",                                     true, false },
+      { Loc::Tr(LocId::Fps_Menu_Options),    Loc::Tr(LocId::Fps_Menu_OptionsDesc),    "F1",                                     true, false },
+      { Loc::Tr(LocId::Fps_Menu_Exit),       Loc::Tr(LocId::Fps_Menu_ExitDesc),       "",                                       true, true  }
     };
 
     const int activated = GameMenuUI::DrawMenuButtonList(items, _MainMenuNav, *ioContext._MenuInput, _Theme, _Fonts, 56.0f);
@@ -107,9 +108,9 @@ void FpsGameHud::DrawMainMenuPage( FpsGameHudContext & ioContext )
   }
   GameMenuUI::EndMenuPanel();
 
-  const std::string leftStatus = std::string("BACKEND: ") + GetRendererModeLabel(ioContext._GameSettings->_RendererMode)
-                               + "    MAP: " + ioContext._MapName;
-  GameMenuUI::DrawFooterBar(leftStatus.c_str(), "[UP/DOWN] Navigate    [ENTER] Select    [F1] Options    [F3] Editor", _Theme, _Fonts);
+  const std::string leftStatus = std::string(Loc::Tr(LocId::Option_ActiveRenderer)) + ": " + GetRendererModeLabel(ioContext._GameSettings->_RendererMode)
+                               + "    " + Loc::Tr(LocId::Fps_Map_Title) + ": " + ioContext._MapName;
+  GameMenuUI::DrawFooterBar(leftStatus.c_str(), Loc::Tr(LocId::Fps_Footer_Main), _Theme, _Fonts);
 }
 
 // ----------------------------------------------------------------------------
@@ -126,29 +127,29 @@ void FpsGameHud::DrawMapSelectPage( FpsGameHudContext & ioContext )
   const ImGuiIO & io = ImGui::GetIO();
   const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.56f);
 
-  if ( GameMenuUI::BeginMenuPanel("##FpsMapSelect", "SELECT MAP", center, Vec2(820.0f, 0.0f), _Theme, _Fonts) )
+  if ( GameMenuUI::BeginMenuPanel("##FpsMapSelect", Loc::Tr(LocId::Fps_Map_Title), center, Vec2(820.0f, 0.0f), _Theme, _Fonts) )
   {
     const std::vector<GameSelectionCard> cards =
     {
       {
-        "CYBER CITY",
+        Loc::Tr(LocId::Fps_Map_CityTitle),
         "ccity.fpsmap",
-        "Large-scale urban sector with props, dynamic lights and boid flocks.",
-        PathEndsWith(ioContext._MapPath, "ccity.fpsmap") ? "ACTIVE MAP" : "AVAILABLE",
+        Loc::Tr(LocId::Fps_Map_CityDesc),
+        PathEndsWith(ioContext._MapPath, "ccity.fpsmap") ? Loc::Tr(LocId::Fps_Map_Active) : Loc::Tr(LocId::Fps_Map_Available),
         Vec4(0.96f, 0.72f, 0.18f, 1.0f)
       },
       {
-        "DEFAULT ARENA",
+        Loc::Tr(LocId::Fps_Map_DefaultTitle),
         "default.fpsmap",
-        "Compact tactical arena with pillars, target crates and clean sightlines.",
-        PathEndsWith(ioContext._MapPath, "default.fpsmap") ? "ACTIVE MAP" : "AVAILABLE",
+        Loc::Tr(LocId::Fps_Map_DefaultDesc),
+        PathEndsWith(ioContext._MapPath, "default.fpsmap") ? Loc::Tr(LocId::Fps_Map_Active) : Loc::Tr(LocId::Fps_Map_Available),
         Vec4(0.90f, 0.25f, 0.22f, 1.0f)
       },
       {
-        "CUSTOM MAP",
-        "Browse .fpsmap...",
-        "Load any user-authored .fpsmap file from disk using the native file dialog.",
-        "FILE DIALOG",
+        Loc::Tr(LocId::Fps_Map_CustomTitle),
+        Loc::Tr(LocId::Fps_Map_CustomSubtitle),
+        Loc::Tr(LocId::Fps_Map_CustomDesc),
+        Loc::Tr(LocId::Fps_Map_FileDialog),
         Vec4(0.25f, 0.95f, 0.55f, 1.0f)
       }
     };
@@ -164,9 +165,9 @@ void FpsGameHud::DrawMapSelectPage( FpsGameHudContext & ioContext )
     ImGui::Separator();
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
-    ImGui::Checkbox("Free Look Mode", &ioContext._GameSettings->_FreeLook);
+    ImGui::Checkbox(Loc::Tr(LocId::Fps_Map_FreeLook), &ioContext._GameSettings->_FreeLook);
     ImGui::SameLine(0.0f, 32.0f);
-    if ( ImGui::Checkbox("Show View Weapon", &ioContext._GameSettings->_ShowViewWeapon) )
+    if ( ImGui::Checkbox(Loc::Tr(LocId::Fps_Map_ShowWeapon), &ioContext._GameSettings->_ShowViewWeapon) )
       ioContext._WeaponDirty = true;
 
     ImGui::Dummy(ImVec2(0.0f, 12.0f));
@@ -174,7 +175,7 @@ void FpsGameHud::DrawMapSelectPage( FpsGameHudContext & ioContext )
     const float availW = ImGui::GetContentRegionAvail().x;
     const float btnW = ( availW - 16.0f ) * 0.5f;
 
-    if ( GameMenuUI::DrawActionButton("BACK (ESC)", Vec2(btnW, 46.0f), false, _Theme, _Fonts) )
+    if ( GameMenuUI::DrawActionButton(Loc::Tr(LocId::Fps_Map_Back), Vec2(btnW, 46.0f), false, _Theme, _Fonts) )
     {
       if ( ioContext._Audio && !ioContext._MenuInput->_Back )
         ioContext._Audio->PlaySound2D("ui_back", 0.8f, 1.0f);
@@ -183,7 +184,7 @@ void FpsGameHud::DrawMapSelectPage( FpsGameHudContext & ioContext )
 
     ImGui::SameLine(0.0f, 16.0f);
 
-    if ( GameMenuUI::DrawActionButton("DEPLOY (ENTER)", Vec2(btnW, 46.0f), true, _Theme, _Fonts) || cardConfirmed )
+    if ( GameMenuUI::DrawActionButton(Loc::Tr(LocId::Fps_Map_Deploy), Vec2(btnW, 46.0f), true, _Theme, _Fonts) || cardConfirmed )
     {
       if ( ioContext._Audio && !ioContext._MenuInput->_Confirm )
         ioContext._Audio->PlaySound2D("ui_confirm", 0.8f, 1.0f);
@@ -202,7 +203,7 @@ void FpsGameHud::DrawMapSelectPage( FpsGameHudContext & ioContext )
   }
   GameMenuUI::EndMenuPanel();
 
-  GameMenuUI::DrawFooterBar("SELECT MAP & DEPLOY", "[LEFT/RIGHT] Select Map    [ENTER] Deploy    [ESC] Back", _Theme, _Fonts);
+  GameMenuUI::DrawFooterBar(Loc::Tr(LocId::Fps_Footer_MapSelectLeft), Loc::Tr(LocId::Fps_Footer_MapSelect), _Theme, _Fonts);
 }
 
 // ----------------------------------------------------------------------------
@@ -228,9 +229,15 @@ void FpsGameHud::DrawOptionsPage( FpsGameHudContext & ioContext, bool & oBackReq
   const ImGuiIO & io = ImGui::GetIO();
   const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.54f);
 
-  if ( GameMenuUI::BeginMenuPanel("##FpsOptionsPanel", "OPTIONS & CONFIGURATION", center, Vec2(780.0f, 540.0f), _Theme, _Fonts) )
+  if ( GameMenuUI::BeginMenuPanel("##FpsOptionsPanel", Loc::Tr(LocId::Fps_Opt_Title), center, Vec2(780.0f, 540.0f), _Theme, _Fonts) )
   {
-    const std::vector<const char *> tabs = { "GAMEPLAY", "GRAPHICS", "AUDIO", "CONTROLS" };
+    const std::vector<const char *> tabs =
+    {
+      Loc::Tr(LocId::Tab_Gameplay),
+      Loc::Tr(LocId::Tab_Graphics),
+      Loc::Tr(LocId::Tab_Audio),
+      Loc::Tr(LocId::Tab_Controls)
+    };
     if ( GameMenuUI::DrawTabBar(tabs, _OptionsTabIndex, _Theme, _Fonts) )
     {
       if ( ioContext._Audio && !ioContext._MenuInput->_PrevTab && !ioContext._MenuInput->_NextTab )
@@ -241,49 +248,57 @@ void FpsGameHud::DrawOptionsPage( FpsGameHudContext & ioContext, bool & oBackReq
 
     if ( 0 == _OptionsTabIndex )
     {
-      ImGui::TextDisabled("Movement & Camera");
+      int currentLang = static_cast<int>(Loc::GetLanguage());
+      const char * langNames[] = { "English", "Français" };
+      if ( ImGui::Combo(Loc::Tr(LocId::Option_Language), &currentLang, langNames, IM_ARRAYSIZE(langNames)) )
+      {
+        Loc::SetLanguage(static_cast<Language>(currentLang));
+      }
+      ImGui::Spacing();
+
+      ImGui::TextDisabled("%s", Loc::Tr(LocId::Fps_Opt_Movement));
       ImGui::Separator();
-      ImGui::SliderFloat("Move speed", &game._MoveSpeed, 1.f, 100.f);
-      ImGui::SliderFloat("Sprint speed", &game._SprintSpeed, 1.f, 16.f);
-      ImGui::SliderFloat("Mouse sensitivity", &game._MouseSensitivity, 0.01f, 0.25f);
-      ImGui::SliderFloat("Field of view", &game._CameraFOV, 30.f, 140.f, "%.0f deg");
-      ImGui::SliderFloat("Gravity", &game._Gravity, 1.f, 35.f);
-      ImGui::SliderFloat("Jump speed", &game._JumpSpeed, 1.f, 12.f);
-      ImGui::Checkbox("Free look (no physics)", &game._FreeLook);
+      ImGui::SliderFloat(Loc::Tr(LocId::Fps_Opt_MoveSpeed), &game._MoveSpeed, 1.f, 100.f);
+      ImGui::SliderFloat(Loc::Tr(LocId::Fps_Opt_SprintSpeed), &game._SprintSpeed, 1.f, 16.f);
+      ImGui::SliderFloat(Loc::Tr(LocId::Fps_Opt_MouseSensitivity), &game._MouseSensitivity, 0.01f, 0.25f);
+      ImGui::SliderFloat(Loc::Tr(LocId::Fps_Opt_FOV), &game._CameraFOV, 30.f, 140.f, "%.0f deg");
+      ImGui::SliderFloat(Loc::Tr(LocId::Fps_Opt_Gravity), &game._Gravity, 1.f, 35.f);
+      ImGui::SliderFloat(Loc::Tr(LocId::Fps_Opt_JumpSpeed), &game._JumpSpeed, 1.f, 12.f);
+      ImGui::Checkbox(Loc::Tr(LocId::Fps_Opt_FreeLook), &game._FreeLook);
 
       ImGui::Dummy(ImVec2(0.0f, 6.0f));
-      ImGui::TextDisabled("Head Bob");
+      ImGui::TextDisabled("%s", Loc::Tr(LocId::Fps_Opt_HeadBobHeader));
       ImGui::Separator();
-      ImGui::Checkbox("Head bob enabled", &game._HeadBob._Enabled);
-      ImGui::SliderFloat("Bob amplitude", &game._HeadBob._Amplitude, 0.f, 0.08f, "%.3f");
-      ImGui::SliderFloat("Bob frequency", &game._HeadBob._Frequency, 0.5f, 4.f, "%.2f");
-      ImGui::SliderFloat("Bob sway", &game._HeadBob._Sway, 0.f, 0.05f, "%.3f");
+      ImGui::Checkbox(Loc::Tr(LocId::Fps_Opt_HeadBobEnabled), &game._HeadBob._Enabled);
+      ImGui::SliderFloat(Loc::Tr(LocId::Fps_Opt_BobAmplitude), &game._HeadBob._Amplitude, 0.f, 0.08f, "%.3f");
+      ImGui::SliderFloat(Loc::Tr(LocId::Fps_Opt_BobFrequency), &game._HeadBob._Frequency, 0.5f, 4.f, "%.2f");
+      ImGui::SliderFloat(Loc::Tr(LocId::Fps_Opt_BobSway), &game._HeadBob._Sway, 0.f, 0.05f, "%.3f");
 
       ImGui::Dummy(ImVec2(0.0f, 6.0f));
-      ImGui::TextDisabled("Projectiles & Weapon");
+      ImGui::TextDisabled("%s", Loc::Tr(LocId::Fps_Opt_ProjectilesHeader));
       ImGui::Separator();
-      ImGui::SliderFloat("Projectile speed", &game._ProjectileSpeed, 1.f, 40.f);
-      ImGui::SliderFloat("Projectile gravity", &game._ProjectileGravity, 0.f, 30.f);
-      ImGui::SliderFloat("Projectile bounciness", &game._ProjectileBounciness, 0.f, 1.f);
-      ImGui::SliderFloat("Projectile cooldown", &game._ProjectileCooldown, 0.02f, 1.f);
+      ImGui::SliderFloat(Loc::Tr(LocId::Fps_Opt_ProjSpeed), &game._ProjectileSpeed, 1.f, 40.f);
+      ImGui::SliderFloat(Loc::Tr(LocId::Fps_Opt_ProjGravity), &game._ProjectileGravity, 0.f, 30.f);
+      ImGui::SliderFloat(Loc::Tr(LocId::Fps_Opt_ProjBounciness), &game._ProjectileBounciness, 0.f, 1.f);
+      ImGui::SliderFloat(Loc::Tr(LocId::Fps_Opt_ProjCooldown), &game._ProjectileCooldown, 0.02f, 1.f);
       int maxProjectiles = game._MaxProjectiles;
-      if ( ImGui::SliderInt("Max projectiles", &maxProjectiles, 1, 128) )
+      if ( ImGui::SliderInt(Loc::Tr(LocId::Fps_Opt_MaxProjectiles), &maxProjectiles, 1, 128) )
       {
         game._MaxProjectiles = std::max(1, maxProjectiles);
         ioContext._RequestReloadScene = true;
       }
-      if ( ImGui::Checkbox("Show view weapon", &game._ShowViewWeapon) )
+      if ( ImGui::Checkbox(Loc::Tr(LocId::Fps_Opt_ShowViewWeapon), &game._ShowViewWeapon) )
         ioContext._WeaponDirty = true;
     }
     else if ( 1 == _OptionsTabIndex )
     {
-      ImGui::TextDisabled("RTRTCore Engine & Renderer Settings");
+      ImGui::TextDisabled("%s", Loc::Tr(LocId::Fps_Opt_EngineHeader));
       ImGui::Separator();
 
       const char * rendererNames[] =
       {
-        "Deferred Renderer (Real-Time PBR)",
-        "Software Rasterizer (CPU SIMD)"
+        Loc::Tr(LocId::Fps_Renderer_Deferred),
+        Loc::Tr(LocId::Fps_Renderer_Software)
       };
       int rendererIdx = static_cast<int>(game._RendererMode);
       bool reloadRenderer = false;
@@ -305,10 +320,10 @@ void FpsGameHud::DrawOptionsPage( FpsGameHudContext & ioContext, bool & oBackReq
         ioContext._RequestRendererMode = rendererIdx;
 
       ImGui::Dummy(ImVec2(0.0f, 6.0f));
-      ImGui::TextDisabled("Developer Tools");
+      ImGui::TextDisabled("%s", Loc::Tr(LocId::Fps_Opt_DevTools));
       ImGui::Separator();
       bool devPanels = ioContext._DevPanelsVisible;
-      if ( ImGui::Checkbox("Show developer panels (F4)", &devPanels) )
+      if ( ImGui::Checkbox(Loc::Tr(LocId::Fps_Opt_DevPanels), &devPanels) )
         ioContext._RequestToggleDevPanels = true;
     }
     else if ( 2 == _OptionsTabIndex )
@@ -319,53 +334,53 @@ void FpsGameHud::DrawOptionsPage( FpsGameHudContext & ioContext, bool & oBackReq
       }
       else
       {
-        ImGui::TextDisabled("Audio engine not available.");
+        ImGui::TextDisabled("%s", Loc::Tr(LocId::Fps_Opt_AudioNotAvail));
       }
     }
     else
     {
       if ( ioContext._Gamepad )
       {
-        ImGui::TextDisabled("Xbox / XInput Controller Status & Tuning");
+        ImGui::TextDisabled("%s", Loc::Tr(LocId::Fps_Opt_GamepadHeader));
         ImGui::Separator();
 
         if ( ioContext._Gamepad->IsConnected() )
         {
-          ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f), "Controller Connected: %s (Slot %d)",
+          ImGui::TextColored(ImVec4(0.25f, 0.95f, 0.55f, 1.0f), Loc::Tr(LocId::Fps_Opt_GamepadConnected),
                              ioContext._Gamepad->GetName().c_str(), ioContext._Gamepad->GetJoystickId() + 1);
         }
         else
-          ImGui::TextColored(ImVec4(0.65f, 0.70f, 0.78f, 1.0f), "No Gamepad Detected (Connect an Xbox Controller to play)");
+          ImGui::TextColored(ImVec4(0.65f, 0.70f, 0.78f, 1.0f), "%s", Loc::Tr(LocId::Fps_Opt_GamepadNotFound));
 
         float deadzone = ioContext._Gamepad->GetStickDeadzone();
         ImGui::SetNextItemWidth(220.0f);
-        if ( ImGui::SliderFloat("Stick deadzone", &deadzone, 0.05f, 0.45f, "%.2f") )
+        if ( ImGui::SliderFloat(Loc::Tr(LocId::Fps_Opt_Deadzone), &deadzone, 0.05f, 0.45f, "%.2f") )
           ioContext._Gamepad->SetStickDeadzone(deadzone);
 
         if ( ioContext._GamepadLookSensitivity )
         {
           ImGui::SetNextItemWidth(220.0f);
-          ImGui::SliderFloat("Look speed (deg/s)", ioContext._GamepadLookSensitivity, 40.f, 360.f, "%.0f");
+          ImGui::SliderFloat(Loc::Tr(LocId::Fps_Opt_LookSpeed), ioContext._GamepadLookSensitivity, 40.f, 360.f, "%.0f");
         }
         ImGui::Dummy(ImVec2(0.0f, 6.0f));
       }
 
       const std::vector<GameKeybindEntry> bindings =
       {
-        { "MOVEMENT",        "Move Forward / Back",     "W / S",       "UP / DOWN",  "L-STICK UP / DOWN"  },
-        { "MOVEMENT",        "Strafe Left / Right",     "A / D",       "",           "L-STICK LEFT / RIGHT" },
-        { "MOVEMENT",        "Look Around",             "MOUSE",       "",           "R-STICK"            },
-        { "MOVEMENT",        "Jump",                    "SPACE",       "",           "A BUTTON"           },
-        { "MOVEMENT",        "Sprint",                  "LEFT SHIFT",  "",           "L3 / LB"            },
-        { "COMBAT",          "Fire Projectile",         "LEFT CLICK",  "",           "RT"                 },
-        { "COMBAT",          "Respawn Player",          "R",           "",           "Y BUTTON"           },
-        { "SYSTEM",          "Pause Menu",              "ESCAPE",      "P",          "START"              },
-        { "SYSTEM",          "Options Menu",            "F1",          "",           ""                   },
-        { "SYSTEM",          "Toggle Free Look",        "F2",          "",           ""                   },
-        { "SYSTEM",          "Map Editor",              "F3",          "",           ""                   },
-        { "SYSTEM",          "Developer Panels",        "F4",          "",           ""                   },
-        { "SYSTEM",          "Deferred / Software",     "J / K",       "",           ""                   },
-        { "SYSTEM",          "Photo Mode (Path Tracer)", "L",          "F12",        ""                   }
+        { Loc::Tr(LocId::Fps_Key_CategoryMovement), Loc::Tr(LocId::Fps_Key_Move),           "W / S",       "UP / DOWN",  "L-STICK UP / DOWN"  },
+        { Loc::Tr(LocId::Fps_Key_CategoryMovement), Loc::Tr(LocId::Fps_Key_Strafe),         "A / D",       "",           "L-STICK LEFT / RIGHT" },
+        { Loc::Tr(LocId::Fps_Key_CategoryMovement), Loc::Tr(LocId::Fps_Key_Look),           "MOUSE",       "",           "R-STICK"            },
+        { Loc::Tr(LocId::Fps_Key_CategoryMovement), Loc::Tr(LocId::Fps_Key_Jump),           "SPACE",       "",           "A BUTTON"           },
+        { Loc::Tr(LocId::Fps_Key_CategoryMovement), Loc::Tr(LocId::Fps_Key_Sprint),         "LEFT SHIFT",  "",           "L3 / LB"            },
+        { Loc::Tr(LocId::Fps_Key_CategoryCombat),   Loc::Tr(LocId::Fps_Key_Fire),           "LEFT CLICK",  "",           "RT"                 },
+        { Loc::Tr(LocId::Fps_Key_CategoryCombat),   Loc::Tr(LocId::Fps_Key_Respawn),        "R",           "",           "Y BUTTON"           },
+        { Loc::Tr(LocId::Fps_Key_CategorySystem),   Loc::Tr(LocId::Fps_Key_Pause),          "ESCAPE",      "P",          "START"              },
+        { Loc::Tr(LocId::Fps_Key_CategorySystem),   Loc::Tr(LocId::Fps_Key_Options),        "F1",          "",           ""                   },
+        { Loc::Tr(LocId::Fps_Key_CategorySystem),   Loc::Tr(LocId::Fps_Key_ToggleFreeLook),  "F2",          "",           ""                   },
+        { Loc::Tr(LocId::Fps_Key_CategorySystem),   Loc::Tr(LocId::Fps_Key_MapEditor),      "F3",          "",           ""                   },
+        { Loc::Tr(LocId::Fps_Key_CategorySystem),   Loc::Tr(LocId::Fps_Key_DevPanels),      "F4",          "",           ""                   },
+        { Loc::Tr(LocId::Fps_Key_CategorySystem),   Loc::Tr(LocId::Fps_Key_SwitchRenderer), "J / K",       "",           ""                   },
+        { Loc::Tr(LocId::Fps_Key_CategorySystem),   Loc::Tr(LocId::Fps_Key_PhotoMode),      "L",           "F12",        ""                   }
       };
       GameMenuUI::DrawKeybindingTable(bindings, _Theme, _Fonts);
     }
@@ -373,7 +388,7 @@ void FpsGameHud::DrawOptionsPage( FpsGameHudContext & ioContext, bool & oBackReq
     ImGui::EndChild();
 
     ImGui::Separator();
-    if ( GameMenuUI::DrawActionButton("BACK (ESC / B)", Vec2(220.0f, 42.0f), true, _Theme, _Fonts) )
+    if ( GameMenuUI::DrawActionButton(Loc::Tr(LocId::Fps_Opt_BackBtn), Vec2(220.0f, 42.0f), true, _Theme, _Fonts) )
     {
       if ( ioContext._Audio && !ioContext._MenuInput->_Back )
         ioContext._Audio->PlaySound2D("ui_back", 0.8f, 1.0f);
@@ -382,7 +397,7 @@ void FpsGameHud::DrawOptionsPage( FpsGameHudContext & ioContext, bool & oBackReq
   }
   GameMenuUI::EndMenuPanel();
 
-  GameMenuUI::DrawFooterBar("CONFIGURATION", "[ESC / B] Back    [LB / RB] Switch Tab", _Theme, _Fonts);
+  GameMenuUI::DrawFooterBar(Loc::Tr(LocId::Option_Title), Loc::Tr(LocId::Fps_Footer_Options), _Theme, _Fonts);
 }
 
 // ----------------------------------------------------------------------------
@@ -391,7 +406,7 @@ void FpsGameHud::DrawOptionsPage( FpsGameHudContext & ioContext, bool & oBackReq
 void FpsGameHud::DrawTitleScreenMenus( FpsGameHudContext & ioContext )
 {
   GameMenuUI::DrawBackgroundOverlay(_Theme, 0.78f);
-  GameMenuUI::DrawTitleHeader("RTRT TACTICAL FPS", "MULTI-RENDERER FIRST-PERSON SANDBOX", _Theme, _Fonts, 28.0f);
+  GameMenuUI::DrawTitleHeader(Loc::Tr(LocId::Fps_Title), Loc::Tr(LocId::Fps_Subtitle), _Theme, _Fonts, 28.0f);
 
   if ( FpsMenuPage::MainMenu == _MenuPage )
     DrawMainMenuPage(ioContext);
@@ -431,17 +446,17 @@ void FpsGameHud::DrawInGamePauseModal( FpsGameHudContext & ioContext )
   const ImGuiIO & io = ImGui::GetIO();
   const Vec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.52f);
 
-  if ( GameMenuUI::BeginMenuPanel("##FpsPauseModal", "GAME PAUSED", center, Vec2(500.0f, 0.0f), _Theme, _Fonts) )
+  if ( GameMenuUI::BeginMenuPanel("##FpsPauseModal", Loc::Tr(LocId::Fps_Pause_Title), center, Vec2(500.0f, 0.0f), _Theme, _Fonts) )
   {
     const std::vector<GameMenuItem> items =
     {
-      { "RESUME GAME",            "Return to active combat",                    "ESC / P", true, false },
-      { "PHOTO MODE",             "Frame & capture high-quality path-traced photo", "L / F12", true, false },
-      { "RESPAWN PLAYER",         "Reset position, velocity & clear projectiles", "R",     true, false },
-      { "SWITCH MAP",             "Open the map selection screen",              "MAPS",    true, false },
-      { "ENTER MAP EDITOR",       "Switch to the interactive 3D map editor",    "F3",      true, false },
-      { "OPTIONS",                "Configure gameplay, renderer & controls",    "F1",      true, false },
-      { "RETURN TO TITLE SCREEN", "Exit match and return to Main Menu",         "",        true, true  }
+      { Loc::Tr(LocId::Fps_Pause_Resume),      Loc::Tr(LocId::Fps_Pause_ResumeDesc),      "ESC / P", true, false },
+      { Loc::Tr(LocId::Fps_Pause_PhotoMode),   Loc::Tr(LocId::Fps_Pause_PhotoModeDesc),   "L / F12", true, false },
+      { Loc::Tr(LocId::Fps_Pause_Respawn),     Loc::Tr(LocId::Fps_Pause_RespawnDesc),     "R",       true, false },
+      { Loc::Tr(LocId::Fps_Pause_SwitchMap),   Loc::Tr(LocId::Fps_Pause_SwitchMapDesc),   "MAPS",    true, false },
+      { Loc::Tr(LocId::Fps_Pause_EnterEditor), Loc::Tr(LocId::Fps_Pause_EnterEditorDesc), "F3",      true, false },
+      { Loc::Tr(LocId::Fps_Pause_Options),     Loc::Tr(LocId::Fps_Pause_OptionsDesc),     "F1",      true, false },
+      { Loc::Tr(LocId::Fps_Pause_MainMenu),    Loc::Tr(LocId::Fps_Pause_MainMenuDesc),    "",        true, true  }
     };
 
     const int activated = GameMenuUI::DrawMenuButtonList(items, _PauseMenuNav, *ioContext._MenuInput, _Theme, _Fonts, 56.0f);
@@ -528,37 +543,37 @@ void FpsGameHud::DrawPhotoModeHud( FpsGameHudContext & ioContext )
     const Vec2 panelSize(380.0f, 0.0f);
     const Vec2 panelCenter(io.DisplaySize.x - panelSize.x * 0.5f - 28.0f, io.DisplaySize.y * 0.48f);
 
-    if ( GameMenuUI::BeginMenuPanel("##FpsPhotoSetup", "PHOTO MODE SETUP", panelCenter, panelSize, _Theme, _Fonts) )
+    if ( GameMenuUI::BeginMenuPanel("##FpsPhotoSetup", Loc::Tr(LocId::Fps_Photo_SetupTitle), panelCenter, panelSize, _Theme, _Fonts) )
     {
-      ImGui::TextDisabled("Camera & Composition");
+      ImGui::TextDisabled("%s", Loc::Tr(LocId::Fps_Photo_CameraHeader));
       ImGui::Separator();
 
       if ( ioContext._GameSettings )
       {
-        if ( ImGui::SliderFloat("Field of View", &ioContext._GameSettings->_CameraFOV, 30.f, 140.f, "%.0f deg") )
+        if ( ImGui::SliderFloat(Loc::Tr(LocId::Fps_Photo_FOV), &ioContext._GameSettings->_CameraFOV, 30.f, 140.f, "%.0f deg") )
           ioContext._CameraDirty = true;
 
-        if ( ImGui::Checkbox("Show View Weapon", &ioContext._GameSettings->_ShowViewWeapon) )
+        if ( ImGui::Checkbox(Loc::Tr(LocId::Fps_Photo_ShowWeapon), &ioContext._GameSettings->_ShowViewWeapon) )
           ioContext._WeaponDirty = true;
 
         ImGui::SameLine(0.0f, 16.0f);
-        if ( ImGui::SmallButton("Reset Camera") )
+        if ( ImGui::SmallButton(Loc::Tr(LocId::Fps_Photo_ResetCam)) )
           ioContext._RequestResetPhotoCamera = true;
       }
 
       if ( ioContext._RenderSettings )
       {
         ImGui::Dummy(ImVec2(0.0f, 4.0f));
-        ImGui::TextDisabled("Exposure & Tone Mapping");
+        ImGui::TextDisabled("%s", Loc::Tr(LocId::Fps_Photo_ToneMappingHeader));
         ImGui::Separator();
 
-        if ( ImGui::Checkbox("Tone Mapping", &ioContext._RenderSettings->_ToneMapping) )
+        if ( ImGui::Checkbox(Loc::Tr(LocId::Fps_Photo_ToneMapping), &ioContext._RenderSettings->_ToneMapping) )
           ioContext._RenderSettingsDirty = true;
         if ( ioContext._RenderSettings->_ToneMapping )
         {
-          if ( ImGui::SliderFloat("Exposure", &ioContext._RenderSettings->_Exposure, 0.1f, 5.f, "%.2f") )
+          if ( ImGui::SliderFloat(Loc::Tr(LocId::Fps_Photo_Exposure), &ioContext._RenderSettings->_Exposure, 0.1f, 5.f, "%.2f") )
             ioContext._RenderSettingsDirty = true;
-          if ( ImGui::SliderFloat("Gamma", &ioContext._RenderSettings->_Gamma, 0.5f, 3.f, "%.2f") )
+          if ( ImGui::SliderFloat(Loc::Tr(LocId::Fps_Photo_Gamma), &ioContext._RenderSettings->_Gamma, 0.5f, 3.f, "%.2f") )
             ioContext._RenderSettingsDirty = true;
         }
       }
@@ -566,13 +581,13 @@ void FpsGameHud::DrawPhotoModeHud( FpsGameHudContext & ioContext )
       if ( ioContext._PhotoSettings )
       {
         ImGui::Dummy(ImVec2(0.0f, 4.0f));
-        ImGui::TextDisabled("Path Tracer Capture Settings");
+        ImGui::TextDisabled("%s", Loc::Tr(LocId::Fps_Photo_PtHeader));
         ImGui::Separator();
 
-        ImGui::SliderInt("Accumulation Passes", &ioContext._PhotoSettings->_TargetPasses, 8, 512);
-        ImGui::SliderInt("Samples / Pass (SPP)", &ioContext._PhotoSettings->_SamplesPerPixel, 1, 8);
-        ImGui::SliderInt("Max Bounces", &ioContext._PhotoSettings->_Bounces, 1, 8);
-        ImGui::Checkbox("Enable Denoiser", &ioContext._PhotoSettings->_Denoise);
+        ImGui::SliderInt(Loc::Tr(LocId::Fps_Photo_Passes), &ioContext._PhotoSettings->_TargetPasses, 8, 512);
+        ImGui::SliderInt(Loc::Tr(LocId::Fps_Photo_SPP), &ioContext._PhotoSettings->_SamplesPerPixel, 1, 8);
+        ImGui::SliderInt(Loc::Tr(LocId::Fps_Photo_Bounces), &ioContext._PhotoSettings->_Bounces, 1, 8);
+        ImGui::Checkbox(Loc::Tr(LocId::Fps_Photo_Denoise), &ioContext._PhotoSettings->_Denoise);
 
         if ( ioContext._PhotoSettings->_Denoise )
         {
@@ -584,7 +599,7 @@ void FpsGameHud::DrawPhotoModeHud( FpsGameHudContext & ioContext )
           const int methodCount = 3;
 #endif
           int denoisingMethod = static_cast<int>(ioContext._PhotoSettings->_DenoisingMethod);
-          if ( ImGui::Combo("Denoiser", &denoisingMethod, DENOISING_METHODS, methodCount) )
+          if ( ImGui::Combo(Loc::Tr(LocId::Fps_Photo_DenoiserCombo), &denoisingMethod, DENOISING_METHODS, methodCount) )
             ioContext._PhotoSettings->_DenoisingMethod = static_cast<unsigned int>(denoisingMethod);
         }
       }
@@ -594,17 +609,17 @@ void FpsGameHud::DrawPhotoModeHud( FpsGameHudContext & ioContext )
       ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
       const float availW = ImGui::GetContentRegionAvail().x;
-      if ( GameMenuUI::DrawActionButton("CAPTURE PHOTO (ENTER)", Vec2(availW, 44.0f), true, _Theme, _Fonts) )
+      if ( GameMenuUI::DrawActionButton(Loc::Tr(LocId::Fps_Photo_CaptureBtn), Vec2(availW, 44.0f), true, _Theme, _Fonts) )
         ioContext._RequestCapturePhoto = true;
 
-      if ( GameMenuUI::DrawActionButton("EXIT PHOTO MODE (ESC)", Vec2(availW, 40.0f), false, _Theme, _Fonts) )
+      if ( GameMenuUI::DrawActionButton(Loc::Tr(LocId::Fps_Photo_ExitBtn), Vec2(availW, 40.0f), false, _Theme, _Fonts) )
         ioContext._RequestExitPhotoPreview = true;
     }
     GameMenuUI::EndMenuPanel();
 
     GameMenuUI::DrawFooterBar(
-      "PHOTO MODE — IN-GAME RENDERER PREVIEW",
-      "[RMB + WASD / SPACE / CTRL] Fly Camera    [SHIFT] Fast    [ENTER] Capture Photo    [ESC] Exit",
+      Loc::Tr(LocId::Fps_Photo_FooterPreviewTitle),
+      Loc::Tr(LocId::Fps_Photo_FooterSetup),
       _Theme,
       _Fonts );
   }
@@ -613,19 +628,19 @@ void FpsGameHud::DrawPhotoModeHud( FpsGameHudContext & ioContext )
     const Vec2 panelSize(460.0f, 0.0f);
     const Vec2 panelCenter(io.DisplaySize.x * 0.5f, io.DisplaySize.y - 120.0f);
 
-    if ( GameMenuUI::BeginMenuPanel("##FpsPhotoCapture", "CAPTURING PHOTO (PATH TRACER)", panelCenter, panelSize, _Theme, _Fonts) )
+    if ( GameMenuUI::BeginMenuPanel("##FpsPhotoCapture", Loc::Tr(LocId::Fps_Photo_CapturingTitle), panelCenter, panelSize, _Theme, _Fonts) )
     {
       const int target = std::max(1, ioContext._PhotoTargetPasses);
       const int current = MathUtil::Clamp(ioContext._PhotoCurrentPass, 0, target);
       const float progress = static_cast<float>(current) / static_cast<float>(target);
 
       char overlay[64];
-      std::snprintf(overlay, sizeof(overlay), "Accumulating pass %d / %d (%.0f%%)", current, target, progress * 100.0f);
+      std::snprintf(overlay, sizeof(overlay), Loc::Tr(LocId::Fps_Photo_Accumulating), current, target, progress * 100.0f);
       ImGui::ProgressBar(progress, ImVec2(-1.0f, 26.0f), overlay);
 
       ImGui::Dummy(ImVec2(0.0f, 6.0f));
       const float availW = ImGui::GetContentRegionAvail().x;
-      if ( GameMenuUI::DrawActionButton("CANCEL CAPTURE (ESC)", Vec2(availW, 40.0f), false, _Theme, _Fonts) )
+      if ( GameMenuUI::DrawActionButton(Loc::Tr(LocId::Fps_Photo_CancelBtn), Vec2(availW, 40.0f), false, _Theme, _Fonts) )
         ioContext._RequestCancelPhotoCapture = true;
     }
     GameMenuUI::EndMenuPanel();
@@ -635,17 +650,17 @@ void FpsGameHud::DrawPhotoModeHud( FpsGameHudContext & ioContext )
     const Vec2 panelSize(720.0f, 0.0f);
     const Vec2 panelCenter(io.DisplaySize.x * 0.5f, io.DisplaySize.y - 110.0f);
 
-    if ( GameMenuUI::BeginMenuPanel("##FpsPhotoPreview", "PHOTO CAPTURED", panelCenter, panelSize, _Theme, _Fonts) )
+    if ( GameMenuUI::BeginMenuPanel("##FpsPhotoPreview", Loc::Tr(LocId::Fps_Photo_CapturedTitle), panelCenter, panelSize, _Theme, _Fonts) )
     {
       if ( !ioContext._PhotoSavedPath.empty() )
       {
-        ImGui::TextColored(ImVec4(0.30f, 0.88f, 0.45f, 1.0f), "Saved to:");
+        ImGui::TextColored(ImVec4(0.30f, 0.88f, 0.45f, 1.0f), "%s", Loc::Tr(LocId::Fps_Photo_SavedTo));
         ImGui::SameLine();
         ImGui::TextWrapped("%s", ioContext._PhotoSavedPath.c_str());
       }
       else
       {
-        ImGui::TextColored(ImVec4(0.95f, 0.24f, 0.24f, 1.0f), "Failed to save screenshot file.");
+        ImGui::TextColored(ImVec4(0.95f, 0.24f, 0.24f, 1.0f), "%s", Loc::Tr(LocId::Fps_Photo_SaveFailed));
       }
 
       ImGui::Dummy(ImVec2(0.0f, 8.0f));
@@ -653,12 +668,12 @@ void FpsGameHud::DrawPhotoModeHud( FpsGameHudContext & ioContext )
       const float availW = ImGui::GetContentRegionAvail().x;
       const float btnW = ( availW - 14.0f ) * 0.5f;
 
-      if ( GameMenuUI::DrawActionButton("REFRAME (BACKSPACE)", Vec2(btnW, 42.0f), false, _Theme, _Fonts) )
+      if ( GameMenuUI::DrawActionButton(Loc::Tr(LocId::Fps_Photo_ReframeBtn), Vec2(btnW, 42.0f), false, _Theme, _Fonts) )
         ioContext._RequestRetakePhoto = true;
 
       ImGui::SameLine(0.0f, 14.0f);
 
-      if ( GameMenuUI::DrawActionButton("EXIT PREVIEW (ESC)", Vec2(btnW, 42.0f), true, _Theme, _Fonts) )
+      if ( GameMenuUI::DrawActionButton(Loc::Tr(LocId::Fps_Photo_ExitPreviewBtn), Vec2(btnW, 42.0f), true, _Theme, _Fonts) )
         ioContext._RequestExitPhotoPreview = true;
     }
     GameMenuUI::EndMenuPanel();
@@ -693,9 +708,9 @@ void FpsGameHud::DrawGameplayHud( const FpsGameHudContext & iContext )
 
   const HudBar bars[] =
   {
-    { "HEALTH", player._Health, game._MaxHealth, IM_COL32(220, 42, 42, 235) },
-    { "ARMOR", player._Armor, game._MaxArmor, IM_COL32(64, 142, 255, 235) },
-    { "PROJECTILES", iContext._GameWorld->GetProjectileAmmo(), game._MaxProjectileAmmo, IM_COL32(235, 190, 48, 235) }
+    { Loc::Tr(LocId::Fps_Hud_Health),      player._Health, game._MaxHealth, IM_COL32(220, 42, 42, 235) },
+    { Loc::Tr(LocId::Fps_Hud_Armor),       player._Armor,  game._MaxArmor,  IM_COL32(64, 142, 255, 235) },
+    { Loc::Tr(LocId::Fps_Hud_Projectiles), iContext._GameWorld->GetProjectileAmmo(), game._MaxProjectileAmmo, IM_COL32(235, 190, 48, 235) }
   };
 
   for ( int i = 0; i < 3; ++i )
@@ -716,7 +731,7 @@ void FpsGameHud::DrawGameplayHud( const FpsGameHudContext & iContext )
     drawList -> AddText(ImVec2(origin.x + 8.f, y + 5.f), textColor, label.c_str());
   }
 
-  const char * hint = "[ESC] Pause   [L] Photo Mode   [F1] Options   [F3] Editor";
+  const char * hint = Loc::Tr(LocId::Fps_Hud_Hint);
   const ImVec2 hintSize = ImGui::CalcTextSize(hint);
   drawList -> AddText(ImVec2(io.DisplaySize.x - hintSize.x - margin, margin), IM_COL32(245, 245, 245, 140), hint);
 

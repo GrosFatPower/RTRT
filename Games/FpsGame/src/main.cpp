@@ -1,5 +1,8 @@
 #include "FpsGameApp.h"
 #include "PathUtils.h"
+#include "Localization.h"
+#include "UserPreferences.h"
+#include "MathUtil.h"
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -25,6 +28,7 @@ static void PrintUsage( const char * iExeName )
 
   std::cout << "Usage: " << exeName << " [OPTIONS]" << std::endl;
   std::cout << "Options:" << std::endl;
+  std::cout << "  --unit-tests" << std::endl;
   std::cout << "  --benchmark-software-control" << std::endl;
   std::cout << "  --benchmark-software LABEL [scalar|simd] TILE_SIZE [OPTIMIZATION] [fixed|ground|sky]" << std::endl;
   std::cout << "Examples:" << std::endl;
@@ -67,6 +71,92 @@ int main( int iArgc, char ** iArgv )
     else if ( option == "--benchmark-software-control" )
     {
       automaticSoftwareBenchmark = true;
+    }
+    else if ( option == "--unit-tests" )
+    {
+      std::cout << "==========================================" << std::endl;
+      std::cout << "Running FPS Game Localization & Preferences Tests" << std::endl;
+      std::cout << "==========================================" << std::endl;
+
+      RTRT::LocalizationManager & locMgr = RTRT::LocalizationManager::Instance();
+      locMgr.Initialize();
+
+      if ( !locMgr.IsComplete(RTRT::Language::English) )
+      {
+        std::cerr << "FAIL: English localization table has missing keys!" << std::endl;
+        return 1;
+      }
+      if ( !locMgr.IsComplete(RTRT::Language::French) )
+      {
+        std::cerr << "FAIL: French localization table has missing keys!" << std::endl;
+        return 1;
+      }
+
+      // Check key retrieval
+      RTRT::Loc::SetLanguage(RTRT::Language::English);
+      const char * enTitle = RTRT::Loc::Tr(RTRT::LocId::Fps_Title);
+      if ( !enTitle || std::string(enTitle) != "RTRT TACTICAL FPS" )
+      {
+        std::cerr << "FAIL: English Fps_Title mismatch: " << ( enTitle ? enTitle : "null" ) << std::endl;
+        return 1;
+      }
+
+      RTRT::Loc::SetLanguage(RTRT::Language::French);
+      const char * frTitle = RTRT::Loc::Tr(RTRT::LocId::Fps_Title);
+      if ( !frTitle || std::string(frTitle) != "RTRT FPS TACTIQUE" )
+      {
+        std::cerr << "FAIL: French Fps_Title mismatch: " << ( frTitle ? frTitle : "null" ) << std::endl;
+        return 1;
+      }
+
+      const char * frDeploy = RTRT::Loc::Tr(RTRT::LocId::Fps_Menu_Deploy);
+      if ( !frDeploy || std::string(frDeploy) != "DÉPLOYER / CHOISIR CARTE" )
+      {
+        std::cerr << "FAIL: French Fps_Menu_Deploy mismatch: " << ( frDeploy ? frDeploy : "null" ) << std::endl;
+        return 1;
+      }
+
+      // Test UserPreferences persistence roundtrip
+      {
+        RTRT::UserPreferences prefs;
+        prefs._Language = RTRT::Language::French;
+        prefs._Audio._MasterVolume = 0.65f;
+        prefs._VSync = true;
+        prefs._CustomRenderResolution = { 1920, 1080 };
+
+        const std::string testFile = RTRT::UserPreferences::GetDefaultFilePath("fps_test_prefs.json");
+        if ( !prefs.SaveToFile(testFile) )
+        {
+          std::cerr << "FAIL: Failed to save test preferences to " << testFile << std::endl;
+          return 1;
+        }
+
+        RTRT::UserPreferences loaded;
+        if ( !loaded.LoadFromFile(testFile) )
+        {
+          std::cerr << "FAIL: Failed to load test preferences from " << testFile << std::endl;
+          return 1;
+        }
+
+        std::remove(testFile.c_str());
+
+        if ( loaded._Language != RTRT::Language::French ||
+             std::abs(loaded._Audio._MasterVolume - 0.65f) > 0.001f ||
+             !loaded._VSync ||
+             loaded._CustomRenderResolution.x != 1920 ||
+             loaded._CustomRenderResolution.y != 1080 )
+        {
+          std::cerr << "FAIL: Preferences roundtrip values mismatched!" << std::endl;
+          return 1;
+        }
+      }
+
+      // Restore default English
+      RTRT::Loc::SetLanguage(RTRT::Language::English);
+
+      std::cout << "[PASS] FPS Game Localization (100% EN & FR) and Preferences test passed." << std::endl;
+      std::cout << "==========================================" << std::endl;
+      return 0;
     }
     else
     {

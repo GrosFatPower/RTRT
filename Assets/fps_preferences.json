@@ -1,0 +1,22 @@
+{
+  "audio": {
+    "master_volume": 0.800000011920929,
+    "music_volume": 0.699999988079071,
+    "muted": false,
+    "sfx_volume": 0.800000011920929
+  },
+  "graphics": {
+    "custom_render_height": 0,
+    "custom_render_width": 0,
+    "enable_skybox": true,
+    "exposure": 1.5,
+    "fullscreen": true,
+    "fxaa": false,
+    "gamma": 2.0,
+    "render_scale": 100,
+    "tone_mapping": true,
+    "vsync": true
+  },
+  "language": "fr",
+  "version": 1
+}
