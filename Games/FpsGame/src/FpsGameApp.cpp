@@ -256,6 +256,12 @@ void FpsGameApp::KeyCallback( GLFWwindow * iWindow, const int iKey, const int iS
       else
         this_ -> _Hud.SetSettingsOpen(!this_ -> _Hud.IsSettingsOpen());
     }
+
+    // Toggle Fullscreen
+    if ( ( GLFW_KEY_F11 == iKey ) || ( ( GLFW_KEY_ENTER == iKey ) && ( iMods & GLFW_MOD_ALT ) ) )
+    {
+      GameMenuUI::ToggleWindowFullscreen(iWindow, this_->_Settings);
+    }
   }
 }
 

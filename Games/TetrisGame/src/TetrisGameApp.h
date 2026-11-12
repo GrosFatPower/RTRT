@@ -65,6 +65,10 @@ public:
 
   void SetStartInGame( bool iStartInGame ) { _AppState = iStartInGame ? TetrisAppState::InGame : TetrisAppState::TitleScreen; }
 
+  void ToggleFullscreen();
+  void SetFullscreen( bool iFullscreen );
+  bool IsFullscreen() const;
+
   static const char * GetAppHeader() { return "Tetris 3D"; }
 
   // Public static helpers for input device assignment & routing (testable by unit tests)

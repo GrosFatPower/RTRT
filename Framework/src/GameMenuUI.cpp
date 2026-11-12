@@ -1135,6 +1135,19 @@ void DrawSharedRendererSettings( Scene & ioScene,
     settingsDirty = true;
   }
 
+  GLFWwindow * currentWin = glfwGetCurrentContext();
+  const bool isCurrentlyFullscreen = currentWin ? ( glfwGetWindowMonitor(currentWin) != nullptr ) : ioSettings._FullScreen;
+  ioSettings._FullScreen = isCurrentlyFullscreen;
+  bool fsToggle = isCurrentlyFullscreen;
+  if ( ImGui::Checkbox("Fullscreen", &fsToggle) )
+  {
+    if ( currentWin )
+      SetWindowFullscreen(currentWin, fsToggle, ioSettings);
+    else
+      ioSettings._FullScreen = fsToggle;
+    settingsDirty = true;
+  }
+  ImGui::SameLine();
   if ( ImGui::Checkbox("VSync", &ioSettings._VSync) )
   {
     glfwSwapInterval(ioSettings._VSync ? 1 : 0);
@@ -1239,6 +1252,84 @@ void DrawSharedRendererSettings( Scene & ioScene,
   RenderStatsUI::DrawRenderOverview(ioSettings, iDeltaTime, iNbRenderedFrames);
   RenderStatsUI::DrawRenderPassTimings(ioRenderer);
   RenderStatsUI::DrawSceneStats(&ioScene);
+}
+
+// ----------------------------------------------------------------------------
+// SetWindowFullscreen
+// ----------------------------------------------------------------------------
+void SetWindowFullscreen( GLFWwindow * iWindow, bool iFullscreen, RenderSettings & ioSettings )
+{
+  if ( !iWindow )
+  {
+    ioSettings._FullScreen = iFullscreen;
+    return;
+  }
+
+  static int s_SavedWindowedX = 100;
+  static int s_SavedWindowedY = 100;
+  static int s_SavedWindowedW = 1280;
+  static int s_SavedWindowedH = 720;
+
+  const bool isCurrentlyFullscreen = ( glfwGetWindowMonitor(iWindow) != nullptr );
+  if ( iFullscreen == isCurrentlyFullscreen )
+  {
+    ioSettings._FullScreen = iFullscreen;
+    return;
+  }
+
+  if ( iFullscreen )
+  {
+    glfwGetWindowPos(iWindow, &s_SavedWindowedX, &s_SavedWindowedY);
+    glfwGetWindowSize(iWindow, &s_SavedWindowedW, &s_SavedWindowedH);
+    if ( ( s_SavedWindowedW <= 0 ) || ( s_SavedWindowedH <= 0 ) )
+    {
+      s_SavedWindowedW = ( ioSettings._WindowResolution.x > 0 ) ? ioSettings._WindowResolution.x : 1280;
+      s_SavedWindowedH = ( ioSettings._WindowResolution.y > 0 ) ? ioSettings._WindowResolution.y : 720;
+    }
+
+    GLFWmonitor * targetMonitor = glfwGetPrimaryMonitor();
+    int monitorCount = 0;
+    GLFWmonitor ** monitors = glfwGetMonitors(&monitorCount);
+    for ( int i = 0; i < monitorCount; ++i )
+    {
+      int mx = 0, my = 0, mw = 0, mh = 0;
+      glfwGetMonitorWorkarea(monitors[i], &mx, &my, &mw, &mh);
+      if ( ( s_SavedWindowedX >= mx ) && ( s_SavedWindowedX < mx + mw ) &&
+           ( s_SavedWindowedY >= my ) && ( s_SavedWindowedY < my + mh ) )
+      {
+        targetMonitor = monitors[i];
+        break;
+      }
+    }
+
+    if ( targetMonitor )
+    {
+      const GLFWvidmode * mode = glfwGetVideoMode(targetMonitor);
+      if ( mode )
+      {
+        glfwSetWindowMonitor(iWindow, targetMonitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+      }
+    }
+    ioSettings._FullScreen = true;
+  }
+  else
+  {
+    glfwSetWindowMonitor(iWindow, nullptr, s_SavedWindowedX, s_SavedWindowedY, s_SavedWindowedW, s_SavedWindowedH, 0);
+    ioSettings._FullScreen = false;
+  }
+
+  glfwSwapInterval(ioSettings._VSync ? 1 : 0);
+}
+
+// ----------------------------------------------------------------------------
+// ToggleWindowFullscreen
+// ----------------------------------------------------------------------------
+void ToggleWindowFullscreen( GLFWwindow * iWindow, RenderSettings & ioSettings )
+{
+  if ( !iWindow )
+    return;
+  const bool isCurrentlyFullscreen = ( glfwGetWindowMonitor(iWindow) != nullptr );
+  SetWindowFullscreen(iWindow, !isCurrentlyFullscreen, ioSettings);
 }
 
 } // namespace GameMenuUI

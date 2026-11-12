@@ -8,6 +8,7 @@
 #include <vector>
 
 struct ImFont;
+struct GLFWwindow;
 
 namespace RTRT
 {
@@ -223,6 +224,9 @@ void DrawSharedRendererSettings( Scene & ioScene,
                                  double iFrameRate,
                                  double iDeltaTime,
                                  unsigned int iNbRenderedFrames );
+
+void SetWindowFullscreen( GLFWwindow * iWindow, bool iFullscreen, RenderSettings & ioSettings );
+void ToggleWindowFullscreen( GLFWwindow * iWindow, RenderSettings & ioSettings );
 
 } // namespace GameMenuUI
 

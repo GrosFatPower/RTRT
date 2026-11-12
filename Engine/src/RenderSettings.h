@@ -38,6 +38,7 @@ struct RenderSettings
   bool         _ToneMapping            = true;
   bool         _FXAA                   = false;
   bool         _VSync                  = true;
+  bool         _FullScreen             = false;
   bool         _Accumulate            = true;                   // PathTracer
   bool         _Denoise               = false;                  // PathTracer
   bool         _TiledRendering        = false;

@@ -331,6 +331,12 @@ void TetrisGameApp::KeyCallback( GLFWwindow * iWindow, int iKey, int, int iActio
       const int nextCam = ( (int)app->_SceneManager.GetCameraPreset() + 1 ) % 3;
       app->_SceneManager.SetCameraPreset(static_cast<TetrisCameraPreset>(nextCam));
     }
+
+    // Toggle Fullscreen
+    if ( ( GLFW_KEY_F11 == iKey ) || ( ( GLFW_KEY_ENTER == iKey ) && ( iMods & GLFW_MOD_ALT ) ) )
+    {
+      app->ToggleFullscreen();
+    }
   }
 }
 
@@ -978,6 +984,26 @@ void TetrisGameApp::SetRendererMode( TetrisRendererMode iMode )
   _RendererMode = iMode;
   ApplyRendererDefaults();
   _ReloadRenderer = true;
+}
+
+// ----------------------------------------------------------------------------
+// Fullscreen Helpers
+// ----------------------------------------------------------------------------
+void TetrisGameApp::ToggleFullscreen()
+{
+  if ( _MainWindow )
+    GameMenuUI::ToggleWindowFullscreen(_MainWindow.get(), _Settings);
+}
+
+void TetrisGameApp::SetFullscreen( bool iFullscreen )
+{
+  if ( _MainWindow )
+    GameMenuUI::SetWindowFullscreen(_MainWindow.get(), iFullscreen, _Settings);
+}
+
+bool TetrisGameApp::IsFullscreen() const
+{
+  return _MainWindow ? ( glfwGetWindowMonitor(_MainWindow.get()) != nullptr ) : _Settings._FullScreen;
 }
 
 // ----------------------------------------------------------------------------
