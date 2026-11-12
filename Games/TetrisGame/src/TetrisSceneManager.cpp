@@ -372,7 +372,7 @@ int TetrisSceneManager::SetupMaterials( Scene & ioScene )
   // Chassis Material
   {
     Material chassis;
-    chassis._Albedo = Vec3(0.12f, 0.14f, 0.18f);
+    chassis._Albedo = _BoardEdgeColor;
     chassis._Metallic = 0.85f;
     chassis._Roughness = 0.28f;
     chassis._Reflectance = 0.75f;
@@ -433,6 +433,21 @@ void TetrisSceneManager::SetBackplateOpacity( Scene & ioScene, float iOpacity )
     backplate._AlphaMode   = ( _BackplateOpacity >= 0.995f )
                              ? static_cast<float>(AlphaMode::Opaque)
                              : static_cast<float>(AlphaMode::Blend);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// SetBoardEdgeColor
+// ----------------------------------------------------------------------------
+void TetrisSceneManager::SetBoardEdgeColor( Scene & ioScene, const Vec3 & iColor )
+{
+  _BoardEdgeColor = iColor;
+
+  std::vector<Material> & materials = ioScene.GetMaterials();
+  if ( ( _ChassisMaterialID >= 0 ) && ( _ChassisMaterialID < static_cast<int>(materials.size()) ) )
+  {
+    Material & chassis = materials[_ChassisMaterialID];
+    chassis._Albedo = _BoardEdgeColor;
   }
 }
 

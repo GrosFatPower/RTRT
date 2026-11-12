@@ -54,6 +54,9 @@ public:
   void SetBackplateOpacity( Scene & ioScene, float iOpacity );
   float GetBackplateOpacity() const { return _BackplateOpacity; }
 
+  void SetBoardEdgeColor( Scene & ioScene, const Vec3 & iColor );
+  Vec3 GetBoardEdgeColor() const { return _BoardEdgeColor; }
+
   void SetDynamicPieceLighting( bool iEnable ) { _DynamicPieceLighting = iEnable; }
   bool GetDynamicPieceLighting() const { return _DynamicPieceLighting; }
 
@@ -130,6 +133,7 @@ protected:
   TetrisLineClearAnimMode _LineClearAnimMode = TetrisLineClearAnimMode::Dynamic;
   bool                 _ShowGhost      = true;
   float                _BackplateOpacity = 0.45f;
+  Vec3                 _BoardEdgeColor = Vec3(0.12f, 0.14f, 0.18f);
   bool                 _DynamicPieceLighting = true;
   bool                 _InGameCameraMotion   = true;
   float                _BgMotionSpeed        = 1.0f;

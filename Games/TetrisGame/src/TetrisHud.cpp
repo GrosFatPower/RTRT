@@ -1523,6 +1523,59 @@ void TetrisHud::DrawOptionsPage( TetrisGameLogic & ioLogic,
         }
       }
 
+      Vec3 edgeColor = ioSceneMgr.GetBoardEdgeColor();
+      float edgeColorArr[3] = { edgeColor.x, edgeColor.y, edgeColor.z };
+      if ( ImGui::ColorEdit3("Board Edges / Frame Color", edgeColorArr) )
+      {
+        ioSceneMgr.SetBoardEdgeColor(ioScene, Vec3(edgeColorArr[0], edgeColorArr[1], edgeColorArr[2]));
+        if ( ioRenderer )
+          ioRenderer->Notify(DirtyState::SceneMaterials);
+      }
+
+      ImGui::TextDisabled("Edge Presets:");
+      ImGui::SameLine();
+      if ( ImGui::SmallButton("Steel") )
+      {
+        ioSceneMgr.SetBoardEdgeColor(ioScene, Vec3(0.12f, 0.14f, 0.18f));
+        if ( ioRenderer )
+          ioRenderer->Notify(DirtyState::SceneMaterials);
+      }
+      ImGui::SameLine();
+      if ( ImGui::SmallButton("Cyan") )
+      {
+        ioSceneMgr.SetBoardEdgeColor(ioScene, Vec3(0.0f, 0.85f, 0.95f));
+        if ( ioRenderer )
+          ioRenderer->Notify(DirtyState::SceneMaterials);
+      }
+      ImGui::SameLine();
+      if ( ImGui::SmallButton("Purple") )
+      {
+        ioSceneMgr.SetBoardEdgeColor(ioScene, Vec3(0.72f, 0.25f, 0.95f));
+        if ( ioRenderer )
+          ioRenderer->Notify(DirtyState::SceneMaterials);
+      }
+      ImGui::SameLine();
+      if ( ImGui::SmallButton("Gold") )
+      {
+        ioSceneMgr.SetBoardEdgeColor(ioScene, Vec3(0.95f, 0.75f, 0.15f));
+        if ( ioRenderer )
+          ioRenderer->Notify(DirtyState::SceneMaterials);
+      }
+      ImGui::SameLine();
+      if ( ImGui::SmallButton("Crimson") )
+      {
+        ioSceneMgr.SetBoardEdgeColor(ioScene, Vec3(0.90f, 0.18f, 0.22f));
+        if ( ioRenderer )
+          ioRenderer->Notify(DirtyState::SceneMaterials);
+      }
+      ImGui::SameLine();
+      if ( ImGui::SmallButton("White") )
+      {
+        ioSceneMgr.SetBoardEdgeColor(ioScene, Vec3(0.95f, 0.95f, 0.95f));
+        if ( ioRenderer )
+          ioRenderer->Notify(DirtyState::SceneMaterials);
+      }
+
       bool dynLight = ioSceneMgr.GetDynamicPieceLighting();
       if ( ImGui::Checkbox("Active Piece Dynamic Point Light", &dynLight) )
         ioSceneMgr.SetDynamicPieceLighting(dynLight);
