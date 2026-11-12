@@ -1717,13 +1717,6 @@ void TetrisHud::DrawTitleScreenMenus( TetrisAppState & ioAppState,
                                       bool & oRequestExit )
 {
   GameMenuUI::DrawBackgroundOverlay(_Theme, 0.78f);
-  GameMenuUI::DrawTitleHeader(
-    "TETRIS 3D",
-    "RTRT MULTI-RENDERER GUIDELINE EDITION",
-    _Theme,
-    _Fonts,
-    28.0f
-  );
 
   if ( TetrisMenuPage::MainMenu == _MenuPage )
   {

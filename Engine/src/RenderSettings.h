@@ -22,20 +22,22 @@ enum class SamplingMode
 
 struct RenderSettings
 {
-  Vec2i        _RenderResolution      = { 0, 0 };
-  Vec2i        _WindowResolution      = { 1920, 1080 };
-  Vec2i        _TileResolution        = { -1, -1 };
-  Vec3         _BackgroundColor       = { 0.f, 0.f, 0.f };
-  Vec3         _UniformLightCol       = { .3f, .3f, .3f };
-  Vec2i        _TextureSize           = { 4096, 4096 };
-  bool         _ShowLights            = false;                  // PathTracer
-  bool         _EnableBackGround      = true;
-  bool         _EnableSkybox          = true;
-  bool         _EnableUniformLight    = true;
-  bool         _AutoScale             = false;                  // PathTracer
-  bool         _RussianRoulette       = true;                   // PathTracer
-  bool         _ToneMapping           = true;
-  bool         _FXAA                  = false;
+  Vec2i        _RenderResolution       = { 0, 0 };
+  Vec2i        _WindowResolution       = { 1920, 1080 };
+  Vec2i        _CustomRenderResolution = { 0, 0 };
+  Vec2i        _TileResolution         = { -1, -1 };
+  Vec3         _BackgroundColor        = { 0.f, 0.f, 0.f };
+  Vec3         _UniformLightCol        = { .3f, .3f, .3f };
+  Vec2i        _TextureSize            = { 4096, 4096 };
+  bool         _ShowLights             = false;                  // PathTracer
+  bool         _EnableBackGround       = true;
+  bool         _EnableSkybox           = true;
+  bool         _EnableUniformLight     = true;
+  bool         _AutoScale              = false;                  // PathTracer
+  bool         _RussianRoulette        = true;                   // PathTracer
+  bool         _ToneMapping            = true;
+  bool         _FXAA                   = false;
+  bool         _VSync                  = true;
   bool         _Accumulate            = true;                   // PathTracer
   bool         _Denoise               = false;                  // PathTracer
   bool         _TiledRendering        = false;

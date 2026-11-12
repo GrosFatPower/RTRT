@@ -1356,8 +1356,11 @@ int DeferredRenderer::ReloadEnvMap()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::InitializeFrameBuffers()
 {
-  _Settings._RenderResolution.x = int(_Settings._WindowResolution.x * RenderScale());
-  _Settings._RenderResolution.y = int(_Settings._WindowResolution.y * RenderScale());
+  const Vec2i baseRes = ( _Settings._CustomRenderResolution.x > 0 && _Settings._CustomRenderResolution.y > 0 )
+                        ? _Settings._CustomRenderResolution
+                        : _Settings._WindowResolution;
+  _Settings._RenderResolution.x = int(baseRes.x * RenderScale());
+  _Settings._RenderResolution.y = int(baseRes.y * RenderScale());
 
   GLTextureDesc targetDesc;
   targetDesc._Target = GL_TEXTURE_2D;
@@ -1442,8 +1445,11 @@ int DeferredRenderer::InitializeFrameBuffers()
 // ----------------------------------------------------------------------------
 int DeferredRenderer::ResizeRenderTarget()
 {
-  _Settings._RenderResolution.x = int(_Settings._WindowResolution.x * RenderScale());
-  _Settings._RenderResolution.y = int(_Settings._WindowResolution.y * RenderScale());
+  const Vec2i baseRes = ( _Settings._CustomRenderResolution.x > 0 && _Settings._CustomRenderResolution.y > 0 )
+                        ? _Settings._CustomRenderResolution
+                        : _Settings._WindowResolution;
+  _Settings._RenderResolution.x = int(baseRes.x * RenderScale());
+  _Settings._RenderResolution.y = int(baseRes.y * RenderScale());
 
   GLUtil::ResizeFBO(_GBufferFBO, RenderWidth(), RenderHeight());
   GLUtil::ResizeFBO(_LightingFBO, RenderWidth(), RenderHeight());

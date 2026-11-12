@@ -393,8 +393,11 @@ void FpsGameApp::SyncFramebufferResolution( bool iNotifyRenderer )
 
   _Settings._WindowResolution.x = frameBufferWidth;
   _Settings._WindowResolution.y = frameBufferHeight;
-  _Settings._RenderResolution.x = int(_Settings._WindowResolution.x * (_Settings._RenderScale * 0.01f));
-  _Settings._RenderResolution.y = int(_Settings._WindowResolution.y * (_Settings._RenderScale * 0.01f));
+  const Vec2i baseRes = ( _Settings._CustomRenderResolution.x > 0 && _Settings._CustomRenderResolution.y > 0 )
+                        ? _Settings._CustomRenderResolution
+                        : _Settings._WindowResolution;
+  _Settings._RenderResolution.x = int(baseRes.x * (_Settings._RenderScale * 0.01f));
+  _Settings._RenderResolution.y = int(baseRes.y * (_Settings._RenderScale * 0.01f));
 
   glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
 

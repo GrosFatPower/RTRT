@@ -774,8 +774,11 @@ int SoftwareRasterizer::RenderToFile(const fs::path& iFilePath)
 // ----------------------------------------------------------------------------
 int SoftwareRasterizer::UpdateRenderResolution()
 {
-  _Settings._RenderResolution.x = int(_Settings._WindowResolution.x * RenderScale());
-  _Settings._RenderResolution.y = int(_Settings._WindowResolution.y * RenderScale());
+  const Vec2i baseRes = ( _Settings._CustomRenderResolution.x > 0 && _Settings._CustomRenderResolution.y > 0 )
+                        ? _Settings._CustomRenderResolution
+                        : _Settings._WindowResolution;
+  _Settings._RenderResolution.x = int(baseRes.x * RenderScale());
+  _Settings._RenderResolution.y = int(baseRes.y * RenderScale());
 
   _ImageBuffer._ColorBuffer.resize(RenderWidth() * RenderHeight());
   _ImageBuffer._DepthBuffer.resize(RenderWidth() * RenderHeight());

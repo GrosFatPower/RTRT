@@ -8,6 +8,7 @@
 #include "Scene.h"
 
 #include "imgui.h"
+#include <GLFW/glfw3.h>
 
 #include <algorithm>
 #include <cmath>
@@ -1024,7 +1025,121 @@ void DrawSharedRendererSettings( Scene & ioScene,
   }
 
   bool settingsDirty = false;
+
+  struct ResolutionPreset
+  {
+    int _Width;
+    int _Height;
+    const char * _Label;
+  };
+
+  static const ResolutionPreset kResolutions[] =
+  {
+    {  800,  600, "800 x 600 (4:3 SVGA)" },
+    { 1024,  768, "1024 x 768 (4:3 XGA)" },
+    { 1280,  720, "1280 x 720 (16:9 720p HD)" },
+    { 1366,  768, "1366 x 768 (16:9 WXGA)" },
+    { 1600,  900, "1600 x 900 (16:9 900p HD+)" },
+    { 1920, 1080, "1920 x 1080 (16:9 1080p FHD)" },
+    { 1920, 1200, "1920 x 1200 (16:10 WUXGA)" },
+    { 2560, 1440, "2560 x 1440 (16:9 1440p 2K QHD)" },
+    { 2560, 1080, "2560 x 1080 (21:9 UW-FHD)" },
+    { 3440, 1440, "3440 x 1440 (21:9 UW-QHD)" },
+    { 3840, 2160, "3840 x 2160 (16:9 4K UHD)" }
+  };
+  const int numPresets = static_cast<int>(sizeof(kResolutions) / sizeof(kResolutions[0]));
+
+  const Vec2i activeBase = ( ioSettings._CustomRenderResolution.x > 0 && ioSettings._CustomRenderResolution.y > 0 )
+                           ? ioSettings._CustomRenderResolution
+                           : ioSettings._WindowResolution;
+
+  int currentPresetIdx = -1;
+  if ( ( ioSettings._CustomRenderResolution.x <= 0 ) || ( ioSettings._CustomRenderResolution.y <= 0 ) )
+  {
+    currentPresetIdx = 0;
+  }
+  else
+  {
+    for ( int i = 0; i < numPresets; ++i )
+    {
+      if ( ( kResolutions[i]._Width == activeBase.x ) && ( kResolutions[i]._Height == activeBase.y ) )
+      {
+        currentPresetIdx = i + 1;
+        break;
+      }
+    }
+  }
+
+  char nativeLabel[64];
+  std::snprintf(nativeLabel, sizeof(nativeLabel), "Window Native (%d x %d)", ioSettings._WindowResolution.x, ioSettings._WindowResolution.y);
+
+  char customLabel[64];
+  if ( -1 == currentPresetIdx )
+    std::snprintf(customLabel, sizeof(customLabel), "Custom (%d x %d)", activeBase.x, activeBase.y);
+
+  const char * previewValue = nativeLabel;
+  if ( 0 == currentPresetIdx )
+    previewValue = nativeLabel;
+  else if ( ( currentPresetIdx > 0 ) && ( currentPresetIdx <= numPresets ) )
+    previewValue = kResolutions[currentPresetIdx - 1]._Label;
+  else
+    previewValue = customLabel;
+
+  if ( ImGui::BeginCombo("Render Resolution", previewValue) )
+  {
+    const bool isNativeSelected = ( 0 == currentPresetIdx );
+    if ( ImGui::Selectable(nativeLabel, isNativeSelected) )
+    {
+      ioSettings._CustomRenderResolution = Vec2i(0, 0);
+      settingsDirty = true;
+    }
+    if ( isNativeSelected )
+      ImGui::SetItemDefaultFocus();
+
+    for ( int i = 0; i < numPresets; ++i )
+    {
+      const bool isSelected = ( ( i + 1 ) == currentPresetIdx );
+      if ( ImGui::Selectable(kResolutions[i]._Label, isSelected) )
+      {
+        ioSettings._CustomRenderResolution = Vec2i(kResolutions[i]._Width, kResolutions[i]._Height);
+        GLFWwindow * win = glfwGetCurrentContext();
+        if ( win )
+          glfwSetWindowSize(win, kResolutions[i]._Width, kResolutions[i]._Height);
+        settingsDirty = true;
+      }
+      if ( isSelected )
+        ImGui::SetItemDefaultFocus();
+    }
+
+    if ( -1 == currentPresetIdx )
+    {
+      if ( ImGui::Selectable(customLabel, true) )
+      {
+      }
+      ImGui::SetItemDefaultFocus();
+    }
+
+    ImGui::EndCombo();
+  }
+
+  const int prevScale = ioSettings._RenderScale;
   settingsDirty |= ImGui::SliderInt("Render Scale (%)", &ioSettings._RenderScale, 25, 100);
+
+  if ( settingsDirty || ( prevScale != ioSettings._RenderScale ) )
+  {
+    const Vec2i baseRes = ( ioSettings._CustomRenderResolution.x > 0 && ioSettings._CustomRenderResolution.y > 0 )
+                          ? ioSettings._CustomRenderResolution
+                          : ioSettings._WindowResolution;
+    ioSettings._RenderResolution.x = static_cast<int>(baseRes.x * ( ioSettings._RenderScale * 0.01f ));
+    ioSettings._RenderResolution.y = static_cast<int>(baseRes.y * ( ioSettings._RenderScale * 0.01f ));
+    settingsDirty = true;
+  }
+
+  if ( ImGui::Checkbox("VSync", &ioSettings._VSync) )
+  {
+    glfwSwapInterval(ioSettings._VSync ? 1 : 0);
+  }
+  ImGui::SameLine();
   settingsDirty |= ImGui::Checkbox("Tone Mapping", &ioSettings._ToneMapping);
   ImGui::SameLine();
   settingsDirty |= ImGui::Checkbox("FXAA", &ioSettings._FXAA);

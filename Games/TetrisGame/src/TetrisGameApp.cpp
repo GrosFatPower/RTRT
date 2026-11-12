@@ -996,8 +996,11 @@ void TetrisGameApp::SyncFramebufferResolution( bool iNotifyRenderer )
 
   _Settings._WindowResolution.x = fbWidth;
   _Settings._WindowResolution.y = fbHeight;
-  _Settings._RenderResolution.x = static_cast<int>(_Settings._WindowResolution.x * ( _Settings._RenderScale * 0.01f ));
-  _Settings._RenderResolution.y = static_cast<int>(_Settings._WindowResolution.y * ( _Settings._RenderScale * 0.01f ));
+  const Vec2i baseRes = ( _Settings._CustomRenderResolution.x > 0 && _Settings._CustomRenderResolution.y > 0 )
+                        ? _Settings._CustomRenderResolution
+                        : _Settings._WindowResolution;
+  _Settings._RenderResolution.x = static_cast<int>(baseRes.x * ( _Settings._RenderScale * 0.01f ));
+  _Settings._RenderResolution.y = static_cast<int>(baseRes.y * ( _Settings._RenderScale * 0.01f ));
 
   glViewport(0, 0, _Settings._WindowResolution.x, _Settings._WindowResolution.y);
 
@@ -2141,6 +2144,7 @@ int TetrisGameApp::Run( const std::string & iCapturePath, int iMaxFrames )
 
   SyncFramebufferResolution(true);
   glDisable(GL_DEPTH_TEST);
+  glfwSwapInterval(_Settings._VSync ? 1 : 0);
 
   _LastTime = glfwGetTime();
 
