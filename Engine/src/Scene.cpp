@@ -83,6 +83,7 @@ void Scene::Clear()
   _Primitives.clear();
 
   _Camera = Camera();
+  _HasExplicitCamera = false;
   _EnvMap.Reset();
 
   _Lights.clear();

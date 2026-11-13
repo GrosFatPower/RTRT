@@ -65,8 +65,9 @@ public:
   bool LoadEnvMap( const std::string & iFilename );
   void ResetEnvMap();
 
-  void SetCamera( const Camera & iCamera ) { _Camera = iCamera; }
+  void SetCamera( const Camera & iCamera ) { _Camera = iCamera; _HasExplicitCamera = true; }
   Camera & GetCamera() { return _Camera; }
+  bool HasExplicitCamera() const { return _HasExplicitCamera; }
 
   void AddLight( const Light & iLight ) { _Lights.push_back(iLight); }
   void RemoveLight( unsigned int iIndex ) { if ( iIndex < _Lights.size() ) _Lights.erase( _Lights.begin() + iIndex ); }
@@ -140,6 +141,7 @@ public:
 private:
 
   Camera                         _Camera;
+  bool                           _HasExplicitCamera = false;
   EnvMap                         _EnvMap;
   std::vector<Light>             _Lights;
   std::vector<Material>          _Materials;

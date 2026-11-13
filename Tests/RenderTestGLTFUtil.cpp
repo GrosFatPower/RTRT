@@ -50,7 +50,8 @@ bool CheckStaticImport( bool iQuiet )
 
   Light * light = scene.GetLight(0);
   const Camera & camera = scene.GetCamera();
-  return light
+  return scene.HasExplicitCamera()
+      && light
       && ( LightType::DistantLight == static_cast<LightType>(light -> _Type) )
       && ( std::abs(light -> _Pos.z - 1.f) < .0001f )
       && ( std::abs(camera.GetPos().x - 1.f) < .0001f )
@@ -107,6 +108,8 @@ bool CheckAnimatedImport( bool iQuiet )
   }
 
   if ( ( 1 != scene.GetAnimations().size() ) || ( "Take 001" != scene.GetAnimations()[0]._Name ) || ( scene.GetAnimations()[0]._Duration <= 0.f ) )
+    return false;
+  if ( scene.HasExplicitCamera() )
     return false;
   if ( ( 1 != scene.GetSkins().size() ) || ( 62 != scene.GetSkins()[0]._JointNodeIndices.size() ) )
     return false;

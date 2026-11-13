@@ -414,6 +414,7 @@ int Test5::DrawMainMenuBar()
     ImGui::MenuItem("Camera", nullptr, &_ShowCameraPanel);
     ImGui::MenuItem("Mesh Instances", nullptr, &_ShowMeshPanel);
     ImGui::MenuItem("Boids", nullptr, &_ShowBoidsPanel);
+    ImGui::MenuItem("Animation", nullptr, &_ShowAnimationPanel);
     ImGui::MenuItem("Background", nullptr, &_ShowBackgroundPanel);
     ImGui::MenuItem("Materials", nullptr, &_ShowMaterialsPanel);
     ImGui::MenuItem("Lights", nullptr, &_ShowLightsPanel);
@@ -474,6 +475,7 @@ bool Test5::AreAnyPanelsVisible() const
       || _ShowCameraPanel
       || _ShowMeshPanel
       || _ShowBoidsPanel
+      || _ShowAnimationPanel
       || _ShowBackgroundPanel
       || _ShowMaterialsPanel
       || _ShowLightsPanel
@@ -490,6 +492,7 @@ void Test5::SetAllPanelsVisibility( const bool iVisible )
   _ShowCameraPanel      = iVisible;
   _ShowMeshPanel        = iVisible;
   _ShowBoidsPanel       = iVisible;
+  _ShowAnimationPanel   = iVisible;
   _ShowBackgroundPanel  = iVisible;
   _ShowMaterialsPanel   = iVisible;
   _ShowLightsPanel      = iVisible;
@@ -522,77 +525,6 @@ int Test5::DrawSceneUI()
 
   if ( !_SceneLoadError.empty() )
     ImGui::TextColored(ImVec4(1.f, .35f, .35f, 1.f), "%s", _SceneLoadError.c_str());
-
-  if ( _Scene && _Scene -> HasAnimations() )
-  {
-    ImGui::Separator();
-    ImGui::Text("Animations");
-
-    AnimationState & animState = _Scene -> GetAnimationState();
-    const std::vector<AnimationClip> & clips = _Scene -> GetAnimations();
-
-    if ( ImGui::Checkbox("Run animations", &_RunAnimations) )
-      animState._Playing = _RunAnimations;
-
-    const char * playLabel = _RunAnimations ? "Pause" : "Run";
-    if ( ImGui::Button(playLabel) )
-    {
-      _RunAnimations = !_RunAnimations;
-      animState._Playing = _RunAnimations;
-    }
-    ImGui::SameLine();
-    if ( ImGui::Button("Stop") )
-    {
-      _RunAnimations = false;
-      animState._Playing = false;
-      if ( _Scene -> ResetAnimationsToInitialPose() && _Renderer )
-      {
-        _Renderer -> Notify(DirtyState::SceneInstances);
-        if ( _Scene -> HasSkinnedMeshes() )
-          _Renderer -> Notify(DirtyState::SceneMeshData);
-      }
-    }
-
-    std::vector<const char*> clipNames;
-    clipNames.reserve(clips.size());
-    for ( const AnimationClip & clip : clips )
-      clipNames.push_back(clip._Name.empty() ? "Unnamed" : clip._Name.c_str());
-
-    if ( !clipNames.empty() )
-    {
-      if ( ( animState._ActiveClip < 0 ) || ( animState._ActiveClip >= static_cast<int>(clipNames.size()) ) )
-        animState._ActiveClip = 0;
-
-      if ( ImGui::Combo("Clip", &animState._ActiveClip, clipNames.data(), static_cast<int>(clipNames.size())) )
-      {
-        animState._CurrentTime = 0.0f;
-        if ( _Scene -> EvaluateAnimationAtTime(animState._ActiveClip, animState._CurrentTime) && _Renderer )
-        {
-          _Renderer -> Notify(DirtyState::SceneInstances);
-          if ( _Scene -> HasSkinnedMeshes() )
-            _Renderer -> Notify(DirtyState::SceneMeshData);
-        }
-      }
-    }
-
-    ImGui::Checkbox("Loop", &animState._Loop);
-
-    const float duration = clips[animState._ActiveClip]._Duration;
-    if ( duration > 0.0f )
-    {
-      if ( ImGui::SliderFloat("Timeline (s)", &animState._CurrentTime, 0.0f, duration, "%.3f") )
-      {
-        if ( _Scene -> EvaluateAnimationAtTime(animState._ActiveClip, animState._CurrentTime) && _Renderer )
-        {
-          _Renderer -> Notify(DirtyState::SceneInstances);
-          if ( _Scene -> HasSkinnedMeshes() )
-            _Renderer -> Notify(DirtyState::SceneMeshData);
-        }
-      }
-    }
-
-    ImGui::SliderFloat("Speed", &animState._Speed, 0.0f, 3.0f, "%.2fx");
-  }
 
   return 0;
 }
@@ -678,6 +610,13 @@ int Test5::DrawUI()
     ImGui::End();
   }
 
+  if ( _ShowAnimationPanel )
+  {
+    if ( ImGui::Begin("Animation", &_ShowAnimationPanel) )
+      DrawAnimationUI();
+    ImGui::End();
+  }
+
   if ( _ShowBackgroundPanel )
   {
     if ( ImGui::Begin("Background", &_ShowBackgroundPanel) )
@@ -751,12 +690,12 @@ void Test5::NotifyBoidsInstancesEdited()
 }
 
 // ----------------------------------------------------------------------------
-// ComputeBoidsBoundsFromScene
+// ComputeSceneBounds
 // ----------------------------------------------------------------------------
-void Test5::ComputeBoidsBoundsFromScene()
+bool Test5::ComputeSceneBounds( Vec3 & oLow, Vec3 & oHigh, bool iExcludeBoids ) const
 {
   if ( !_Scene )
-    return;
+    return false;
 
   Vec3 low( MAX_FLOAT );
   Vec3 high( -MAX_FLOAT );
@@ -767,7 +706,7 @@ void Test5::ComputeBoidsBoundsFromScene()
 
   for ( int i = 0; i < static_cast<int>(meshInstances.size()); ++i )
   {
-    if ( _BoidsBinding.ContainsInstanceID(i) )
+    if ( iExcludeBoids && _BoidsBinding.ContainsInstanceID(i) )
       continue;
 
     const MeshInstance & inst = meshInstances[i];
@@ -792,7 +731,66 @@ void Test5::ComputeBoidsBoundsFromScene()
     }
   }
 
+  const std::vector<PrimitiveInstance> & primInstances = _Scene -> GetPrimitiveInstances();
+  const std::vector<Primitive*>        & primitives    = _Scene -> GetPrimitives();
+  for ( const PrimitiveInstance & inst : primInstances )
+  {
+    if ( ( inst._PrimID < 0 ) || ( inst._PrimID >= static_cast<int>(primitives.size()) ) )
+      continue;
+
+    const Primitive * prim = primitives[inst._PrimID];
+    if ( !prim )
+      continue;
+
+    Vec3 primLow(0.f), primHigh(0.f);
+    if ( PrimitiveType::Sphere == prim -> _Type )
+    {
+      const Sphere * sphere = static_cast<const Sphere*>(prim);
+      const Vec3 rVec(sphere -> _Radius);
+      primLow  = sphere -> _Origin - rVec;
+      primHigh = sphere -> _Origin + rVec;
+    }
+    else if ( PrimitiveType::Box == prim -> _Type )
+    {
+      const Box * box = static_cast<const Box*>(prim);
+      primLow  = box -> _Low;
+      primHigh = box -> _High;
+    }
+    else
+      continue;
+
+    Vec3 corners[8];
+    AABB<Vec3> primBox;
+    primBox._Low  = primLow;
+    primBox._High = primHigh;
+    primBox.Corners(corners);
+    for ( int c = 0; c < 8; ++c )
+    {
+      const Vec3 worldCorner = MathUtil::TransformPoint(corners[c], inst._Transform);
+      MathUtil::Minimize(low, worldCorner);
+      MathUtil::Maximize(high, worldCorner);
+      hasBounds = true;
+    }
+  }
+
   if ( !hasBounds )
+    return false;
+
+  oLow  = low;
+  oHigh = high;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// ComputeBoidsBoundsFromScene
+// ----------------------------------------------------------------------------
+void Test5::ComputeBoidsBoundsFromScene()
+{
+  if ( !_Scene )
+    return;
+
+  Vec3 low(0.f), high(0.f);
+  if ( !ComputeSceneBounds(low, high, true) )
   {
     _BoidsSettings._BoundsCenter = Vec3(0.f);
     _BoidsSettings._BoundsRadius = 4.f;
@@ -807,6 +805,45 @@ void Test5::ComputeBoidsBoundsFromScene()
   _BoidsSettings._BoundsCenter = center;
   _BoidsSettings._BoundsRadius = std::max(4.f, horizontalExtent * 0.75f + 1.f);
   _BoidsSettings._BoundsHeight = std::max(3.f, extent.y * 1.5f + 1.f);
+}
+
+// ----------------------------------------------------------------------------
+// FrameDefaultCameraToScene
+// ----------------------------------------------------------------------------
+void Test5::FrameDefaultCameraToScene()
+{
+  if ( !_Scene )
+    return;
+
+  Vec3 low(0.f), high(0.f);
+  if ( !ComputeSceneBounds(low, high, false) )
+    return;
+
+  const Vec3 center = 0.5f * ( low + high );
+  const Vec3 extent = high - low;
+  const float radius = std::max(0.001f, 0.5f * glm::length(extent));
+
+  const float width  = static_cast<float>(( _Settings._WindowResolution.x > 0 ) ? _Settings._WindowResolution.x : _Settings._RenderResolution.x);
+  const float height = static_cast<float>(( _Settings._WindowResolution.y > 0 ) ? _Settings._WindowResolution.y : _Settings._RenderResolution.y);
+  const float aspect = ( ( width > 0.f ) && ( height > 0.f ) ) ? ( width / height ) : ( 16.f / 9.f );
+
+  Camera cam = _Scene -> GetCamera();
+  const float halfHFov    = 0.5f * cam.GetFOV();
+  const float tanHalfHFov = std::tan(halfHFov);
+  const float tanHalfVFov = ( aspect > 1.f ) ? ( tanHalfHFov / aspect ) : ( tanHalfHFov * aspect );
+  const float halfMinFov  = std::atan(std::min(tanHalfHFov, tanHalfVFov));
+
+  const float distance = ( radius * 1.25f ) / std::sin(std::max(halfMinFov, 0.05f));
+  const Vec3 viewDir = glm::normalize(Vec3(0.25f, 0.2f, 1.f));
+  const Vec3 camPos  = center + viewDir * distance;
+
+  cam.Initialize(camPos, center, cam.GetFOVInDegrees());
+
+  const float zNear = std::max(0.001f, distance * 0.01f);
+  const float zFar  = std::max(zNear + 10.f, distance * 10.f + radius * 4.f);
+  cam.SetZNearFar(zNear, zFar);
+
+  _Scene -> SetCamera(cam);
 }
 
 // ----------------------------------------------------------------------------
@@ -1431,6 +1468,83 @@ int Test5::DrawMeshInstanceUI()
     }
 
   ImGui::Text("Ctrl + Left Click selects the nearest mesh instance.");
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawAnimationUI
+// ----------------------------------------------------------------------------
+int Test5::DrawAnimationUI()
+{
+  if ( !_Scene || !_Scene -> HasAnimations() )
+  {
+    ImGui::TextDisabled("No animations in current scene.");
+    return 0;
+  }
+
+  AnimationState & animState = _Scene -> GetAnimationState();
+  const std::vector<AnimationClip> & clips = _Scene -> GetAnimations();
+
+  auto notifyAnimationUpdated = [this]()
+  {
+    if ( _Renderer )
+    {
+      _Renderer -> Notify(DirtyState::SceneInstances);
+      if ( _Scene -> HasSkinnedMeshes() )
+        _Renderer -> Notify(DirtyState::SceneMeshData);
+    }
+  };
+
+  if ( ImGui::Checkbox("Run animations", &_RunAnimations) )
+    animState._Playing = _RunAnimations;
+
+  const char * playLabel = _RunAnimations ? "Pause" : "Run";
+  if ( ImGui::Button(playLabel) )
+  {
+    _RunAnimations = !_RunAnimations;
+    animState._Playing = _RunAnimations;
+  }
+  ImGui::SameLine();
+  if ( ImGui::Button("Stop") )
+  {
+    _RunAnimations = false;
+    animState._Playing = false;
+    if ( _Scene -> ResetAnimationsToInitialPose() )
+      notifyAnimationUpdated();
+  }
+
+  std::vector<const char*> clipNames;
+  clipNames.reserve(clips.size());
+  for ( const AnimationClip & clip : clips )
+    clipNames.push_back(clip._Name.empty() ? "Unnamed" : clip._Name.c_str());
+
+  if ( !clipNames.empty() )
+  {
+    if ( ( animState._ActiveClip < 0 ) || ( animState._ActiveClip >= static_cast<int>(clipNames.size()) ) )
+      animState._ActiveClip = 0;
+
+    if ( ImGui::Combo("Clip", &animState._ActiveClip, clipNames.data(), static_cast<int>(clipNames.size())) )
+    {
+      animState._CurrentTime = 0.0f;
+      if ( _Scene -> EvaluateAnimationAtTime(animState._ActiveClip, animState._CurrentTime) )
+        notifyAnimationUpdated();
+    }
+  }
+
+  ImGui::Checkbox("Loop", &animState._Loop);
+
+  const float duration = clips[animState._ActiveClip]._Duration;
+  if ( duration > 0.0f )
+  {
+    if ( ImGui::SliderFloat("Timeline (s)", &animState._CurrentTime, 0.0f, duration, "%.3f") )
+    {
+      if ( _Scene -> EvaluateAnimationAtTime(animState._ActiveClip, animState._CurrentTime) )
+        notifyAnimationUpdated();
+    }
+  }
+
+  ImGui::SliderFloat("Speed", &animState._Speed, 0.0f, 3.0f, "%.2fx");
 
   return 0;
 }
@@ -2482,6 +2596,9 @@ int Test5::InitializeScene()
   GLUtil::DeleteTEX(_MetalRoughTEX);
   GLUtil::DeleteTEX(_NormalMapTEX);
   GLUtil::DeleteTEX(_EmissionMapTEX);
+
+  if ( !_Scene -> HasExplicitCamera() )
+    FrameDefaultCameraToScene();
 
   _DefaultCam = _Scene -> GetCamera();
 

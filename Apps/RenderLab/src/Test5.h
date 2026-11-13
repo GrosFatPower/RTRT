@@ -65,6 +65,7 @@ protected:
   int DrawCameraUI();
   int DrawMeshInstanceUI();
   int DrawBoidsUI();
+  int DrawAnimationUI();
   int DrawBackgroundUI();
   int DrawMaterialsUI();
   int DrawLightsUI();
@@ -93,7 +94,9 @@ protected:
   void NotifyMeshInstanceEdited();
   void NotifyLightEdited();
   void NotifyBoidsInstancesEdited();
+  bool ComputeSceneBounds( Vec3 & oLow, Vec3 & oHigh, bool iExcludeBoids = false ) const;
   void ComputeBoidsBoundsFromScene();
+  void FrameDefaultCameraToScene();
 
   bool PickMeshInstance( double iMouseX, double iMouseY, int & oMeshInstanceID ) const;
   bool BuildPickingRay( double iMouseX, double iMouseY, Vec3 & oRayOrigin, Vec3 & oRayDir ) const;
@@ -138,6 +141,7 @@ protected:
   bool                       _ShowCameraPanel      = true;
   bool                       _ShowMeshPanel        = true;
   bool                       _ShowBoidsPanel       = true;
+  bool                       _ShowAnimationPanel   = true;
   bool                       _ShowBackgroundPanel  = true;
   bool                       _ShowMaterialsPanel   = true;
   bool                       _ShowLightsPanel      = true;
