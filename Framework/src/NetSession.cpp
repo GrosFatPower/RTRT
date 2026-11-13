@@ -12,10 +12,19 @@
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
+typedef SOCKET RouteSocket;
+#define CLOSE_ROUTE_SOCKET( s ) closesocket( s )
 #else
+#include <sys/socket.h>
+#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
+typedef int RouteSocket;
+#ifndef INVALID_SOCKET
+#define INVALID_SOCKET ( -1 )
+#endif
+#define CLOSE_ROUTE_SOCKET( s ) close( s )
 #endif
 
 namespace RTRT
@@ -609,7 +618,7 @@ std::string NetSession::GetPeerAddressString() const
 std::string NetSession::GetLocalIPv4Address() const
 {
   // 1. Primary: Query OS routing table via an unbound UDP connect() to a public IP
-  SOCKET routeSock = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
+  RouteSocket routeSock = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
   if ( routeSock != INVALID_SOCKET )
   {
     sockaddr_in remoteAddr = {};
@@ -629,21 +638,13 @@ std::string NetSession::GetLocalIPv4Address() const
           std::string routedIp( ipStr );
           if ( !routedIp.empty() && routedIp != "0.0.0.0" && routedIp != "127.0.0.1" )
           {
-#ifdef _WIN32
-            closesocket( routeSock );
-#else
-            close( routeSock );
-#endif
+            CLOSE_ROUTE_SOCKET( routeSock );
             return routedIp;
           }
         }
       }
     }
-#ifdef _WIN32
-    closesocket( routeSock );
-#else
-    close( routeSock );
-#endif
+    CLOSE_ROUTE_SOCKET( routeSock );
   }
 
   // 2. Fallback: Enumerate local hostname addresses
