@@ -266,7 +266,7 @@ int SoftwareRasterizer::Update()
   if (_DirtyStates & (unsigned long)DirtyState::SceneEnvMap)
     this->ReloadEnvMap();
 
-  if (_DirtyStates & (unsigned long)DirtyState::SceneInstances)
+  if (_DirtyStates & ( (unsigned long)DirtyState::SceneInstances | (unsigned long)DirtyState::SceneMeshData ))
   {
     const double refreshStartTime = glfwGetTime();
     _PassEnabled[TimingInstanceRefresh] = true;
@@ -1070,20 +1070,22 @@ int SoftwareRasterizer::RefreshSceneInstanceTransforms()
   {
     CompiledInstanceRange & instanceRange = _InstanceRanges[instID];
     const MeshInstance & meshInst = meshInstances[instID];
+    Mesh * curMesh = meshes[meshInst._MeshID];
     const bool transformChanged = 0 != std::memcmp(&instanceRange._Transform, &meshInst._Transform, sizeof(Mat4x4));
+    const bool meshDeformed = ( ( _DirtyStates & (unsigned long)DirtyState::SceneMeshData ) != 0 ) && curMesh && curMesh -> IsSkinned();
+    const bool geometryChanged = transformChanged || meshDeformed;
     const bool materialChanged = instanceRange._MaterialID != meshInst._MaterialID;
     const bool visibilityChanged = instanceRange._Visible != meshInst._Visible;
-    if ( !transformChanged && !materialChanged && !visibilityChanged )
+    if ( !geometryChanged && !materialChanged && !visibilityChanged )
       continue;
 
     _Stats._ChangedInstances++;
-    Mesh * curMesh = meshes[meshInst._MeshID];
 
     const std::vector<Vec3> & vertices = curMesh -> GetVertices();
     const std::vector<Vec3> & normals = curMesh -> GetNormals();
-    const Mat4x4 trInvTransfo = transformChanged ? glm::transpose(glm::inverse(meshInst._Transform)) : Mat4x4(1.f);
+    const Mat4x4 trInvTransfo = geometryChanged ? glm::transpose(glm::inverse(meshInst._Transform)) : Mat4x4(1.f);
 
-    if ( transformChanged )
+    if ( geometryChanged )
     {
       for ( int i = instanceRange._VertexStart; i < instanceRange._VertexStart + instanceRange._VertexCount; ++i )
       {
@@ -1102,7 +1104,7 @@ int SoftwareRasterizer::RefreshSceneInstanceTransforms()
     for ( int i = instanceRange._TriangleStart; i < instanceRange._TriangleStart + instanceRange._TriangleCount; ++i )
     {
       RasterData::Triangle & tri = _Triangles[i];
-      if ( transformChanged )
+      if ( geometryChanged )
       {
         const Vec3 & p0 = _VertexBuffer[tri._Indices[0]]._WorldPos;
         const Vec3 & p1 = _VertexBuffer[tri._Indices[1]]._WorldPos;
@@ -1116,7 +1118,7 @@ int SoftwareRasterizer::RefreshSceneInstanceTransforms()
     instanceRange._Visible = meshInst._Visible;
     instanceRange._Transform = meshInst._Transform;
     instanceRange._MaterialID = meshInst._MaterialID;
-    if ( transformChanged )
+    if ( geometryChanged )
       UpdateInstanceBounds(instanceRange);
   }
 

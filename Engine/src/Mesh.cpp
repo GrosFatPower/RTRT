@@ -2,6 +2,8 @@
 #include "GpuBvh.h"
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <limits>
 
@@ -162,6 +164,104 @@ int Mesh::BuildBvh()
 {
   _Bvh -> Clear();
   return _Bvh -> Build(*this);
+}
+
+// ----------------------------------------------------------------------------
+int Mesh::RefitBvh()
+{
+  if ( !_Bvh )
+    return 1;
+  return _Bvh -> Refit(*this);
+}
+
+// ----------------------------------------------------------------------------
+void Mesh::InitializeSkinningBindPose()
+{
+  _BindVertices = _Vertices;
+  _BindNormals  = _Normals;
+}
+
+// ----------------------------------------------------------------------------
+void Mesh::ResetToBindPose()
+{
+  if ( _BindVertices.empty() )
+    return;
+
+  _Vertices = _BindVertices;
+  if ( !_BindNormals.empty() )
+    _Normals = _BindNormals;
+
+  _BoundingBox._Low  = Vec3(MAX_FLOAT);
+  _BoundingBox._High = Vec3(-MAX_FLOAT);
+  for ( const Vec3 & v : _Vertices )
+  {
+    _BoundingBox._Low  = glm::min(_BoundingBox._Low, v);
+    _BoundingBox._High = glm::max(_BoundingBox._High, v);
+  }
+}
+
+// ----------------------------------------------------------------------------
+void Mesh::ApplySkinning( const std::vector<Mat4x4> & iJointMatrices )
+{
+  if ( !IsSkinned() || iJointMatrices.empty() )
+    return;
+
+  const size_t nbVerts   = _BindVertices.size();
+  const size_t nbNorms   = _BindNormals.size();
+  const int    nbJoints  = static_cast<int>(iJointMatrices.size());
+
+  _Vertices.resize(nbVerts);
+  if ( nbNorms == nbVerts )
+    _Normals.resize(nbNorms);
+
+  Vec3 bMin( MAX_FLOAT);
+  Vec3 bMax(-MAX_FLOAT);
+
+  for ( size_t i = 0; i < nbVerts; ++i )
+  {
+    const Vec4i & j = _Joints[i];
+    const Vec4  & w = _Weights[i];
+
+    Mat4x4 skinMat(0.0f);
+    float totalWeight = 0.0f;
+
+    const int   jArr[4] = { j.x, j.y, j.z, j.w };
+    const float wArr[4] = { w.x, w.y, w.z, w.w };
+
+    for ( int k = 0; k < 4; ++k )
+    {
+      if ( wArr[k] > 0.0f && jArr[k] >= 0 && jArr[k] < nbJoints )
+      {
+        skinMat     += wArr[k] * iJointMatrices[jArr[k]];
+        totalWeight += wArr[k];
+      }
+    }
+
+    if ( totalWeight <= 1e-6f )
+      skinMat = Mat4x4(1.0f);
+    else if ( std::abs(totalWeight - 1.0f) > 1e-4f )
+      skinMat /= totalWeight;
+
+    const Vec3 & bindPos = _BindVertices[i];
+    const Vec3 deformedPos = Vec3(skinMat * Vec4(bindPos, 1.0f));
+    _Vertices[i] = deformedPos;
+
+    bMin = glm::min(bMin, deformedPos);
+    bMax = glm::max(bMax, deformedPos);
+
+    if ( nbNorms == nbVerts )
+    {
+      glm::mat3 m3(skinMat);
+      const float det = glm::determinant(m3);
+      glm::mat3 normalMat = ( std::abs(det) > 1e-8f ) ? glm::transpose(glm::inverse(m3)) : m3;
+      const Vec3 n = normalMat * _BindNormals[i];
+      const float len = glm::length(n);
+      _Normals[i] = ( len > 1e-8f ) ? ( n / len ) : _BindNormals[i];
+    }
+  }
+
+  _BoundingBox._Low  = bMin;
+  _BoundingBox._High = bMax;
 }
 
 }

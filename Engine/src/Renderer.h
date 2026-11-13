@@ -22,7 +22,8 @@ enum class DirtyState
   SceneInstances = 0x08,
   SceneEnvMap    = 0x10,
   RenderSettings = 0x20,
-  Textures       = 0x40
+  Textures       = 0x40,
+  SceneMeshData  = 0x80
 };
 
 struct RenderPassTiming

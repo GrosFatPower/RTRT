@@ -56,6 +56,7 @@ public:
   virtual void Clear();
 
   int Build( Mesh & iMesh );
+  int Refit( const Mesh & iMesh );
 
   const std::vector<Vec3i> & GetPackedTriangleIdx() const { return _PackedTriangleIdx; }
 

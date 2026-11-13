@@ -1,0 +1,35 @@
+renderer
+{
+	resolution 1280 720
+	windowresolution 1280 720
+	maxdepth 2
+	tilewidth 256
+	tileheight 144
+	envmapfile HDR/san_giuseppe_bridge_blurred.hdr
+	envmapintensity 1.5
+}
+
+camera
+{
+	position -5.0 16.0 45.0
+	lookat -7.0 10.0 0.0
+	fov 45
+	near 0.5
+	far 250.0
+}
+
+gltf
+{
+	file an-animated-cat/scene.gltf
+}
+
+light
+{
+	type sphere
+	position 15.0 35.0 30.0
+	emission 1.0 0.98 0.95
+	intensity 2500.0
+	radius 3.0
+	castshadow true
+	shadowradius 0.5
+}

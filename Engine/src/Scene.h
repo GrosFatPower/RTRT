@@ -10,6 +10,7 @@
 #include "Texture.h"
 #include "GpuBvh.h"
 #include "EnvMap.h"
+#include "Animation.h"
 #include <vector>
 #include <map>
 #include <memory>
@@ -95,9 +96,26 @@ public:
   std::vector<Mesh*>             & GetMeshes()             { return _Meshes;             }
   std::vector<Primitive*>        & GetPrimitives()         { return _Primitives;         }
 
+  std::vector<SceneNode>         & GetNodes()              { return _Nodes;              }
+  const std::vector<SceneNode>   & GetNodes()        const { return _Nodes;              }
+  std::vector<Skin>              & GetSkins()              { return _Skins;              }
+  const std::vector<Skin>        & GetSkins()        const { return _Skins;              }
+  std::vector<AnimationClip>     & GetAnimations()         { return _Animations;         }
+  const std::vector<AnimationClip> & GetAnimations() const { return _Animations;         }
+  AnimationState                 & GetAnimationState()     { return _AnimationState;     }
+  const AnimationState           & GetAnimationState() const { return _AnimationState;   }
+
+  bool HasAnimations() const { return !_Animations.empty(); }
+  bool HasSkinnedMeshes() const;
+  void UpdateNodeHierarchyAndSkinning();
+  bool EvaluateAnimationAtTime( int iClipIndex, float iTime );
+  bool UpdateAnimations( float iDeltaTime );
+  bool ResetAnimationsToInitialPose();
+
   // Compiled data
   void CompileMeshData( Vec2i iTextureArraySize = Vec2i(0), bool iBuildTextureArray = true, bool iBuildBVH = true, bool iUseTextureBuckets = true );
   int RebuildTLASData();
+  int RefitBLASData();
   int GetNbFaces() const { return _NbFaces; }
   int GetNbCompiledTex() const { return _NbCompiledTex; }
   const std::vector<Vec3>          & GetVertices()               const { return _Vertices;                }
@@ -157,6 +175,14 @@ private:
   std::vector<Vec3>              _BLASPackedVertices;
   std::vector<Vec3>              _BLASPackedNormals;
   std::vector<Vec2>              _BLASPackedUVs;
+  std::vector<Vec2i>             _BLASVerticesRange;      // (StartIdx, Length)
+  std::vector<Vec2i>             _BLASNormalsRange;       // (StartIdx, Length)
+
+  // Hierarchy, Skinning & Animations
+  std::vector<SceneNode>         _Nodes;
+  std::vector<Skin>              _Skins;
+  std::vector<AnimationClip>     _Animations;
+  AnimationState                 _AnimationState;
 };
 
 }

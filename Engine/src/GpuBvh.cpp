@@ -5,6 +5,8 @@
 #include <iostream>
 #include <memory>
 #include <chrono>
+#include <algorithm>
+#include <limits>
 
 #include "split_bvh.h"
 //#define USE_TINYBVH
@@ -343,6 +345,78 @@ int GpuBLAS::Build( Mesh & iMesh )
   auto endTime = std::chrono::system_clock::now();
   auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>( endTime - startTime ).count();
   std::cout << "GpuBLAS built in " << elapsed << "ms\n";
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+int GpuBLAS::Refit( const Mesh & iMesh )
+{
+  if ( _Nodes.empty() || _PackedTriangleIdx.empty() )
+    return 0;
+
+  const std::vector<Vec3> & vertices = iMesh.GetVertices();
+  const int nbVerts = static_cast<int>(vertices.size());
+  const int nbPackedIdx = static_cast<int>(_PackedTriangleIdx.size());
+
+  // ProcessNodes assigns pre-order indices so children always have higher indices than their parent
+  for ( int i = static_cast<int>(_Nodes.size()) - 1; i >= 0; --i )
+  {
+    Node & node = _Nodes[i];
+
+    if ( node._LcRcLeaf.z > 0.5f )
+    {
+      const int firstTriIdx = static_cast<int>(node._LcRcLeaf.x);
+      const int nbTris      = static_cast<int>(node._LcRcLeaf.y);
+
+      Vec3 bMin( std::numeric_limits<float>::max());
+      Vec3 bMax(-std::numeric_limits<float>::max());
+
+      const int startIdx = firstTriIdx * 3;
+      const int endIdx   = std::min(nbPackedIdx, startIdx + nbTris * 3);
+      for ( int k = startIdx; k < endIdx; ++k )
+      {
+        const int vIdx = _PackedTriangleIdx[k].x;
+        if ( ( vIdx >= 0 ) && ( vIdx < nbVerts ) )
+        {
+          const Vec3 & v = vertices[vIdx];
+          bMin = glm::min(bMin, v);
+          bMax = glm::max(bMax, v);
+        }
+      }
+
+      if ( endIdx <= startIdx )
+      {
+        bMin = Vec3(0.0f);
+        bMax = Vec3(0.0f);
+      }
+
+      node._BBoxMin = bMin;
+      node._BBoxMax = bMax;
+    }
+    else
+    {
+      const int lc = static_cast<int>(node._LcRcLeaf.x);
+      const int rc = static_cast<int>(node._LcRcLeaf.y);
+
+      Vec3 bMin( std::numeric_limits<float>::max());
+      Vec3 bMax(-std::numeric_limits<float>::max());
+
+      if ( ( lc >= 0 ) && ( lc < static_cast<int>(_Nodes.size()) ) )
+      {
+        bMin = glm::min(bMin, _Nodes[lc]._BBoxMin);
+        bMax = glm::max(bMax, _Nodes[lc]._BBoxMax);
+      }
+      if ( ( rc >= 0 ) && ( rc < static_cast<int>(_Nodes.size()) ) )
+      {
+        bMin = glm::min(bMin, _Nodes[rc]._BBoxMin);
+        bMax = glm::max(bMax, _Nodes[rc]._BBoxMax);
+      }
+
+      node._BBoxMin = bMin;
+      node._BBoxMax = bMax;
+    }
+  }
 
   return 0;
 }

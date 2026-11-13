@@ -113,6 +113,13 @@ void Scene::Clear()
   _BLASPackedVertices.clear();
   _BLASPackedNormals.clear();
   _BLASPackedUVs.clear();
+  _BLASVerticesRange.clear();
+  _BLASNormalsRange.clear();
+
+  _Nodes.clear();
+  _Skins.clear();
+  _Animations.clear();
+  _AnimationState = AnimationState();
 }
 
 // ----------------------------------------------------------------------------
@@ -479,6 +486,8 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
   _BLASPackedVertices.clear();
   _BLASPackedNormals.clear();
   _BLASPackedUVs.clear();
+  _BLASVerticesRange.clear();
+  _BLASNormalsRange.clear();
 
   // Geometry
   int vtxIndexOffset  = 0;
@@ -727,6 +736,8 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
       const int fallbackUVIndex = static_cast<int>(_BLASPackedUVs.size());
       _BLASPackedVertices.insert(_BLASPackedVertices.end(), curVertices.begin(), curVertices.end());
       _BLASPackedNormals. insert(_BLASPackedNormals.end(),  curNormals.begin(),  curNormals.end());
+      _BLASVerticesRange.emplace_back(vertexOffset, static_cast<int>(curVertices.size()));
+      _BLASNormalsRange. emplace_back(normalOffset, static_cast<int>(curNormals.size()));
       // BVH shaders always interpolate UVs, including geometry without texture coordinates.
       _BLASPackedUVs.emplace_back(0.f);
       _BLASPackedUVs.     insert(_BLASPackedUVs.end(),      curUVs.begin(),      curUVs.end());
@@ -745,6 +756,269 @@ void Scene::CompileMeshData( Vec2i iTextureArraySize, bool iBuildTextureArray, b
   auto endTime = std::chrono::system_clock::now();
   auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>( endTime - startTime ).count();
   std::cout << "Scene compiled in " << elapsed << "ms\n";
+}
+
+// ----------------------------------------------------------------------------
+// HasSkinnedMeshes
+// ----------------------------------------------------------------------------
+bool Scene::HasSkinnedMeshes() const
+{
+  for ( const Mesh * mesh : _Meshes )
+  {
+    if ( mesh && mesh -> IsSkinned() )
+      return true;
+  }
+  return false;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateNodeHierarchyAndSkinning
+// ----------------------------------------------------------------------------
+void Scene::UpdateNodeHierarchyAndSkinning()
+{
+  const int nbNodes = static_cast<int>(_Nodes.size());
+  if ( 0 == nbNodes )
+    return;
+
+  for ( SceneNode & node : _Nodes )
+    node._LocalTransform = node.ComputeLocalTransform();
+
+  // DFS from root nodes ensures parent globals are always evaluated before children
+  std::vector<bool> visited(nbNodes, false);
+  auto updateSubtree = [&](auto & self, int iNodeIdx, const Mat4x4 & iParentGlobal) -> void
+  {
+    if ( iNodeIdx < 0 || iNodeIdx >= nbNodes || visited[iNodeIdx] )
+      return;
+    visited[iNodeIdx] = true;
+
+    SceneNode & node = _Nodes[iNodeIdx];
+    node._GlobalTransform = iParentGlobal * node._LocalTransform;
+
+    for ( int instIdx : node._MeshInstanceIndices )
+    {
+      if ( ( instIdx >= 0 ) && ( instIdx < static_cast<int>(_MeshInstances.size()) ) )
+        _MeshInstances[instIdx]._Transform = node._GlobalTransform;
+    }
+
+    for ( int childIdx : node._ChildrenIndices )
+      self(self, childIdx, node._GlobalTransform);
+  };
+
+  for ( int i = 0; i < nbNodes; ++i )
+  {
+    if ( _Nodes[i]._ParentIndex < 0 )
+      updateSubtree(updateSubtree, i, Mat4x4(1.0f));
+  }
+
+  for ( int i = 0; i < nbNodes; ++i )
+  {
+    if ( !visited[i] )
+    {
+      const int parent = _Nodes[i]._ParentIndex;
+      const Mat4x4 parentGlobal = ( parent >= 0 && parent < nbNodes ) ? _Nodes[parent]._GlobalTransform : Mat4x4(1.0f);
+      updateSubtree(updateSubtree, i, parentGlobal);
+    }
+  }
+
+  // Compute skinning matrices per skin and apply LBS to skinned meshes
+  std::vector<std::vector<Mat4x4>> skinJointMatrices(_Skins.size());
+  for ( size_t s = 0; s < _Skins.size(); ++s )
+  {
+    const Skin & skin = _Skins[s];
+    Mat4x4 invOwnerTransform(1.0f);
+    if ( ( skin._OwnerNodeIndex >= 0 ) && ( skin._OwnerNodeIndex < nbNodes ) )
+      invOwnerTransform = glm::inverse(_Nodes[skin._OwnerNodeIndex]._GlobalTransform);
+
+    const size_t nbJoints = skin._JointNodeIndices.size();
+    skinJointMatrices[s].resize(nbJoints, Mat4x4(1.0f));
+    for ( size_t j = 0; j < nbJoints; ++j )
+    {
+      const int jointNodeIdx = skin._JointNodeIndices[j];
+      const Mat4x4 jointGlobal = ( jointNodeIdx >= 0 && jointNodeIdx < nbNodes ) ? _Nodes[jointNodeIdx]._GlobalTransform : Mat4x4(1.0f);
+      const Mat4x4 ibm = ( j < skin._InverseBindMatrices.size() ) ? skin._InverseBindMatrices[j] : Mat4x4(1.0f);
+      skinJointMatrices[s][j] = invOwnerTransform * jointGlobal * ibm;
+    }
+  }
+
+  for ( Mesh * mesh : _Meshes )
+  {
+    if ( !mesh || !mesh -> IsSkinned() )
+      continue;
+    const int skinIdx = mesh -> GetSkinIndex();
+    if ( ( skinIdx >= 0 ) && ( skinIdx < static_cast<int>(skinJointMatrices.size()) ) )
+      mesh -> ApplySkinning(skinJointMatrices[skinIdx]);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// EvaluateAnimationAtTime
+// ----------------------------------------------------------------------------
+bool Scene::EvaluateAnimationAtTime( int iClipIndex, float iTime )
+{
+  if ( _Nodes.empty() || _Animations.empty() )
+    return false;
+
+  if ( ( iClipIndex < 0 ) || ( iClipIndex >= static_cast<int>(_Animations.size()) ) )
+    return false;
+
+  for ( SceneNode & node : _Nodes )
+    node.ResetToInitialPose();
+
+  const AnimationClip & clip = _Animations[iClipIndex];
+  for ( const AnimationChannel & channel : clip._Channels )
+  {
+    if ( ( channel._SamplerIndex < 0 ) || ( channel._SamplerIndex >= static_cast<int>(clip._Samplers.size()) ) )
+      continue;
+    if ( ( channel._TargetNodeIndex < 0 ) || ( channel._TargetNodeIndex >= static_cast<int>(_Nodes.size()) ) )
+      continue;
+
+    const AnimationSampler & sampler = clip._Samplers[channel._SamplerIndex];
+    SceneNode & targetNode = _Nodes[channel._TargetNodeIndex];
+    targetNode._HasTRS = true;
+
+    switch ( channel._Path )
+    {
+    case AnimationTargetPath::Translation:
+      targetNode._Translation = sampler.SampleVec3(iTime);
+      break;
+    case AnimationTargetPath::Rotation:
+      targetNode._Rotation = sampler.SampleQuat(iTime);
+      break;
+    case AnimationTargetPath::Scale:
+      targetNode._Scale = sampler.SampleVec3(iTime);
+      break;
+    case AnimationTargetPath::Weights:
+    default:
+      break;
+    }
+  }
+
+  UpdateNodeHierarchyAndSkinning();
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateAnimations
+// ----------------------------------------------------------------------------
+bool Scene::UpdateAnimations( float iDeltaTime )
+{
+  if ( !_AnimationState._Playing || _Animations.empty() )
+    return false;
+
+  if ( ( _AnimationState._ActiveClip < 0 ) || ( _AnimationState._ActiveClip >= static_cast<int>(_Animations.size()) ) )
+    _AnimationState._ActiveClip = 0;
+
+  const AnimationClip & clip = _Animations[_AnimationState._ActiveClip];
+  const float duration = clip._Duration;
+
+  _AnimationState._CurrentTime += iDeltaTime * _AnimationState._Speed;
+
+  if ( duration > 0.0f )
+  {
+    if ( _AnimationState._Loop )
+    {
+      while ( _AnimationState._CurrentTime >= duration )
+        _AnimationState._CurrentTime -= duration;
+      while ( _AnimationState._CurrentTime < 0.0f )
+        _AnimationState._CurrentTime += duration;
+    }
+    else
+    {
+      if ( _AnimationState._CurrentTime >= duration )
+      {
+        _AnimationState._CurrentTime = duration;
+        _AnimationState._Playing = false;
+      }
+      else if ( _AnimationState._CurrentTime < 0.0f )
+      {
+        _AnimationState._CurrentTime = 0.0f;
+        _AnimationState._Playing = false;
+      }
+    }
+  }
+  else
+  {
+    _AnimationState._CurrentTime = 0.0f;
+  }
+
+  return EvaluateAnimationAtTime(_AnimationState._ActiveClip, _AnimationState._CurrentTime);
+}
+
+// ----------------------------------------------------------------------------
+// ResetAnimationsToInitialPose
+// ----------------------------------------------------------------------------
+bool Scene::ResetAnimationsToInitialPose()
+{
+  _AnimationState._CurrentTime = 0.0f;
+
+  if ( _Nodes.empty() )
+    return false;
+
+  for ( SceneNode & node : _Nodes )
+    node.ResetToInitialPose();
+
+  UpdateNodeHierarchyAndSkinning();
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// RefitBLASData
+// ----------------------------------------------------------------------------
+int Scene::RefitBLASData()
+{
+  if ( _Meshes.size() != _BLASNodesRange.size() )
+    return 1;
+
+  for ( size_t m = 0; m < _Meshes.size(); ++m )
+  {
+    Mesh * curMesh = _Meshes[m];
+    if ( !curMesh || !curMesh -> IsSkinned() )
+      continue;
+
+    if ( 0 != curMesh -> RefitBvh() )
+      return 1;
+
+    std::shared_ptr<GpuBLAS> curBLAS = curMesh -> GetBvh();
+    if ( curBLAS && ( m < _BLASNodesRange.size() ) )
+    {
+      const Vec2i nodeRange = _BLASNodesRange[m];
+      const int copyCount = std::min(nodeRange.y, static_cast<int>(curBLAS -> _Nodes.size()));
+      if ( ( nodeRange.x >= 0 ) && ( nodeRange.x + copyCount <= static_cast<int>(_BLASNodes.size()) ) )
+      {
+        std::copy(curBLAS -> _Nodes.begin(),
+                  curBLAS -> _Nodes.begin() + copyCount,
+                  _BLASNodes.begin() + nodeRange.x);
+      }
+    }
+
+    if ( m < _BLASVerticesRange.size() )
+    {
+      const Vec2i vertRange = _BLASVerticesRange[m];
+      const std::vector<Vec3> & curVerts = curMesh -> GetVertices();
+      const int copyCount = std::min(vertRange.y, static_cast<int>(curVerts.size()));
+      if ( ( vertRange.x >= 0 ) && ( vertRange.x + copyCount <= static_cast<int>(_BLASPackedVertices.size()) ) )
+      {
+        std::copy(curVerts.begin(),
+                  curVerts.begin() + copyCount,
+                  _BLASPackedVertices.begin() + vertRange.x);
+      }
+    }
+
+    if ( m < _BLASNormalsRange.size() )
+    {
+      const Vec2i normRange = _BLASNormalsRange[m];
+      const std::vector<Vec3> & curNorms = curMesh -> GetNormals();
+      const int copyCount = std::min(normRange.y, static_cast<int>(curNorms.size()));
+      if ( ( normRange.x >= 0 ) && ( normRange.x + copyCount <= static_cast<int>(_BLASPackedNormals.size()) ) )
+      {
+        std::copy(curNorms.begin(),
+                  curNorms.begin() + copyCount,
+                  _BLASPackedNormals.begin() + normRange.x);
+      }
+    }
+  }
+
+  return 0;
 }
 
 }

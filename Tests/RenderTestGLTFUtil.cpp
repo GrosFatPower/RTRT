@@ -7,6 +7,7 @@
 #include "Scene.h"
 #include "RenderTestOutputUtil.h"
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 
@@ -88,6 +89,64 @@ bool CheckObjImport( bool iQuiet )
     if ( ( instance._MaterialID != overrideID ) || ( std::abs(instance._Transform[3][0] - 2.f) > .0001f ) ) return false;
   }
   return true;
+}
+
+bool CheckAnimatedImport( bool iQuiet )
+{
+  Scene scene;
+  RenderSettings settings;
+  bool loaded = false;
+  {
+    ScopedOutputSilencer outputSilencer(iQuiet);
+    loaded = Loader::LoadScene(PathUtils::GetAssetPath("an-animated-cat/scene.gltf"), scene, settings);
+  }
+  if ( !loaded )
+  {
+    std::cerr << "Unable to load animated GLTF asset an-animated-cat/scene.gltf." << std::endl;
+    return false;
+  }
+
+  if ( ( 1 != scene.GetAnimations().size() ) || ( "Take 001" != scene.GetAnimations()[0]._Name ) || ( scene.GetAnimations()[0]._Duration <= 0.f ) )
+    return false;
+  if ( ( 1 != scene.GetSkins().size() ) || ( 62 != scene.GetSkins()[0]._JointNodeIndices.size() ) )
+    return false;
+  if ( ( 3 != scene.GetNbMeshes() ) || !scene.HasSkinnedMeshes() )
+    return false;
+
+  for ( const Mesh * mesh : scene.GetMeshes() )
+  {
+    if ( !mesh || !mesh -> IsSkinned() || mesh -> GetVertices().empty() )
+      return false;
+  }
+
+  {
+    ScopedOutputSilencer outputSilencer(iQuiet);
+    scene.CompileMeshData(Vec2i(0), false, true, false);
+  }
+
+  if ( !scene.EvaluateAnimationAtTime(0, 0.0f) )
+    return false;
+  const std::vector<Vec3> vertsAtT0 = scene.GetMeshes()[0] -> GetVertices();
+
+  if ( !scene.EvaluateAnimationAtTime(0, 0.5f) )
+    return false;
+  const std::vector<Vec3> & vertsAtT05 = scene.GetMeshes()[0] -> GetVertices();
+  if ( vertsAtT0.size() != vertsAtT05.size() )
+    return false;
+
+  float maxDelta = 0.0f;
+  for ( size_t i = 0; i < vertsAtT0.size(); ++i )
+    maxDelta = std::max(maxDelta, glm::length(vertsAtT05[i] - vertsAtT0[i]));
+  if ( maxDelta <= 1e-4f )
+    return false;
+
+  if ( 0 != scene.RefitBLASData() )
+    return false;
+
+  if ( !scene.ResetAnimationsToInitialPose() )
+    return false;
+
+  return std::abs(scene.GetAnimationState()._CurrentTime) < 1e-6f;
 }
 
 }

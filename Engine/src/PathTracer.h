@@ -95,6 +95,7 @@ protected:
   int UnloadScene( bool iDeleteOutputTextures = false );
   int ReloadScene();
   int ReloadSceneInstances();
+  int ReloadSceneMeshes();
   int ReloadEnvMap();
 
   int UploadTLASData();

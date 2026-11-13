@@ -389,6 +389,92 @@ bool ReadVec2Accessor( const tinygltf::Model & iModel, int iAccessorIndex, std::
 }
 
 // ----------------------------------------------------------------------------
+// GLTF loader : ReadVec4Accessor
+// ----------------------------------------------------------------------------
+bool ReadVec4Accessor( const tinygltf::Model & iModel, int iAccessorIndex, std::vector<Vec4> & oValues )
+{
+  if ( !IsValidIndex(iAccessorIndex, iModel.accessors.size()) )
+    return false;
+  const tinygltf::Accessor & accessor = iModel.accessors[iAccessorIndex];
+  if ( TINYGLTF_TYPE_VEC4 != accessor.type )
+    return false;
+
+  std::vector<double> values;
+  if ( !ReadAccessor(iModel, accessor, values) )
+    return false;
+  oValues.resize(accessor.count);
+  for ( size_t i = 0; i < accessor.count; ++i )
+    oValues[i] = Vec4( static_cast<float>(values[4 * i]), static_cast<float>(values[4 * i + 1]), static_cast<float>(values[4 * i + 2]), static_cast<float>(values[4 * i + 3]) );
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : ReadVec4iAccessor
+// ----------------------------------------------------------------------------
+bool ReadVec4iAccessor( const tinygltf::Model & iModel, int iAccessorIndex, std::vector<Vec4i> & oValues )
+{
+  if ( !IsValidIndex(iAccessorIndex, iModel.accessors.size()) )
+    return false;
+  const tinygltf::Accessor & accessor = iModel.accessors[iAccessorIndex];
+  if ( TINYGLTF_TYPE_VEC4 != accessor.type )
+    return false;
+
+  std::vector<double> values;
+  if ( !ReadAccessor(iModel, accessor, values) )
+    return false;
+  oValues.resize(accessor.count);
+  for ( size_t i = 0; i < accessor.count; ++i )
+    oValues[i] = Vec4i( static_cast<int>(values[4 * i]), static_cast<int>(values[4 * i + 1]), static_cast<int>(values[4 * i + 2]), static_cast<int>(values[4 * i + 3]) );
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : ReadScalarFloatAccessor
+// ----------------------------------------------------------------------------
+bool ReadScalarFloatAccessor( const tinygltf::Model & iModel, int iAccessorIndex, std::vector<float> & oValues )
+{
+  if ( !IsValidIndex(iAccessorIndex, iModel.accessors.size()) )
+    return false;
+  const tinygltf::Accessor & accessor = iModel.accessors[iAccessorIndex];
+  if ( TINYGLTF_TYPE_SCALAR != accessor.type )
+    return false;
+
+  std::vector<double> values;
+  if ( !ReadAccessor(iModel, accessor, values) )
+    return false;
+  oValues.resize(accessor.count);
+  for ( size_t i = 0; i < accessor.count; ++i )
+    oValues[i] = static_cast<float>(values[i]);
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : ReadMat4Accessor
+// ----------------------------------------------------------------------------
+bool ReadMat4Accessor( const tinygltf::Model & iModel, int iAccessorIndex, std::vector<Mat4x4> & oValues )
+{
+  if ( !IsValidIndex(iAccessorIndex, iModel.accessors.size()) )
+    return false;
+  const tinygltf::Accessor & accessor = iModel.accessors[iAccessorIndex];
+  if ( TINYGLTF_TYPE_MAT4 != accessor.type )
+    return false;
+
+  std::vector<double> values;
+  if ( !ReadAccessor(iModel, accessor, values) )
+    return false;
+  oValues.resize(accessor.count);
+  for ( size_t i = 0; i < accessor.count; ++i )
+  {
+    Mat4x4 mat(1.0f);
+    for ( int col = 0; col < 4; ++col )
+      for ( int row = 0; row < 4; ++row )
+        mat[col][row] = static_cast<float>(values[16 * i + 4 * col + row]);
+    oValues[i] = mat;
+  }
+  return true;
+}
+
+// ----------------------------------------------------------------------------
 // GLTF loader : ReadIndices
 // ----------------------------------------------------------------------------
 bool ReadIndices( const tinygltf::Model & iModel, int iAccessorIndex, size_t iVertexCount, std::vector<int> & oIndices )
@@ -801,8 +887,26 @@ bool LoadMeshes( Scene & ioScene, tinygltf::Model & iGltfModel, GltfDiagnostics 
       std::vector<Vec2> uvs;
       const auto uvIt = prim.attributes.find("TEXCOORD_0");
       if ( ( uvIt != prim.attributes.end() ) && ( !ReadVec2Accessor(iGltfModel, uvIt -> second, uvs) || ( uvs.size() != vertices.size() ) ) ) return false;
+
+      std::vector<Vec4i> joints;
+      std::vector<Vec4>  weights;
+      const auto jointsIt  = prim.attributes.find("JOINTS_0");
+      const auto weightsIt = prim.attributes.find("WEIGHTS_0");
+      if ( ( jointsIt != prim.attributes.end() ) && ( weightsIt != prim.attributes.end() ) )
+      {
+        if ( !ReadVec4iAccessor(iGltfModel, jointsIt -> second, joints) || ( joints.size() != vertices.size() ) )
+          return false;
+        if ( !ReadVec4Accessor(iGltfModel, weightsIt -> second, weights) || ( weights.size() != vertices.size() ) )
+          return false;
+      }
+      else if ( ( jointsIt != prim.attributes.end() ) || ( weightsIt != prim.attributes.end() ) )
+      {
+        ioDiagnostics.Warn("incomplete skinning attributes (JOINTS_0 or WEIGHTS_0 missing)");
+      }
+
+      if ( ( prim.attributes.find("JOINTS_1") != prim.attributes.end() ) || ( prim.attributes.find("WEIGHTS_1") != prim.attributes.end() ) )
+        ioDiagnostics.Warn("extra skinning attributes (JOINTS_1/WEIGHTS_1) are ignored");
       if ( prim.attributes.find("TANGENT") != prim.attributes.end() ) ioDiagnostics.Warn("tangent attributes are ignored");
-      if ( ( prim.attributes.find("JOINTS_0") != prim.attributes.end() ) || ( prim.attributes.find("WEIGHTS_0") != prim.attributes.end() ) ) ioDiagnostics.Warn("skinning attributes are ignored");
       if ( !prim.targets.empty() ) ioDiagnostics.Warn("morph targets are ignored");
 
       std::vector<Vec3i> indices;
@@ -812,6 +916,12 @@ bool LoadMeshes( Scene & ioScene, tinygltf::Model & iGltfModel, GltfDiagnostics 
       std::string meshName;
       GetMeshName( gltfMesh, static_cast<int>(indMesh), static_cast<int>(indPrim), meshName );
       Mesh * newMesh = new Mesh( meshName, vertices, normals, uvs, indices );
+      if ( !joints.empty() && !weights.empty() )
+      {
+        newMesh -> SetJoints(std::move(joints));
+        newMesh -> SetWeights(std::move(weights));
+        newMesh -> InitializeSkinningBindPose();
+      }
       if ( -1 == ioScene.AddMesh(newMesh) ) return false;
     }
   }
@@ -819,9 +929,235 @@ bool LoadMeshes( Scene & ioScene, tinygltf::Model & iGltfModel, GltfDiagnostics 
 }
 
 // ----------------------------------------------------------------------------
+// GLTF loader : LoadNodes
+// ----------------------------------------------------------------------------
+bool LoadNodes( Scene & ioScene, tinygltf::Model & iGltfModel, const Mat4x4 & iRootTransfoMat, size_t & oNodeOffset )
+{
+  oNodeOffset = ioScene.GetNodes().size();
+  if ( iGltfModel.nodes.empty() )
+    return true;
+
+  const size_t nbGltfNodes = iGltfModel.nodes.size();
+  std::vector<SceneNode> & sceneNodes = ioScene.GetNodes();
+  sceneNodes.resize(oNodeOffset + 1 + nbGltfNodes);
+
+  // Virtual root wrapper preserves iRootTransfoMat from .scene placements without clobbering glTF TRS
+  SceneNode & rootNode = sceneNodes[oNodeOffset];
+  rootNode._Name               = "__gltf_root__";
+  rootNode._ParentIndex        = -1;
+  rootNode._HasTRS             = false;
+  rootNode._InitialLocalMatrix = iRootTransfoMat;
+  rootNode._LocalTransform     = iRootTransfoMat;
+  rootNode._GlobalTransform    = iRootTransfoMat;
+
+  for ( size_t i = 0; i < nbGltfNodes; ++i )
+  {
+    const tinygltf::Node & gltfNode = iGltfModel.nodes[i];
+    if ( ( !gltfNode.matrix.empty() && ( 16 != gltfNode.matrix.size() ) )
+      || ( !gltfNode.translation.empty() && ( 3 != gltfNode.translation.size() ) )
+      || ( !gltfNode.rotation.empty() && ( 4 != gltfNode.rotation.size() ) )
+      || ( !gltfNode.scale.empty() && ( 3 != gltfNode.scale.size() ) ) )
+      return false;
+
+    SceneNode & node = sceneNodes[oNodeOffset + 1 + i];
+    node._Name = gltfNode.name;
+
+    if ( !gltfNode.matrix.empty() )
+    {
+      node._HasTRS             = false;
+      node._InitialLocalMatrix = glm::make_mat4(gltfNode.matrix.data());
+    }
+    else
+    {
+      node._HasTRS = true;
+      if ( gltfNode.translation.size() == 3 )
+      {
+        node._InitialTranslation = Vec3(static_cast<float>(gltfNode.translation[0]),
+                                        static_cast<float>(gltfNode.translation[1]),
+                                        static_cast<float>(gltfNode.translation[2]));
+      }
+      if ( gltfNode.rotation.size() == 4 )
+      {
+        node._InitialRotation = Vec4(static_cast<float>(gltfNode.rotation[0]),
+                                     static_cast<float>(gltfNode.rotation[1]),
+                                     static_cast<float>(gltfNode.rotation[2]),
+                                     static_cast<float>(gltfNode.rotation[3]));
+      }
+      if ( gltfNode.scale.size() == 3 )
+      {
+        node._InitialScale = Vec3(static_cast<float>(gltfNode.scale[0]),
+                                  static_cast<float>(gltfNode.scale[1]),
+                                  static_cast<float>(gltfNode.scale[2]));
+      }
+    }
+
+    node.ResetToInitialPose();
+    if ( node._HasTRS )
+      node._InitialLocalMatrix = node._LocalTransform;
+
+    for ( int childIdx : gltfNode.children )
+    {
+      if ( !IsValidIndex(childIdx, nbGltfNodes) )
+        return false;
+      const int mappedChild = static_cast<int>(oNodeOffset) + 1 + childIdx;
+      node._ChildrenIndices.push_back(mappedChild);
+      sceneNodes[mappedChild]._ParentIndex = static_cast<int>(oNodeOffset) + 1 + static_cast<int>(i);
+    }
+  }
+
+  // Attach top-level nodes (scene roots and any unparented skeleton roots) to the virtual root
+  for ( size_t i = 0; i < nbGltfNodes; ++i )
+  {
+    const size_t nodeIdx = oNodeOffset + 1 + i;
+    if ( sceneNodes[nodeIdx]._ParentIndex < 0 )
+    {
+      sceneNodes[nodeIdx]._ParentIndex = static_cast<int>(oNodeOffset);
+      sceneNodes[oNodeOffset]._ChildrenIndices.push_back(static_cast<int>(nodeIdx));
+    }
+  }
+
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : LoadSkins
+// ----------------------------------------------------------------------------
+bool LoadSkins( Scene & ioScene, const tinygltf::Model & iGltfModel, size_t iNodeOffset, size_t & oSkinOffset )
+{
+  oSkinOffset = ioScene.GetSkins().size();
+  const size_t nbGltfNodes = iGltfModel.nodes.size();
+
+  for ( size_t s = 0; s < iGltfModel.skins.size(); ++s )
+  {
+    const tinygltf::Skin & gltfSkin = iGltfModel.skins[s];
+    Skin skin;
+    skin._Name = gltfSkin.name.empty() ? ( "Skin_" + std::to_string(s) ) : gltfSkin.name;
+
+    if ( gltfSkin.skeleton >= 0 )
+    {
+      if ( !IsValidIndex(gltfSkin.skeleton, nbGltfNodes) )
+        return false;
+      skin._SkeletonRootNode = static_cast<int>(iNodeOffset) + 1 + gltfSkin.skeleton;
+    }
+
+    skin._JointNodeIndices.reserve(gltfSkin.joints.size());
+    for ( int jointIdx : gltfSkin.joints )
+    {
+      if ( !IsValidIndex(jointIdx, nbGltfNodes) )
+        return false;
+      skin._JointNodeIndices.push_back(static_cast<int>(iNodeOffset) + 1 + jointIdx);
+    }
+
+    if ( gltfSkin.inverseBindMatrices >= 0 )
+    {
+      if ( !ReadMat4Accessor(iGltfModel, gltfSkin.inverseBindMatrices, skin._InverseBindMatrices) )
+        return false;
+    }
+    if ( skin._InverseBindMatrices.size() < skin._JointNodeIndices.size() )
+      skin._InverseBindMatrices.resize(skin._JointNodeIndices.size(), Mat4x4(1.0f));
+
+    ioScene.GetSkins().push_back(std::move(skin));
+  }
+
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// GLTF loader : LoadAnimations
+// ----------------------------------------------------------------------------
+bool LoadAnimations( Scene & ioScene, const tinygltf::Model & iGltfModel, size_t iNodeOffset, GltfDiagnostics & ioDiagnostics )
+{
+  const size_t nbGltfNodes = iGltfModel.nodes.size();
+
+  for ( size_t animIdx = 0; animIdx < iGltfModel.animations.size(); ++animIdx )
+  {
+    const tinygltf::Animation & gltfAnim = iGltfModel.animations[animIdx];
+    AnimationClip clip;
+    clip._Name = gltfAnim.name.empty() ? ( "Anim_" + std::to_string(animIdx) ) : gltfAnim.name;
+
+    clip._Samplers.reserve(gltfAnim.samplers.size());
+    for ( const tinygltf::AnimationSampler & gltfSampler : gltfAnim.samplers )
+    {
+      AnimationSampler sampler;
+      if ( "STEP" == gltfSampler.interpolation )
+        sampler._Interpolation = AnimationInterpolation::Step;
+      else if ( "CUBICSPLINE" == gltfSampler.interpolation )
+        sampler._Interpolation = AnimationInterpolation::CubicSpline;
+      else
+        sampler._Interpolation = AnimationInterpolation::Linear;
+
+      if ( !ReadScalarFloatAccessor(iGltfModel, gltfSampler.input, sampler._InputTimes) )
+        return false;
+
+      if ( !IsValidIndex(gltfSampler.output, iGltfModel.accessors.size()) )
+        return false;
+      const tinygltf::Accessor & outAccessor = iGltfModel.accessors[gltfSampler.output];
+      if ( TINYGLTF_TYPE_VEC3 == outAccessor.type )
+      {
+        std::vector<Vec3> vec3Vals;
+        if ( !ReadVec3Accessor(iGltfModel, gltfSampler.output, vec3Vals) )
+          return false;
+        sampler._OutputValues.reserve(vec3Vals.size());
+        for ( const Vec3 & v : vec3Vals )
+          sampler._OutputValues.emplace_back(v, 0.0f);
+      }
+      else if ( TINYGLTF_TYPE_VEC4 == outAccessor.type )
+      {
+        if ( !ReadVec4Accessor(iGltfModel, gltfSampler.output, sampler._OutputValues) )
+          return false;
+      }
+      else
+      {
+        // Scalar morph weight tracks or unsupported types: preserve empty/fallback
+        std::vector<float> scalarVals;
+        if ( ReadScalarFloatAccessor(iGltfModel, gltfSampler.output, scalarVals) )
+        {
+          sampler._OutputValues.reserve(scalarVals.size());
+          for ( float sVal : scalarVals )
+            sampler._OutputValues.emplace_back(sVal, 0.0f, 0.0f, 0.0f);
+        }
+      }
+
+      clip._Samplers.push_back(std::move(sampler));
+    }
+
+    for ( const tinygltf::AnimationChannel & gltfChannel : gltfAnim.channels )
+    {
+      if ( ( gltfChannel.target_node < 0 ) || !IsValidIndex(gltfChannel.target_node, nbGltfNodes) )
+        continue;
+      if ( !IsValidIndex(gltfChannel.sampler, clip._Samplers.size()) )
+        return false;
+
+      AnimationChannel channel;
+      channel._SamplerIndex    = gltfChannel.sampler;
+      channel._TargetNodeIndex = static_cast<int>(iNodeOffset) + 1 + gltfChannel.target_node;
+
+      if ( "translation" == gltfChannel.target_path )
+        channel._Path = AnimationTargetPath::Translation;
+      else if ( "rotation" == gltfChannel.target_path )
+        channel._Path = AnimationTargetPath::Rotation;
+      else if ( "scale" == gltfChannel.target_path )
+        channel._Path = AnimationTargetPath::Scale;
+      else
+      {
+        ioDiagnostics.Warn("morph target animations are ignored");
+        continue;
+      }
+
+      clip._Channels.push_back(channel);
+    }
+
+    clip.ComputeDuration();
+    ioScene.GetAnimations().push_back(std::move(clip));
+  }
+
+  return true;
+}
+
+// ----------------------------------------------------------------------------
 // GLTF loader : TraverseNodes
 // ----------------------------------------------------------------------------
-bool TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx, const Mat4x4 & iParentTransfoMat, const RenderSettings & iRenderSettings, GltfDiagnostics & ioDiagnostics, std::set<int> & ioAncestors )
+bool TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx, size_t iNodeOffset, size_t iSkinOffset, const Mat4x4 & iParentTransfoMat, const RenderSettings & iRenderSettings, GltfDiagnostics & ioDiagnostics, std::set<int> & ioAncestors )
 {
   if ( !IsValidIndex(iNodeIdx, iGltfModel.nodes.size()) || !ioAncestors.insert(iNodeIdx).second )
     return false;
@@ -877,7 +1213,20 @@ bool TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx,
       instanceName += std::to_string(indPrim);
 
       MeshInstance instance( instanceName, meshID, matID, transfoMat );
-      ioScene.AddMeshInstance(instance);
+      const int instIdx = ioScene.AddMeshInstance(instance);
+
+      const size_t mappedNodeIdx = iNodeOffset + 1 + static_cast<size_t>(iNodeIdx);
+      if ( mappedNodeIdx < ioScene.GetNodes().size() )
+        ioScene.GetNodes()[mappedNodeIdx]._MeshInstanceIndices.push_back(instIdx);
+
+      if ( gltfNode.skin >= 0 )
+      {
+        const size_t mappedSkinIdx = iSkinOffset + static_cast<size_t>(gltfNode.skin);
+        if ( ( meshID >= 0 ) && ( meshID < ioScene.GetNbMeshes() ) && ioScene.GetMeshes()[meshID] )
+          ioScene.GetMeshes()[meshID] -> SetSkinIndex(static_cast<int>(mappedSkinIdx));
+        if ( ( mappedSkinIdx < ioScene.GetSkins().size() ) && ( ioScene.GetSkins()[mappedSkinIdx]._OwnerNodeIndex < 0 ) )
+          ioScene.GetSkins()[mappedSkinIdx]._OwnerNodeIndex = static_cast<int>(mappedNodeIdx);
+      }
     }
   }
 
@@ -999,7 +1348,7 @@ bool TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx,
 
   for ( size_t i = 0; i < gltfNode.children.size(); ++i )
   {
-    if ( !TraverseNodes(ioScene, iGltfModel, gltfNode.children[i], transfoMat, iRenderSettings, ioDiagnostics, ioAncestors) )
+    if ( !TraverseNodes(ioScene, iGltfModel, gltfNode.children[i], iNodeOffset, iSkinOffset, transfoMat, iRenderSettings, ioDiagnostics, ioAncestors) )
       return false;
   }
 
@@ -1010,7 +1359,7 @@ bool TraverseNodes( Scene & ioScene, tinygltf::Model & iGltfModel, int iNodeIdx,
 // ----------------------------------------------------------------------------
 // GLTF loader : LoadInstances
 // ----------------------------------------------------------------------------
-bool LoadInstances( Scene & ioScene, tinygltf::Model & iGltfModel, const Mat4x4 & iTransfoMat, const RenderSettings & iRenderSettings, GltfDiagnostics & ioDiagnostics )
+bool LoadInstances( Scene & ioScene, tinygltf::Model & iGltfModel, size_t iNodeOffset, size_t iSkinOffset, const Mat4x4 & iTransfoMat, const RenderSettings & iRenderSettings, GltfDiagnostics & ioDiagnostics )
 {
   if ( iGltfModel.scenes.empty() ) return false;
   const int sceneIndex = ( iGltfModel.defaultScene >= 0 ) ? iGltfModel.defaultScene : 0;
@@ -1022,7 +1371,7 @@ bool LoadInstances( Scene & ioScene, tinygltf::Model & iGltfModel, const Mat4x4 
   for ( int nodeIdx : gltfScene.nodes )
   {
     std::set<int> ancestors;
-    if ( !TraverseNodes(ioScene, iGltfModel, nodeIdx, iTransfoMat, iRenderSettings, ioDiagnostics, ancestors) ) return false;
+    if ( !TraverseNodes(ioScene, iGltfModel, nodeIdx, iNodeOffset, iSkinOffset, iTransfoMat, iRenderSettings, ioDiagnostics, ancestors) ) return false;
   }
   return true;
 }
@@ -1497,10 +1846,10 @@ bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTra
     printf("Loading Scene from gltf...\n");
 
     GltfDiagnostics diagnostics;
-    if ( !gltfModel.animations.empty() )
-      diagnostics.Warn("animations are ignored");
-    if ( !gltfModel.skins.empty() )
-      diagnostics.Warn("skins are ignored");
+
+    size_t nodeOffset = 0;
+    size_t skinOffset = 0;
+    const size_t animOffset = ioScene.GetAnimations().size();
 
     ret = LoadTextures(ioScene, gltfModel, diagnostics);
     if ( ret )
@@ -1508,13 +1857,24 @@ bool Loader::LoadFromGLTF(const std::string & iGltfFilename, const Mat4x4 & iTra
     if ( ret )
       ret = LoadMeshes(ioScene, gltfModel, diagnostics);
     if ( ret )
-      ret = LoadInstances(ioScene, gltfModel, iTransfoMat, ioRenderSettings, diagnostics);
+      ret = LoadNodes(ioScene, gltfModel, iTransfoMat, nodeOffset);
+    if ( ret )
+      ret = LoadSkins(ioScene, gltfModel, nodeOffset, skinOffset);
+    if ( ret )
+      ret = LoadInstances(ioScene, gltfModel, nodeOffset, skinOffset, iTransfoMat, ioRenderSettings, diagnostics);
+    if ( ret )
+      ret = LoadAnimations(ioScene, gltfModel, nodeOffset, diagnostics);
 
     if ( !ret )
     {
       printf("Error while to loading scene from gltf file %s\n", iGltfFilename.c_str());
       break;
     }
+
+    if ( !gltfModel.animations.empty() )
+      ioScene.EvaluateAnimationAtTime(static_cast<int>(animOffset), 0.0f);
+    else if ( !gltfModel.skins.empty() )
+      ioScene.UpdateNodeHierarchyAndSkinning();
 
   } while ( 0 );
 

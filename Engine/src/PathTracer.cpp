@@ -177,7 +177,13 @@ int PathTracer::Update()
   if ( _DirtyStates & (unsigned long)DirtyState::RenderSettings )
     this -> ResizeRenderTarget();
 
-  if ( _DirtyStates & (unsigned long)DirtyState::SceneInstances )
+  if ( _DirtyStates & (unsigned long)DirtyState::SceneMeshData )
+  {
+    if ( 0 != this -> ReloadSceneMeshes() )
+      return 1;
+  }
+
+  if ( _DirtyStates & ( (unsigned long)DirtyState::SceneInstances | (unsigned long)DirtyState::SceneMeshData ) )
   {
     if ( 0 != this -> ReloadSceneInstances() )
       return 1;
@@ -1457,6 +1463,31 @@ int PathTracer::ReloadSceneInstances()
   if ( _NbTriangles )
   {
     if ( 0 != this -> UploadTLASData() )
+      return 1;
+  }
+
+  _FrameNum = 0;
+  _NbCompleteFrames = 0;
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// ReloadSceneMeshes
+// ----------------------------------------------------------------------------
+int PathTracer::ReloadSceneMeshes()
+{
+  if ( 0 != _Scene.RefitBLASData() )
+    return 1;
+
+  if ( _NbTriangles )
+  {
+    const auto uploadBLASTBO = [this]( GLTextureBuffer & ioTBO, const auto & iData, GLenum iFormat ) {
+      return UploadOrCreateTBO(ioTBO, static_cast<GLsizeiptr>(sizeof(iData[0]) * iData.size()), iData.empty() ? nullptr : iData.data(), iFormat);
+    };
+    if ( 0 != uploadBLASTBO(_BLASNodesTBO, _Scene.GetBLASNode(), GL_RGB32F)
+      || 0 != uploadBLASTBO(_BLASPackedVerticesTBO, _Scene.GetBLASPackedVertices(), GL_RGB32F)
+      || 0 != uploadBLASTBO(_BLASPackedNormalsTBO, _Scene.GetBLASPackedNormals(), GL_RGB32F) )
       return 1;
   }
 

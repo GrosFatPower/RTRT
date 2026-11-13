@@ -792,6 +792,8 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
     return 1;
   if ( !RunUnitTest("obj_static_import", [iQuiet]() { return GLTFTestUtil::CheckObjImport(iQuiet); }) )
     return 1;
+  if ( !RunUnitTest("gltf_animated_import", [iQuiet]() { return GLTFTestUtil::CheckAnimatedImport(iQuiet); }) )
+    return 1;
   if ( !RunUnitTest("scene_optional_mesh_warning", [&iArtifactsDir, iQuiet]() {
     std::error_code errorCode;
     std::filesystem::create_directories(iArtifactsDir, errorCode);

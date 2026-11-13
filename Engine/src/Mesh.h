@@ -32,6 +32,21 @@ public:
   int GetNbFaces() const { return _NbFaces; }
 
   int BuildBvh();
+  int RefitBvh();
+
+  void InitializeSkinningBindPose();
+  void ResetToBindPose();
+  void ApplySkinning( const std::vector<Mat4x4> & iJointMatrices );
+
+  bool IsSkinned() const { return ( _SkinIndex >= 0 ) && !_Joints.empty() && ( _Joints.size() == _BindVertices.size() ); }
+
+  void SetSkinIndex( int iSkinIndex ) { _SkinIndex = iSkinIndex; }
+  int  GetSkinIndex() const { return _SkinIndex; }
+
+  void SetJoints( std::vector<Vec4i> && iJoints ) { _Joints = std::move(iJoints); }
+  void SetWeights( std::vector<Vec4> && iWeights ) { _Weights = std::move(iWeights); }
+  const std::vector<Vec4i> & GetJoints()  const { return _Joints;  }
+  const std::vector<Vec4>  & GetWeights() const { return _Weights; }
 
   const std::vector<Vec3>  & GetVertices() const { return _Vertices; }
   const std::vector<Vec3>  & GetNormals()  const { return _Normals;  }
@@ -51,6 +66,13 @@ private:
   std::vector<Vec3>        _Normals;
   std::vector<Vec2>        _UVs;
   std::vector<Vec3i>       _Indices;
+
+  // Skinning data
+  int                      _SkinIndex = -1;
+  std::vector<Vec3>        _BindVertices;
+  std::vector<Vec3>        _BindNormals;
+  std::vector<Vec4i>       _Joints;
+  std::vector<Vec4>        _Weights;
 
   AABB<Vec3>               _BoundingBox;
 

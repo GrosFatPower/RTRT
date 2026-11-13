@@ -10,6 +10,7 @@ namespace GLTFTestUtil
 
 bool CheckStaticImport( bool iQuiet );
 bool CheckObjImport( bool iQuiet );
+bool CheckAnimatedImport( bool iQuiet );
 
 }
 }

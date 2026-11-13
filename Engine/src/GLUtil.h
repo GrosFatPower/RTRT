@@ -578,7 +578,8 @@ static void CreateMeshBuffers( GLsizeiptr iVertexSize, const void * iVertexData,
 static void CreateMeshBuffers( GLsizeiptr iVertexSize, const void * iVertexData,
                                GLsizeiptr iIndexSize,  const void * iIndexData,
                                const std::vector<std::tuple<GLuint, GLint, GLenum, GLboolean, GLsizei, std::size_t>> & iAttributes,
-                               GLuint & oVAO, GLuint & oVBO, GLuint & oEBO )
+                               GLuint & oVAO, GLuint & oVBO, GLuint & oEBO,
+                               GLenum iVertexUsage = GL_STATIC_DRAW, GLenum iIndexUsage = GL_STATIC_DRAW )
 {
   std::vector<GLVertexAttribDesc> attrs;
   attrs.reserve(iAttributes.size());
@@ -594,7 +595,7 @@ static void CreateMeshBuffers( GLsizeiptr iVertexSize, const void * iVertexData,
     attrs.push_back(desc);
   }
 
-  CreateMeshBuffers(iVertexSize, iVertexData, iIndexSize, iIndexData, attrs, oVAO, oVBO, oEBO);
+  CreateMeshBuffers(iVertexSize, iVertexData, iIndexSize, iIndexData, attrs, oVAO, oVBO, oEBO, iVertexUsage, iIndexUsage);
 }
 
 // Convenience: delete mesh buffers

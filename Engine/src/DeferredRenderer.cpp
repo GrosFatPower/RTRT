@@ -47,13 +47,6 @@ static float S_WireWidth = 3.0f;
 // ----------------------------------------------------------------------------
 // HELPER TYPES
 // ----------------------------------------------------------------------------
-struct GPUMeshVertex
-{
-  Vec3 _Pos;
-  Vec3 _Normal;
-  Vec2 _UV;
-};
-
 struct IndexTriplet
 {
   int v, n, u;
@@ -217,10 +210,16 @@ int DeferredRenderer::Update()
   if ( _DirtyStates & (unsigned long)DirtyState::SceneEnvMap )
     this -> ReloadEnvMap();
 
+  if ( _DirtyStates & (unsigned long)DirtyState::SceneMeshData )
+  {
+    if ( 0 != UpdateDynamicMeshes() )
+      return 1;
+  }
+
   if ( _DirtyStates & ( (unsigned long)DirtyState::SceneMaterials | (unsigned long)DirtyState::SceneInstances ) )
     BuildDeferredDrawLists();
 
-  if ( _DirtyStates & (unsigned long)DirtyState::SceneInstances )
+  if ( _DirtyStates & ( (unsigned long)DirtyState::SceneInstances | (unsigned long)DirtyState::SceneMeshData ) )
     ComputeSceneBounds(false);
 
   UpdateShadowState();
@@ -406,6 +405,8 @@ int DeferredRenderer::UnloadScene()
   _MeshVBOs.clear();
   _MeshEBOs.clear();
   _MeshIndexCount.clear();
+  _MeshVertexSources.clear();
+  _MeshCPUVertices.clear();
   _TransparentMeshBaseIndices.clear();
   _TransparentMeshLocalTriCenters.clear();
   _TransparentMeshSortedIndices.clear();
@@ -1137,6 +1138,8 @@ int DeferredRenderer::ReloadScene()
   _MeshVBOs.assign(meshCount, 0u);
   _MeshEBOs.assign(meshCount, 0u);
   _MeshIndexCount.assign(meshCount, 0);
+  _MeshVertexSources.assign(meshCount, {});
+  _MeshCPUVertices.assign(meshCount, {});
   _TransparentMeshBaseIndices.assign(meshCount, {});
   _TransparentMeshLocalTriCenters.assign(meshCount, {});
   _TransparentMeshSortedIndices.assign(meshCount, {});
@@ -1156,9 +1159,11 @@ int DeferredRenderer::ReloadScene()
 
     // Map each (posIdx, normIdx, uvIdx) triplet to a unique GPU vertex
     std::unordered_map<IndexTriplet, uint32_t, IndexTripletHash> indexMap;
-    std::vector<GPUMeshVertex> outVertices;
+    std::vector<GPUMeshVertex> & outVertices = _MeshCPUVertices[mi];
+    std::vector<MeshVertexSource> & outSources = _MeshVertexSources[mi];
     std::vector<uint32_t> outIndices;
     outVertices.reserve(srcPos.size());
+    outSources.reserve(srcPos.size());
     outIndices.reserve(srcIdx.size());
 
     for ( size_t k = 0; k < srcIdx.size(); ++k )
@@ -1194,6 +1199,7 @@ int DeferredRenderer::ReloadScene()
 
         uint32_t newIndex = static_cast<uint32_t>(outVertices.size());
         outVertices.push_back(v);
+        outSources.push_back({ key.v, key.n });
         indexMap.emplace(key, newIndex);
         outIndices.push_back(newIndex);
       }
@@ -1212,10 +1218,12 @@ int DeferredRenderer::ReloadScene()
     attrs.emplace_back(1u, 3, GL_FLOAT, GL_FALSE, stride, offsetof(GPUMeshVertex, _Normal));
     attrs.emplace_back(2u, 2, GL_FLOAT, GL_FALSE, stride, offsetof(GPUMeshVertex, _UV));
 
+    const GLenum vertexUsage = mesh -> IsSkinned() ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW;
     GLUtil::CreateMeshBuffers( static_cast<GLsizeiptr>(outVertices.size() * sizeof(GPUMeshVertex)), outVertices.data(),
                                static_cast<GLsizeiptr>(outIndices.size() * sizeof(uint32_t)), outIndices.data(),
                                attrs,
-                               vao, vbo, ebo);
+                               vao, vbo, ebo,
+                               vertexUsage );
 
     _MeshVAOs[mi] = vao;
     _MeshVBOs[mi] = vbo;
@@ -1300,6 +1308,64 @@ void DeferredRenderer::SetAnisotropicLevel(int iLevel)
 {
   _Settings._AnisotropicLevel = std::max(0, iLevel);
   _DirtyStates |= (unsigned long)DirtyState::Textures;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateDynamicMeshes
+// Re-upload deformed vertex buffers for skinned meshes
+// ----------------------------------------------------------------------------
+int DeferredRenderer::UpdateDynamicMeshes()
+{
+  const std::vector<Mesh*> & meshes = _Scene.GetMeshes();
+  const size_t meshCount = std::min(meshes.size(), _MeshVBOs.size());
+
+  for ( size_t mi = 0; mi < meshCount; ++mi )
+  {
+    Mesh * mesh = meshes[mi];
+    if ( !mesh || !mesh -> IsSkinned() || !_MeshVBOs[mi] )
+      continue;
+
+    const std::vector<Vec3> & srcPos  = mesh -> GetVertices();
+    const std::vector<Vec3> & srcNorm = mesh -> GetNormals();
+    std::vector<GPUMeshVertex>          & gpuVerts = _MeshCPUVertices[mi];
+    const std::vector<MeshVertexSource> & sources  = _MeshVertexSources[mi];
+
+    const size_t vtxCount = std::min(gpuVerts.size(), sources.size());
+    for ( size_t i = 0; i < vtxCount; ++i )
+    {
+      const MeshVertexSource & src = sources[i];
+      if ( ( src._PosIdx >= 0 ) && ( static_cast<size_t>(src._PosIdx) < srcPos.size() ) )
+        gpuVerts[i]._Pos = srcPos[src._PosIdx];
+      if ( ( src._NormIdx >= 0 ) && ( static_cast<size_t>(src._NormIdx) < srcNorm.size() ) )
+        gpuVerts[i]._Normal = srcNorm[src._NormIdx];
+    }
+
+    if ( !gpuVerts.empty() )
+    {
+      GLBufferDesc desc;
+      desc._Target = GL_ARRAY_BUFFER;
+      desc._Size   = static_cast<GLsizeiptr>(gpuVerts.size() * sizeof(GPUMeshVertex));
+      desc._Data   = gpuVerts.data();
+      GLUtil::UpdateBuffer(_MeshVBOs[mi], desc);
+    }
+
+    if ( ( mi < _TransparentMeshLocalTriCenters.size() ) && !_TransparentMeshLocalTriCenters[mi].empty() )
+    {
+      const std::vector<uint32_t> & baseIndices = _TransparentMeshBaseIndices[mi];
+      std::vector<Vec3> & localCenters = _TransparentMeshLocalTriCenters[mi];
+      const size_t triCount = std::min(localCenters.size(), baseIndices.size() / 3);
+      for ( size_t ti = 0; ti < triCount; ++ti )
+      {
+        const uint32_t i0 = baseIndices[ti * 3 + 0];
+        const uint32_t i1 = baseIndices[ti * 3 + 1];
+        const uint32_t i2 = baseIndices[ti * 3 + 2];
+        if ( ( i0 < gpuVerts.size() ) && ( i1 < gpuVerts.size() ) && ( i2 < gpuVerts.size() ) )
+          localCenters[ti] = ( gpuVerts[i0]._Pos + gpuVerts[i1]._Pos + gpuVerts[i2]._Pos ) * ( 1.f / 3.f );
+      }
+    }
+  }
+
+  return 0;
 }
 
 // ----------------------------------------------------------------------------

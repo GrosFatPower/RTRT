@@ -76,6 +76,7 @@ protected:
   int InitializeRenderer();
   int UpdateScene();
   int UpdateBoids();
+  int UpdateAnimations();
   int InitializeBoidsForScene( bool iResetSimulation );
 
   int InitializeSceneFiles();
@@ -172,6 +173,9 @@ protected:
   BoidSettings               _BoidsSettings;
   BoidSimulation             _BoidsSimulation;
   BoidSceneBinding           _BoidsBinding;
+
+  // Animations
+  bool                       _RunAnimations          = true;
 };
 
 }

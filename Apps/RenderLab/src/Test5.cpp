@@ -523,6 +523,77 @@ int Test5::DrawSceneUI()
   if ( !_SceneLoadError.empty() )
     ImGui::TextColored(ImVec4(1.f, .35f, .35f, 1.f), "%s", _SceneLoadError.c_str());
 
+  if ( _Scene && _Scene -> HasAnimations() )
+  {
+    ImGui::Separator();
+    ImGui::Text("Animations");
+
+    AnimationState & animState = _Scene -> GetAnimationState();
+    const std::vector<AnimationClip> & clips = _Scene -> GetAnimations();
+
+    if ( ImGui::Checkbox("Run animations", &_RunAnimations) )
+      animState._Playing = _RunAnimations;
+
+    const char * playLabel = _RunAnimations ? "Pause" : "Run";
+    if ( ImGui::Button(playLabel) )
+    {
+      _RunAnimations = !_RunAnimations;
+      animState._Playing = _RunAnimations;
+    }
+    ImGui::SameLine();
+    if ( ImGui::Button("Stop") )
+    {
+      _RunAnimations = false;
+      animState._Playing = false;
+      if ( _Scene -> ResetAnimationsToInitialPose() && _Renderer )
+      {
+        _Renderer -> Notify(DirtyState::SceneInstances);
+        if ( _Scene -> HasSkinnedMeshes() )
+          _Renderer -> Notify(DirtyState::SceneMeshData);
+      }
+    }
+
+    std::vector<const char*> clipNames;
+    clipNames.reserve(clips.size());
+    for ( const AnimationClip & clip : clips )
+      clipNames.push_back(clip._Name.empty() ? "Unnamed" : clip._Name.c_str());
+
+    if ( !clipNames.empty() )
+    {
+      if ( ( animState._ActiveClip < 0 ) || ( animState._ActiveClip >= static_cast<int>(clipNames.size()) ) )
+        animState._ActiveClip = 0;
+
+      if ( ImGui::Combo("Clip", &animState._ActiveClip, clipNames.data(), static_cast<int>(clipNames.size())) )
+      {
+        animState._CurrentTime = 0.0f;
+        if ( _Scene -> EvaluateAnimationAtTime(animState._ActiveClip, animState._CurrentTime) && _Renderer )
+        {
+          _Renderer -> Notify(DirtyState::SceneInstances);
+          if ( _Scene -> HasSkinnedMeshes() )
+            _Renderer -> Notify(DirtyState::SceneMeshData);
+        }
+      }
+    }
+
+    ImGui::Checkbox("Loop", &animState._Loop);
+
+    const float duration = clips[animState._ActiveClip]._Duration;
+    if ( duration > 0.0f )
+    {
+      if ( ImGui::SliderFloat("Timeline (s)", &animState._CurrentTime, 0.0f, duration, "%.3f") )
+      {
+        if ( _Scene -> EvaluateAnimationAtTime(animState._ActiveClip, animState._CurrentTime) && _Renderer )
+        {
+          _Renderer -> Notify(DirtyState::SceneInstances);
+          if ( _Scene -> HasSkinnedMeshes() )
+            _Renderer -> Notify(DirtyState::SceneMeshData);
+        }
+      }
+    }
+
+    ImGui::SliderFloat("Speed", &animState._Speed, 0.0f, 3.0f, "%.2fx");
+  }
+
   return 0;
 }
 
@@ -2420,6 +2491,12 @@ int Test5::InitializeScene()
   if ( _BoidsEnabled && ( 0 != InitializeBoidsForScene(true) ) )
     return 1;
 
+  if ( _Scene -> HasAnimations() )
+  {
+    _Scene -> GetAnimationState()._Playing     = _RunAnimations;
+    _Scene -> GetAnimationState()._CurrentTime = 0.0f;
+  }
+
   return 0;
 }
 
@@ -2525,9 +2602,37 @@ int Test5::UpdateScene()
     _ReloadBackground = false;
   }
 
+  if ( 0 != UpdateAnimations() )
+    return 1;
+
   if ( 0 != UpdateBoids() )
     return 1;
 
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateAnimations
+// ----------------------------------------------------------------------------
+int Test5::UpdateAnimations()
+{
+  if ( !_Scene || !_Scene -> HasAnimations() )
+    return 0;
+
+  AnimationState & animState = _Scene -> GetAnimationState();
+  animState._Playing = _RunAnimations;
+
+  if ( _Scene -> UpdateAnimations(static_cast<float>(_DeltaTime)) )
+  {
+    if ( _Renderer )
+    {
+      _Renderer -> Notify(DirtyState::SceneInstances);
+      if ( _Scene -> HasSkinnedMeshes() )
+        _Renderer -> Notify(DirtyState::SceneMeshData);
+    }
+  }
+
+  _RunAnimations = animState._Playing;
   return 0;
 }
 

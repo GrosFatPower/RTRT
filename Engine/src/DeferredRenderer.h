@@ -123,6 +123,7 @@ protected:
 
   int UnloadScene();
   int ReloadScene();
+  int UpdateDynamicMeshes();
   int ReloadEnvMap();
 
   int InitializeFrameBuffers();
@@ -240,10 +241,24 @@ protected:
   unsigned int _FrameNum = 1;
 
   // GPU mesh resources (one entry per Scene::GetMeshes())
+  struct MeshVertexSource
+  {
+    int _PosIdx  = -1;
+    int _NormIdx = -1;
+  };
+  struct GPUMeshVertex
+  {
+    Vec3 _Pos;
+    Vec3 _Normal;
+    Vec2 _UV;
+  };
+
   std::vector<GLuint>                _MeshVAOs;
   std::vector<GLuint>                _MeshVBOs;
   std::vector<GLuint>                _MeshEBOs;
   std::vector<int>                   _MeshIndexCount;
+  std::vector<std::vector<MeshVertexSource>> _MeshVertexSources;
+  std::vector<std::vector<GPUMeshVertex>>    _MeshCPUVertices;
   std::vector<std::vector<uint32_t>> _TransparentMeshBaseIndices;
   std::vector<std::vector<Vec3>>     _TransparentMeshLocalTriCenters;
   std::vector<std::vector<uint32_t>> _TransparentMeshSortedIndices;
