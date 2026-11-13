@@ -608,6 +608,45 @@ std::string NetSession::GetPeerAddressString() const
 
 std::string NetSession::GetLocalIPv4Address() const
 {
+  // 1. Primary: Query OS routing table via an unbound UDP connect() to a public IP
+  SOCKET routeSock = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
+  if ( routeSock != INVALID_SOCKET )
+  {
+    sockaddr_in remoteAddr = {};
+    remoteAddr.sin_family = AF_INET;
+    remoteAddr.sin_port   = htons( 53 );
+    inet_pton( AF_INET, "8.8.8.8", &remoteAddr.sin_addr );
+
+    if ( connect( routeSock, reinterpret_cast<sockaddr *>( &remoteAddr ), sizeof( remoteAddr ) ) == 0 )
+    {
+      sockaddr_in localAddr = {};
+      socklen_t addrLen = sizeof( localAddr );
+      if ( getsockname( routeSock, reinterpret_cast<sockaddr *>( &localAddr ), &addrLen ) == 0 )
+      {
+        char ipStr[64] = {};
+        if ( inet_ntop( AF_INET, &localAddr.sin_addr, ipStr, sizeof( ipStr ) ) )
+        {
+          std::string routedIp( ipStr );
+          if ( !routedIp.empty() && routedIp != "0.0.0.0" && routedIp != "127.0.0.1" )
+          {
+#ifdef _WIN32
+            closesocket( routeSock );
+#else
+            close( routeSock );
+#endif
+            return routedIp;
+          }
+        }
+      }
+    }
+#ifdef _WIN32
+    closesocket( routeSock );
+#else
+    close( routeSock );
+#endif
+  }
+
+  // 2. Fallback: Enumerate local hostname addresses
   char hostName[256] = {};
   if ( gethostname( hostName, sizeof( hostName ) ) == 0 )
   {
@@ -629,8 +668,9 @@ std::string NetSession::GetLocalIPv4Address() const
           if ( candidate != "127.0.0.1" && candidate.rfind( "169.254.", 0 ) != 0 )
           {
             bestIp = candidate;
-            // Prefer standard private LAN ranges (192.168.x.x or 10.x.x.x)
-            if ( candidate.rfind( "192.168.", 0 ) == 0 || candidate.rfind( "10.", 0 ) == 0 )
+            // Prefer standard private LAN ranges (192.168.x.x or 10.x.x.x), skipping VirtualBox 192.168.56.x
+            if ( ( candidate.rfind( "192.168.", 0 ) == 0 && candidate.rfind( "192.168.56.", 0 ) != 0 ) ||
+                 candidate.rfind( "10.", 0 ) == 0 )
               break;
           }
         }

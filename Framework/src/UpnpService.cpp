@@ -425,13 +425,49 @@ void UpnpService::RunMapping( uint16_t iInternalPort, uint16_t iExternalPort, co
   status._StatusMessage = "Opening port on router...";
   SetStatus( status );
 
-  // 3. Router's external IP check
+  // 3. Router's external IP check (and secondary WAN service check if primary is unconfigured)
   char externalIp[64] = {};
-  const int ipResult = UPNP_GetExternalIPAddress( urls.controlURL, data.first.servicetype, externalIp );
-  const bool hasExternalIp = ( UPNPCOMMAND_SUCCESS == ipResult ) && ( externalIp[0] != '\0' );
+  int ipResult = UPNP_GetExternalIPAddress( urls.controlURL, data.first.servicetype, externalIp );
+  bool hasExternalIp = ( UPNPCOMMAND_SUCCESS == ipResult ) && ( externalIp[0] != '\0' ) && ( std::strcmp( externalIp, "0.0.0.0" ) != 0 );
 
-  std::cout << "[UPnP] UPNP_GetExternalIPAddress result: " << ( hasExternalIp ? externalIp : "failed/empty" )
-            << " (ipResult=" << ipResult << ")" << std::endl;
+  std::cout << "[UPnP] Primary service (" << data.first.servicetype << ") UPNP_GetExternalIPAddress: "
+            << ( hasExternalIp ? externalIp : "failed/empty" ) << " (ipResult=" << ipResult << ")" << std::endl;
+
+  if ( !hasExternalIp && data.second.servicetype[0] != '\0' && data.second.controlurl[0] != '\0' && urls.rootdescURL )
+  {
+    std::string rootDescCopy( urls.rootdescURL );
+    UPNPUrls secondUrls;
+    IGDdatas secondData = data;
+    std::memset( &secondUrls, 0, sizeof( secondUrls ) );
+    std::memcpy( &secondData.tmp,    &secondData.first,  sizeof( IGDdatas_service ) );
+    std::memcpy( &secondData.first,  &secondData.second, sizeof( IGDdatas_service ) );
+    std::memcpy( &secondData.second, &secondData.tmp,    sizeof( IGDdatas_service ) );
+    GetUPNPUrls( &secondUrls, &secondData, rootDescCopy.c_str(), 0 );
+
+    if ( secondUrls.controlURL )
+    {
+      char secondIp[64] = {};
+      const int secondIpRes = UPNP_GetExternalIPAddress( secondUrls.controlURL, secondData.first.servicetype, secondIp );
+      const bool hasSecondIp = ( UPNPCOMMAND_SUCCESS == secondIpRes ) && ( secondIp[0] != '\0' ) && ( std::strcmp( secondIp, "0.0.0.0" ) != 0 );
+      std::cout << "[UPnP] Secondary service (" << secondData.first.servicetype << " at " << secondUrls.controlURL
+                << ") UPNP_GetExternalIPAddress: " << ( hasSecondIp ? secondIp : "failed/empty" )
+                << " (ipResult=" << secondIpRes << ")" << std::endl;
+      if ( hasSecondIp )
+      {
+        FreeUPNPUrls( &urls );
+        urls = secondUrls;
+        data = secondData;
+        std::strncpy( externalIp, secondIp, sizeof( externalIp ) - 1 );
+        ipResult      = secondIpRes;
+        hasExternalIp = true;
+        std::cout << "[UPnP] Switched active UPnP service to " << data.first.servicetype << " (" << urls.controlURL << ")" << std::endl;
+      }
+      else
+      {
+        FreeUPNPUrls( &secondUrls );
+      }
+    }
+  }
 
   if ( igdStatus == UPNP_DISCONNECTED_IGD )
   {
@@ -484,6 +520,28 @@ void UpnpService::RunMapping( uint16_t iInternalPort, uint16_t iExternalPort, co
   }
 
   std::cout << "[UPnP] SUCCESS: UDP port " << extPortStr << " mapped successfully on router!" << std::endl;
+
+  // Verify the mapping in the router's UPnP table
+  char verifyClient[64]  = {};
+  char verifyPort[16]    = {};
+  char verifyDesc[80]    = {};
+  char verifyEnabled[8]  = {};
+  char verifyLease[16]   = {};
+  const int verifyRes = UPNP_GetSpecificPortMappingEntry( urls.controlURL, data.first.servicetype,
+                                                          extPortStr, "UDP", nullptr,
+                                                          verifyClient, verifyPort, verifyDesc,
+                                                          verifyEnabled, verifyLease );
+  if ( UPNPCOMMAND_SUCCESS == verifyRes )
+  {
+    std::cout << "[UPnP] Verified active UPnP table entry: External UDP " << extPortStr
+              << " -> " << verifyClient << ":" << verifyPort
+              << " (enabled=" << verifyEnabled << ", lease=" << verifyLease << "s)" << std::endl;
+  }
+  else
+  {
+    std::cerr << "[UPnP] Warning: UPNP_GetSpecificPortMappingEntry returned " << verifyRes
+              << " (" << strupnperror( verifyRes ) << ") after AddPortMapping!" << std::endl;
+  }
 
   // Prefer STUN's verified public IP; fall back to router's external IP only if it's genuinely public
   if ( routableIp.empty() && hasExternalIp && ( 0 == addr_is_reserved( externalIp ) ) )
