@@ -23,6 +23,7 @@ struct FpsProjectile
   float _Age = 0.f;
   float _MaxLifetime = 0.f;
   float _RadiusScale = 1.f;
+  float _LastBounceAge = -1.f;
 };
 
 struct FpsProjectilesUpdateContext
@@ -59,6 +60,7 @@ public:
   int GetAmmo() const { return _Ammo; }
   int GetActiveCount() const;
   bool ConsumeDirty();
+  void ConsumeSoundEvents( std::vector<Vec3> & oBouncePositions, std::vector<Vec3> & oExplosionPositions );
 
 protected:
   void Fire( const FpsGameSettings & iSettings, const FpsPlayer & iPlayer );
@@ -67,6 +69,8 @@ protected:
 
 protected:
   std::vector<FpsProjectile> _Projectiles;
+  std::vector<Vec3>          _BounceSoundEvents;
+  std::vector<Vec3>          _ExplosionSoundEvents;
   float                      _CooldownTimer = 0.f;
   float                      _AmmoRefillTimer = 0.f;
   int                        _Ammo = 32;

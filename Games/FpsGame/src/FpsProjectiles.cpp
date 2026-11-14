@@ -79,7 +79,10 @@ void FpsProjectiles::Clear()
     projectile._Age = 0.f;
     projectile._MaxLifetime = 0.f;
     projectile._RadiusScale = 1.f;
+    projectile._LastBounceAge = -1.f;
   }
+  _BounceSoundEvents.clear();
+  _ExplosionSoundEvents.clear();
   _Dirty = true;
 }
 
@@ -140,6 +143,7 @@ void FpsProjectiles::SpawnHitscanImpact( const FpsGameSettings & iSettings, cons
   projectile._Age = 0.f;
   projectile._MaxLifetime = 0.35f;
   projectile._RadiusScale = 0.45f;
+  projectile._LastBounceAge = -1.f;
 
   _Dirty = true;
 }
@@ -212,6 +216,17 @@ bool FpsProjectiles::ConsumeDirty()
 }
 
 // ----------------------------------------------------------------------------
+// ConsumeSoundEvents
+// ----------------------------------------------------------------------------
+void FpsProjectiles::ConsumeSoundEvents( std::vector<Vec3> & oBouncePositions, std::vector<Vec3> & oExplosionPositions )
+{
+  oBouncePositions = std::move(_BounceSoundEvents);
+  oExplosionPositions = std::move(_ExplosionSoundEvents);
+  _BounceSoundEvents.clear();
+  _ExplosionSoundEvents.clear();
+}
+
+// ----------------------------------------------------------------------------
 // Fire
 // ----------------------------------------------------------------------------
 void FpsProjectiles::Fire( const FpsGameSettings & iSettings, const FpsPlayer & iPlayer )
@@ -233,6 +248,7 @@ void FpsProjectiles::Fire( const FpsGameSettings & iSettings, const FpsPlayer & 
   projectile._Age = 0.f;
   projectile._MaxLifetime = std::max(0.1f, iSettings._ProjectileLifetime);
   projectile._RadiusScale = 1.f;
+  projectile._LastBounceAge = -1.f;
 
   _Dirty = true;
 }
@@ -254,6 +270,8 @@ void FpsProjectiles::UpdateActiveProjectiles( float iDeltaTime, const FpsProject
     const float lifetime = ( projectile._MaxLifetime > 0.f ) ? projectile._MaxLifetime : std::max(0.1f, iContext._Settings._ProjectileLifetime);
     if ( projectile._Age >= lifetime )
     {
+      if ( !projectile._HitscanImpact )
+        _ExplosionSoundEvents.push_back(projectile._Position);
       projectile._Active = false;
       _Dirty = true;
       continue;
@@ -322,6 +340,11 @@ void FpsProjectiles::MoveProjectileAxis( FpsProjectile & ioProjectile, int iAxis
       ioProjectile._Position[iAxis] += overlap[iAxis];
 
     ioProjectile._Velocity[iAxis] = -ioProjectile._Velocity[iAxis] * bounciness;
+    if ( ( std::abs(ioProjectile._Velocity[iAxis]) >= 0.25f ) && ( ioProjectile._Age - ioProjectile._LastBounceAge >= 0.06f ) )
+    {
+      _BounceSoundEvents.push_back(ioProjectile._Position);
+      ioProjectile._LastBounceAge = ioProjectile._Age;
+    }
     if ( std::abs(ioProjectile._Velocity[iAxis]) < 0.15f )
       ioProjectile._Velocity[iAxis] = 0.f;
 
@@ -344,7 +367,14 @@ void FpsProjectiles::MoveProjectileAxis( FpsProjectile & ioProjectile, int iAxis
 
     const float normalSpeed = glm::dot(ioProjectile._Velocity, hit._Normal);
     if ( normalSpeed < 0.f )
+    {
+      if ( ( normalSpeed < -0.4f ) && ( ioProjectile._Age - ioProjectile._LastBounceAge >= 0.06f ) )
+      {
+        _BounceSoundEvents.push_back(ioProjectile._Position);
+        ioProjectile._LastBounceAge = ioProjectile._Age;
+      }
       ioProjectile._Velocity -= ( 1.f + bounciness ) * normalSpeed * hit._Normal;
+    }
 
     ioProjectile._Velocity *= 0.96f;
     if ( glm::length(ioProjectile._Velocity) < 0.15f )

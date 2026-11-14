@@ -60,6 +60,27 @@ static void ApplyMapSettings( const FpsGameMap & iMap, FpsGameSettings & ioSetti
 }
 
 // ----------------------------------------------------------------------------
+// GetWeaponFireSoundId / GetWeaponReloadSoundId
+// ----------------------------------------------------------------------------
+static const char * GetWeaponFireSoundId( int iSlot )
+{
+  if ( iSlot == (int)FpsWeaponId::Mark23Pistol )
+    return "fps_fire_mark23";
+  if ( iSlot == (int)FpsWeaponId::CarbineRifle )
+    return "fps_fire_carbine";
+  return "fps_fire_launcher";
+}
+
+static const char * GetWeaponReloadSoundId( int iSlot )
+{
+  if ( iSlot == (int)FpsWeaponId::Mark23Pistol )
+    return "fps_reload_mark23";
+  if ( iSlot == (int)FpsWeaponId::CarbineRifle )
+    return "fps_reload_carbine";
+  return nullptr;
+}
+
+// ----------------------------------------------------------------------------
 // ApplyMapRenderSettings
 // ----------------------------------------------------------------------------
 static void ApplyMapRenderSettings( const FpsGameMap & iMap, FpsGameSettings & ioGameSettings, RenderSettings & ioRenderSettings )
@@ -820,6 +841,30 @@ void FpsGameApp::InitializeSoundBank()
     const std::string path = std::string("Assets/Sounds/") + name + ".wav";
     if ( std::filesystem::exists(path) )
       _Audio.RegisterSoundFile(name, path);
+  }
+
+  // Per-weapon and projectile sound assets
+  struct AssetSoundEntry
+  {
+    const char * _Id;
+    const char * _AssetRelPath;
+  };
+  const AssetSoundEntry weaponSounds[] =
+  {
+    { "fps_fire",                 "overwatch_junkrats_grenade_launcher/sound/grenade_launcher-cannon-shot.mp3" },
+    { "fps_fire_launcher",        "overwatch_junkrats_grenade_launcher/sound/grenade_launcher-cannon-shot.mp3" },
+    { "fps_projectile_bounce",    "overwatch_junkrats_grenade_launcher/sound/grenade_launcher-bounce.mp3" },
+    { "fps_projectile_explosion", "overwatch_junkrats_grenade_launcher/sound/grenade_launcher-explosion.mp3" },
+    { "fps_fire_mark23",          "mark_23__animated_free/sound/mark_23-pistol-shoot-short-reverb.mp3" },
+    { "fps_reload_mark23",        "mark_23__animated_free/sound/mark_23-gun-reload.mp3" },
+    { "fps_fire_carbine",         "fps_animated_carbine/sound/carbine-submachine-gun.mp3" },
+    { "fps_reload_carbine",       "fps_animated_carbine/sound/carbine-reload-sound.mp3" }
+  };
+  for ( const AssetSoundEntry & entry : weaponSounds )
+  {
+    const std::string assetPath = PathUtils::GetAssetPath(entry._AssetRelPath);
+    if ( !assetPath.empty() && std::filesystem::exists(assetPath) )
+      _Audio.RegisterSoundFile(entry._Id, assetPath);
   }
 }
 
@@ -2143,10 +2188,24 @@ int FpsGameApp::ProcessInput()
   }
   _PrevGrounded = player._Grounded;
 
-  if ( _GameWorld.ConsumeWeaponFired() )
+  int firedSlot = -1;
+  if ( _GameWorld.ConsumeWeaponFired(&firedSlot) )
+    _Audio.PlaySound2D( GetWeaponFireSoundId(firedSlot), 0.85f, 1.0f );
+
+  int reloadSlot = -1;
+  if ( _GameWorld.ConsumeWeaponReloaded(&reloadSlot) )
   {
-    _Audio.PlaySound2D( "fps_fire", 0.85f, 1.0f );
+    if ( const char * reloadSound = GetWeaponReloadSoundId(reloadSlot) )
+      _Audio.PlaySound2D( reloadSound, 0.85f, 1.0f );
   }
+
+  std::vector<Vec3> bouncePositions;
+  std::vector<Vec3> explosionPositions;
+  _GameWorld.ConsumeProjectileSoundEvents(bouncePositions, explosionPositions);
+  for ( const Vec3 & bouncePos : bouncePositions )
+    _Audio.PlaySound3D( "fps_projectile_bounce", bouncePos, 0.80f, 1.0f );
+  for ( const Vec3 & explosionPos : explosionPositions )
+    _Audio.PlaySound3D( "fps_projectile_explosion", explosionPos, 0.95f, 1.0f );
 
   const bool projectilesDirty = _GameWorld.ConsumeProjectilesDirty();
   if ( projectilesDirty || ( _GameSettings._ShowViewWeapon && _SceneBinding.HasViewWeapon() ) )
@@ -2747,7 +2806,15 @@ int FpsGameApp::DrawGameSettingsUI()
     if ( ( 0 != activeSlot ) && ImGui::SmallButton("Trigger Reload") )
     {
       if ( _GameWorld.TriggerReload(_GameSettings) )
+      {
+        int reloadSlot = -1;
+        if ( _GameWorld.ConsumeWeaponReloaded(&reloadSlot) )
+        {
+          if ( const char * reloadSound = GetWeaponReloadSoundId(reloadSlot) )
+            _Audio.PlaySound2D( reloadSound, 0.85f, 1.0f );
+        }
         weaponDirty = true;
+      }
     }
 
     FpsWeaponViewSettings & slotView = _GameSettings._WeaponSlots[activeSlot]._View;

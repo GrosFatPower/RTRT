@@ -246,7 +246,9 @@ public:
   bool SelectWeaponSlot( int iSlot, const FpsGameSettings & iSettings );
   bool CycleWeaponSlot( int iDelta, const FpsGameSettings & iSettings );
   bool TriggerReload( const FpsGameSettings & iSettings );
-  bool ConsumeWeaponFired();
+  bool ConsumeWeaponFired( int * oWeaponSlot = nullptr );
+  bool ConsumeWeaponReloaded( int * oWeaponSlot = nullptr );
+  void ConsumeProjectileSoundEvents( std::vector<Vec3> & oBouncePositions, std::vector<Vec3> & oExplosionPositions ) { _Projectiles.ConsumeSoundEvents(oBouncePositions, oExplosionPositions); }
   const Vec3 & GetSpawnPosition() const { return _SpawnPosition; }
   float GetSpawnYaw() const { return _SpawnYaw; }
   float GetSpawnPitch() const { return _SpawnPitch; }
@@ -278,6 +280,9 @@ protected:
   float                      _HitMarkerTimer = 0.f;
   int                        _WeaponAmmo[(int)FpsWeaponId::Count] = { 32, 12, 30 };
   bool                       _WeaponFiredDirty = false;
+  int                        _LastFiredWeaponSlot = 0;
+  bool                       _WeaponReloadDirty = false;
+  int                        _LastReloadWeaponSlot = 0;
   bool                       _PrevFireHeld = false;
 };
 

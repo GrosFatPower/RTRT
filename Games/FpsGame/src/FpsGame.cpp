@@ -301,6 +301,9 @@ int FpsGameWorld::Reset( const FpsGameSettings & iSettings )
   _WeaponRecoil = 0.f;
   _HitMarkerTimer = 0.f;
   _WeaponFiredDirty = false;
+  _LastFiredWeaponSlot = _ActiveWeaponSlot;
+  _WeaponReloadDirty = false;
+  _LastReloadWeaponSlot = _ActiveWeaponSlot;
   _PrevFireHeld = false;
   for ( int s = 0; s < (int)FpsWeaponId::Count; ++s )
     _WeaponAmmo[s] = std::max(1, iSettings._WeaponSlots[s]._ClipCapacity);
@@ -380,17 +383,33 @@ bool FpsGameWorld::TriggerReload( const FpsGameSettings & iSettings )
   _WeaponAnimAction = FpsWeaponAnimAction::Reload;
   _WeaponAnimTimer = 0.f;
   _WeaponFireCooldown = 0.f;
+  _WeaponReloadDirty = true;
+  _LastReloadWeaponSlot = slot;
   return true;
 }
 
 // ----------------------------------------------------------------------------
 // ConsumeWeaponFired
 // ----------------------------------------------------------------------------
-bool FpsGameWorld::ConsumeWeaponFired()
+bool FpsGameWorld::ConsumeWeaponFired( int * oWeaponSlot )
 {
   const bool fired = _WeaponFiredDirty;
   _WeaponFiredDirty = false;
+  if ( fired && oWeaponSlot )
+    *oWeaponSlot = _LastFiredWeaponSlot;
   return fired;
+}
+
+// ----------------------------------------------------------------------------
+// ConsumeWeaponReloaded
+// ----------------------------------------------------------------------------
+bool FpsGameWorld::ConsumeWeaponReloaded( int * oWeaponSlot )
+{
+  const bool reloaded = _WeaponReloadDirty;
+  _WeaponReloadDirty = false;
+  if ( reloaded && oWeaponSlot )
+    *oWeaponSlot = _LastReloadWeaponSlot;
+  return reloaded;
 }
 
 // ----------------------------------------------------------------------------
@@ -522,6 +541,7 @@ int FpsGameWorld::Update( float iDeltaTime, const FpsGameInput & iInput, const F
         _WeaponAnimAction = FpsWeaponAnimAction::Shoot;
         _WeaponAnimTimer = 0.f;
         _WeaponRecoil = 1.f;
+        _LastFiredWeaponSlot = _ActiveWeaponSlot;
         _WeaponFiredDirty = true;
       }
     }
@@ -535,6 +555,7 @@ int FpsGameWorld::Update( float iDeltaTime, const FpsGameInput & iInput, const F
         _WeaponAnimAction = FpsWeaponAnimAction::Shoot;
         _WeaponAnimTimer = 0.f;
         _WeaponRecoil = ( _ActiveWeaponSlot == (int)FpsWeaponId::Mark23Pistol ) ? 0.65f : 0.45f;
+        _LastFiredWeaponSlot = _ActiveWeaponSlot;
         _WeaponFiredDirty = true;
       }
       else
