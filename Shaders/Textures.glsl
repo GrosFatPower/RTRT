@@ -42,21 +42,27 @@ vec4 SampleMaterialTexture( in ivec4 iMapping, in vec2 iUV )
 
   // Sample only the populated part of a padded bucket layer.
   vec2 contentSize = max(vec2(iMapping.zw), vec2(1.0));
+  vec2 uvScale = contentSize / float(bucketSize);
+  vec2 dPdx = dFdx(iUV) * uvScale;
+  vec2 dPdy = dFdy(iUV) * uvScale;
   vec2 sampleUV = clamp(fract(iUV) * contentSize, vec2(0.5), max(contentSize - vec2(0.5), vec2(0.5))) / float(bucketSize);
   if ( iMapping.x == 0 )
-    return texture(u_TexArrayTexture0, vec3(sampleUV, float(iMapping.y)));
+    return textureGrad(u_TexArrayTexture0, vec3(sampleUV, float(iMapping.y)), dPdx, dPdy);
   if ( iMapping.x == 1 )
-    return texture(u_TexArrayTexture1, vec3(sampleUV, float(iMapping.y)));
+    return textureGrad(u_TexArrayTexture1, vec3(sampleUV, float(iMapping.y)), dPdx, dPdy);
   if ( iMapping.x == 2 )
-    return texture(u_TexArrayTexture2, vec3(sampleUV, float(iMapping.y)));
+    return textureGrad(u_TexArrayTexture2, vec3(sampleUV, float(iMapping.y)), dPdx, dPdy);
   if ( iMapping.x == 3 )
-    return texture(u_TexArrayTexture3, vec3(sampleUV, float(iMapping.y)));
+    return textureGrad(u_TexArrayTexture3, vec3(sampleUV, float(iMapping.y)), dPdx, dPdy);
   if ( iMapping.x == 4 )
-    return texture(u_TexArrayTexture4, vec3(sampleUV, float(iMapping.y)));
+    return textureGrad(u_TexArrayTexture4, vec3(sampleUV, float(iMapping.y)), dPdx, dPdy);
 #else
   vec2 contentSize = max(vec2(iMapping.zw), vec2(1.0));
+  vec2 uvScale = contentSize / float(u_TextureArraySize);
+  vec2 dPdx = dFdx(iUV) * uvScale;
+  vec2 dPdy = dFdy(iUV) * uvScale;
   vec2 sampleUV = clamp(fract(iUV) * contentSize, vec2(0.5), max(contentSize - vec2(0.5), vec2(0.5))) / float(u_TextureArraySize);
-  return texture(u_TexArrayTexture0, vec3(sampleUV, float(iMapping.y)));
+  return textureGrad(u_TexArrayTexture0, vec3(sampleUV, float(iMapping.y)), dPdx, dPdy);
 #endif
 
   return vec4(1.0);
