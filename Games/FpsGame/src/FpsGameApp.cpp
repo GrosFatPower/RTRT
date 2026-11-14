@@ -2208,7 +2208,8 @@ int FpsGameApp::ProcessInput()
     _Audio.PlaySound3D( "fps_projectile_explosion", explosionPos, 0.95f, 1.0f );
 
   const bool projectilesDirty = _GameWorld.ConsumeProjectilesDirty();
-  if ( projectilesDirty || ( _GameSettings._ShowViewWeapon && _SceneBinding.HasViewWeapon() ) )
+  const bool decalsDirty = _GameWorld.ConsumeDecalsDirty();
+  if ( projectilesDirty || decalsDirty || ( _GameSettings._ShowViewWeapon && _SceneBinding.HasViewWeapon() ) )
   {
     bool meshDataDirty = false;
     if ( 0 != _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings, &meshDataDirty) )
@@ -2761,6 +2762,34 @@ int FpsGameApp::DrawGameSettingsUI()
     if ( ImGui::Button("Clear projectiles") )
     {
       _GameWorld.ClearProjectiles();
+      _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings);
+      if ( _Renderer )
+        _Renderer -> Notify(DirtyState::SceneInstances);
+    }
+  }
+
+  if ( ImGui::CollapsingHeader("Decals") )
+  {
+    ImGui::Text("Active decals: %d / %d", _GameWorld.GetActiveDecalCount(), (int)_GameWorld.GetDecals().size());
+    ImGui::SliderFloat("Decal size", &_GameSettings._DecalSize, 0.04f, 0.75f, "%.3f");
+    ImGui::SliderFloat("Decal lifetime (0 = persistent)", &_GameSettings._DecalLifetime, 0.f, 60.f, "%.1f");
+    if ( ImGui::SliderFloat("Decal normal offset", &_GameSettings._DecalNormalOffset, 0.0005f, 0.02f, "%.4f") )
+    {
+      _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings);
+      if ( _Renderer )
+        _Renderer -> Notify(DirtyState::SceneInstances);
+    }
+
+    int maxDecals = _GameSettings._MaxDecals;
+    if ( ImGui::SliderInt("Max decals", &maxDecals, 1, 256) )
+    {
+      _GameSettings._MaxDecals = std::max(1, maxDecals);
+      _ReloadScene = true;
+    }
+
+    if ( ImGui::Button("Clear decals") )
+    {
+      _GameWorld.ClearDecals();
       _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings);
       if ( _Renderer )
         _Renderer -> Notify(DirtyState::SceneInstances);

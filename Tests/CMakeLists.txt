@@ -26,6 +26,7 @@ target_compile_features(RenderRegression
 
 target_link_libraries(RenderRegression
   PRIVATE
+    FpsGameCore
     RTRTCore
     nlohmann_json::nlohmann_json
     glfw

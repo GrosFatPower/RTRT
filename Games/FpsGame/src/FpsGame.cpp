@@ -308,6 +308,9 @@ int FpsGameWorld::Reset( const FpsGameSettings & iSettings )
   for ( int s = 0; s < (int)FpsWeaponId::Count; ++s )
     _WeaponAmmo[s] = std::max(1, iSettings._WeaponSlots[s]._ClipCapacity);
 
+  if ( 0 != _Decals.Initialize(iSettings) )
+    return 1;
+
   return _Projectiles.Initialize(iSettings);
 }
 
@@ -469,7 +472,7 @@ bool FpsGameWorld::FireHitscanWeapon( const FpsWeaponSlotConfig & iSlotConfig, c
 
   if ( bestHit._Hit )
   {
-    _Projectiles.SpawnHitscanImpact(iSettings, bestHit._Point, bestHit._Normal);
+    _Decals.Spawn(iSettings, bestHit._Point, bestHit._Normal);
     _HitMarkerTimer = 0.16f;
   }
 
@@ -526,6 +529,7 @@ int FpsGameWorld::Update( float iDeltaTime, const FpsGameInput & iInput, const F
 
   FpsProjectilesUpdateContext projectilesContext(iSettings, _Player, _Objects, _PropCollisionColliders);
   _Projectiles.Update(realDt, 0.f, projectilesContext);
+  _Decals.Update(realDt, iSettings);
 
   const bool fireDown = iInput._FirePressed || iInput._FireHeld;
   const bool fireJustPressed = fireDown && !_PrevFireHeld;
@@ -676,6 +680,22 @@ int FpsGameWorld::ResizeProjectilePool( const FpsGameSettings & iSettings )
 void FpsGameWorld::ClearProjectiles()
 {
   _Projectiles.Clear();
+}
+
+// ----------------------------------------------------------------------------
+// ResizeDecalPool
+// ----------------------------------------------------------------------------
+int FpsGameWorld::ResizeDecalPool( const FpsGameSettings & iSettings )
+{
+  return _Decals.ResizePool(iSettings);
+}
+
+// ----------------------------------------------------------------------------
+// ClearDecals
+// ----------------------------------------------------------------------------
+void FpsGameWorld::ClearDecals()
+{
+  _Decals.Clear();
 }
 
 // ----------------------------------------------------------------------------
@@ -832,7 +852,9 @@ void FpsGameSceneBinding::Reset()
 {
   _CubeMeshID = -1;
   _SphereMeshID = -1;
+  _QuadMeshID = -1;
   _ProjectileMaterialID = -1;
+  _BulletDecalMaterialID = -1;
   for ( int i = 0; i < (int)FpsMaterialSlot::Count; ++i )
     _MaterialIDs[i] = -1;
   _MapMaterialIDs.clear();
@@ -840,6 +862,7 @@ void FpsGameSceneBinding::Reset()
   _PropInstanceIDs.clear();
   _PropBaseTransforms.clear();
   _ProjectileInstanceIDs.clear();
+  _DecalInstanceIDs.clear();
   for ( int s = 0; s < (int)FpsWeaponId::Count; ++s )
   {
     _WeaponModels[s]._InstanceIDs.clear();
@@ -918,6 +941,18 @@ int FpsGameSceneBinding::Attach( Scene & iScene, const FpsGameWorld & iWorld, co
     _ProjectileInstanceIDs.push_back(iScene.AddMeshInstance(instance));
   }
 
+  const std::vector<FpsDecal> & decals = iWorld.GetDecals();
+  _DecalInstanceIDs.reserve(decals.size());
+  for ( int i = 0; i < static_cast<int>(decals.size()); ++i )
+  {
+    if ( ( _QuadMeshID < 0 ) || ( _BulletDecalMaterialID < 0 ) )
+      return 1;
+
+    MeshInstance instance("Decal " + std::to_string(i), _QuadMeshID, _BulletDecalMaterialID, BuildDecalTransform(decals[i], iSettings));
+    instance._Visible = decals[i]._Active;
+    _DecalInstanceIDs.push_back(iScene.AddMeshInstance(instance));
+  }
+
   if ( 0 != SyncCamera(iScene, iWorld, iSettings) )
     return 1;
 
@@ -957,6 +992,10 @@ int FpsGameSceneBinding::SyncTransforms( Scene & iScene, const FpsGameWorld & iW
   if ( projectiles.size() != _ProjectileInstanceIDs.size() )
     return 1;
 
+  const std::vector<FpsDecal> & decals = iWorld.GetDecals();
+  if ( decals.size() != _DecalInstanceIDs.size() )
+    return 1;
+
   std::vector<MeshInstance> & instances = iScene.GetMeshInstances();
   for ( int i = 0; i < static_cast<int>(_ObjectInstanceIDs.size()); ++i )
   {
@@ -978,6 +1017,16 @@ int FpsGameSceneBinding::SyncTransforms( Scene & iScene, const FpsGameWorld & iW
 
     instances[instanceID]._Visible = projectiles[i]._Active;
     instances[instanceID]._Transform = BuildProjectileTransform(projectiles[i], iSettings);
+  }
+
+  for ( int i = 0; i < static_cast<int>(_DecalInstanceIDs.size()); ++i )
+  {
+    const int instanceID = _DecalInstanceIDs[i];
+    if ( ( instanceID < 0 ) || ( instanceID >= static_cast<int>(instances.size()) ) )
+      return 1;
+
+    instances[instanceID]._Visible = decals[i]._Active;
+    instances[instanceID]._Transform = BuildDecalTransform(decals[i], iSettings);
   }
 
   const int activeSlot = MathUtil::Clamp(iWorld.GetActiveWeaponSlot(), 0, (int)FpsWeaponId::Count - 1);
@@ -1329,7 +1378,26 @@ int FpsGameSceneBinding::EnsureResources( Scene & iScene, const FpsGameMap * iMa
     return 1;
   }
 
+  Mesh * quadMesh = ProceduralMesh::CreateQuad("__FpsDecalQuad", 0.5f);
+  _QuadMeshID = iScene.AddMesh(quadMesh);
+  if ( _QuadMeshID < 0 )
+  {
+    delete quadMesh;
+    return 1;
+  }
+
   Material projectile = MakeMaterial(Vec3(1.0f, 0.04f, 0.02f), 0.28f, 0.f, 0.75f);
+
+  Material bulletDecal = MakeMaterial(Vec3(1.f), 0.85f, 0.f, 0.25f);
+  bulletDecal._Opacity = 1.f;
+  bulletDecal._AlphaMode = (float)AlphaMode::Blend;
+  const std::string decalTexPath = PathUtils::GetAssetPath("Decals/bullet_hole.png");
+  if ( !decalTexPath.empty() && std::filesystem::exists(decalTexPath) )
+  {
+    const int decalTexID = iScene.AddTexture(decalTexPath, 4, TexFormat::TEX_UNSIGNED_BYTE);
+    if ( decalTexID >= 0 )
+      bulletDecal._BaseColorTexId = static_cast<float>(decalTexID);
+  }
 
   FpsGameMap materialMap = iMap ? *iMap : FpsGameMap();
   FpsGameMapLoader::SeedDefaultMaterials(materialMap);
@@ -1353,13 +1421,14 @@ int FpsGameSceneBinding::EnsureResources( Scene & iScene, const FpsGameMap * iMa
   }
 
   _ProjectileMaterialID = iScene.AddMaterial(projectile, "__FpsProjectile");
+  _BulletDecalMaterialID = iScene.AddMaterial(bulletDecal, "__FpsBulletDecal");
 
   for ( int i = 0; i < (int)FpsMaterialSlot::Count; ++i )
   {
     if ( _MaterialIDs[i] < 0 )
       return 1;
   }
-  if ( _ProjectileMaterialID < 0 )
+  if ( ( _ProjectileMaterialID < 0 ) || ( _BulletDecalMaterialID < 0 ) )
     return 1;
 
   return 0;
@@ -1627,6 +1696,39 @@ Mat4x4 FpsGameSceneBinding::BuildProjectileTransform( const FpsProjectile & iPro
 
   const float radius = std::max(0.005f, iSettings._ProjectileRadius * std::max(0.05f, iProjectile._RadiusScale));
   return glm::translate(iProjectile._Position) * glm::scale(Vec3(radius * 2.f));
+}
+
+// ----------------------------------------------------------------------------
+// BuildDecalTransform
+// ----------------------------------------------------------------------------
+Mat4x4 FpsGameSceneBinding::BuildDecalTransform( const FpsDecal & iDecal, const FpsGameSettings & iSettings ) const
+{
+  if ( !iDecal._Active )
+    return glm::translate(iDecal._Position) * glm::scale(Vec3(0.0001f));
+
+  const float normalLen = glm::length(iDecal._Normal);
+  const Vec3 normal = ( normalLen > EPSILON ) ? ( iDecal._Normal / normalLen ) : Vec3(0.f, 1.f, 0.f);
+
+  const Vec3 refUp = ( std::abs(normal.y) < 0.99f ) ? Vec3(0.f, 1.f, 0.f) : Vec3(1.f, 0.f, 0.f);
+  const Vec3 baseTangent = glm::normalize(glm::cross(refUp, normal));
+  const Vec3 baseBitangent = glm::normalize(glm::cross(normal, baseTangent));
+
+  const float c = std::cos(iDecal._Rotation);
+  const float s = std::sin(iDecal._Rotation);
+  const Vec3 tangent = baseTangent * c + baseBitangent * s;
+  const Vec3 bitangent = -baseTangent * s + baseBitangent * c;
+
+  const float size = std::max(0.01f, ( iDecal._Size > 0.f ) ? iDecal._Size : iSettings._DecalSize);
+  const float normalOffset = std::max(0.0005f, iSettings._DecalNormalOffset)
+                           + static_cast<float>(std::max(0, iDecal._LayerOrder) % 32) * 0.0001f;
+  const Vec3 worldPos = iDecal._Position + normal * normalOffset;
+
+  Mat4x4 transform(1.f);
+  transform[0] = Vec4(tangent * size, 0.f);
+  transform[1] = Vec4(bitangent * size, 0.f);
+  transform[2] = Vec4(normal, 0.f);
+  transform[3] = Vec4(worldPos, 1.f);
+  return transform;
 }
 
 // ----------------------------------------------------------------------------

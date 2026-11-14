@@ -4,6 +4,9 @@
 #include "RenderTestGLTFUtil.h"
 
 #include "DroppedFileUtils.h"
+#include "FpsDecals.h"
+#include "FpsGame.h"
+#include "ProceduralMesh.h"
 #include "Camera.h"
 #include "RenderSettings.h"
 #include "Scene.h"
@@ -1188,6 +1191,82 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
     }
 
     return true;
+  }) )
+    return 1;
+
+  if ( !RunUnitTest("fps_decals", [iQuiet]() {
+    ScopedOutputSilencer outputSilencer(iQuiet);
+
+    std::unique_ptr<Mesh> quad(ProceduralMesh::CreateQuad("unit_quad", 0.5f));
+    if ( !quad || ( quad -> GetVertices().size() != 4u ) || ( quad -> GetIndices().size() != 6u ) || ( quad -> GetNormals().size() != 1u ) )
+    {
+      std::cerr << "Unit test failed: ProceduralMesh::CreateQuad geometry." << std::endl;
+      return false;
+    }
+
+    FPS::FpsGameSettings settings;
+    settings._MaxDecals = 4;
+    settings._DecalSize = 0.2f;
+    settings._DecalLifetime = 0.f;
+
+    FPS::FpsDecals decals;
+    decals.Initialize(settings);
+    if ( ( decals.GetDecals().size() != 4u ) || ( decals.GetActiveCount() != 0 ) )
+      return false;
+
+    for ( int i = 0; i < 6; ++i )
+      decals.Spawn(settings, Vec3(static_cast<float>(i), 1.f, 2.f), Vec3(0.f, 0.f, -1.f));
+
+    if ( ( decals.GetActiveCount() != 4 ) || !decals.ConsumeDirty() || decals.ConsumeDirty() )
+    {
+      std::cerr << "Unit test failed: FpsDecals ring-buffer count/dirty state." << std::endl;
+      return false;
+    }
+    if ( ( std::abs(decals.GetDecals()[0]._Position.x - 4.f) > 1e-4f )
+      || ( std::abs(decals.GetDecals()[1]._Position.x - 5.f) > 1e-4f ) )
+    {
+      std::cerr << "Unit test failed: FpsDecals ring-buffer wrap-around." << std::endl;
+      return false;
+    }
+
+    FPS::FpsGameWorld world;
+    world.Initialize(settings);
+    world.SelectWeaponSlot((int)FPS::FpsWeaponId::Mark23Pistol, settings);
+
+    FPS::FpsGameInput idleInput;
+    world.Update(0.05f, idleInput, settings);
+    world.Update(0.05f, idleInput, settings);
+    world.Update(0.05f, idleInput, settings);
+    world.Update(0.05f, idleInput, settings);
+    world.Update(0.05f, idleInput, settings);
+    world.Update(0.05f, idleInput, settings);
+
+    FPS::FpsGameInput fireInput;
+    fireInput._FirePressed = true;
+    fireInput._FireHeld = true;
+    world.Update(0.016f, fireInput, settings);
+
+    if ( ( world.GetActiveDecalCount() != 1 ) || !world.ConsumeDecalsDirty() )
+    {
+      std::cerr << "Unit test failed: hitscan weapon did not spawn decal." << std::endl;
+      return false;
+    }
+
+    Scene scene;
+    FPS::FpsGameSceneBinding binding;
+    if ( 0 != binding.Attach(scene, world, settings) )
+    {
+      std::cerr << "Unit test failed: FpsGameSceneBinding::Attach with decals." << std::endl;
+      return false;
+    }
+
+    int visibleDecalInstances = 0;
+    for ( const MeshInstance & inst : scene.GetMeshInstances() )
+    {
+      if ( ( inst._Filename.rfind("Decal ", 0) == 0 ) && inst._Visible )
+        ++visibleDecalInstances;
+    }
+    return ( 1 == visibleDecalInstances );
   }) )
     return 1;
 

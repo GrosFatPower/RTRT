@@ -2,6 +2,7 @@
 #define _FpsGame_
 
 #include "FpsCollision.h"
+#include "FpsDecals.h"
 #include "FpsHeadBob.h"
 #include "FpsProjectiles.h"
 #include "MathUtil.h"
@@ -150,6 +151,10 @@ struct FpsGameSettings
   float           _ProjectileLifetime = 8.f;
   int             _MaxProjectiles = 32;
   float           _ProjectileCooldown = 0.12f;
+  int             _MaxDecals = 64;
+  float           _DecalSize = 0.18f;
+  float           _DecalLifetime = 0.f;
+  float           _DecalNormalOffset = 0.003f;
   int             _MaxHealth = 100;
   int             _MaxArmor = 50;
   int             _MaxProjectileAmmo = 32;
@@ -223,6 +228,8 @@ public:
   int Update( float iDeltaTime, const FpsGameInput & iInput, const FpsGameSettings & iSettings );
   int ResizeProjectilePool( const FpsGameSettings & iSettings );
   void ClearProjectiles();
+  int ResizeDecalPool( const FpsGameSettings & iSettings );
+  void ClearDecals();
 
   const FpsPlayer & GetPlayer() const { return _Player; }
   FpsPlayer & GetPlayer() { return _Player; }
@@ -235,6 +242,9 @@ public:
   int GetActiveProjectileCount() const { return _Projectiles.GetActiveCount(); }
   int GetProjectileAmmo() const { return _Projectiles.GetAmmo(); }
   bool ConsumeProjectilesDirty() { return _Projectiles.ConsumeDirty(); }
+  const std::vector<FpsDecal> & GetDecals() const { return _Decals.GetDecals(); }
+  int GetActiveDecalCount() const { return _Decals.GetActiveCount(); }
+  bool ConsumeDecalsDirty() { return _Decals.ConsumeDirty(); }
   int GetActiveWeaponSlot() const { return _ActiveWeaponSlot; }
   FpsWeaponAnimAction GetWeaponAnimAction() const { return _WeaponAnimAction; }
   float GetWeaponAnimTimer() const { return _WeaponAnimTimer; }
@@ -266,6 +276,7 @@ protected:
   std::vector<FpsSceneObject> _Objects;
   std::vector<FpsCollisionObb>     _PropCollisionColliders;
   FpsProjectiles             _Projectiles;
+  FpsDecals                  _Decals;
   Vec3                       _SpawnPosition = Vec3(0.f, 0.05f, -8.f);
   float                      _SpawnYaw = 90.f;
   float                      _SpawnPitch = 0.f;
@@ -319,6 +330,7 @@ protected:
   int AddLights( Scene & iScene, const FpsGameMap * iMap );
   Mat4x4 BuildObjectTransform( const FpsSceneObject & iObject ) const;
   Mat4x4 BuildProjectileTransform( const FpsProjectile & iProjectile, const FpsGameSettings & iSettings ) const;
+  Mat4x4 BuildDecalTransform( const FpsDecal & iDecal, const FpsGameSettings & iSettings ) const;
   Mat4x4 BuildViewWeaponTransform( const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, int iSlotIndex ) const;
   Mat4x4 BuildPropTransform( const FpsMapProp & iProp ) const;
   int MaterialID( FpsMaterialSlot iMaterial ) const;
@@ -327,13 +339,16 @@ protected:
 protected:
   int              _CubeMeshID = -1;
   int              _SphereMeshID = -1;
+  int              _QuadMeshID = -1;
   int              _ProjectileMaterialID = -1;
+  int              _BulletDecalMaterialID = -1;
   int              _MaterialIDs[(int)FpsMaterialSlot::Count] = { -1, -1, -1, -1, -1 };
   std::map<std::string, int> _MapMaterialIDs;
   std::vector<int> _ObjectInstanceIDs;
   std::vector<std::vector<int>> _PropInstanceIDs;
   std::vector<std::vector<Mat4x4>> _PropBaseTransforms;
   std::vector<int> _ProjectileInstanceIDs;
+  std::vector<int> _DecalInstanceIDs;
   FpsLoadedWeaponModel _WeaponModels[(int)FpsWeaponId::Count];
   int                  _LastEvaluatedSlot = -1;
   int                  _LastEvaluatedClip = -1;

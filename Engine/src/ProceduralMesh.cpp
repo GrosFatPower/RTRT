@@ -69,6 +69,43 @@ Mesh * CreateCube( const std::string & iName )
 }
 
 // ----------------------------------------------------------------------------
+// CreateQuad
+// ----------------------------------------------------------------------------
+Mesh * CreateQuad( const std::string & iName, float iHalfExtent )
+{
+  const float h = std::max(0.0001f, iHalfExtent);
+
+  std::vector<Vec3> vertices;
+  vertices.reserve(4);
+  vertices.push_back(Vec3(-h, -h, 0.f));
+  vertices.push_back(Vec3( h, -h, 0.f));
+  vertices.push_back(Vec3( h,  h, 0.f));
+  vertices.push_back(Vec3(-h,  h, 0.f));
+
+  std::vector<Vec3> normals;
+  normals.push_back(Vec3(0.f, 0.f, 1.f));
+
+  std::vector<Vec2> uvs;
+  uvs.reserve(4);
+  uvs.push_back(Vec2(0.f, 0.f));
+  uvs.push_back(Vec2(1.f, 0.f));
+  uvs.push_back(Vec2(1.f, 1.f));
+  uvs.push_back(Vec2(0.f, 1.f));
+
+  std::vector<Vec3i> indices;
+  indices.reserve(6);
+  indices.push_back(Vec3i(0, 0, 0));
+  indices.push_back(Vec3i(1, 0, 1));
+  indices.push_back(Vec3i(2, 0, 2));
+
+  indices.push_back(Vec3i(0, 0, 0));
+  indices.push_back(Vec3i(2, 0, 2));
+  indices.push_back(Vec3i(3, 0, 3));
+
+  return new Mesh(iName, vertices, normals, uvs, indices);
+}
+
+// ----------------------------------------------------------------------------
 // CreateUVSphere
 // ----------------------------------------------------------------------------
 Mesh * CreateUVSphere( const std::string & iName, int iRings, int iSegments )

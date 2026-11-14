@@ -6,11 +6,11 @@
     "sfx_volume": 0.800000011920929
   },
   "graphics": {
-    "custom_render_height": 0,
-    "custom_render_width": 0,
+    "custom_render_height": 1080,
+    "custom_render_width": 1920,
     "enable_skybox": true,
     "exposure": 1.5,
-    "fullscreen": true,
+    "fullscreen": false,
     "fxaa": false,
     "gamma": 2.0,
     "render_scale": 100,
