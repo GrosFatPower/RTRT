@@ -184,6 +184,66 @@ static Material MakeMaterial( const Vec3 & iAlbedo, float iRoughness, float iMet
 }
 
 // ----------------------------------------------------------------------------
+// FpsGameSettings
+// ----------------------------------------------------------------------------
+FpsGameSettings::FpsGameSettings()
+{
+  FpsWeaponSlotConfig & launcher = _WeaponSlots[(int)FpsWeaponId::GrenadeLauncher];
+  launcher._Id = FpsWeaponId::GrenadeLauncher;
+  launcher._Name = "GRENADE LAUNCHER";
+  launcher._FireMode = FpsWeaponFireMode::Projectile;
+  launcher._AssetPath = "overwatch_junkrats_grenade_launcher/scene.gltf";
+  launcher._Automatic = false;
+  launcher._FireCooldown = _ProjectileCooldown;
+  launcher._MaxRange = 0.f;
+  launcher._ClipCapacity = _MaxProjectileAmmo;
+  launcher._ReloadDuration = 0.f;
+  launcher._DrawDuration = 0.28f;
+  launcher._ShootAnimDuration = 0.18f;
+  launcher._View._Offset = _ViewWeaponOffset;
+  launcher._View._Rotation = _ViewWeaponRotation;
+  launcher._View._Scale = _ViewWeaponScale;
+  launcher._View._ModelPivot = Vec3(0.f);
+  launcher._View._FlipModelX = false;
+
+  FpsWeaponSlotConfig & mark23 = _WeaponSlots[(int)FpsWeaponId::Mark23Pistol];
+  mark23._Id = FpsWeaponId::Mark23Pistol;
+  mark23._Name = "MARK 23 PISTOL";
+  mark23._FireMode = FpsWeaponFireMode::Hitscan;
+  mark23._AssetPath = "mark_23__animated_free/scene.gltf";
+  mark23._Automatic = false;
+  mark23._FireCooldown = 0.22f;
+  mark23._MaxRange = 120.f;
+  mark23._ClipCapacity = 12;
+  mark23._ReloadDuration = 3.7667f;
+  mark23._DrawDuration = 0.8333f;
+  mark23._ShootAnimDuration = 0.3333f;
+  mark23._View._Offset = Vec3(0.16f, -0.18f, 0.48f);
+  mark23._View._Rotation = Vec3(0.f, -4.5f, 0.f);
+  mark23._View._Scale = 0.010f;
+  mark23._View._ModelPivot = Vec3(-11.135f, 142.974f, -1.07f);
+  mark23._View._FlipModelX = true;
+
+  FpsWeaponSlotConfig & carbine = _WeaponSlots[(int)FpsWeaponId::CarbineRifle];
+  carbine._Id = FpsWeaponId::CarbineRifle;
+  carbine._Name = "CARBINE RIFLE";
+  carbine._FireMode = FpsWeaponFireMode::Hitscan;
+  carbine._AssetPath = "fps_animated_carbine/scene.gltf";
+  carbine._Automatic = true;
+  carbine._FireCooldown = 0.10f;
+  carbine._MaxRange = 160.f;
+  carbine._ClipCapacity = 30;
+  carbine._ReloadDuration = 1.9667f;
+  carbine._DrawDuration = 1.4000f;
+  carbine._ShootAnimDuration = 0.2000f;
+  carbine._View._Offset = Vec3(0.16f, -0.24f, 0.36f);
+  carbine._View._Rotation = Vec3(0.f);
+  carbine._View._Scale = 0.55f;
+  carbine._View._ModelPivot = Vec3(0.f, 0.11f, 0.f);
+  carbine._View._FlipModelX = true;
+}
+
+// ----------------------------------------------------------------------------
 // EyePosition
 // ----------------------------------------------------------------------------
 Vec3 FpsPlayer::EyePosition( const FpsGameSettings & iSettings ) const
@@ -233,7 +293,168 @@ int FpsGameWorld::Reset( const FpsGameSettings & iSettings )
   _Player._Armor = std::max(0, ( _SpawnArmor >= 0 ) ? _SpawnArmor : iSettings._MaxArmor);
   _Player._HeadBob.Reset();
 
+  _ActiveWeaponSlot = MathUtil::Clamp(iSettings._ActiveWeaponSlot, 0, (int)FpsWeaponId::Count - 1);
+  _WeaponAnimAction = FpsWeaponAnimAction::Idle;
+  _WeaponAnimTimer = 0.f;
+  _WeaponFireCooldown = 0.f;
+  _WeaponDrawCooldown = 0.f;
+  _WeaponRecoil = 0.f;
+  _HitMarkerTimer = 0.f;
+  _WeaponFiredDirty = false;
+  _PrevFireHeld = false;
+  for ( int s = 0; s < (int)FpsWeaponId::Count; ++s )
+    _WeaponAmmo[s] = std::max(1, iSettings._WeaponSlots[s]._ClipCapacity);
+
   return _Projectiles.Initialize(iSettings);
+}
+
+// ----------------------------------------------------------------------------
+// GetWeaponAmmo
+// ----------------------------------------------------------------------------
+int FpsGameWorld::GetWeaponAmmo( int iSlot, const FpsGameSettings & iSettings ) const
+{
+  const int slot = MathUtil::Clamp(iSlot, 0, (int)FpsWeaponId::Count - 1);
+  if ( 0 == slot )
+    return _Projectiles.GetAmmo();
+
+  return MathUtil::Clamp(_WeaponAmmo[slot], 0, std::max(1, iSettings._WeaponSlots[slot]._ClipCapacity));
+}
+
+// ----------------------------------------------------------------------------
+// GetWeaponMaxAmmo
+// ----------------------------------------------------------------------------
+int FpsGameWorld::GetWeaponMaxAmmo( int iSlot, const FpsGameSettings & iSettings ) const
+{
+  const int slot = MathUtil::Clamp(iSlot, 0, (int)FpsWeaponId::Count - 1);
+  if ( 0 == slot )
+    return std::max(1, iSettings._MaxProjectileAmmo);
+
+  return std::max(1, iSettings._WeaponSlots[slot]._ClipCapacity);
+}
+
+// ----------------------------------------------------------------------------
+// SelectWeaponSlot
+// ----------------------------------------------------------------------------
+bool FpsGameWorld::SelectWeaponSlot( int iSlot, const FpsGameSettings & )
+{
+  const int slot = MathUtil::Clamp(iSlot, 0, (int)FpsWeaponId::Count - 1);
+  if ( slot == _ActiveWeaponSlot )
+    return false;
+
+  _ActiveWeaponSlot = slot;
+  _WeaponAnimAction = FpsWeaponAnimAction::Draw;
+  _WeaponAnimTimer = 0.f;
+  _WeaponFireCooldown = 0.f;
+  _WeaponDrawCooldown = 0.25f;
+  _WeaponRecoil = 0.f;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// CycleWeaponSlot
+// ----------------------------------------------------------------------------
+bool FpsGameWorld::CycleWeaponSlot( int iDelta, const FpsGameSettings & iSettings )
+{
+  if ( 0 == iDelta )
+    return false;
+
+  const int count = (int)FpsWeaponId::Count;
+  const int nextSlot = ( _ActiveWeaponSlot + ( iDelta % count ) + count ) % count;
+  return SelectWeaponSlot(nextSlot, iSettings);
+}
+
+// ----------------------------------------------------------------------------
+// TriggerReload
+// ----------------------------------------------------------------------------
+bool FpsGameWorld::TriggerReload( const FpsGameSettings & iSettings )
+{
+  const int slot = MathUtil::Clamp(_ActiveWeaponSlot, 0, (int)FpsWeaponId::Count - 1);
+  const FpsWeaponSlotConfig & slotCfg = iSettings._WeaponSlots[slot];
+  if ( ( 0 == slot ) || ( slotCfg._ReloadDuration <= 0.f ) )
+    return false;
+  if ( FpsWeaponAnimAction::Reload == _WeaponAnimAction )
+    return false;
+  if ( _WeaponAmmo[slot] >= slotCfg._ClipCapacity )
+    return false;
+
+  _WeaponAnimAction = FpsWeaponAnimAction::Reload;
+  _WeaponAnimTimer = 0.f;
+  _WeaponFireCooldown = 0.f;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// ConsumeWeaponFired
+// ----------------------------------------------------------------------------
+bool FpsGameWorld::ConsumeWeaponFired()
+{
+  const bool fired = _WeaponFiredDirty;
+  _WeaponFiredDirty = false;
+  return fired;
+}
+
+// ----------------------------------------------------------------------------
+// FireHitscanWeapon
+// ----------------------------------------------------------------------------
+bool FpsGameWorld::FireHitscanWeapon( const FpsWeaponSlotConfig & iSlotConfig, const FpsGameSettings & iSettings )
+{
+  const Vec3 rayOrigin = _Player.EyePosition(iSettings);
+  const Vec3 rayDir = PlayerForward();
+  const float maxDistance = std::max(1.f, iSlotConfig._MaxRange);
+
+  FpsCollisionRayResult bestHit;
+  float bestDist = maxDistance;
+
+  for ( int i = 0; i < static_cast<int>(_Objects.size()); ++i )
+  {
+    const FpsSceneObject & obj = _Objects[i];
+    if ( !obj._Collidable )
+      continue;
+
+    FpsCollisionRayResult candidate;
+    bool hit = false;
+    if ( ( glm::length(obj._Rotation) <= EPSILON ) && ( glm::length(obj._Orientation - Vec4(0.f, 0.f, 0.f, 1.f)) <= EPSILON ) )
+    {
+      hit = FpsCollision::RaycastAabb(rayOrigin, rayDir, bestDist, obj._Center, obj._HalfExtents, candidate);
+    }
+    else
+    {
+      const Mat4x4 rot = BuildObjectRotationTransform(obj);
+      FpsCollisionObb obb;
+      obb._Center = obj._Center;
+      obb._Axis[0] = glm::normalize(Vec3(rot[0]));
+      obb._Axis[1] = glm::normalize(Vec3(rot[1]));
+      obb._Axis[2] = glm::normalize(Vec3(rot[2]));
+      obb._HalfExtents = obj._HalfExtents;
+      hit = FpsCollision::RaycastObb(rayOrigin, rayDir, bestDist, obb, candidate);
+    }
+
+    if ( hit && ( candidate._Distance < bestDist ) )
+    {
+      bestDist = candidate._Distance;
+      bestHit = candidate;
+      bestHit._ObjectIndex = i;
+    }
+  }
+
+  for ( int i = 0; i < static_cast<int>(_PropCollisionColliders.size()); ++i )
+  {
+    FpsCollisionRayResult candidate;
+    if ( FpsCollision::RaycastObb(rayOrigin, rayDir, bestDist, _PropCollisionColliders[i], candidate) && ( candidate._Distance < bestDist ) )
+    {
+      bestDist = candidate._Distance;
+      bestHit = candidate;
+      bestHit._PropIndex = i;
+    }
+  }
+
+  if ( bestHit._Hit )
+  {
+    _Projectiles.SpawnHitscanImpact(iSettings, bestHit._Point, bestHit._Normal);
+    _HitMarkerTimer = 0.16f;
+  }
+
+  return bestHit._Hit;
 }
 
 // ----------------------------------------------------------------------------
@@ -249,10 +470,79 @@ int FpsGameWorld::Update( float iDeltaTime, const FpsGameInput & iInput, const F
   if ( realDt <= 0.f )
     return 0;
 
+  _WeaponFireCooldown = std::max(0.f, _WeaponFireCooldown - realDt);
+  _WeaponDrawCooldown = std::max(0.f, _WeaponDrawCooldown - realDt);
+  _HitMarkerTimer = std::max(0.f, _HitMarkerTimer - realDt);
+  _WeaponRecoil = std::max(0.f, _WeaponRecoil - realDt * 4.5f);
+
+  if ( iInput._RequestedWeaponSlot >= 0 )
+    SelectWeaponSlot(iInput._RequestedWeaponSlot, iSettings);
+  else if ( 0 != iInput._WeaponSwitchDelta )
+    CycleWeaponSlot(iInput._WeaponSwitchDelta, iSettings);
+
+  const FpsWeaponSlotConfig & slotCfg = iSettings._WeaponSlots[_ActiveWeaponSlot];
+  if ( FpsWeaponAnimAction::Idle != _WeaponAnimAction )
+  {
+    _WeaponAnimTimer += realDt;
+    if ( ( FpsWeaponAnimAction::Draw == _WeaponAnimAction ) && ( _WeaponAnimTimer >= slotCfg._DrawDuration ) )
+    {
+      _WeaponAnimAction = FpsWeaponAnimAction::Idle;
+      _WeaponAnimTimer = 0.f;
+    }
+    else if ( ( FpsWeaponAnimAction::Shoot == _WeaponAnimAction ) && ( _WeaponAnimTimer >= slotCfg._ShootAnimDuration ) )
+    {
+      _WeaponAnimAction = FpsWeaponAnimAction::Idle;
+      _WeaponAnimTimer = 0.f;
+    }
+    else if ( ( FpsWeaponAnimAction::Reload == _WeaponAnimAction ) && ( _WeaponAnimTimer >= slotCfg._ReloadDuration ) )
+    {
+      _WeaponAmmo[_ActiveWeaponSlot] = std::max(1, slotCfg._ClipCapacity);
+      _WeaponAnimAction = FpsWeaponAnimAction::Idle;
+      _WeaponAnimTimer = 0.f;
+    }
+  }
+
+  if ( iInput._ReloadPressed )
+    TriggerReload(iSettings);
+
   FpsProjectilesUpdateContext projectilesContext(iSettings, _Player, _Objects, _PropCollisionColliders);
   _Projectiles.Update(realDt, 0.f, projectilesContext);
-  if ( iInput._FirePressed )
-    _Projectiles.RequestFire(iSettings, _Player);
+
+  const bool fireDown = iInput._FirePressed || iInput._FireHeld;
+  const bool fireJustPressed = fireDown && !_PrevFireHeld;
+  _PrevFireHeld = fireDown;
+  const bool wantFire = slotCfg._Automatic ? fireDown : fireJustPressed;
+  if ( wantFire && ( _WeaponDrawCooldown <= 0.f ) && ( _WeaponFireCooldown <= 0.f ) && ( FpsWeaponAnimAction::Reload != _WeaponAnimAction ) )
+  {
+    if ( FpsWeaponFireMode::Projectile == slotCfg._FireMode )
+    {
+      if ( _Projectiles.RequestFire(iSettings, _Player) )
+      {
+        _WeaponFireCooldown = std::max(0.02f, iSettings._ProjectileCooldown);
+        _WeaponAnimAction = FpsWeaponAnimAction::Shoot;
+        _WeaponAnimTimer = 0.f;
+        _WeaponRecoil = 1.f;
+        _WeaponFiredDirty = true;
+      }
+    }
+    else
+    {
+      if ( _WeaponAmmo[_ActiveWeaponSlot] > 0 )
+      {
+        --_WeaponAmmo[_ActiveWeaponSlot];
+        FireHitscanWeapon(slotCfg, iSettings);
+        _WeaponFireCooldown = std::max(0.02f, slotCfg._FireCooldown);
+        _WeaponAnimAction = FpsWeaponAnimAction::Shoot;
+        _WeaponAnimTimer = 0.f;
+        _WeaponRecoil = ( _ActiveWeaponSlot == (int)FpsWeaponId::Mark23Pistol ) ? 0.65f : 0.45f;
+        _WeaponFiredDirty = true;
+      }
+      else
+      {
+        TriggerReload(iSettings);
+      }
+    }
+  }
 
   if ( dt <= 0.f )
     return 0;
@@ -501,6 +791,22 @@ bool FpsGameWorld::OverlapPlayerObject( const FpsSceneObject & iObject, const Fp
 
 // Reset
 // ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// HasViewWeapon
+// ----------------------------------------------------------------------------
+bool FpsGameSceneBinding::HasViewWeapon() const
+{
+  for ( int s = 0; s < (int)FpsWeaponId::Count; ++s )
+  {
+    if ( !_WeaponModels[s]._InstanceIDs.empty() )
+      return true;
+  }
+  return false;
+}
+
+// ----------------------------------------------------------------------------
+// Reset
+// ----------------------------------------------------------------------------
 void FpsGameSceneBinding::Reset()
 {
   _CubeMeshID = -1;
@@ -513,8 +819,16 @@ void FpsGameSceneBinding::Reset()
   _PropInstanceIDs.clear();
   _PropBaseTransforms.clear();
   _ProjectileInstanceIDs.clear();
-  _WeaponInstanceIDs.clear();
-  _WeaponBaseTransforms.clear();
+  for ( int s = 0; s < (int)FpsWeaponId::Count; ++s )
+  {
+    _WeaponModels[s]._InstanceIDs.clear();
+    _WeaponModels[s]._BaseTransforms.clear();
+    _WeaponModels[s]._AnimStartIndex = -1;
+    _WeaponModels[s]._AnimCount = 0;
+  }
+  _LastEvaluatedSlot = -1;
+  _LastEvaluatedClip = -1;
+  _LastEvaluatedTime = -1.f;
 }
 
 // ----------------------------------------------------------------------------
@@ -543,8 +857,15 @@ int FpsGameSceneBinding::Attach( Scene & iScene, const FpsGameWorld & iWorld, co
   if ( 0 != LoadProps(iScene, iMap) )
     std::cout << "FpsGameSceneBinding : failed to load one or more map props" << std::endl;
 
-  if ( 0 != LoadViewWeapon(iScene, iMap._Weapon._Path) )
-    std::cout << "FpsGameSceneBinding : failed to load view weapon model" << std::endl;
+  for ( int s = 0; s < (int)FpsWeaponId::Count; ++s )
+  {
+    std::string weaponPath = iSettings._WeaponSlots[s]._AssetPath ? iSettings._WeaponSlots[s]._AssetPath : "";
+    if ( ( 0 == s ) && !iMap._Weapon._Path.empty() )
+      weaponPath = iMap._Weapon._Path;
+
+    if ( !weaponPath.empty() && ( 0 != LoadViewWeaponSlot(iScene, s, weaponPath) ) )
+      std::cout << "FpsGameSceneBinding : failed to load view weapon slot " << s << " (" << weaponPath << ")" << std::endl;
+  }
 
   const std::vector<FpsSceneObject> & objects = iWorld.GetObjects();
   _ObjectInstanceIDs.reserve(objects.size());
@@ -602,8 +923,11 @@ int FpsGameSceneBinding::SyncCamera( Scene & iScene, const FpsGameWorld & iWorld
 // ----------------------------------------------------------------------------
 // SyncTransforms
 // ----------------------------------------------------------------------------
-int FpsGameSceneBinding::SyncTransforms( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings )
+int FpsGameSceneBinding::SyncTransforms( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, bool * oMeshDataDirty )
 {
+  if ( oMeshDataDirty )
+    *oMeshDataDirty = false;
+
   const std::vector<FpsSceneObject> & objects = iWorld.GetObjects();
   if ( objects.size() != _ObjectInstanceIDs.size() )
     return 1;
@@ -635,18 +959,105 @@ int FpsGameSceneBinding::SyncTransforms( Scene & iScene, const FpsGameWorld & iW
     instances[instanceID]._Transform = BuildProjectileTransform(projectiles[i], iSettings);
   }
 
-  if ( _WeaponInstanceIDs.size() != _WeaponBaseTransforms.size() )
+  const int activeSlot = MathUtil::Clamp(iWorld.GetActiveWeaponSlot(), 0, (int)FpsWeaponId::Count - 1);
+  FpsLoadedWeaponModel & activeModel = _WeaponModels[activeSlot];
+  if ( activeModel._InstanceIDs.size() != activeModel._BaseTransforms.size() )
     return 1;
 
-  const Mat4x4 weaponTransform = BuildViewWeaponTransform(iWorld.GetPlayer(), iSettings);
-  for ( int i = 0; i < static_cast<int>(_WeaponInstanceIDs.size()); ++i )
+  if ( ( activeModel._AnimCount > 0 ) && ( activeModel._AnimStartIndex >= 0 ) )
   {
-    const int instanceID = _WeaponInstanceIDs[i];
+    int localClipIdx = 0;
+    float sampleTime = 0.f;
+    const FpsWeaponAnimAction action = iWorld.GetWeaponAnimAction();
+    const float animTimer = iWorld.GetWeaponAnimTimer();
+
+    if ( activeSlot == (int)FpsWeaponId::Mark23Pistol )
+    {
+      switch ( action )
+      {
+      case FpsWeaponAnimAction::Draw:
+        localClipIdx = 3;
+        sampleTime = 4.5000f + std::min(animTimer, 0.8333f);
+        break;
+      case FpsWeaponAnimAction::Shoot:
+        localClipIdx = 1;
+        sampleTime = 3.7667f + std::min(animTimer, 0.3333f);
+        break;
+      case FpsWeaponAnimAction::Reload:
+        localClipIdx = 0;
+        sampleTime = std::min(animTimer, 3.7667f);
+        break;
+      case FpsWeaponAnimAction::Idle:
+      default:
+        localClipIdx = 1;
+        sampleTime = 3.7667f;
+        break;
+      }
+    }
+    else if ( activeSlot == (int)FpsWeaponId::CarbineRifle )
+    {
+      localClipIdx = 0;
+      switch ( action )
+      {
+      case FpsWeaponAnimAction::Draw:
+        sampleTime = 4.5000f + std::min(animTimer, 1.4000f);
+        break;
+      case FpsWeaponAnimAction::Shoot:
+        sampleTime = std::min(animTimer, 0.2000f);
+        break;
+      case FpsWeaponAnimAction::Reload:
+        sampleTime = 0.3000f + std::min(animTimer, 1.9667f);
+        break;
+      case FpsWeaponAnimAction::Idle:
+      default:
+        sampleTime = 0.0000f;
+        break;
+      }
+    }
+
+    const int sceneClipIdx = activeModel._AnimStartIndex + std::min(localClipIdx, activeModel._AnimCount - 1);
+    if ( ( activeSlot != _LastEvaluatedSlot )
+      || ( sceneClipIdx != _LastEvaluatedClip )
+      || ( std::abs(sampleTime - _LastEvaluatedTime) > 1e-4f ) )
+    {
+      if ( iScene.EvaluateAnimationAtTime(sceneClipIdx, sampleTime) )
+      {
+        iScene.RefitBLASData();
+        for ( int i = 0; i < static_cast<int>(activeModel._InstanceIDs.size()); ++i )
+        {
+          const int instanceID = activeModel._InstanceIDs[i];
+          if ( ( instanceID >= 0 ) && ( instanceID < static_cast<int>(instances.size()) ) )
+            activeModel._BaseTransforms[i] = instances[instanceID]._Transform;
+        }
+        _LastEvaluatedSlot = activeSlot;
+        _LastEvaluatedClip = sceneClipIdx;
+        _LastEvaluatedTime = sampleTime;
+        if ( oMeshDataDirty )
+          *oMeshDataDirty = true;
+      }
+    }
+  }
+
+  for ( int s = 0; s < (int)FpsWeaponId::Count; ++s )
+  {
+    if ( s == activeSlot )
+      continue;
+    for ( int instanceID : _WeaponModels[s]._InstanceIDs )
+    {
+      if ( ( instanceID >= 0 ) && ( instanceID < static_cast<int>(instances.size()) ) )
+        instances[instanceID]._Visible = false;
+    }
+  }
+
+  const Mat4x4 weaponTransform = BuildViewWeaponTransform(iWorld, iSettings, activeSlot);
+  for ( int i = 0; i < static_cast<int>(activeModel._InstanceIDs.size()); ++i )
+  {
+    const int instanceID = activeModel._InstanceIDs[i];
     if ( ( instanceID < 0 ) || ( instanceID >= static_cast<int>(instances.size()) ) )
       return 1;
 
     instances[instanceID]._Visible = iSettings._ShowViewWeapon;
-    instances[instanceID]._Transform = weaponTransform * _WeaponBaseTransforms[i];
+    instances[instanceID]._Transform = weaponTransform * activeModel._BaseTransforms[i];
   }
 
   return 0;
@@ -680,10 +1091,15 @@ int FpsGameSceneBinding::SyncTitleCamera( Scene & iScene, const FpsGameWorld & i
 void FpsGameSceneBinding::SetViewWeaponVisible( Scene & iScene, bool iVisible )
 {
   std::vector<MeshInstance> & instances = iScene.GetMeshInstances();
-  for ( int instanceID : _WeaponInstanceIDs )
+  const int activeSlot = ( _LastEvaluatedSlot >= 0 ) ? _LastEvaluatedSlot : 0;
+  for ( int s = 0; s < (int)FpsWeaponId::Count; ++s )
   {
-    if ( ( instanceID >= 0 ) && ( instanceID < static_cast<int>(instances.size()) ) )
-      instances[instanceID]._Visible = iVisible;
+    const bool showSlot = iVisible && ( s == activeSlot );
+    for ( int instanceID : _WeaponModels[s]._InstanceIDs )
+    {
+      if ( ( instanceID >= 0 ) && ( instanceID < static_cast<int>(instances.size()) ) )
+        instances[instanceID]._Visible = showSlot;
+    }
   }
 }
 
@@ -929,14 +1345,21 @@ int FpsGameSceneBinding::EnsureResources( Scene & iScene, const FpsGameMap * iMa
 }
 
 // ----------------------------------------------------------------------------
-// LoadViewWeapon
+// LoadViewWeaponSlot
 // ----------------------------------------------------------------------------
-int FpsGameSceneBinding::LoadViewWeapon( Scene & iScene, const std::string & iPath )
+int FpsGameSceneBinding::LoadViewWeaponSlot( Scene & iScene, int iSlotIndex, const std::string & iPath )
 {
-  if ( iPath.empty() )
+  if ( ( iSlotIndex < 0 ) || ( iSlotIndex >= (int)FpsWeaponId::Count ) || iPath.empty() )
     return 1;
 
+  FpsLoadedWeaponModel & model = _WeaponModels[iSlotIndex];
+  model._InstanceIDs.clear();
+  model._BaseTransforms.clear();
+  model._AnimStartIndex = -1;
+  model._AnimCount = 0;
+
   const int firstInstanceID = iScene.GetNbMeshInstances();
+  const int firstAnimID = static_cast<int>(iScene.GetAnimations().size());
   RenderSettings loaderSettings;
 
   if ( !Loader::LoadScene(PathUtils::GetAssetPath(iPath), iScene, loaderSettings) )
@@ -945,11 +1368,14 @@ int FpsGameSceneBinding::LoadViewWeapon( Scene & iScene, const std::string & iPa
   std::vector<MeshInstance> & instances = iScene.GetMeshInstances();
   for ( int instanceID = firstInstanceID; instanceID < static_cast<int>(instances.size()); ++instanceID )
   {
-    _WeaponInstanceIDs.push_back(instanceID);
-    _WeaponBaseTransforms.push_back(instances[instanceID]._Transform);
+    model._InstanceIDs.push_back(instanceID);
+    model._BaseTransforms.push_back(instances[instanceID]._Transform);
   }
 
-  return _WeaponInstanceIDs.empty() ? 1 : 0;
+  model._AnimStartIndex = firstAnimID;
+  model._AnimCount = static_cast<int>(iScene.GetAnimations().size()) - firstAnimID;
+
+  return model._InstanceIDs.empty() ? 1 : 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -1178,20 +1604,33 @@ Mat4x4 FpsGameSceneBinding::BuildProjectileTransform( const FpsProjectile & iPro
   if ( !iProjectile._Active )
     return glm::translate(iProjectile._Position) * glm::scale(Vec3(0.001f));
 
-  const float radius = std::max(0.02f, iSettings._ProjectileRadius);
+  const float radius = std::max(0.005f, iSettings._ProjectileRadius * std::max(0.05f, iProjectile._RadiusScale));
   return glm::translate(iProjectile._Position) * glm::scale(Vec3(radius * 2.f));
 }
 
 // ----------------------------------------------------------------------------
 // BuildViewWeaponTransform
 // ----------------------------------------------------------------------------
-Mat4x4 FpsGameSceneBinding::BuildViewWeaponTransform( const FpsPlayer & iPlayer, const FpsGameSettings & iSettings ) const
+Mat4x4 FpsGameSceneBinding::BuildViewWeaponTransform( const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, int iSlotIndex ) const
 {
-  if ( !iSettings._ShowViewWeapon )
-    return glm::translate(iPlayer.ViewPosition(iSettings)) * glm::scale(Vec3(std::max(0.001f, iSettings._ViewWeaponScale)));
+  const FpsPlayer & player = iWorld.GetPlayer();
+  const int slotIdx = MathUtil::Clamp(iSlotIndex, 0, (int)FpsWeaponId::Count - 1);
+  const FpsWeaponSlotConfig & slotCfg = iSettings._WeaponSlots[slotIdx];
 
-  const float yawRad = MathUtil::ToRadians(iPlayer._Yaw);
-  const float pitchRad = MathUtil::ToRadians(iPlayer._Pitch);
+  FpsWeaponViewSettings view = slotCfg._View;
+  if ( 0 == slotIdx )
+  {
+    view._Offset = iSettings._ViewWeaponOffset;
+    view._Rotation = iSettings._ViewWeaponRotation;
+    view._Scale = iSettings._ViewWeaponScale;
+  }
+
+  const float scale = std::max(0.0001f, view._Scale);
+  if ( !iSettings._ShowViewWeapon )
+    return glm::translate(player.ViewPosition(iSettings)) * glm::scale(Vec3(scale));
+
+  const float yawRad = MathUtil::ToRadians(player._Yaw);
+  const float pitchRad = MathUtil::ToRadians(player._Pitch);
   Vec3 forward(std::cos(yawRad) * std::cos(pitchRad),
                std::sin(pitchRad),
                std::sin(yawRad) * std::cos(pitchRad));
@@ -1205,17 +1644,43 @@ Mat4x4 FpsGameSceneBinding::BuildViewWeaponTransform( const FpsPlayer & iPlayer,
   cameraTransform[0] = Vec4(right, 0.f);
   cameraTransform[1] = Vec4(up, 0.f);
   cameraTransform[2] = Vec4(forward, 0.f);
-  cameraTransform[3] = Vec4(iPlayer.ViewPosition(iSettings), 1.f);
+  cameraTransform[3] = Vec4(player.ViewPosition(iSettings), 1.f);
 
-  const Vec3 rotRad(MathUtil::ToRadians(iSettings._ViewWeaponRotation.x),
-                    MathUtil::ToRadians(iSettings._ViewWeaponRotation.y),
-                    MathUtil::ToRadians(iSettings._ViewWeaponRotation.z));
+  Vec3 offset = view._Offset;
+  Vec3 rotation = view._Rotation;
+  const float recoil = iWorld.GetWeaponRecoil();
+  const FpsWeaponAnimAction action = iWorld.GetWeaponAnimAction();
+  const float animTimer = iWorld.GetWeaponAnimTimer();
 
-  Mat4x4 localTransform = glm::translate(iSettings._ViewWeaponOffset);
+  if ( 0 == slotIdx )
+  {
+    offset.z -= recoil * 0.09f;
+    offset.y -= recoil * 0.02f;
+    rotation.x -= recoil * 7.f;
+
+    if ( ( FpsWeaponAnimAction::Draw == action ) && ( slotCfg._DrawDuration > 0.f ) )
+    {
+      const float t = MathUtil::Clamp(1.f - animTimer / slotCfg._DrawDuration, 0.f, 1.f);
+      offset.y -= t * 0.22f;
+      rotation.x += t * 18.f;
+    }
+  }
+  else
+  {
+    offset.z -= recoil * 0.02f;
+    rotation.x -= recoil * 1.5f;
+  }
+
+  const Vec3 rotRad(MathUtil::ToRadians(rotation.x),
+                    MathUtil::ToRadians(rotation.y),
+                    MathUtil::ToRadians(rotation.z));
+
+  Mat4x4 localTransform = glm::translate(offset);
   localTransform = localTransform * glm::rotate(rotRad.y, Vec3(0.f, 1.f, 0.f));
   localTransform = localTransform * glm::rotate(rotRad.x, Vec3(1.f, 0.f, 0.f));
   localTransform = localTransform * glm::rotate(rotRad.z, Vec3(0.f, 0.f, 1.f));
-  localTransform = localTransform * glm::scale(Vec3(std::max(0.001f, iSettings._ViewWeaponScale)));
+  localTransform = localTransform * glm::scale(Vec3(view._FlipModelX ? -scale : scale, scale, scale));
+  localTransform = localTransform * glm::translate(-view._ModelPivot);
 
   return cameraTransform * localTransform;
 }

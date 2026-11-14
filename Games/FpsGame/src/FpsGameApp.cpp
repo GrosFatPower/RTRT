@@ -54,6 +54,9 @@ static void ApplyMapSettings( const FpsGameMap & iMap, FpsGameSettings & ioSetti
   ioSettings._ViewWeaponOffset = iMap._Weapon._Offset;
   ioSettings._ViewWeaponRotation = iMap._Weapon._Rotation;
   ioSettings._ViewWeaponScale = iMap._Weapon._Scale;
+  ioSettings._WeaponSlots[0]._View._Offset = iMap._Weapon._Offset;
+  ioSettings._WeaponSlots[0]._View._Rotation = iMap._Weapon._Rotation;
+  ioSettings._WeaponSlots[0]._View._Scale = iMap._Weapon._Scale;
 }
 
 // ----------------------------------------------------------------------------
@@ -502,7 +505,7 @@ void FpsGameApp::ApplyRendererDefaults()
     _Settings._SSR = true;
     _Settings._ShadowMapping = true;
     _Settings._SpecularIBL = false;
-    _Settings._Transparency = false;
+    _Settings._Transparency = true;
     _Settings._TiledRendering = false;
   }
 }
@@ -893,10 +896,13 @@ void FpsGameApp::SyncPlayerView()
     return;
 
   _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings, _Editor.IsEnabled());
-  _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings);
+  bool meshDataDirty = false;
+  _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings, &meshDataDirty);
   if ( _Renderer )
   {
     _Renderer -> Notify(DirtyState::SceneCamera);
+    if ( meshDataDirty )
+      _Renderer -> Notify(DirtyState::SceneMeshData);
     _Renderer -> Notify(DirtyState::SceneInstances);
   }
 
@@ -910,10 +916,13 @@ void FpsGameApp::SyncPlayerView()
     return;
 
   _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings, _Editor.IsEnabled());
-  _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings);
+  bool meshDataDirty = false;
+  _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings, &meshDataDirty);
   if ( _Renderer )
   {
     _Renderer -> Notify(DirtyState::SceneCamera);
+    if ( meshDataDirty )
+      _Renderer -> Notify(DirtyState::SceneMeshData);
     _Renderer -> Notify(DirtyState::SceneInstances);
   }
 }
@@ -1972,7 +1981,19 @@ int FpsGameApp::ProcessInput()
     if ( _MouseInput.IsButtonPressed(GLFW_MOUSE_BUTTON_1, mouseX, mouseY) )
     {
       if ( !_GameSettings._FreeLook )
+      {
         input._FirePressed = true;
+        input._FireHeld = true;
+      }
+    }
+
+    double scrollX = 0., scrollY = 0.;
+    if ( _MouseInput.IsScrolled(scrollX, scrollY) )
+    {
+      if ( scrollY > 0.05 )
+        input._WeaponSwitchDelta = -1;
+      else if ( scrollY < -0.05 )
+        input._WeaponSwitchDelta = 1;
     }
   }
 
@@ -1982,6 +2003,13 @@ int FpsGameApp::ProcessInput()
       _GameSettings._MoveSpeed = std::clamp(_GameSettings._MoveSpeed + 5.f, 1.f, 100.f);
     if ( _KeyInput.IsKeyReleased(GLFW_KEY_PAGE_DOWN) )
       _GameSettings._MoveSpeed = std::clamp(_GameSettings._MoveSpeed - 5.f, 1.f, 100.f);
+
+    if ( _KeyInput.IsKeyReleased(GLFW_KEY_1) )
+      input._RequestedWeaponSlot = 0;
+    else if ( _KeyInput.IsKeyReleased(GLFW_KEY_2) )
+      input._RequestedWeaponSlot = 1;
+    else if ( _KeyInput.IsKeyReleased(GLFW_KEY_3) )
+      input._RequestedWeaponSlot = 2;
 
     if ( _KeyInput.IsKeyReleased(GLFW_KEY_L) || _KeyInput.IsKeyReleased(GLFW_KEY_F12) )
     {
@@ -2017,7 +2045,16 @@ int FpsGameApp::ProcessInput()
     }
     else
       input._JumpPressed = _KeyInput.IsKeyDown(GLFW_KEY_SPACE);
-    input._ResetPressed = _KeyInput.IsKeyReleased(GLFW_KEY_R);
+
+    if ( 0 != _GameWorld.GetActiveWeaponSlot() )
+    {
+      input._ReloadPressed = _KeyInput.IsKeyReleased(GLFW_KEY_R);
+      input._ResetPressed = _KeyInput.IsKeyReleased(GLFW_KEY_BACKSPACE);
+    }
+    else
+    {
+      input._ResetPressed = _KeyInput.IsKeyReleased(GLFW_KEY_R) || _KeyInput.IsKeyReleased(GLFW_KEY_BACKSPACE);
+    }
   }
 
   if ( _GamepadInput.IsConnected() && !ImGui::GetIO().WantTextInput )
@@ -2041,6 +2078,7 @@ int FpsGameApp::ProcessInput()
     if ( !_GameSettings._FreeLook && _GamepadInput.IsRightTriggerDown() )
     {
       input._FirePressed = true;
+      input._FireHeld = true;
     }
 
     const float lookScale = _GamepadLookSensitivity * static_cast<float>(_DeltaTime) / std::max(_GameSettings._MouseSensitivity, 0.001f);
@@ -2063,6 +2101,8 @@ int FpsGameApp::ProcessInput()
 
   if ( 0 != _GameWorld.Update(static_cast<float>(_DeltaTime), input, _GameSettings) )
     return 1;
+
+  _GameSettings._ActiveWeaponSlot = _GameWorld.GetActiveWeaponSlot();
 
   if ( 0 != _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings, _Editor.IsEnabled()) )
     return 1;
@@ -2103,7 +2143,7 @@ int FpsGameApp::ProcessInput()
   }
   _PrevGrounded = player._Grounded;
 
-  if ( input._FirePressed )
+  if ( _GameWorld.ConsumeWeaponFired() )
   {
     _Audio.PlaySound2D( "fps_fire", 0.85f, 1.0f );
   }
@@ -2111,11 +2151,16 @@ int FpsGameApp::ProcessInput()
   const bool projectilesDirty = _GameWorld.ConsumeProjectilesDirty();
   if ( projectilesDirty || ( _GameSettings._ShowViewWeapon && _SceneBinding.HasViewWeapon() ) )
   {
-    if ( 0 != _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings) )
+    bool meshDataDirty = false;
+    if ( 0 != _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings, &meshDataDirty) )
       return 1;
 
     if ( _Renderer )
+    {
+      if ( meshDataDirty )
+        _Renderer -> Notify(DirtyState::SceneMeshData);
       _Renderer -> Notify(DirtyState::SceneInstances);
+    }
   }
 
   if ( _KeyInput.IsKeyReleased(GLFW_KEY_C) )
@@ -2483,10 +2528,13 @@ void FpsGameApp::DrawDebugPanel()
   {
     _GameWorld.Reset(_GameSettings);
     _SceneBinding.SyncCamera(*_Scene, _GameWorld, _GameSettings, _Editor.IsEnabled());
-    _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings);
+    bool meshDataDirty = false;
+    _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings, &meshDataDirty);
     if ( _Renderer )
     {
       _Renderer -> Notify(DirtyState::SceneCamera);
+      if ( meshDataDirty )
+        _Renderer -> Notify(DirtyState::SceneMeshData);
       _Renderer -> Notify(DirtyState::SceneInstances);
     }
   }
@@ -2662,26 +2710,68 @@ int FpsGameApp::DrawGameSettingsUI()
 
   if ( ImGui::CollapsingHeader("View weapon debug", ImGuiTreeNodeFlags_DefaultOpen) )
   {
-    constexpr Vec3 defaultOffset(0.44f, -0.33f, 0.83f);
-    constexpr Vec3 defaultRotation(-6.5f, -10.5f, 3.f);
-    constexpr float defaultScale = 1.24f;
-
     bool weaponDirty = false;
     weaponDirty |= ImGui::Checkbox("Show weapon", &_GameSettings._ShowViewWeapon);
 
+    const char * slotLabels[(int)FpsWeaponId::Count] = { "1: Grenade Launcher", "2: Mark 23 Pistol", "3: Carbine Rifle" };
+    int selectedSlot = _GameWorld.GetActiveWeaponSlot();
+    if ( ImGui::Combo("Weapon slot", &selectedSlot, slotLabels, (int)FpsWeaponId::Count) )
+    {
+      if ( _GameWorld.SelectWeaponSlot(selectedSlot, _GameSettings) )
+      {
+        _GameSettings._ActiveWeaponSlot = _GameWorld.GetActiveWeaponSlot();
+        weaponDirty = true;
+      }
+    }
+
+    const int activeSlot = _GameWorld.GetActiveWeaponSlot();
+    const FpsWeaponSlotConfig & slotCfg = _GameSettings._WeaponSlots[activeSlot];
+    const char * fireModeName = ( FpsWeaponFireMode::Hitscan == slotCfg._FireMode )
+                              ? ( slotCfg._Automatic ? "Hitscan (Auto)" : "Hitscan (Semi)" )
+                              : "Projectile";
+    const char * animActionName = "Idle";
+    switch ( _GameWorld.GetWeaponAnimAction() )
+    {
+    case FpsWeaponAnimAction::Draw:   animActionName = "Draw"; break;
+    case FpsWeaponAnimAction::Shoot:  animActionName = "Shoot"; break;
+    case FpsWeaponAnimAction::Reload: animActionName = "Reload"; break;
+    default: break;
+    }
+
+    ImGui::Text("Mode: %s | Ammo: %d / %d",
+                fireModeName,
+                _GameWorld.GetWeaponAmmo(activeSlot, _GameSettings),
+                _GameWorld.GetWeaponMaxAmmo(activeSlot, _GameSettings));
+    ImGui::Text("Animation: %s (t = %.3fs)", animActionName, _GameWorld.GetWeaponAnimTimer());
+
+    if ( ( 0 != activeSlot ) && ImGui::SmallButton("Trigger Reload") )
+    {
+      if ( _GameWorld.TriggerReload(_GameSettings) )
+        weaponDirty = true;
+    }
+
+    FpsWeaponViewSettings & slotView = _GameSettings._WeaponSlots[activeSlot]._View;
+    if ( 0 == activeSlot )
+    {
+      slotView._Offset = _GameSettings._ViewWeaponOffset;
+      slotView._Rotation = _GameSettings._ViewWeaponRotation;
+      slotView._Scale = _GameSettings._ViewWeaponScale;
+    }
+
     ImGui::Text("Camera-local transform");
     ImGui::PushItemWidth(260.f);
-    weaponDirty |= ImGui::DragFloat3("Translation XYZ", &_GameSettings._ViewWeaponOffset.x, 0.01f, -3.f, 3.f, "%.3f");
-    weaponDirty |= ImGui::DragFloat3("Rotation XYZ deg", &_GameSettings._ViewWeaponRotation.x, 0.5f, -360.f, 360.f, "%.2f");
-    weaponDirty |= ImGui::DragFloat("Scale", &_GameSettings._ViewWeaponScale, 0.01f, 0.01f, 8.f, "%.3f");
+    weaponDirty |= ImGui::DragFloat3("Translation XYZ", &slotView._Offset.x, 0.01f, -3.f, 3.f, "%.3f");
+    weaponDirty |= ImGui::DragFloat3("Rotation XYZ deg", &slotView._Rotation.x, 0.5f, -360.f, 360.f, "%.2f");
+    weaponDirty |= ImGui::DragFloat("Scale", &slotView._Scale, 0.001f, 0.001f, 8.f, "%.4f");
+    weaponDirty |= ImGui::DragFloat3("Model Pivot XYZ", &slotView._ModelPivot.x, 0.05f, -500.f, 500.f, "%.3f");
+    weaponDirty |= ImGui::Checkbox("Flip Model X", &slotView._FlipModelX);
     ImGui::PopItemWidth();
 
     ImGui::SameLine();
     if ( ImGui::SmallButton("Reset weapon pose") )
     {
-      _GameSettings._ViewWeaponOffset = defaultOffset;
-      _GameSettings._ViewWeaponRotation = defaultRotation;
-      _GameSettings._ViewWeaponScale = defaultScale;
+      const FpsGameSettings defaults;
+      slotView = defaults._WeaponSlots[activeSlot]._View;
       weaponDirty = true;
     }
 
@@ -2689,28 +2779,36 @@ int FpsGameApp::DrawGameSettingsUI()
     {
       char buffer[256];
       std::snprintf(buffer, sizeof(buffer),
-                    "Offset = Vec3(%.3ff, %.3ff, %.3ff), Rotation = Vec3(%.2ff, %.2ff, %.2ff), Scale = %.3ff",
-                    _GameSettings._ViewWeaponOffset.x, _GameSettings._ViewWeaponOffset.y, _GameSettings._ViewWeaponOffset.z,
-                    _GameSettings._ViewWeaponRotation.x, _GameSettings._ViewWeaponRotation.y, _GameSettings._ViewWeaponRotation.z,
-                    _GameSettings._ViewWeaponScale);
+                    "Offset = Vec3(%.3ff, %.3ff, %.3ff), Rotation = Vec3(%.2ff, %.2ff, %.2ff), Scale = %.4ff, Pivot = Vec3(%.3ff, %.3ff, %.3ff), FlipX = %s",
+                    slotView._Offset.x, slotView._Offset.y, slotView._Offset.z,
+                    slotView._Rotation.x, slotView._Rotation.y, slotView._Rotation.z,
+                    slotView._Scale,
+                    slotView._ModelPivot.x, slotView._ModelPivot.y, slotView._ModelPivot.z,
+                    slotView._FlipModelX ? "true" : "false");
       ImGui::SetClipboardText(buffer);
     }
 
-    ImGui::Text("Offset %.3f %.3f %.3f",
-                _GameSettings._ViewWeaponOffset.x,
-                _GameSettings._ViewWeaponOffset.y,
-                _GameSettings._ViewWeaponOffset.z);
-    ImGui::Text("Rotation %.2f %.2f %.2f, Scale %.3f",
-                _GameSettings._ViewWeaponRotation.x,
-                _GameSettings._ViewWeaponRotation.y,
-                _GameSettings._ViewWeaponRotation.z,
-                _GameSettings._ViewWeaponScale);
+    ImGui::Text("Offset %.3f %.3f %.3f", slotView._Offset.x, slotView._Offset.y, slotView._Offset.z);
+    ImGui::Text("Rotation %.2f %.2f %.2f, Scale %.4f",
+                slotView._Rotation.x, slotView._Rotation.y, slotView._Rotation.z, slotView._Scale);
 
     if ( weaponDirty )
     {
-      _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings);
+      if ( 0 == activeSlot )
+      {
+        _GameSettings._ViewWeaponOffset = slotView._Offset;
+        _GameSettings._ViewWeaponRotation = slotView._Rotation;
+        _GameSettings._ViewWeaponScale = slotView._Scale;
+      }
+
+      bool meshDataDirty = false;
+      _SceneBinding.SyncTransforms(*_Scene, _GameWorld, _GameSettings, &meshDataDirty);
       if ( _Renderer )
+      {
+        if ( meshDataDirty )
+          _Renderer -> Notify(DirtyState::SceneMeshData);
         _Renderer -> Notify(DirtyState::SceneInstances);
+      }
     }
   }
 

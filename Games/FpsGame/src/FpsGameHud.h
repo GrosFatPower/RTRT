@@ -86,7 +86,7 @@ public:
 
   void Initialize();
   void Draw( FpsGameHudContext & ioContext );
-  void DrawCrosshair();
+  void DrawCrosshair( const FpsGameWorld * iGameWorld = nullptr );
 
   bool IsSettingsOpen() const { return _ShowInGameOptions; }
   void SetSettingsOpen( bool iOpen ) { _ShowInGameOptions = iOpen; }

@@ -73,9 +73,12 @@ void FpsProjectiles::Clear()
   for ( FpsProjectile & projectile : _Projectiles )
   {
     projectile._Active = false;
+    projectile._HitscanImpact = false;
     projectile._Position = Vec3(0.f);
     projectile._Velocity = Vec3(0.f);
     projectile._Age = 0.f;
+    projectile._MaxLifetime = 0.f;
+    projectile._RadiusScale = 1.f;
   }
   _Dirty = true;
 }
@@ -83,15 +86,62 @@ void FpsProjectiles::Clear()
 // ----------------------------------------------------------------------------
 // RequestFire
 // ----------------------------------------------------------------------------
-void FpsProjectiles::RequestFire( const FpsGameSettings & iSettings, const FpsPlayer & )
+bool FpsProjectiles::RequestFire( const FpsGameSettings & iSettings, const FpsPlayer & )
 {
   const float cooldown = std::max(0.001f, iSettings._ProjectileCooldown);
-  if ( ( _Ammo > 0 ) && ( _CooldownTimer > cooldown ) )
+  if ( ( _Ammo > 0 ) && ( _CooldownTimer >= cooldown ) )
   {
     _PendingShots += 1;
     _Ammo--;
     _CooldownTimer = 0.f;
+    return true;
   }
+  return false;
+}
+
+// ----------------------------------------------------------------------------
+// AcquireProjectileSlot
+// ----------------------------------------------------------------------------
+static int AcquireProjectileSlot( std::vector<FpsProjectile> & ioProjectiles )
+{
+  int projectileID = -1;
+  float oldestAge = -1.f;
+  for ( int i = 0; i < static_cast<int>(ioProjectiles.size()); ++i )
+  {
+    if ( !ioProjectiles[i]._Active )
+      return i;
+
+    if ( ioProjectiles[i]._Age > oldestAge )
+    {
+      oldestAge = ioProjectiles[i]._Age;
+      projectileID = i;
+    }
+  }
+  return projectileID;
+}
+
+// ----------------------------------------------------------------------------
+// SpawnHitscanImpact
+// ----------------------------------------------------------------------------
+void FpsProjectiles::SpawnHitscanImpact( const FpsGameSettings & iSettings, const Vec3 & iPosition, const Vec3 & iNormal )
+{
+  if ( _Projectiles.empty() )
+    ResizePool(iSettings);
+
+  const int projectileID = AcquireProjectileSlot(_Projectiles);
+  if ( projectileID < 0 )
+    return;
+
+  FpsProjectile & projectile = _Projectiles[projectileID];
+  projectile._Active = true;
+  projectile._HitscanImpact = true;
+  projectile._Position = iPosition + iNormal * 0.03f;
+  projectile._Velocity = Vec3(0.f);
+  projectile._Age = 0.f;
+  projectile._MaxLifetime = 0.35f;
+  projectile._RadiusScale = 0.45f;
+
+  _Dirty = true;
 }
 
 // ----------------------------------------------------------------------------
@@ -169,23 +219,7 @@ void FpsProjectiles::Fire( const FpsGameSettings & iSettings, const FpsPlayer & 
   if ( _Projectiles.empty() )
     ResizePool(iSettings);
 
-  int projectileID = -1;
-  float oldestAge = -1.f;
-  for ( int i = 0; i < static_cast<int>(_Projectiles.size()); ++i )
-  {
-    if ( !_Projectiles[i]._Active )
-    {
-      projectileID = i;
-      break;
-    }
-
-    if ( _Projectiles[i]._Age > oldestAge )
-    {
-      oldestAge = _Projectiles[i]._Age;
-      projectileID = i;
-    }
-  }
-
+  const int projectileID = AcquireProjectileSlot(_Projectiles);
   if ( projectileID < 0 )
     return;
 
@@ -193,9 +227,12 @@ void FpsProjectiles::Fire( const FpsGameSettings & iSettings, const FpsPlayer & 
   const Vec3 forward = PlayerForward(iPlayer);
   FpsProjectile & projectile = _Projectiles[projectileID];
   projectile._Active = true;
+  projectile._HitscanImpact = false;
   projectile._Position = iPlayer.EyePosition(iSettings) + forward * (iSettings._PlayerRadius + radius + 0.08f);
   projectile._Velocity = iPlayer._Velocity + forward * std::max(0.f, iSettings._ProjectileSpeed);
   projectile._Age = 0.f;
+  projectile._MaxLifetime = std::max(0.1f, iSettings._ProjectileLifetime);
+  projectile._RadiusScale = 1.f;
 
   _Dirty = true;
 }
@@ -214,9 +251,17 @@ void FpsProjectiles::UpdateActiveProjectiles( float iDeltaTime, const FpsProject
       continue;
 
     projectile._Age += iDeltaTime;
-    if ( projectile._Age >= std::max(0.1f, iContext._Settings._ProjectileLifetime) )
+    const float lifetime = ( projectile._MaxLifetime > 0.f ) ? projectile._MaxLifetime : std::max(0.1f, iContext._Settings._ProjectileLifetime);
+    if ( projectile._Age >= lifetime )
     {
       projectile._Active = false;
+      _Dirty = true;
+      continue;
+    }
+
+    if ( projectile._HitscanImpact )
+    {
+      projectile._RadiusScale = 0.45f * std::max(0.05f, 1.f - ( projectile._Age / lifetime ));
       _Dirty = true;
       continue;
     }

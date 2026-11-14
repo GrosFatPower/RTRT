@@ -698,6 +698,38 @@ void FpsGameHud::DrawGameplayHud( const FpsGameHudContext & iContext )
   const ImU32 bgColor = IM_COL32(16, 16, 18, 210);
   const ImU32 textColor = IM_COL32(245, 245, 245, 255);
 
+  const int activeSlot = MathUtil::Clamp(iContext._GameWorld->GetActiveWeaponSlot(), 0, (int)FpsWeaponId::Count - 1);
+  const FpsWeaponSlotConfig & slotCfg = game._WeaponSlots[activeSlot];
+  const char * ammoLabel = ( FpsWeaponFireMode::Hitscan == slotCfg._FireMode ) ? "AMMO" : Loc::Tr(LocId::Fps_Hud_Projectiles);
+
+  const char * slotShortNames[(int)FpsWeaponId::Count] = { "[1] LAUNCHER", "[2] MARK 23", "[3] CARBINE" };
+  float slotX = origin.x;
+  const float slotY = origin.y - 44.f;
+  for ( int s = 0; s < (int)FpsWeaponId::Count; ++s )
+  {
+    const bool active = ( s == activeSlot );
+    const ImVec2 labelSize = ImGui::CalcTextSize(slotShortNames[s]);
+    const float pillW = labelSize.x + 14.f;
+    const float pillH = 20.f;
+    const ImVec2 pMin(slotX, slotY);
+    const ImVec2 pMax(slotX + pillW, slotY + pillH);
+    drawList -> AddRectFilled(pMin, pMax, active ? IM_COL32(48, 42, 22, 230) : IM_COL32(16, 16, 18, 180), 3.f);
+    drawList -> AddRect(pMin, pMax, active ? IM_COL32(235, 190, 48, 255) : IM_COL32(255, 255, 255, 70), 3.f);
+    drawList -> AddText(ImVec2(slotX + 7.f, slotY + 3.f), active ? IM_COL32(255, 232, 130, 255) : IM_COL32(200, 200, 205, 180), slotShortNames[s]);
+    slotX += pillW + 6.f;
+  }
+
+  std::string weaponStatus = slotCfg._Name ? slotCfg._Name : "";
+  if ( iContext._GameWorld->IsWeaponReloading() )
+    weaponStatus += "  |  RELOADING...";
+  else if ( FpsWeaponFireMode::Hitscan == slotCfg._FireMode )
+    weaponStatus += slotCfg._Automatic ? "  |  HITSCAN AUTO" : "  |  HITSCAN SEMI";
+  else
+    weaponStatus += "  |  PROJECTILE";
+  drawList -> AddText(ImVec2(origin.x, origin.y - 20.f),
+                      iContext._GameWorld->IsWeaponReloading() ? IM_COL32(255, 195, 72, 255) : IM_COL32(235, 235, 240, 220),
+                      weaponStatus.c_str());
+
   struct HudBar
   {
     const char * _Label;
@@ -708,9 +740,9 @@ void FpsGameHud::DrawGameplayHud( const FpsGameHudContext & iContext )
 
   const HudBar bars[] =
   {
-    { Loc::Tr(LocId::Fps_Hud_Health),      player._Health, game._MaxHealth, IM_COL32(220, 42, 42, 235) },
-    { Loc::Tr(LocId::Fps_Hud_Armor),       player._Armor,  game._MaxArmor,  IM_COL32(64, 142, 255, 235) },
-    { Loc::Tr(LocId::Fps_Hud_Projectiles), iContext._GameWorld->GetProjectileAmmo(), game._MaxProjectileAmmo, IM_COL32(235, 190, 48, 235) }
+    { Loc::Tr(LocId::Fps_Hud_Health), player._Health, game._MaxHealth, IM_COL32(220, 42, 42, 235) },
+    { Loc::Tr(LocId::Fps_Hud_Armor),  player._Armor,  game._MaxArmor,  IM_COL32(64, 142, 255, 235) },
+    { ammoLabel, iContext._GameWorld->GetWeaponAmmo(activeSlot, game), iContext._GameWorld->GetWeaponMaxAmmo(activeSlot, game), IM_COL32(235, 190, 48, 235) }
   };
 
   for ( int i = 0; i < 3; ++i )
@@ -735,13 +767,17 @@ void FpsGameHud::DrawGameplayHud( const FpsGameHudContext & iContext )
   const ImVec2 hintSize = ImGui::CalcTextSize(hint);
   drawList -> AddText(ImVec2(io.DisplaySize.x - hintSize.x - margin, margin), IM_COL32(245, 245, 245, 140), hint);
 
-  DrawCrosshair();
+  const char * weaponHint = "Scroll / 1-3: Weapon | R: Reload";
+  const ImVec2 weaponHintSize = ImGui::CalcTextSize(weaponHint);
+  drawList -> AddText(ImVec2(io.DisplaySize.x - weaponHintSize.x - margin, margin + 18.f), IM_COL32(245, 245, 245, 140), weaponHint);
+
+  DrawCrosshair(iContext._GameWorld);
 }
 
 // ----------------------------------------------------------------------------
 // DrawCrosshair
 // ----------------------------------------------------------------------------
-void FpsGameHud::DrawCrosshair()
+void FpsGameHud::DrawCrosshair( const FpsGameWorld * iGameWorld )
 {
   const ImGuiIO & io = ImGui::GetIO();
   const ImVec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
@@ -755,6 +791,19 @@ void FpsGameHud::DrawCrosshair()
   drawList -> AddLine(ImVec2(center.x + gap, center.y), ImVec2(center.x + length, center.y), color, thickness);
   drawList -> AddLine(ImVec2(center.x, center.y - length), ImVec2(center.x, center.y - gap), color, thickness);
   drawList -> AddLine(ImVec2(center.x, center.y + gap), ImVec2(center.x, center.y + length), color, thickness);
+
+  if ( iGameWorld && ( iGameWorld->GetHitMarkerTimer() > 0.f ) )
+  {
+    const float alphaRatio = MathUtil::Clamp(iGameWorld->GetHitMarkerTimer() / 0.16f, 0.f, 1.f);
+    const int alpha = MathUtil::Clamp(static_cast<int>(alphaRatio * 255.f), 0, 255);
+    const ImU32 hitColor = IM_COL32(255, 235, 140, alpha);
+    const float inner = 5.f;
+    const float outer = 12.f;
+    drawList -> AddLine(ImVec2(center.x - outer, center.y - outer), ImVec2(center.x - inner, center.y - inner), hitColor, 2.f);
+    drawList -> AddLine(ImVec2(center.x + inner, center.y - inner), ImVec2(center.x + outer, center.y - outer), hitColor, 2.f);
+    drawList -> AddLine(ImVec2(center.x - outer, center.y + outer), ImVec2(center.x - inner, center.y + inner), hitColor, 2.f);
+    drawList -> AddLine(ImVec2(center.x + inner, center.y + inner), ImVec2(center.x + outer, center.y + outer), hitColor, 2.f);
+  }
 }
 
 }

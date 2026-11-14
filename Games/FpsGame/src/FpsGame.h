@@ -80,6 +80,53 @@ enum class FpsPropCollisionMode
   Compound,
 };
 
+enum class FpsWeaponId : int
+{
+  GrenadeLauncher = 0,
+  Mark23Pistol,
+  CarbineRifle,
+  Count
+};
+
+enum class FpsWeaponFireMode
+{
+  Projectile = 0,
+  Hitscan
+};
+
+enum class FpsWeaponAnimAction
+{
+  Idle = 0,
+  Draw,
+  Shoot,
+  Reload
+};
+
+struct FpsWeaponViewSettings
+{
+  Vec3  _Offset     = Vec3(0.44f, -0.33f, 0.83f);
+  Vec3  _Rotation   = Vec3(-6.5f, -10.5f, 3.f);
+  float _Scale      = 1.24f;
+  Vec3  _ModelPivot = Vec3(0.f);
+  bool  _FlipModelX = false;
+};
+
+struct FpsWeaponSlotConfig
+{
+  FpsWeaponId           _Id = FpsWeaponId::GrenadeLauncher;
+  const char *          _Name = "GRENADE LAUNCHER";
+  FpsWeaponFireMode     _FireMode = FpsWeaponFireMode::Projectile;
+  const char *          _AssetPath = "";
+  bool                  _Automatic = false;
+  float                 _FireCooldown = 0.24f;
+  float                 _MaxRange = 120.f;
+  int                   _ClipCapacity = 32;
+  float                 _ReloadDuration = 0.f;
+  float                 _DrawDuration = 0.35f;
+  float                 _ShootAnimDuration = 0.25f;
+  FpsWeaponViewSettings _View;
+};
+
 struct FpsGameSettings
 {
   FpsRendererMode _RendererMode = FpsRendererMode::Deferred;
@@ -113,6 +160,10 @@ struct FpsGameSettings
   Vec3            _ViewWeaponOffset = Vec3(0.44f, -0.33f, 0.83f);
   Vec3            _ViewWeaponRotation = Vec3(-6.5f, -10.5f, 3.f);
   float           _ViewWeaponScale = 1.24f;
+  int             _ActiveWeaponSlot = 0;
+  FpsWeaponSlotConfig _WeaponSlots[(int)FpsWeaponId::Count];
+
+  FpsGameSettings();
 };
 
 struct FpsGameInput
@@ -127,6 +178,10 @@ struct FpsGameInput
   bool  _JumpPressed = false;
   bool  _ResetPressed = false;
   bool   _FirePressed = false;
+  bool   _FireHeld = false;
+  bool   _ReloadPressed = false;
+  int    _WeaponSwitchDelta = 0;
+  int    _RequestedWeaponSlot = -1;
   float _MouseDeltaX = 0.f;
   float _MouseDeltaY = 0.f;
 };
@@ -180,6 +235,18 @@ public:
   int GetActiveProjectileCount() const { return _Projectiles.GetActiveCount(); }
   int GetProjectileAmmo() const { return _Projectiles.GetAmmo(); }
   bool ConsumeProjectilesDirty() { return _Projectiles.ConsumeDirty(); }
+  int GetActiveWeaponSlot() const { return _ActiveWeaponSlot; }
+  FpsWeaponAnimAction GetWeaponAnimAction() const { return _WeaponAnimAction; }
+  float GetWeaponAnimTimer() const { return _WeaponAnimTimer; }
+  float GetWeaponRecoil() const { return _WeaponRecoil; }
+  float GetHitMarkerTimer() const { return _HitMarkerTimer; }
+  bool IsWeaponReloading() const { return FpsWeaponAnimAction::Reload == _WeaponAnimAction; }
+  int GetWeaponAmmo( int iSlot, const FpsGameSettings & iSettings ) const;
+  int GetWeaponMaxAmmo( int iSlot, const FpsGameSettings & iSettings ) const;
+  bool SelectWeaponSlot( int iSlot, const FpsGameSettings & iSettings );
+  bool CycleWeaponSlot( int iDelta, const FpsGameSettings & iSettings );
+  bool TriggerReload( const FpsGameSettings & iSettings );
+  bool ConsumeWeaponFired();
   const Vec3 & GetSpawnPosition() const { return _SpawnPosition; }
   float GetSpawnYaw() const { return _SpawnYaw; }
   float GetSpawnPitch() const { return _SpawnPitch; }
@@ -190,6 +257,7 @@ protected:
   void MoveAxis( int iAxis, float iDelta, const FpsGameSettings & iSettings );
   bool OverlapPlayerObject( const FpsSceneObject & iObject, const FpsGameSettings & iSettings, Vec3 & oOverlap ) const;
   Vec3 PlayerForward() const;
+  bool FireHitscanWeapon( const FpsWeaponSlotConfig & iSlotConfig, const FpsGameSettings & iSettings );
 
 protected:
   FpsPlayer                  _Player;
@@ -201,6 +269,24 @@ protected:
   float                      _SpawnPitch = 0.f;
   int                        _SpawnHealth = -1;
   int                        _SpawnArmor = -1;
+  int                        _ActiveWeaponSlot = 0;
+  FpsWeaponAnimAction        _WeaponAnimAction = FpsWeaponAnimAction::Idle;
+  float                      _WeaponAnimTimer = 0.f;
+  float                      _WeaponFireCooldown = 0.f;
+  float                      _WeaponDrawCooldown = 0.f;
+  float                      _WeaponRecoil = 0.f;
+  float                      _HitMarkerTimer = 0.f;
+  int                        _WeaponAmmo[(int)FpsWeaponId::Count] = { 32, 12, 30 };
+  bool                       _WeaponFiredDirty = false;
+  bool                       _PrevFireHeld = false;
+};
+
+struct FpsLoadedWeaponModel
+{
+  std::vector<int>    _InstanceIDs;
+  std::vector<Mat4x4> _BaseTransforms;
+  int                 _AnimStartIndex = -1;
+  int                 _AnimCount = 0;
 };
 
 class FpsGameSceneBinding
@@ -209,7 +295,7 @@ public:
   int Attach( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
   int Attach( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, const FpsGameMap & iMap );
   int SyncCamera( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, bool iAllowOrthographic = false );
-  int SyncTransforms( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings );
+  int SyncTransforms( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, bool * oMeshDataDirty = nullptr );
   int SyncTitleCamera( Scene & iScene, const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, float iTime );
   void SetViewWeaponVisible( Scene & iScene, bool iVisible );
   int SyncProp( Scene & iScene, const FpsGameMap & iMap, int iPropIndex );
@@ -218,17 +304,17 @@ public:
   int BuildPropBoundsColliders( Scene & iScene, const FpsGameMap & iMap, int iPropIndex, std::vector<FpsMapPropCollider> & oColliders ) const;
   int SetObjectInstanceVisible( Scene & iScene, int iObjectIndex, bool iVisible );
   const std::vector<int> * GetPropInstanceIDs( int iPropIndex ) const;
-  bool HasViewWeapon() const { return !_WeaponInstanceIDs.empty(); }
+  bool HasViewWeapon() const;
   void Reset();
 
 protected:
   int EnsureResources( Scene & iScene, const FpsGameMap * iMap );
-  int LoadViewWeapon( Scene & iScene, const std::string & iPath );
+  int LoadViewWeaponSlot( Scene & iScene, int iSlotIndex, const std::string & iPath );
   int LoadProps( Scene & iScene, const FpsGameMap & iMap );
   int AddLights( Scene & iScene, const FpsGameMap * iMap );
   Mat4x4 BuildObjectTransform( const FpsSceneObject & iObject ) const;
   Mat4x4 BuildProjectileTransform( const FpsProjectile & iProjectile, const FpsGameSettings & iSettings ) const;
-  Mat4x4 BuildViewWeaponTransform( const FpsPlayer & iPlayer, const FpsGameSettings & iSettings ) const;
+  Mat4x4 BuildViewWeaponTransform( const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, int iSlotIndex ) const;
   Mat4x4 BuildPropTransform( const FpsMapProp & iProp ) const;
   int MaterialID( FpsMaterialSlot iMaterial ) const;
   int MaterialID( const std::string & iMaterialName, FpsMaterialSlot iFallback ) const;
@@ -243,8 +329,10 @@ protected:
   std::vector<std::vector<int>> _PropInstanceIDs;
   std::vector<std::vector<Mat4x4>> _PropBaseTransforms;
   std::vector<int> _ProjectileInstanceIDs;
-  std::vector<int> _WeaponInstanceIDs;
-  std::vector<Mat4x4> _WeaponBaseTransforms;
+  FpsLoadedWeaponModel _WeaponModels[(int)FpsWeaponId::Count];
+  int                  _LastEvaluatedSlot = -1;
+  int                  _LastEvaluatedClip = -1;
+  float                _LastEvaluatedTime = -1.f;
 };
 
 }

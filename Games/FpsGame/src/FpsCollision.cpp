@@ -262,6 +262,122 @@ bool FpsCollision::ResolveSphereObb( const Vec3 & iSphereCenter, float iSphereRa
 }
 
 // ----------------------------------------------------------------------------
+// RaycastLocalBox (shared slab test in box-local frame)
+// ----------------------------------------------------------------------------
+static bool RaycastLocalBox( const Vec3 & iLocalOrigin,
+                             const Vec3 & iLocalDir,
+                             float iMaxDistance,
+                             const Vec3 & iHalfExtents,
+                             float & oDistance,
+                             Vec3 & oLocalNormal )
+{
+  float tMin = 0.f;
+  float tMax = iMaxDistance;
+  Vec3 hitNormal(0.f, 1.f, 0.f);
+
+  for ( int axis = 0; axis < 3; ++axis )
+  {
+    const float minBound = -iHalfExtents[axis];
+    const float maxBound = iHalfExtents[axis];
+    const float origin = iLocalOrigin[axis];
+    const float dir = iLocalDir[axis];
+
+    if ( std::abs(dir) <= 1e-7f )
+    {
+      if ( ( origin < minBound ) || ( origin > maxBound ) )
+        return false;
+      continue;
+    }
+
+    const float invDir = 1.f / dir;
+    float t1 = ( minBound - origin ) * invDir;
+    float t2 = ( maxBound - origin ) * invDir;
+    float axisSign = -1.f;
+    if ( t1 > t2 )
+    {
+      std::swap(t1, t2);
+      axisSign = 1.f;
+    }
+
+    if ( t1 > tMin )
+    {
+      tMin = t1;
+      hitNormal = Vec3(0.f);
+      hitNormal[axis] = axisSign;
+    }
+    tMax = std::min(tMax, t2);
+    if ( tMin > tMax )
+      return false;
+  }
+
+  if ( ( tMin < 0.f ) || ( tMin > iMaxDistance ) )
+    return false;
+
+  oDistance = tMin;
+  oLocalNormal = hitNormal;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// RaycastAabb
+// ----------------------------------------------------------------------------
+bool FpsCollision::RaycastAabb( const Vec3 & iRayOrigin, const Vec3 & iRayDir, float iMaxDistance, const Vec3 & iBoxCenter, const Vec3 & iBoxHalfExtents, FpsCollisionRayResult & oResult )
+{
+  oResult = FpsCollisionRayResult();
+  const float dirLen = glm::length(iRayDir);
+  if ( ( dirLen <= EPSILON ) || ( iMaxDistance <= 0.f ) )
+    return false;
+
+  const Vec3 dir = iRayDir / dirLen;
+  float hitDist = 0.f;
+  Vec3 hitNormal(0.f, 1.f, 0.f);
+  if ( !RaycastLocalBox(iRayOrigin - iBoxCenter, dir, iMaxDistance, iBoxHalfExtents, hitDist, hitNormal) )
+    return false;
+
+  oResult._Hit = true;
+  oResult._Distance = hitDist;
+  oResult._Point = iRayOrigin + dir * hitDist;
+  oResult._Normal = hitNormal;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// RaycastObb
+// ----------------------------------------------------------------------------
+bool FpsCollision::RaycastObb( const Vec3 & iRayOrigin, const Vec3 & iRayDir, float iMaxDistance, const FpsCollisionObb & iObb, FpsCollisionRayResult & oResult )
+{
+  oResult = FpsCollisionRayResult();
+  const float dirLen = glm::length(iRayDir);
+  if ( ( dirLen <= EPSILON ) || ( iMaxDistance <= 0.f ) )
+    return false;
+
+  const Vec3 dir = iRayDir / dirLen;
+  const Vec3 delta = iRayOrigin - iObb._Center;
+  const Vec3 localOrigin(glm::dot(delta, iObb._Axis[0]),
+                         glm::dot(delta, iObb._Axis[1]),
+                         glm::dot(delta, iObb._Axis[2]));
+  const Vec3 localDir(glm::dot(dir, iObb._Axis[0]),
+                      glm::dot(dir, iObb._Axis[1]),
+                      glm::dot(dir, iObb._Axis[2]));
+
+  float hitDist = 0.f;
+  Vec3 localNormal(0.f, 1.f, 0.f);
+  if ( !RaycastLocalBox(localOrigin, localDir, iMaxDistance, iObb._HalfExtents, hitDist, localNormal) )
+    return false;
+
+  Vec3 worldNormal = iObb._Axis[0] * localNormal.x
+                   + iObb._Axis[1] * localNormal.y
+                   + iObb._Axis[2] * localNormal.z;
+
+  oResult._Hit = true;
+  oResult._Distance = hitDist;
+  oResult._Point = iRayOrigin + dir * hitDist;
+  oResult._Normal = SafeNormalize(worldNormal, Vec3(0.f, 1.f, 0.f));
+  oResult._PropIndex = iObb._PropIndex;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
 // EulerTransform
 // ----------------------------------------------------------------------------
 Mat4x4 FpsCollision::EulerTransform( const Vec3 & iPosition, const Vec3 & iRotation, const Vec3 & iScale )

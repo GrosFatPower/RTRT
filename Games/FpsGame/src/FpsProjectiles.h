@@ -17,9 +17,12 @@ struct FpsSceneObject;
 struct FpsProjectile
 {
   bool  _Active = false;
+  bool  _HitscanImpact = false;
   Vec3  _Position = Vec3(0.f);
   Vec3  _Velocity = Vec3(0.f);
   float _Age = 0.f;
+  float _MaxLifetime = 0.f;
+  float _RadiusScale = 1.f;
 };
 
 struct FpsProjectilesUpdateContext
@@ -48,7 +51,8 @@ public:
   int ResizePool( const FpsGameSettings & iSettings );
   void Clear();
 
-  void RequestFire( const FpsGameSettings & iSettings, const FpsPlayer & iPlayer );
+  bool RequestFire( const FpsGameSettings & iSettings, const FpsPlayer & iPlayer );
+  void SpawnHitscanImpact( const FpsGameSettings & iSettings, const Vec3 & iPosition, const Vec3 & iNormal );
   int Update( float iRealDeltaTime, float iSimDeltaTime, const FpsProjectilesUpdateContext & iContext );
 
   const std::vector<FpsProjectile> & GetProjectiles() const { return _Projectiles; }
