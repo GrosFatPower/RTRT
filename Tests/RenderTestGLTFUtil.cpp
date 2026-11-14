@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <unordered_set>
 
 namespace RTRT
 {
@@ -114,6 +115,21 @@ bool CheckAnimatedImport( bool iQuiet )
   if ( ( 1 != scene.GetSkins().size() ) || ( 62 != scene.GetSkins()[0]._JointNodeIndices.size() ) )
     return false;
   if ( ( 3 != scene.GetNbMeshes() ) || !scene.HasSkinnedMeshes() )
+    return false;
+
+  const std::vector<SceneNode> & nodes = scene.GetNodes();
+  const Skin & skin = scene.GetSkins()[0];
+  std::unordered_set<int> jointSet(skin._JointNodeIndices.begin(), skin._JointNodeIndices.end());
+  int nbBones = 0;
+  for ( int jointIdx : skin._JointNodeIndices )
+  {
+    if ( ( jointIdx < 0 ) || ( jointIdx >= static_cast<int>(nodes.size()) ) )
+      return false;
+    const int parentIdx = nodes[jointIdx]._ParentIndex;
+    if ( ( parentIdx >= 0 ) && ( jointSet.count(parentIdx) > 0 ) )
+      ++nbBones;
+  }
+  if ( 61 != nbBones )
     return false;
 
   for ( const Mesh * mesh : scene.GetMeshes() )

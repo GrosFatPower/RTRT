@@ -70,6 +70,10 @@ protected:
   int DrawMaterialsUI();
   int DrawLightsUI();
   int DrawSelectedMeshInstanceBBox();
+  int DrawSkeleton();
+  bool ComputeCameraViewProj( Mat4x4 & oViewProj ) const;
+  bool ProjectWorldPoint( const Mat4x4 & iViewProj, const Vec3 & iWorldPos, const Vec2 & iDisplaySize, Vec2 & oScreenPos ) const;
+  bool ProjectWorldSegment( const Mat4x4 & iViewProj, const Vec3 & iP0, const Vec3 & iP1, const Vec2 & iDisplaySize, Vec2 & oS0, Vec2 & oS1 ) const;
 
   int ProcessInput();
 
@@ -180,6 +184,12 @@ protected:
 
   // Animations
   bool                       _RunAnimations          = true;
+  bool                       _ShowSkeleton           = false;
+  bool                       _ShowSkeletonBones      = true;
+  bool                       _ShowSkeletonJoints     = true;
+  bool                       _ShowSkeletonLabels     = false;
+  float                      _SkeletonBoneWidth      = 2.5f;
+  float                      _SkeletonJointRadius    = 4.5f;
 };
 
 }

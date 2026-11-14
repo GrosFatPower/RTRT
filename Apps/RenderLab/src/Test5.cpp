@@ -19,6 +19,7 @@
 #include <thread>
 #include <limits>
 #include <cmath>
+#include <unordered_set>
 
 #include "imgui.h"
 #include "ImGuizmo.h"
@@ -640,6 +641,7 @@ int Test5::DrawUI()
 
   DrawRenderStatsUI();
   DrawHelpUI();
+  DrawSkeleton();
 
   if ( _SelectedLightID >= 0 )
     DrawLightGizmo();
@@ -1477,74 +1479,99 @@ int Test5::DrawMeshInstanceUI()
 // ----------------------------------------------------------------------------
 int Test5::DrawAnimationUI()
 {
-  if ( !_Scene || !_Scene -> HasAnimations() )
+  const bool hasAnimations = _Scene && _Scene -> HasAnimations();
+  const bool hasSkins      = _Scene && !_Scene -> GetSkins().empty();
+
+  if ( !hasAnimations && !hasSkins )
   {
-    ImGui::TextDisabled("No animations in current scene.");
+    ImGui::TextDisabled("No animations or skeletons in current scene.");
     return 0;
   }
 
-  AnimationState & animState = _Scene -> GetAnimationState();
-  const std::vector<AnimationClip> & clips = _Scene -> GetAnimations();
-
-  auto notifyAnimationUpdated = [this]()
+  if ( hasAnimations )
   {
-    if ( _Renderer )
+    AnimationState & animState = _Scene -> GetAnimationState();
+    const std::vector<AnimationClip> & clips = _Scene -> GetAnimations();
+
+    auto notifyAnimationUpdated = [this]()
     {
-      _Renderer -> Notify(DirtyState::SceneInstances);
-      if ( _Scene -> HasSkinnedMeshes() )
-        _Renderer -> Notify(DirtyState::SceneMeshData);
+      if ( _Renderer )
+      {
+        _Renderer -> Notify(DirtyState::SceneInstances);
+        if ( _Scene -> HasSkinnedMeshes() )
+          _Renderer -> Notify(DirtyState::SceneMeshData);
+      }
+    };
+
+    if ( ImGui::Checkbox("Run animations", &_RunAnimations) )
+      animState._Playing = _RunAnimations;
+
+    const char * playLabel = _RunAnimations ? "Pause" : "Run";
+    if ( ImGui::Button(playLabel) )
+    {
+      _RunAnimations = !_RunAnimations;
+      animState._Playing = _RunAnimations;
     }
-  };
-
-  if ( ImGui::Checkbox("Run animations", &_RunAnimations) )
-    animState._Playing = _RunAnimations;
-
-  const char * playLabel = _RunAnimations ? "Pause" : "Run";
-  if ( ImGui::Button(playLabel) )
-  {
-    _RunAnimations = !_RunAnimations;
-    animState._Playing = _RunAnimations;
-  }
-  ImGui::SameLine();
-  if ( ImGui::Button("Stop") )
-  {
-    _RunAnimations = false;
-    animState._Playing = false;
-    if ( _Scene -> ResetAnimationsToInitialPose() )
-      notifyAnimationUpdated();
-  }
-
-  std::vector<const char*> clipNames;
-  clipNames.reserve(clips.size());
-  for ( const AnimationClip & clip : clips )
-    clipNames.push_back(clip._Name.empty() ? "Unnamed" : clip._Name.c_str());
-
-  if ( !clipNames.empty() )
-  {
-    if ( ( animState._ActiveClip < 0 ) || ( animState._ActiveClip >= static_cast<int>(clipNames.size()) ) )
-      animState._ActiveClip = 0;
-
-    if ( ImGui::Combo("Clip", &animState._ActiveClip, clipNames.data(), static_cast<int>(clipNames.size())) )
+    ImGui::SameLine();
+    if ( ImGui::Button("Stop") )
     {
-      animState._CurrentTime = 0.0f;
-      if ( _Scene -> EvaluateAnimationAtTime(animState._ActiveClip, animState._CurrentTime) )
+      _RunAnimations = false;
+      animState._Playing = false;
+      if ( _Scene -> ResetAnimationsToInitialPose() )
         notifyAnimationUpdated();
     }
-  }
 
-  ImGui::Checkbox("Loop", &animState._Loop);
+    std::vector<const char*> clipNames;
+    clipNames.reserve(clips.size());
+    for ( const AnimationClip & clip : clips )
+      clipNames.push_back(clip._Name.empty() ? "Unnamed" : clip._Name.c_str());
 
-  const float duration = clips[animState._ActiveClip]._Duration;
-  if ( duration > 0.0f )
-  {
-    if ( ImGui::SliderFloat("Timeline (s)", &animState._CurrentTime, 0.0f, duration, "%.3f") )
+    if ( !clipNames.empty() )
     {
-      if ( _Scene -> EvaluateAnimationAtTime(animState._ActiveClip, animState._CurrentTime) )
-        notifyAnimationUpdated();
+      if ( ( animState._ActiveClip < 0 ) || ( animState._ActiveClip >= static_cast<int>(clipNames.size()) ) )
+        animState._ActiveClip = 0;
+
+      if ( ImGui::Combo("Clip", &animState._ActiveClip, clipNames.data(), static_cast<int>(clipNames.size())) )
+      {
+        animState._CurrentTime = 0.0f;
+        if ( _Scene -> EvaluateAnimationAtTime(animState._ActiveClip, animState._CurrentTime) )
+          notifyAnimationUpdated();
+      }
     }
+
+    ImGui::Checkbox("Loop", &animState._Loop);
+
+    const float duration = clips[animState._ActiveClip]._Duration;
+    if ( duration > 0.0f )
+    {
+      if ( ImGui::SliderFloat("Timeline (s)", &animState._CurrentTime, 0.0f, duration, "%.3f") )
+      {
+        if ( _Scene -> EvaluateAnimationAtTime(animState._ActiveClip, animState._CurrentTime) )
+          notifyAnimationUpdated();
+      }
+    }
+
+    ImGui::SliderFloat("Speed", &animState._Speed, 0.0f, 3.0f, "%.2fx");
+  }
+  else
+  {
+    ImGui::TextDisabled("No animations in current scene.");
   }
 
-  ImGui::SliderFloat("Speed", &animState._Speed, 0.0f, 3.0f, "%.2fx");
+  ImGui::Separator();
+  ImGui::Text("Skeleton");
+  ImGui::Checkbox("Show skeleton", &_ShowSkeleton);
+  if ( _ShowSkeleton )
+  {
+    ImGui::Indent();
+    ImGui::Checkbox("Show bones", &_ShowSkeletonBones);
+    ImGui::SameLine();
+    ImGui::Checkbox("Show joints", &_ShowSkeletonJoints);
+    ImGui::Checkbox("Show joint names", &_ShowSkeletonLabels);
+    ImGui::SliderFloat("Bone width", &_SkeletonBoneWidth, 1.0f, 6.0f, "%.1f");
+    ImGui::SliderFloat("Joint radius", &_SkeletonJointRadius, 2.0f, 10.0f, "%.1f");
+    ImGui::Unindent();
+  }
 
   return 0;
 }
@@ -2082,6 +2109,77 @@ int Test5::DrawLightsUI()
 }
 
 // ----------------------------------------------------------------------------
+// ComputeCameraViewProj
+// ----------------------------------------------------------------------------
+bool Test5::ComputeCameraViewProj( Mat4x4 & oViewProj ) const
+{
+  if ( !_Scene )
+    return false;
+
+  Mat4x4 view(1.f);
+  Mat4x4 proj(1.f);
+
+  Camera & cam = const_cast<Scene*>(_Scene.get()) -> GetCamera();
+  cam.ComputeLookAtMatrix(view);
+
+  const float width  = static_cast<float>(std::max(1, _Settings._WindowResolution.x));
+  const float height = static_cast<float>(std::max(1, _Settings._WindowResolution.y));
+  cam.ComputeProjMatrix(width / height, proj);
+
+  oViewProj = proj * view;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// ProjectWorldPoint
+// ----------------------------------------------------------------------------
+bool Test5::ProjectWorldPoint( const Mat4x4 & iViewProj, const Vec3 & iWorldPos, const Vec2 & iDisplaySize, Vec2 & oScreenPos ) const
+{
+  const Vec4 clip = iViewProj * Vec4(iWorldPos, 1.f);
+  if ( clip.w <= 1e-4f )
+    return false;
+
+  const Vec3 ndc = Vec3(clip) / clip.w;
+  oScreenPos.x = ( ndc.x * 0.5f + 0.5f ) * iDisplaySize.x;
+  oScreenPos.y = ( 0.5f - ndc.y * 0.5f ) * iDisplaySize.y;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+// ProjectWorldSegment
+// ----------------------------------------------------------------------------
+bool Test5::ProjectWorldSegment( const Mat4x4 & iViewProj, const Vec3 & iP0, const Vec3 & iP1, const Vec2 & iDisplaySize, Vec2 & oS0, Vec2 & oS1 ) const
+{
+  Vec4 c0 = iViewProj * Vec4(iP0, 1.f);
+  Vec4 c1 = iViewProj * Vec4(iP1, 1.f);
+
+  const float clipEps = 1e-4f;
+  const bool behind0 = ( c0.w < clipEps );
+  const bool behind1 = ( c1.w < clipEps );
+  if ( behind0 && behind1 )
+    return false;
+
+  if ( behind0 )
+  {
+    const float t = ( clipEps - c0.w ) / ( c1.w - c0.w );
+    c0 = glm::mix(c0, c1, t);
+  }
+  else if ( behind1 )
+  {
+    const float t = ( clipEps - c1.w ) / ( c0.w - c1.w );
+    c1 = glm::mix(c1, c0, t);
+  }
+
+  const Vec3 ndc0 = Vec3(c0) / c0.w;
+  const Vec3 ndc1 = Vec3(c1) / c1.w;
+  oS0.x = ( ndc0.x * 0.5f + 0.5f ) * iDisplaySize.x;
+  oS0.y = ( 0.5f - ndc0.y * 0.5f ) * iDisplaySize.y;
+  oS1.x = ( ndc1.x * 0.5f + 0.5f ) * iDisplaySize.x;
+  oS1.y = ( 0.5f - ndc1.y * 0.5f ) * iDisplaySize.y;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
 // DrawSelectedMeshInstanceBBox
 // ----------------------------------------------------------------------------
 int Test5::DrawSelectedMeshInstanceBBox()
@@ -2106,35 +2204,16 @@ int Test5::DrawSelectedMeshInstanceBBox()
   if ( !mesh )
     return 0;
 
-  Mat4x4 view(1.f);
-  Mat4x4 proj(1.f);
-
-  Camera & cam = _Scene -> GetCamera();
-  cam.ComputeLookAtMatrix(view);
-
-  const float width  = static_cast<float>(std::max(1, _Settings._WindowResolution.x));
-  const float height = static_cast<float>(std::max(1, _Settings._WindowResolution.y));
-  cam.ComputeProjMatrix(width / height, proj);
+  Mat4x4 viewProj(1.f);
+  if ( !ComputeCameraViewProj(viewProj) )
+    return 0;
 
   Vec3 localCorners[8];
   mesh -> GetBoundingBox().Corners(localCorners);
 
-  ImVec2 screenCorners[8];
-  bool visibleCorners[8] = { false, false, false, false, false, false, false, false };
-  ImGuiIO & io = ImGui::GetIO();
-
+  Vec3 worldCorners[8];
   for ( int i = 0; i < 8; ++i )
-  {
-    Vec4 worldCorner = inst._Transform * Vec4(localCorners[i], 1.f);
-    Vec4 clipCorner = proj * view * worldCorner;
-    if ( clipCorner.w <= 0.00001f )
-      continue;
-
-    Vec3 ndc = Vec3(clipCorner) / clipCorner.w;
-    screenCorners[i].x = ( ndc.x * 0.5f + 0.5f ) * io.DisplaySize.x;
-    screenCorners[i].y = ( 0.5f - ndc.y * 0.5f ) * io.DisplaySize.y;
-    visibleCorners[i] = true;
-  }
+    worldCorners[i] = Vec3(inst._Transform * Vec4(localCorners[i], 1.f));
 
   static const int Edges[12][2] =
   {
@@ -2143,15 +2222,194 @@ int Test5::DrawSelectedMeshInstanceBBox()
     { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }
   };
 
+  ImGuiIO & io = ImGui::GetIO();
+  const Vec2 displaySize(io.DisplaySize.x, io.DisplaySize.y);
   ImDrawList * drawList = ImGui::GetForegroundDrawList();
   const ImU32 boxColor = IM_COL32(255, 184, 48, 235);
   const float lineWidth = 2.f;
   for ( int i = 0; i < 12; ++i )
   {
-    const int c0 = Edges[i][0];
-    const int c1 = Edges[i][1];
-    if ( visibleCorners[c0] && visibleCorners[c1] )
-      drawList -> AddLine(screenCorners[c0], screenCorners[c1], boxColor, lineWidth);
+    Vec2 s0(0.f), s1(0.f);
+    if ( ProjectWorldSegment(viewProj, worldCorners[Edges[i][0]], worldCorners[Edges[i][1]], displaySize, s0, s1) )
+      drawList -> AddLine(ImVec2(s0.x, s0.y), ImVec2(s1.x, s1.y), boxColor, lineWidth);
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// DrawSkeleton
+// ----------------------------------------------------------------------------
+int Test5::DrawSkeleton()
+{
+  if ( !_ShowSkeleton || !_Scene )
+    return 0;
+
+  const std::vector<SceneNode> & nodes = _Scene -> GetNodes();
+  if ( nodes.empty() )
+    return 0;
+
+  const std::vector<Skin> & skins = _Scene -> GetSkins();
+  const int nbNodes = static_cast<int>(nodes.size());
+
+  Mat4x4 viewProj(1.f);
+  if ( !ComputeCameraViewProj(viewProj) )
+    return 0;
+
+  ImDrawList * drawList = ImGui::GetBackgroundDrawList();
+  if ( !drawList )
+    return 0;
+
+  ImGuiIO & io = ImGui::GetIO();
+  const Vec2 displaySize(io.DisplaySize.x, io.DisplaySize.y);
+  const ImVec2 mousePos = ImGui::GetMousePos();
+  const bool canHover = !io.WantCaptureMouse;
+
+  struct SkeletonBone
+  {
+    int _ParentNode = -1;
+    int _ChildNode  = -1;
+  };
+  struct SkeletonJoint
+  {
+    int  _NodeIdx = -1;
+    bool _IsRoot  = false;
+  };
+
+  std::vector<SkeletonBone>  bones;
+  std::vector<SkeletonJoint> joints;
+  std::unordered_set<int>    collectedJoints;
+
+  auto collectHierarchy = [&]( const std::vector<int> & iNodeList, int iExplicitRoot )
+  {
+    std::unordered_set<int> groupSet;
+    for ( int idx : iNodeList )
+    {
+      if ( ( idx >= 0 ) && ( idx < nbNodes ) )
+        groupSet.insert(idx);
+    }
+    if ( ( iExplicitRoot >= 0 ) && ( iExplicitRoot < nbNodes ) )
+      groupSet.insert(iExplicitRoot);
+
+    for ( int nodeIdx : groupSet )
+    {
+      int ancestor = nodes[nodeIdx]._ParentIndex;
+      int steps = 0;
+      while ( ( ancestor >= 0 ) && ( ancestor < nbNodes ) && ( steps < nbNodes ) )
+      {
+        if ( groupSet.count(ancestor) > 0 )
+          break;
+        ancestor = nodes[ancestor]._ParentIndex;
+        ++steps;
+      }
+
+      const bool hasParentInGroup = ( ancestor >= 0 ) && ( ancestor < nbNodes ) && ( groupSet.count(ancestor) > 0 );
+      if ( hasParentInGroup )
+        bones.push_back({ ancestor, nodeIdx });
+
+      if ( collectedJoints.insert(nodeIdx).second )
+      {
+        const bool isRoot = ( nodeIdx == iExplicitRoot ) || !hasParentInGroup;
+        joints.push_back({ nodeIdx, isRoot });
+      }
+    }
+  };
+
+  if ( !skins.empty() )
+  {
+    for ( const Skin & skin : skins )
+      collectHierarchy(skin._JointNodeIndices, skin._SkeletonRootNode);
+  }
+  else if ( _Scene -> HasAnimations() )
+  {
+    std::vector<int> animatedNodes;
+    for ( const AnimationClip & clip : _Scene -> GetAnimations() )
+    {
+      for ( const AnimationChannel & ch : clip._Channels )
+      {
+        if ( ( ch._TargetNodeIndex >= 0 ) && ( ch._TargetNodeIndex < nbNodes ) )
+          animatedNodes.push_back(ch._TargetNodeIndex);
+      }
+    }
+    collectHierarchy(animatedNodes, -1);
+  }
+
+  if ( joints.empty() && bones.empty() )
+    return 0;
+
+  if ( _ShowSkeletonBones )
+  {
+    const ImU32 boneOutlineColor = IM_COL32(12, 16, 22, 220);
+    const ImU32 boneColor        = IM_COL32(72, 225, 255, 240);
+
+    for ( const SkeletonBone & bone : bones )
+    {
+      const Vec3 p0 = Vec3(nodes[bone._ParentNode]._GlobalTransform[3]);
+      const Vec3 p1 = Vec3(nodes[bone._ChildNode]._GlobalTransform[3]);
+      Vec2 s0(0.f), s1(0.f);
+      if ( ProjectWorldSegment(viewProj, p0, p1, displaySize, s0, s1) )
+      {
+        const ImVec2 a(s0.x, s0.y);
+        const ImVec2 b(s1.x, s1.y);
+        drawList -> AddLine(a, b, boneOutlineColor, _SkeletonBoneWidth + 2.f);
+        drawList -> AddLine(a, b, boneColor, _SkeletonBoneWidth);
+      }
+    }
+  }
+
+  int hoveredJointIdx = -1;
+  Vec2 hoveredScreenPos(0.f);
+  float bestHoverDistSq = std::max(8.f, _SkeletonJointRadius + 4.f);
+  bestHoverDistSq *= bestHoverDistSq;
+
+  if ( _ShowSkeletonJoints )
+  {
+    const ImU32 jointBorderColor = IM_COL32(12, 16, 22, 235);
+    const ImU32 jointColor       = IM_COL32(255, 110, 64, 255);
+    const ImU32 rootJointColor   = IM_COL32(255, 200, 64, 255);
+    const ImU32 labelColor       = IM_COL32(245, 245, 245, 235);
+
+    for ( const SkeletonJoint & joint : joints )
+    {
+      const Vec3 worldPos = Vec3(nodes[joint._NodeIdx]._GlobalTransform[3]);
+      Vec2 screenPos(0.f);
+      if ( !ProjectWorldPoint(viewProj, worldPos, displaySize, screenPos) )
+        continue;
+
+      const ImVec2 center(screenPos.x, screenPos.y);
+      drawList -> AddCircleFilled(center, _SkeletonJointRadius + 1.5f, jointBorderColor, 14);
+      drawList -> AddCircleFilled(center, _SkeletonJointRadius, joint._IsRoot ? rootJointColor : jointColor, 14);
+
+      if ( _ShowSkeletonLabels && !nodes[joint._NodeIdx]._Name.empty() )
+        drawList -> AddText(ImVec2(center.x + _SkeletonJointRadius + 4.f, center.y - 6.f), labelColor, nodes[joint._NodeIdx]._Name.c_str());
+
+      if ( canHover )
+      {
+        const float dx = mousePos.x - center.x;
+        const float dy = mousePos.y - center.y;
+        const float distSq = dx * dx + dy * dy;
+        if ( distSq <= bestHoverDistSq )
+        {
+          bestHoverDistSq = distSq;
+          hoveredJointIdx = joint._NodeIdx;
+          hoveredScreenPos = screenPos;
+        }
+      }
+    }
+  }
+
+  if ( hoveredJointIdx >= 0 )
+  {
+    const ImVec2 center(hoveredScreenPos.x, hoveredScreenPos.y);
+    drawList -> AddCircle(center, _SkeletonJointRadius + 3.5f, IM_COL32(255, 255, 255, 255), 16, 2.f);
+    if ( !ImGui::IsAnyItemHovered() )
+    {
+      const std::string & nodeName = nodes[hoveredJointIdx]._Name;
+      if ( !nodeName.empty() )
+        ImGui::SetTooltip("%s (node %d)", nodeName.c_str(), hoveredJointIdx);
+      else
+        ImGui::SetTooltip("Joint node %d", hoveredJointIdx);
+    }
   }
 
   return 0;
