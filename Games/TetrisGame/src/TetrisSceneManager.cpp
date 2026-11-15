@@ -657,7 +657,7 @@ int TetrisSceneManager::Initialize( Scene & ioScene )
   ioScene.Clear();
 
   // Create Procedural Meshes
-  Mesh * beveledCube = ProceduralMesh::CreateCube("__TetrisBlockCube");
+  Mesh * beveledCube = ProceduralMesh::CreateBeveledCube("__TetrisBlockCube", 0.085f, 4);
   _BeveledCubeMeshID = ioScene.AddMesh(beveledCube);
   if ( _BeveledCubeMeshID < 0 )
   {

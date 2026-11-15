@@ -26,6 +26,7 @@ protected:
   static bool TestProtocolVersionHandshakeAndRejection();
   static bool TestLocalizationCompletenessAndSwitching();
   static bool TestUserPreferencesPersistence();
+  static bool TestBeveledCubeGeometry();
 };
 
 }
