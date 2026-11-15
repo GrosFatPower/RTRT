@@ -973,7 +973,7 @@ int Scene::RefitBLASData()
   for ( size_t m = 0; m < _Meshes.size(); ++m )
   {
     Mesh * curMesh = _Meshes[m];
-    if ( !curMesh || !curMesh -> IsSkinned() )
+    if ( !curMesh || !curMesh -> IsDynamic() )
       continue;
 
     if ( 0 != curMesh -> RefitBvh() )

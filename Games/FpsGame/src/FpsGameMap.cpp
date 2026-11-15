@@ -137,6 +137,24 @@ static bool ParseBool( const std::string & iToken, bool & oValue )
   return false;
 }
 
+static bool ParseVec2( const std::vector<std::string> & iTokens, Vec2 & oValue )
+{
+  if ( 3 != static_cast<int>(iTokens.size()) )
+    return false;
+
+  return ParseFloat(iTokens[1], oValue.x)
+      && ParseFloat(iTokens[2], oValue.y);
+}
+
+static bool ParseVec2i( const std::vector<std::string> & iTokens, Vec2i & oValue )
+{
+  if ( 3 != static_cast<int>(iTokens.size()) )
+    return false;
+
+  return ParseInt(iTokens[1], oValue.x)
+      && ParseInt(iTokens[2], oValue.y);
+}
+
 static bool ParseVec3( const std::vector<std::string> & iTokens, Vec3 & oValue )
 {
   if ( 4 != static_cast<int>(iTokens.size()) )
@@ -448,6 +466,8 @@ protected:
       return ParseLightBlock(ioFile);
     if ( IsEqual(blockType, "prop") )
       return ParsePropBlock(ioFile, blockName);
+    if ( IsEqual(blockType, "terrain") )
+      return ParseTerrainBlock(ioFile, blockName);
     if ( IsEqual(blockType, "boids") )
       return ParseBoidsBlock(ioFile, blockName);
     if ( IsEqual(blockType, "weapon") )
@@ -1347,6 +1367,163 @@ protected:
     return false;
   }
 
+  bool ParseTerrainLayerBlock( std::ifstream & ioFile, const std::vector<std::string> & iHeaderTokens, FpsTerrainLayer & oLayer )
+  {
+    bool hasOpenBracket = false;
+    for ( int i = 1; i < static_cast<int>(iHeaderTokens.size()); ++i )
+    {
+      if ( "{" == iHeaderTokens[i] )
+        hasOpenBracket = true;
+      else if ( "}" == iHeaderTokens[i] )
+        return Error("unexpected closing bracket in terrain layer header");
+      else if ( i == 1 )
+        oLayer._MaterialName = iHeaderTokens[i];
+      else
+        return Error("too many tokens in terrain layer header");
+    }
+
+    if ( !hasOpenBracket )
+    {
+      std::vector<std::string> openTokens;
+      if ( !ReadRequiredLine(ioFile, openTokens) )
+        return false;
+      if ( ( 1 != static_cast<int>(openTokens.size()) ) || ( "{" != openTokens[0] ) )
+        return Error("expected opening bracket for terrain layer");
+    }
+
+    std::vector<std::string> tokens;
+    while ( ReadRequiredLine(ioFile, tokens) )
+    {
+      if ( IsClosingBracket(tokens) )
+        return true;
+
+      if ( IsEqual(tokens[0], "material") && ( 2 == static_cast<int>(tokens.size()) ) )
+        oLayer._MaterialName = tokens[1];
+      else if ( ( IsEqual(tokens[0], "minelevation") || IsEqual(tokens[0], "min_elevation") ) && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], oLayer._MinElevation) )
+          return Error("invalid terrain layer min_elevation");
+      }
+      else if ( ( IsEqual(tokens[0], "maxelevation") || IsEqual(tokens[0], "max_elevation") ) && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], oLayer._MaxElevation) )
+          return Error("invalid terrain layer max_elevation");
+      }
+      else if ( IsEqual(tokens[0], "feather") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], oLayer._Feather) )
+          return Error("invalid terrain layer feather");
+      }
+      else if ( ( IsEqual(tokens[0], "slopeweight") || IsEqual(tokens[0], "slope_weight") ) && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], oLayer._SlopeWeight) )
+          return Error("invalid terrain layer slope_weight");
+      }
+      else if ( ( IsEqual(tokens[0], "uvscale") || IsEqual(tokens[0], "uv_scale") ) && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], oLayer._UVScale) )
+          return Error("invalid terrain layer uv_scale");
+      }
+      else
+        return Error("invalid terrain layer field");
+    }
+    return false;
+  }
+
+  bool ParseTerrainBlock( std::ifstream & ioFile, const std::string & iName )
+  {
+    FpsMapTerrain terrain;
+    terrain._Name = iName.empty() ? "Terrain" : iName;
+    terrain._Layers.clear();
+
+    std::vector<std::string> tokens;
+    while ( ReadRequiredLine(ioFile, tokens) )
+    {
+      if ( IsClosingBracket(tokens) )
+      {
+        terrain._Size.x = std::max(0.5f, terrain._Size.x);
+        terrain._Size.y = std::max(0.5f, terrain._Size.y);
+        terrain._GridResolution.x = MathUtil::Clamp(terrain._GridResolution.x, 4, 512);
+        terrain._GridResolution.y = MathUtil::Clamp(terrain._GridResolution.y, 4, 512);
+        terrain._SmoothPasses = MathUtil::Clamp(terrain._SmoothPasses, 0, 16);
+        if ( terrain._Layers.empty() )
+          FpsTerrain::SeedDefaultLayers(terrain);
+        _Map._Terrains.push_back(terrain);
+        return true;
+      }
+
+      if ( ( IsEqual(tokens[0], "heightmap") || IsEqual(tokens[0], "path") ) && ( 2 == static_cast<int>(tokens.size()) ) )
+        terrain._HeightmapPath = tokens[1];
+      else if ( IsEqual(tokens[0], "center") || IsEqual(tokens[0], "position") )
+      {
+        if ( !ParseVec3(tokens, terrain._Center) )
+          return Error("invalid terrain center");
+      }
+      else if ( IsEqual(tokens[0], "size") )
+      {
+        if ( !ParseVec2(tokens, terrain._Size) )
+          return Error("invalid terrain size");
+      }
+      else if ( ( IsEqual(tokens[0], "minelevation") || IsEqual(tokens[0], "min_elevation") ) && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], terrain._MinElevation) )
+          return Error("invalid terrain min_elevation");
+      }
+      else if ( ( IsEqual(tokens[0], "maxelevation") || IsEqual(tokens[0], "max_elevation") ) && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], terrain._MaxElevation) )
+          return Error("invalid terrain max_elevation");
+      }
+      else if ( IsEqual(tokens[0], "resolution") || IsEqual(tokens[0], "grid_resolution") )
+      {
+        if ( !ParseVec2i(tokens, terrain._GridResolution) )
+          return Error("invalid terrain resolution");
+      }
+      else if ( ( IsEqual(tokens[0], "smoothpasses") || IsEqual(tokens[0], "smooth_passes") ) && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseInt(tokens[1], terrain._SmoothPasses) )
+          return Error("invalid terrain smooth_passes");
+      }
+      else if ( ( IsEqual(tokens[0], "islandfalloff") || IsEqual(tokens[0], "island_falloff") ) && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseBool(tokens[1], terrain._IslandFalloff) )
+          return Error("invalid terrain island_falloff");
+      }
+      else if ( ( IsEqual(tokens[0], "waterenabled") || IsEqual(tokens[0], "water_enabled") ) && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseBool(tokens[1], terrain._WaterEnabled) )
+          return Error("invalid terrain water_enabled");
+      }
+      else if ( ( IsEqual(tokens[0], "waterlevel") || IsEqual(tokens[0], "water_level") ) && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseFloat(tokens[1], terrain._WaterLevel) )
+          return Error("invalid terrain water_level");
+      }
+      else if ( ( IsEqual(tokens[0], "watermaterial") || IsEqual(tokens[0], "water_material") ) && ( 2 == static_cast<int>(tokens.size()) ) )
+        terrain._WaterMaterialName = tokens[1];
+      else if ( IsEqual(tokens[0], "collidable") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseBool(tokens[1], terrain._Collidable) )
+          return Error("invalid terrain collidable flag");
+      }
+      else if ( IsEqual(tokens[0], "visible") && ( 2 == static_cast<int>(tokens.size()) ) )
+      {
+        if ( !ParseBool(tokens[1], terrain._Visible) )
+          return Error("invalid terrain visible flag");
+      }
+      else if ( IsEqual(tokens[0], "layer") )
+      {
+        FpsTerrainLayer layer;
+        if ( !ParseTerrainLayerBlock(ioFile, tokens, layer) )
+          return false;
+        terrain._Layers.push_back(layer);
+      }
+      else
+        return Error("invalid terrain field");
+    }
+    return false;
+  }
+
   bool Error( const std::string & iMessage )
   {
     std::cout << "FpsGameMap : " << _Filename << ":" << _LineNumber << " : " << iMessage << std::endl;
@@ -1382,6 +1559,18 @@ void FpsGameMapLoader::SeedDefaultMaterials( FpsGameMap & ioMap )
   AddMaterialIfMissing(ioMap._Materials, "pillar", MakeFpsMaterial(Vec3(0.58f, 0.55f, 0.49f), 0.55f));
   AddMaterialIfMissing(ioMap._Materials, "crate",  MakeFpsMaterial(Vec3(0.80f, 0.24f, 0.13f), 0.45f));
   AddMaterialIfMissing(ioMap._Materials, "accent", MakeFpsMaterial(Vec3(0.12f, 0.42f, 0.68f), 0.16f, 0.f, 0.85f));
+  AddMaterialIfMissing(ioMap._Materials, "seabed", MakeFpsMaterial(Vec3(0.16f, 0.19f, 0.18f), 0.90f, 0.f, 0.35f));
+  AddMaterialIfMissing(ioMap._Materials, "sand",   MakeFpsMaterial(Vec3(0.76f, 0.68f, 0.48f), 0.82f, 0.f, 0.45f));
+  AddMaterialIfMissing(ioMap._Materials, "grass",  MakeFpsMaterial(Vec3(0.24f, 0.44f, 0.18f), 0.78f, 0.f, 0.45f));
+  AddMaterialIfMissing(ioMap._Materials, "rock",   MakeFpsMaterial(Vec3(0.42f, 0.40f, 0.38f), 0.72f, 0.f, 0.50f));
+  AddMaterialIfMissing(ioMap._Materials, "snow",   MakeFpsMaterial(Vec3(0.92f, 0.94f, 0.97f), 0.35f, 0.f, 0.65f));
+
+  Material water = MakeFpsMaterial(Vec3(0.10f, 0.36f, 0.48f), 0.06f, 0.f, 0.85f);
+  water._Opacity = 0.68f;
+  water._AlphaMode = static_cast<float>(AlphaMode::Blend);
+  water._SpecTrans = 0.80f;
+  water._IOR = 1.33f;
+  AddMaterialIfMissing(ioMap._Materials, "water", water);
 }
 
 static void WriteVec3( std::ofstream & ioFile, const char * iName, const Vec3 & iValue )
@@ -1508,6 +1697,16 @@ bool FpsGameMapLoader::Save( const std::string & iFilename, const FpsGameMap & i
     if ( object._Visible )
       usedMaterials.insert(ObjectMaterialName(object));
   }
+  for ( const FpsMapTerrain & terrain : map._Terrains )
+  {
+    if ( !terrain._WaterMaterialName.empty() )
+      usedMaterials.insert(terrain._WaterMaterialName);
+    for ( const FpsTerrainLayer & layer : terrain._Layers )
+    {
+      if ( !layer._MaterialName.empty() )
+        usedMaterials.insert(layer._MaterialName);
+    }
+  }
 
   for ( const FpsMapMaterial & material : map._Materials )
   {
@@ -1562,6 +1761,37 @@ bool FpsGameMapLoader::Save( const std::string & iFilename, const FpsGameMap & i
         WriteVec3(file, "half", collider._HalfExtents);
         file << "  }\n";
       }
+    }
+    file << "}\n\n";
+  }
+
+  for ( const FpsMapTerrain & terrain : map._Terrains )
+  {
+    file << "terrain \"" << terrain._Name << "\" {\n";
+    file << "  heightmap \"" << terrain._HeightmapPath << "\"\n";
+    WriteVec3(file, "center", terrain._Center);
+    file << "  size " << terrain._Size.x << " " << terrain._Size.y << "\n";
+    file << "  min_elevation " << terrain._MinElevation << "\n";
+    file << "  max_elevation " << terrain._MaxElevation << "\n";
+    file << "  resolution " << terrain._GridResolution.x << " " << terrain._GridResolution.y << "\n";
+    file << "  smooth_passes " << terrain._SmoothPasses << "\n";
+    file << "  island_falloff " << ( terrain._IslandFalloff ? "true" : "false" ) << "\n";
+    file << "  water_enabled " << ( terrain._WaterEnabled ? "true" : "false" ) << "\n";
+    file << "  water_level " << terrain._WaterLevel << "\n";
+    file << "  water_material \"" << terrain._WaterMaterialName << "\"\n";
+    file << "  collidable " << ( terrain._Collidable ? "true" : "false" ) << "\n";
+    file << "  visible " << ( terrain._Visible ? "true" : "false" ) << "\n";
+    for ( const FpsTerrainLayer & layer : terrain._Layers )
+    {
+      file << "\n";
+      file << "  layer \"" << layer._MaterialName << "\" {\n";
+      file << "    material \"" << layer._MaterialName << "\"\n";
+      file << "    min_elevation " << layer._MinElevation << "\n";
+      file << "    max_elevation " << layer._MaxElevation << "\n";
+      file << "    feather " << layer._Feather << "\n";
+      file << "    slope_weight " << layer._SlopeWeight << "\n";
+      file << "    uv_scale " << layer._UVScale << "\n";
+      file << "  }\n";
     }
     file << "}\n\n";
   }

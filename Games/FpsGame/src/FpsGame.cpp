@@ -470,6 +470,20 @@ bool FpsGameWorld::FireHitscanWeapon( const FpsWeaponSlotConfig & iSlotConfig, c
     }
   }
 
+  const size_t nbTerrains = std::min(_Terrains.size(), _TerrainRuntimes.size());
+  for ( size_t t = 0; t < nbTerrains; ++t )
+  {
+    if ( !_Terrains[t]._Collidable )
+      continue;
+
+    FpsCollisionRayResult candidate;
+    if ( FpsTerrain::Raycast(_Terrains[t], _TerrainRuntimes[t], rayOrigin, rayDir, bestDist, candidate) && ( candidate._Distance < bestDist ) )
+    {
+      bestDist = candidate._Distance;
+      bestHit = candidate;
+    }
+  }
+
   if ( bestHit._Hit )
   {
     _Decals.Spawn(iSettings, bestHit._Point, bestHit._Normal);
@@ -527,7 +541,7 @@ int FpsGameWorld::Update( float iDeltaTime, const FpsGameInput & iInput, const F
   if ( iInput._ReloadPressed )
     TriggerReload(iSettings);
 
-  FpsProjectilesUpdateContext projectilesContext(iSettings, _Player, _Objects, _PropCollisionColliders);
+  FpsProjectilesUpdateContext projectilesContext(iSettings, _Player, _Objects, _PropCollisionColliders, &_Terrains, &_TerrainRuntimes);
   _Projectiles.Update(realDt, 0.f, projectilesContext);
   _Decals.Update(realDt, iSettings);
 
@@ -718,6 +732,8 @@ void FpsGameWorld::BuildDefaultArena()
 {
   _Objects.clear();
   _PropCollisionColliders.clear();
+  _Terrains.clear();
+  _TerrainRuntimes.clear();
   _SpawnPosition = Vec3(0.f, 0.05f, -8.f);
   _SpawnYaw = 90.f;
   _SpawnPitch = 0.f;
@@ -747,6 +763,11 @@ void FpsGameWorld::BuildFromMap( const FpsGameMap & iMap )
 {
   _Objects = iMap._Objects;
   _PropCollisionColliders.clear();
+  _Terrains = iMap._Terrains;
+  _TerrainRuntimes.clear();
+  _TerrainRuntimes.resize(_Terrains.size());
+  for ( size_t i = 0; i < _Terrains.size(); ++i )
+    FpsTerrain::LoadOrGenerateRuntime(_Terrains[i], _TerrainRuntimes[i]);
   _SpawnPosition = iMap._Player._Position;
   _SpawnYaw = iMap._Player._Yaw;
   _SpawnPitch = iMap._Player._Pitch;
@@ -755,57 +776,110 @@ void FpsGameWorld::BuildFromMap( const FpsGameMap & iMap )
 }
 
 // ----------------------------------------------------------------------------
+// RebuildTerrainRuntime
+// ----------------------------------------------------------------------------
+void FpsGameWorld::RebuildTerrainRuntime( int iTerrainIndex, bool iReloadHeightmap )
+{
+  if ( ( iTerrainIndex < 0 ) || ( iTerrainIndex >= static_cast<int>(_Terrains.size()) ) )
+    return;
+  if ( _TerrainRuntimes.size() < _Terrains.size() )
+    _TerrainRuntimes.resize(_Terrains.size());
+
+  if ( iReloadHeightmap || _TerrainRuntimes[iTerrainIndex]._SourceHeights.empty() )
+    FpsTerrain::LoadOrGenerateRuntime(_Terrains[iTerrainIndex], _TerrainRuntimes[iTerrainIndex], iReloadHeightmap);
+  else
+    FpsTerrain::RebuildGridFromSource(_Terrains[iTerrainIndex], _TerrainRuntimes[iTerrainIndex]);
+}
+
+// ----------------------------------------------------------------------------
 // MoveAxis
 // ----------------------------------------------------------------------------
 void FpsGameWorld::MoveAxis( int iAxis, float iDelta, const FpsGameSettings & iSettings )
 {
-  if ( fabs(iDelta) <= EPSILON )
+  if ( ( 1 != iAxis ) && ( fabs(iDelta) <= EPSILON ) )
     return;
 
   _Player._Position[iAxis] += iDelta;
 
-  for ( const FpsSceneObject & object : _Objects )
+  if ( fabs(iDelta) > EPSILON )
   {
-    if ( !object._Collidable )
-      continue;
+    for ( const FpsSceneObject & object : _Objects )
+    {
+      if ( !object._Collidable )
+        continue;
 
-    Vec3 overlap(0.f);
-    if ( !OverlapPlayerObject(object, iSettings, overlap) )
-      continue;
+      Vec3 overlap(0.f);
+      if ( !OverlapPlayerObject(object, iSettings, overlap) )
+        continue;
 
-    int minAxis = 0;
-    if ( overlap.y < overlap[minAxis] )
-      minAxis = 1;
-    if ( overlap.z < overlap[minAxis] )
-      minAxis = 2;
-    if ( minAxis != iAxis )
-      continue;
+      int minAxis = 0;
+      if ( overlap.y < overlap[minAxis] )
+        minAxis = 1;
+      if ( overlap.z < overlap[minAxis] )
+        minAxis = 2;
+      if ( minAxis != iAxis )
+        continue;
 
-    if ( iDelta > 0.f )
-      _Player._Position[iAxis] -= overlap[iAxis];
-    else
-      _Player._Position[iAxis] += overlap[iAxis];
+      if ( iDelta > 0.f )
+        _Player._Position[iAxis] -= overlap[iAxis];
+      else
+        _Player._Position[iAxis] += overlap[iAxis];
 
-    _Player._Velocity[iAxis] = 0.f;
-    if ( ( 1 == iAxis ) && ( iDelta < 0.f ) )
-      _Player._Grounded = true;
+      _Player._Velocity[iAxis] = 0.f;
+      if ( ( 1 == iAxis ) && ( iDelta < 0.f ) )
+        _Player._Grounded = true;
+    }
+
+    for ( const FpsCollisionObb & collider : _PropCollisionColliders )
+    {
+      const Vec3 playerHalf(std::max(iSettings._PlayerRadius, 0.05f),
+                            std::max(iSettings._PlayerHeight * 0.5f, 0.1f),
+                            std::max(iSettings._PlayerRadius, 0.05f));
+      const Vec3 playerCenter = _Player._Position + Vec3(0.f, playerHalf.y, 0.f);
+      FpsCollisionAxisResult result;
+      if ( !FpsCollision::ResolveAabbObbAxis(playerCenter, playerHalf, collider, iAxis, iDelta, result) )
+        continue;
+
+      _Player._Position[iAxis] += result._Correction;
+
+      _Player._Velocity[iAxis] = 0.f;
+      if ( ( 1 == iAxis ) && ( iDelta < 0.f ) )
+        _Player._Grounded = true;
+    }
   }
 
-  for ( const FpsCollisionObb & collider : _PropCollisionColliders )
+  const size_t nbTerrains = std::min(_Terrains.size(), _TerrainRuntimes.size());
+  for ( size_t t = 0; t < nbTerrains; ++t )
   {
-    const Vec3 playerHalf(std::max(iSettings._PlayerRadius, 0.05f),
-                          std::max(iSettings._PlayerHeight * 0.5f, 0.1f),
-                          std::max(iSettings._PlayerRadius, 0.05f));
-    const Vec3 playerCenter = _Player._Position + Vec3(0.f, playerHalf.y, 0.f);
-    FpsCollisionAxisResult result;
-    if ( !FpsCollision::ResolveAabbObbAxis(playerCenter, playerHalf, collider, iAxis, iDelta, result) )
+    const FpsMapTerrain & terrain = _Terrains[t];
+    const FpsTerrainRuntime & runtime = _TerrainRuntimes[t];
+    if ( !terrain._Collidable )
       continue;
 
-    _Player._Position[iAxis] += result._Correction;
+    float terrainY = 0.f;
+    Vec3 terrainNormal(0.f, 1.f, 0.f);
+    if ( !FpsTerrain::SampleHeightAndNormal(terrain, runtime, _Player._Position.x, _Player._Position.z, terrainY, terrainNormal) )
+      continue;
 
-    _Player._Velocity[iAxis] = 0.f;
-    if ( ( 1 == iAxis ) && ( iDelta < 0.f ) )
-      _Player._Grounded = true;
+    if ( 1 == iAxis )
+    {
+      if ( ( _Player._Position.y < terrainY ) || ( ( iDelta <= 0.f ) && ( _Player._Position.y <= terrainY + 0.08f ) ) )
+      {
+        _Player._Position.y = terrainY;
+        if ( _Player._Velocity.y < 0.f )
+          _Player._Velocity.y = 0.f;
+        if ( terrainNormal.y > 0.1f )
+          _Player._Grounded = true;
+      }
+    }
+    else
+    {
+      if ( ( terrainNormal.y < 0.5f ) && ( terrainY > _Player._Position.y + 0.45f ) )
+      {
+        _Player._Position[iAxis] -= iDelta;
+        _Player._Velocity[iAxis] = 0.f;
+      }
+    }
   }
 }
 
@@ -861,6 +935,7 @@ void FpsGameSceneBinding::Reset()
   _ObjectInstanceIDs.clear();
   _PropInstanceIDs.clear();
   _PropBaseTransforms.clear();
+  _Terrains.clear();
   _ProjectileInstanceIDs.clear();
   _DecalInstanceIDs.clear();
   for ( int s = 0; s < (int)FpsWeaponId::Count; ++s )
@@ -900,6 +975,9 @@ int FpsGameSceneBinding::Attach( Scene & iScene, const FpsGameWorld & iWorld, co
 
   if ( 0 != LoadProps(iScene, iMap) )
     std::cout << "FpsGameSceneBinding : failed to load one or more map props" << std::endl;
+
+  if ( 0 != LoadTerrains(iScene, iMap, iWorld) )
+    std::cout << "FpsGameSceneBinding : failed to load one or more map terrains" << std::endl;
 
   for ( int s = 0; s < (int)FpsWeaponId::Count; ++s )
   {
@@ -1814,6 +1892,238 @@ Mat4x4 FpsGameSceneBinding::BuildViewWeaponTransform( const FpsGameWorld & iWorl
 Mat4x4 FpsGameSceneBinding::BuildPropTransform( const FpsMapProp & iProp ) const
 {
   return BuildEulerTransform(iProp._Position, iProp._Rotation, iProp._Scale);
+}
+
+// ----------------------------------------------------------------------------
+// BuildTerrainTransform
+// ----------------------------------------------------------------------------
+Mat4x4 FpsGameSceneBinding::BuildTerrainTransform( const FpsMapTerrain & iTerrain ) const
+{
+  return glm::translate(iTerrain._Center);
+}
+
+// ----------------------------------------------------------------------------
+// BuildTerrainWaterTransform
+// ----------------------------------------------------------------------------
+Mat4x4 FpsGameSceneBinding::BuildTerrainWaterTransform( const FpsMapTerrain & iTerrain ) const
+{
+  if ( !iTerrain._Visible || !iTerrain._WaterEnabled )
+    return glm::translate(iTerrain._Center) * glm::scale(Vec3(0.0001f));
+
+  const Vec3 waterCenter(iTerrain._Center.x, iTerrain._Center.y + iTerrain._WaterLevel, iTerrain._Center.z);
+  Mat4x4 transform = glm::translate(waterCenter);
+  transform = transform * glm::rotate(MathUtil::ToRadians(-90.f), Vec3(1.f, 0.f, 0.f));
+  transform = transform * glm::scale(Vec3(std::max(0.1f, iTerrain._Size.x), std::max(0.1f, iTerrain._Size.y), 1.f));
+  return transform;
+}
+
+// ----------------------------------------------------------------------------
+// LoadTerrains
+// ----------------------------------------------------------------------------
+int FpsGameSceneBinding::LoadTerrains( Scene & iScene, const FpsGameMap & iMap, const FpsGameWorld & iWorld )
+{
+  int result = 0;
+  const int nbTerrains = static_cast<int>(iWorld.GetTerrains().size());
+  for ( int terrainIndex = 0; terrainIndex < nbTerrains; ++terrainIndex )
+  {
+    if ( 0 != LoadTerrain(iScene, iMap, iWorld, terrainIndex) )
+      result = 1;
+  }
+  return result;
+}
+
+// ----------------------------------------------------------------------------
+// LoadTerrain
+// ----------------------------------------------------------------------------
+int FpsGameSceneBinding::LoadTerrain( Scene & iScene, const FpsGameMap & iMap, const FpsGameWorld & iWorld, int iTerrainIndex )
+{
+  const std::vector<FpsMapTerrain> & terrains = iWorld.GetTerrains();
+  const std::vector<FpsTerrainRuntime> & runtimes = iWorld.GetTerrainRuntimes();
+  if ( ( iTerrainIndex < 0 )
+    || ( iTerrainIndex >= static_cast<int>(terrains.size()) )
+    || ( iTerrainIndex >= static_cast<int>(runtimes.size()) ) )
+    return 1;
+
+  if ( iTerrainIndex >= static_cast<int>(_Terrains.size()) )
+    _Terrains.resize(iTerrainIndex + 1);
+
+  const FpsMapTerrain & terrain = terrains[iTerrainIndex];
+  const FpsTerrainRuntime & runtime = runtimes[iTerrainIndex];
+
+  std::vector<Vec3> vertices;
+  std::vector<Vec3> normals;
+  std::vector<Vec2> uvs;
+  std::vector<Vec3i> indices;
+  FpsTerrain::BuildMeshGeometry(terrain, runtime, vertices, normals, uvs, indices);
+  if ( vertices.empty() || indices.empty() )
+    return 1;
+
+  Mesh * terrainMesh = new Mesh("__FpsTerrainMesh_" + std::to_string(iTerrainIndex), vertices, normals, uvs, indices);
+  terrainMesh -> SetDynamic(true);
+  const int meshID = iScene.AddMesh(terrainMesh);
+  if ( meshID < 0 )
+  {
+    delete terrainMesh;
+    return 1;
+  }
+
+  FpsGameMap materialMap = iMap;
+  FpsGameMapLoader::SeedDefaultMaterials(materialMap);
+
+  std::vector<unsigned char> albedoPixels;
+  std::vector<unsigned char> mrPixels;
+  const int texRes = 256;
+  FpsTerrain::BuildBlendedTextures(terrain, runtime, materialMap._Materials, &iScene, texRes, albedoPixels, mrPixels);
+
+  const int albedoTexID = iScene.AddTexture("__FpsTerrainAlbedo_" + std::to_string(iTerrainIndex), albedoPixels.data(), texRes, texRes, 4);
+  const int mrTexID = iScene.AddTexture("__FpsTerrainMR_" + std::to_string(iTerrainIndex), mrPixels.data(), texRes, texRes, 4);
+  if ( ( albedoTexID < 0 ) || ( mrTexID < 0 ) )
+    return 1;
+
+  Material terrainMaterial = MakeMaterial(Vec3(1.f), 1.f, 1.f, 0.35f);
+  terrainMaterial._BaseColorTexId = static_cast<float>(albedoTexID);
+  terrainMaterial._MetallicRoughnessTexID = static_cast<float>(mrTexID);
+  const int materialID = iScene.AddMaterial(terrainMaterial, "__FpsTerrainMat_" + std::to_string(iTerrainIndex));
+  if ( materialID < 0 )
+    return 1;
+
+  const std::string terrainName = terrain._Name.empty() ? ( "Terrain " + std::to_string(iTerrainIndex) ) : terrain._Name;
+  MeshInstance terrainInst(terrainName, meshID, materialID, BuildTerrainTransform(terrain));
+  terrainInst._Visible = terrain._Visible;
+  const int instanceID = iScene.AddMeshInstance(terrainInst);
+
+  int waterInstanceID = -1;
+  if ( _QuadMeshID >= 0 )
+  {
+    const int waterMatID = MaterialID(terrain._WaterMaterialName, FpsMaterialSlot::Accent);
+    MeshInstance waterInst(terrainName + " Water", _QuadMeshID, waterMatID, BuildTerrainWaterTransform(terrain));
+    waterInst._Visible = terrain._Visible && terrain._WaterEnabled;
+    waterInstanceID = iScene.AddMeshInstance(waterInst);
+  }
+
+  FpsLoadedTerrain & loaded = _Terrains[iTerrainIndex];
+  loaded._MeshID = meshID;
+  loaded._InstanceID = instanceID;
+  loaded._MaterialID = materialID;
+  loaded._AlbedoTexID = albedoTexID;
+  loaded._MetallicRoughnessTexID = mrTexID;
+  loaded._WaterInstanceID = waterInstanceID;
+  loaded._BuiltGridResolution = runtime._GridResolution;
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// SyncTerrain
+// ----------------------------------------------------------------------------
+int FpsGameSceneBinding::SyncTerrain( Scene & iScene,
+                                      const FpsGameMap & iMap,
+                                      const FpsGameWorld & iWorld,
+                                      int iTerrainIndex,
+                                      bool iUpdateMesh,
+                                      bool iUpdateTextures,
+                                      bool * oTopologyChanged )
+{
+  if ( oTopologyChanged )
+    *oTopologyChanged = false;
+
+  const std::vector<FpsMapTerrain> & terrains = iWorld.GetTerrains();
+  const std::vector<FpsTerrainRuntime> & runtimes = iWorld.GetTerrainRuntimes();
+  if ( ( iTerrainIndex < 0 )
+    || ( iTerrainIndex >= static_cast<int>(terrains.size()) )
+    || ( iTerrainIndex >= static_cast<int>(runtimes.size()) )
+    || ( iTerrainIndex >= static_cast<int>(_Terrains.size()) ) )
+    return 1;
+
+  const FpsMapTerrain & terrain = terrains[iTerrainIndex];
+  const FpsTerrainRuntime & runtime = runtimes[iTerrainIndex];
+  FpsLoadedTerrain & loaded = _Terrains[iTerrainIndex];
+
+  std::vector<MeshInstance> & instances = iScene.GetMeshInstances();
+  if ( ( loaded._InstanceID < 0 ) || ( loaded._InstanceID >= static_cast<int>(instances.size()) ) )
+    return 1;
+
+  instances[loaded._InstanceID]._Visible = terrain._Visible;
+  instances[loaded._InstanceID]._Transform = BuildTerrainTransform(terrain);
+
+  if ( ( loaded._WaterInstanceID >= 0 ) && ( loaded._WaterInstanceID < static_cast<int>(instances.size()) ) )
+  {
+    instances[loaded._WaterInstanceID]._Visible = terrain._Visible && terrain._WaterEnabled;
+    instances[loaded._WaterInstanceID]._Transform = BuildTerrainWaterTransform(terrain);
+    const int waterMatID = MaterialID(terrain._WaterMaterialName, FpsMaterialSlot::Accent);
+    if ( waterMatID >= 0 )
+      instances[loaded._WaterInstanceID]._MaterialID = waterMatID;
+  }
+
+  if ( iUpdateMesh )
+  {
+    std::vector<Vec3> vertices;
+    std::vector<Vec3> normals;
+    std::vector<Vec2> uvs;
+    std::vector<Vec3i> indices;
+    FpsTerrain::BuildMeshGeometry(terrain, runtime, vertices, normals, uvs, indices);
+
+    std::vector<Mesh*> & meshes = iScene.GetMeshes();
+    bool updatedInPlace = false;
+    if ( ( loaded._BuiltGridResolution == runtime._GridResolution )
+      && ( loaded._MeshID >= 0 )
+      && ( loaded._MeshID < static_cast<int>(meshes.size()) )
+      && meshes[loaded._MeshID] )
+    {
+      if ( meshes[loaded._MeshID] -> UpdateGeometry(vertices, normals) )
+      {
+        iScene.RefitBLASData();
+        updatedInPlace = true;
+      }
+    }
+
+    if ( !updatedInPlace && !vertices.empty() && !indices.empty() )
+    {
+      const std::string meshName = "__FpsTerrainMesh_" + std::to_string(iTerrainIndex) + "_" + std::to_string(runtime._GridResolution.x) + "x" + std::to_string(runtime._GridResolution.y);
+      Mesh * newMesh = new Mesh(meshName, vertices, normals, uvs, indices);
+      newMesh -> SetDynamic(true);
+      const int newMeshID = iScene.AddMesh(newMesh);
+      if ( newMeshID < 0 )
+      {
+        delete newMesh;
+        return 1;
+      }
+
+      loaded._MeshID = newMeshID;
+      loaded._BuiltGridResolution = runtime._GridResolution;
+      instances[loaded._InstanceID]._MeshID = newMeshID;
+      if ( oTopologyChanged )
+        *oTopologyChanged = true;
+    }
+  }
+
+  if ( iUpdateTextures )
+  {
+    FpsGameMap materialMap = iMap;
+    FpsGameMapLoader::SeedDefaultMaterials(materialMap);
+
+    std::vector<unsigned char> albedoPixels;
+    std::vector<unsigned char> mrPixels;
+    const int texRes = 256;
+    FpsTerrain::BuildBlendedTextures(terrain, runtime, materialMap._Materials, &iScene, texRes, albedoPixels, mrPixels);
+
+    std::vector<Texture*> & textures = iScene.GetTextures();
+    if ( ( loaded._AlbedoTexID >= 0 ) && ( loaded._AlbedoTexID < static_cast<int>(textures.size()) ) && textures[loaded._AlbedoTexID] )
+      textures[loaded._AlbedoTexID] -> UpdateData(albedoPixels.data(), texRes, texRes, 4);
+    if ( ( loaded._MetallicRoughnessTexID >= 0 ) && ( loaded._MetallicRoughnessTexID < static_cast<int>(textures.size()) ) && textures[loaded._MetallicRoughnessTexID] )
+      textures[loaded._MetallicRoughnessTexID] -> UpdateData(mrPixels.data(), texRes, texRes, 4);
+  }
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+// GetTerrainInstanceID
+// ----------------------------------------------------------------------------
+int FpsGameSceneBinding::GetTerrainInstanceID( int iTerrainIndex ) const
+{
+  if ( ( iTerrainIndex < 0 ) || ( iTerrainIndex >= static_cast<int>(_Terrains.size()) ) )
+    return -1;
+  return _Terrains[iTerrainIndex]._InstanceID;
 }
 
 // ----------------------------------------------------------------------------

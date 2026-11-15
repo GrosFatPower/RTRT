@@ -94,11 +94,84 @@ FpsGameEditorContext::FpsGameEditorContext( GLFWwindow * iWindow,
 // ----------------------------------------------------------------------------
 void FpsGameEditor::HandleMousePick( const FpsGameEditorContext & iContext, double iMouseX, double iMouseY )
 {
+  if ( ( FpsEditableKind::Terrain == _Selection._Kind )
+    && ( FpsTerrainBrushMode::Off != _TerrainBrushMode ) )
+    return;
+
   FpsEditorSelection selection;
   if ( PickSelection(iContext, iMouseX, iMouseY, selection) )
     _Selection = selection;
   else
     _Selection = FpsEditorSelection();
+}
+
+// ----------------------------------------------------------------------------
+// UpdateViewportInteraction
+// ----------------------------------------------------------------------------
+void FpsGameEditor::UpdateViewportInteraction( FpsGameEditorContext & ioContext, double iMouseX, double iMouseY, bool iLeftMouseHeld, float iDeltaTime )
+{
+  _HasTerrainBrushHover = false;
+
+  if ( !_Enabled || !ioContext._Scene )
+  {
+    _TerrainStrokeActive = false;
+    return;
+  }
+
+  if ( ( FpsEditableKind::Terrain != _Selection._Kind )
+    || ( FpsTerrainBrushMode::Off == _TerrainBrushMode )
+    || ( _Selection._Index < 0 )
+    || ( _Selection._Index >= static_cast<int>(ioContext._Map._Terrains.size()) ) )
+  {
+    _TerrainStrokeActive = false;
+    return;
+  }
+
+  const int terrainIndex = _Selection._Index;
+  std::vector<FpsMapTerrain> & worldTerrains = ioContext._GameWorld.GetTerrains();
+  std::vector<FpsTerrainRuntime> & worldRuntimes = ioContext._GameWorld.GetTerrainRuntimes();
+  if ( ( terrainIndex >= static_cast<int>(worldTerrains.size()) )
+    || ( terrainIndex >= static_cast<int>(worldRuntimes.size()) ) )
+  {
+    _TerrainStrokeActive = false;
+    return;
+  }
+
+  Vec3 rayOrigin(0.f);
+  Vec3 rayDir(0.f);
+  if ( BuildPickingRay(ioContext, iMouseX, iMouseY, rayOrigin, rayDir) )
+  {
+    FpsCollisionRayResult hit;
+    if ( FpsTerrain::Raycast(worldTerrains[terrainIndex], worldRuntimes[terrainIndex], rayOrigin, rayDir, 2000.f, hit) )
+    {
+      _HasTerrainBrushHover = true;
+      _TerrainBrushHoverPos = hit._Point;
+      _TerrainBrushHoverNormal = hit._Normal;
+
+      if ( iLeftMouseHeld && !ImGui::GetIO().WantCaptureMouse && !ImGuizmo::IsOver() && !ImGuizmo::IsUsing() )
+      {
+        if ( FpsTerrain::ApplyBrush(worldTerrains[terrainIndex],
+                                    worldRuntimes[terrainIndex],
+                                    _TerrainBrushMode,
+                                    hit._Point,
+                                    _TerrainBrushRadius,
+                                    _TerrainBrushStrength,
+                                    std::max(0.01f, iDeltaTime),
+                                    worldTerrains[terrainIndex]._Center.y + _TerrainBrushFlattenHeight) )
+        {
+          SyncTerrain(ioContext, terrainIndex, false, false, true, false);
+          MarkDirty();
+          _TerrainStrokeActive = true;
+        }
+      }
+    }
+  }
+
+  if ( _TerrainStrokeActive && !iLeftMouseHeld )
+  {
+    _TerrainStrokeActive = false;
+    SyncTerrain(ioContext, terrainIndex, false, false, false, true);
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -248,7 +321,13 @@ static bool EditorIsBuiltinMaterialName( const std::string & iName )
       || ( "wall" == iName )
       || ( "pillar" == iName )
       || ( "crate" == iName )
-      || ( "accent" == iName );
+      || ( "accent" == iName )
+      || ( "seabed" == iName )
+      || ( "sand" == iName )
+      || ( "grass" == iName )
+      || ( "rock" == iName )
+      || ( "snow" == iName )
+      || ( "water" == iName );
 }
 
 // ----------------------------------------------------------------------------
@@ -913,6 +992,242 @@ bool FpsGameEditor::AddDroppedProp( FpsGameEditorContext & ioContext, const std:
 }
 
 // ----------------------------------------------------------------------------
+// RefreshHeightmapAssets
+// ----------------------------------------------------------------------------
+void FpsGameEditor::RefreshHeightmapAssets()
+{
+  _HeightmapAssetPaths.clear();
+
+  const std::filesystem::path assetsDir(PathUtils::GetAssetPath(""));
+  std::error_code ec;
+  if ( !std::filesystem::exists(assetsDir, ec) )
+  {
+    _NewTerrainAssetIndex = -1;
+    return;
+  }
+
+  const std::filesystem::path heightmapDir = assetsDir / "Heightmap";
+  if ( std::filesystem::exists(heightmapDir, ec) && !ec )
+  {
+    std::filesystem::recursive_directory_iterator it(heightmapDir, std::filesystem::directory_options::skip_permission_denied, ec);
+    std::filesystem::recursive_directory_iterator end;
+    while ( !ec && it != end )
+    {
+      const std::filesystem::directory_entry entry = *it;
+      if ( entry.is_regular_file(ec) && DroppedFileUtils::IsDroppedHeightmapPath(entry.path()) )
+      {
+        const std::filesystem::path relativePath = std::filesystem::relative(entry.path(), assetsDir, ec);
+        if ( !ec )
+          _HeightmapAssetPaths.push_back(relativePath.generic_string());
+      }
+      it.increment(ec);
+    }
+  }
+
+  std::filesystem::directory_iterator topIt(assetsDir, std::filesystem::directory_options::skip_permission_denied, ec);
+  std::filesystem::directory_iterator topEnd;
+  while ( !ec && topIt != topEnd )
+  {
+    const std::filesystem::directory_entry entry = *topIt;
+    if ( entry.is_regular_file(ec) && DroppedFileUtils::IsDroppedHeightmapPath(entry.path()) )
+    {
+      const std::filesystem::path relativePath = std::filesystem::relative(entry.path(), assetsDir, ec);
+      if ( !ec )
+        _HeightmapAssetPaths.push_back(relativePath.generic_string());
+    }
+    topIt.increment(ec);
+  }
+
+  std::sort(_HeightmapAssetPaths.begin(), _HeightmapAssetPaths.end());
+  _HeightmapAssetPaths.erase(std::unique(_HeightmapAssetPaths.begin(), _HeightmapAssetPaths.end()), _HeightmapAssetPaths.end());
+
+  if ( _HeightmapAssetPaths.empty() )
+    _NewTerrainAssetIndex = -1;
+  else if ( ( _NewTerrainAssetIndex < 0 ) || ( _NewTerrainAssetIndex >= static_cast<int>(_HeightmapAssetPaths.size()) ) )
+    _NewTerrainAssetIndex = 0;
+}
+
+// ----------------------------------------------------------------------------
+// LoadHeightmapFromDialog
+// ----------------------------------------------------------------------------
+void FpsGameEditor::LoadHeightmapFromDialog( FpsGameEditorContext & ioContext )
+{
+  std::filesystem::path defaultDir = PathUtils::GetAssetPath("Heightmap");
+  std::error_code ec;
+  if ( !std::filesystem::exists(defaultDir, ec) )
+    defaultDir = PathUtils::GetAssetPath("");
+
+  const std::filesystem::path initialDirectory = _LastHeightmapDialogDirectory.empty() ? defaultDir : _LastHeightmapDialogDirectory;
+  std::filesystem::path selectedPath;
+  std::string error;
+  const NativeFileDialogResult result = OpenFileDialog("png,jpg,jpeg,bmp,tga", initialDirectory, selectedPath, error);
+  if ( NativeFileDialogResult::Cancelled == result )
+    return;
+  if ( NativeFileDialogResult::Error == result )
+  {
+    SetStatus("File dialog error: " + error);
+    return;
+  }
+  if ( !EditorNormalizeDialogFilePath(selectedPath) || !DroppedFileUtils::IsDroppedHeightmapPath(selectedPath) )
+  {
+    SetStatus("Selected heightmap file does not exist or is unsupported.");
+    return;
+  }
+
+  _LastHeightmapDialogDirectory = selectedPath.parent_path();
+  AddDroppedHeightmap(ioContext, selectedPath, EditorNewPropPosition(ioContext));
+}
+
+// ----------------------------------------------------------------------------
+// SaveHeightmapAsDialog
+// ----------------------------------------------------------------------------
+void FpsGameEditor::SaveHeightmapAsDialog( FpsGameEditorContext & ioContext, int iTerrainIndex )
+{
+  if ( ( iTerrainIndex < 0 )
+    || ( iTerrainIndex >= static_cast<int>(ioContext._Map._Terrains.size()) )
+    || ( iTerrainIndex >= static_cast<int>(ioContext._GameWorld.GetTerrainRuntimes().size()) ) )
+    return;
+
+  std::filesystem::path defaultDir = PathUtils::GetAssetPath("Heightmap");
+  std::error_code ec;
+  if ( !std::filesystem::exists(defaultDir, ec) )
+    defaultDir = PathUtils::GetAssetPath("");
+
+  const std::filesystem::path initialDirectory = _LastHeightmapDialogDirectory.empty() ? defaultDir : _LastHeightmapDialogDirectory;
+  std::filesystem::path selectedPath;
+  std::string error;
+  const NativeFileDialogResult result = SaveFileDialog("png", initialDirectory, selectedPath, error);
+  if ( NativeFileDialogResult::Cancelled == result )
+    return;
+  if ( NativeFileDialogResult::Error == result )
+  {
+    SetStatus("File dialog error: " + error);
+    return;
+  }
+
+  if ( selectedPath.extension().empty() )
+    selectedPath.replace_extension(".png");
+  if ( !EditorNormalizeDialogSavePath(selectedPath) )
+  {
+    SetStatus("Choose a valid .png save path.");
+    return;
+  }
+
+  FpsMapTerrain & terrain = ioContext._Map._Terrains[iTerrainIndex];
+  const FpsTerrainRuntime & runtime = ioContext._GameWorld.GetTerrainRuntimes()[iTerrainIndex];
+  if ( !FpsTerrain::SaveHeightmapPNG(runtime, selectedPath.string()) )
+  {
+    SetStatus("Failed to save heightmap PNG: " + selectedPath.string());
+    return;
+  }
+
+  _LastHeightmapDialogDirectory = selectedPath.parent_path();
+  if ( EditorPathIsUnderAssets(selectedPath) )
+  {
+    const std::filesystem::path assetsDir = std::filesystem::weakly_canonical(PathUtils::GetAssetPath(""), ec);
+    const std::filesystem::path rel = std::filesystem::relative(selectedPath, assetsDir, ec);
+    if ( !ec && !rel.empty() )
+      terrain._HeightmapPath = rel.generic_string();
+    RefreshHeightmapAssets();
+  }
+  else
+    terrain._HeightmapPath = selectedPath.generic_string();
+
+  SyncTerrain(ioContext, iTerrainIndex, true, true, true, true);
+  MarkDirty();
+  SetStatus("Saved heightmap PNG: " + selectedPath.string());
+}
+
+// ----------------------------------------------------------------------------
+// AddDroppedHeightmap
+// ----------------------------------------------------------------------------
+bool FpsGameEditor::AddDroppedHeightmap( FpsGameEditorContext & ioContext, const std::filesystem::path & iPath, const Vec3 & iPosition )
+{
+  if ( !ioContext._Scene || !DroppedFileUtils::IsDroppedHeightmapPath(iPath) )
+    return false;
+
+  std::error_code ec;
+  std::filesystem::path filepath = DroppedFileUtils::NormalizeDroppedPath(iPath);
+  if ( !std::filesystem::exists(filepath, ec) || ec )
+  {
+    SetStatus("Heightmap file does not exist: " + filepath.generic_string());
+    return false;
+  }
+
+  std::vector<std::string> usedNames;
+  for ( const FpsMapTerrain & t : ioContext._Map._Terrains )
+    usedNames.push_back(t._Name);
+
+  std::string terrainName = filepath.stem().string();
+  if ( terrainName.empty() )
+    terrainName = "Terrain";
+  if ( std::find(usedNames.begin(), usedNames.end(), terrainName) != usedNames.end() )
+    terrainName = EditorUniqueName(terrainName, usedNames);
+
+  std::string storedPath = filepath.generic_string();
+  if ( EditorPathIsUnderAssets(filepath) )
+  {
+    const std::filesystem::path assetsDir = std::filesystem::weakly_canonical(PathUtils::GetAssetPath(""), ec);
+    const std::filesystem::path rel = std::filesystem::relative(filepath, assetsDir, ec);
+    if ( !ec && !rel.empty() )
+      storedPath = rel.generic_string();
+  }
+
+  FpsGameMapLoader::SeedDefaultMaterials(ioContext._Map);
+
+  FpsMapTerrain terrain;
+  terrain._Name = terrainName;
+  terrain._HeightmapPath = storedPath;
+  terrain._Center = Vec3(iPosition.x, 0.f, iPosition.z);
+  terrain._Size = Vec2(96.f, 96.f);
+  terrain._MinElevation = -3.5f;
+  terrain._MaxElevation = 18.f;
+  terrain._GridResolution = Vec2i(129, 129);
+  terrain._SmoothPasses = 2;
+  terrain._IslandFalloff = false;
+  terrain._WaterEnabled = true;
+  terrain._WaterLevel = 0.f;
+  terrain._WaterMaterialName = "water";
+  terrain._Collidable = true;
+  terrain._Visible = true;
+  FpsTerrain::SeedDefaultLayers(terrain);
+
+  ioContext._Map._Terrains.push_back(terrain);
+  ioContext._MapLoaded = true;
+  const int terrainIndex = static_cast<int>(ioContext._Map._Terrains.size()) - 1;
+
+  ioContext._GameWorld.GetTerrains() = ioContext._Map._Terrains;
+  ioContext._GameWorld.RebuildTerrainRuntime(terrainIndex, true);
+
+  if ( 0 != ioContext._SceneBinding.LoadTerrain(*ioContext._Scene, ioContext._Map, ioContext._GameWorld, terrainIndex) )
+  {
+    ioContext._Map._Terrains.pop_back();
+    ioContext._GameWorld.GetTerrains() = ioContext._Map._Terrains;
+    SetStatus("Failed to load terrain heightmap: " + filepath.generic_string());
+    return false;
+  }
+
+  _Selection._Kind = FpsEditableKind::Terrain;
+  _Selection._Index = terrainIndex;
+  _Selection._SubIndex = -1;
+  _Selection._SceneInstanceID = ioContext._SceneBinding.GetTerrainInstanceID(terrainIndex);
+  MarkDirty();
+
+  if ( ioContext._Renderer )
+  {
+    ioContext._Renderer -> Notify(DirtyState::Textures);
+    ioContext._Renderer -> Notify(DirtyState::SceneMaterials);
+    ioContext._Renderer -> Notify(DirtyState::SceneInstances);
+  }
+
+  if ( EditorPathIsUnderAssets(filepath) )
+    RefreshHeightmapAssets();
+
+  SetStatus("Heightmap terrain created: " + terrain._Name);
+  return true;
+}
+
+// ----------------------------------------------------------------------------
 // SyncMapFromRuntimeSettings
 // ----------------------------------------------------------------------------
 void FpsGameEditor::SyncMapFromRuntimeSettings( FpsGameEditorContext & ioContext )
@@ -1056,6 +1371,58 @@ void FpsGameEditor::SyncProp( FpsGameEditorContext & ioContext, int iPropIndex )
 }
 
 // ----------------------------------------------------------------------------
+// SyncEditorTerrain
+// ----------------------------------------------------------------------------
+void FpsGameEditor::SyncTerrain( FpsGameEditorContext & ioContext,
+                                 int iTerrainIndex,
+                                 bool iRebuildRuntime,
+                                 bool iReloadHeightmap,
+                                 bool iUpdateMesh,
+                                 bool iUpdateTextures )
+{
+  if ( ( iTerrainIndex < 0 ) || ( iTerrainIndex >= static_cast<int>(ioContext._Map._Terrains.size()) ) )
+    return;
+
+  std::vector<FpsMapTerrain> & worldTerrains = ioContext._GameWorld.GetTerrains();
+  if ( worldTerrains.size() < ioContext._Map._Terrains.size() )
+    worldTerrains.resize(ioContext._Map._Terrains.size());
+  worldTerrains[iTerrainIndex] = ioContext._Map._Terrains[iTerrainIndex];
+
+  if ( iRebuildRuntime )
+    ioContext._GameWorld.RebuildTerrainRuntime(iTerrainIndex, iReloadHeightmap);
+
+  if ( !ioContext._Scene )
+    return;
+
+  bool topologyChanged = false;
+  if ( 0 != ioContext._SceneBinding.SyncTerrain(*ioContext._Scene,
+                                                ioContext._Map,
+                                                ioContext._GameWorld,
+                                                iTerrainIndex,
+                                                iUpdateMesh,
+                                                iUpdateTextures,
+                                                &topologyChanged) )
+    return;
+
+  if ( ioContext._Renderer )
+  {
+    ioContext._Renderer -> Notify(DirtyState::SceneInstances);
+    if ( topologyChanged )
+    {
+      ioContext._Renderer -> Notify(DirtyState::Textures);
+      ioContext._Renderer -> Notify(DirtyState::SceneMaterials);
+    }
+    else
+    {
+      if ( iUpdateMesh )
+        ioContext._Renderer -> Notify(DirtyState::SceneMeshData);
+      if ( iUpdateTextures )
+        ioContext._Renderer -> Notify(DirtyState::Textures);
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
 // SyncEditorLight
 // ----------------------------------------------------------------------------
 void FpsGameEditor::SyncLight( FpsGameEditorContext & ioContext, int iLightIndex )
@@ -1154,6 +1521,20 @@ bool FpsGameEditor::DeleteSelectedItem( FpsGameEditorContext & ioContext )
     return true;
   }
 
+  if ( FpsEditableKind::Terrain == kind )
+  {
+    if ( ( index < 0 ) || ( index >= static_cast<int>(ioContext._Map._Terrains.size()) ) )
+      return false;
+
+    const std::string name = ioContext._Map._Terrains[index]._Name;
+    ioContext._Map._Terrains.erase(ioContext._Map._Terrains.begin() + index);
+    _Selection = FpsEditorSelection();
+    MarkDirty();
+    ioContext._ReloadScene = true;
+    SetStatus("Deleted " + name);
+    return true;
+  }
+
   return false;
 }
 
@@ -1246,6 +1627,27 @@ bool FpsGameEditor::DuplicateSelectedItem( FpsGameEditorContext & ioContext )
     MarkDirty();
     ioContext._ReloadBoids = true;
     SetStatus("Duplicated " + boids._Name);
+    return true;
+  }
+
+  if ( FpsEditableKind::Terrain == kind )
+  {
+    if ( ( index < 0 ) || ( index >= static_cast<int>(ioContext._Map._Terrains.size()) ) )
+      return false;
+
+    std::vector<std::string> usedNames;
+    for ( const FpsMapTerrain & terrain : ioContext._Map._Terrains )
+      usedNames.push_back(terrain._Name);
+
+    FpsMapTerrain terrain = ioContext._Map._Terrains[index];
+    terrain._Name = EditorUniqueName(terrain._Name, usedNames);
+    terrain._Center += Vec3(terrain._Size.x + 2.f, 0.f, 0.f);
+    ioContext._Map._Terrains.push_back(terrain);
+    _Selection._Kind = FpsEditableKind::Terrain;
+    _Selection._Index = static_cast<int>(ioContext._Map._Terrains.size()) - 1;
+    MarkDirty();
+    ioContext._ReloadScene = true;
+    SetStatus("Duplicated " + terrain._Name);
     return true;
   }
 
@@ -1452,6 +1854,25 @@ bool FpsGameEditor::PickSelection( const FpsGameEditorContext & iContext, double
         oSelection._Index = propIndex;
         oSelection._SceneInstanceID = instanceID;
       }
+    }
+  }
+
+  const std::vector<FpsMapTerrain> & worldTerrains = iContext._GameWorld.GetTerrains();
+  const std::vector<FpsTerrainRuntime> & worldRuntimes = iContext._GameWorld.GetTerrainRuntimes();
+  const size_t nbTerrains = std::min(worldTerrains.size(), worldRuntimes.size());
+  for ( size_t terrainIndex = 0; terrainIndex < nbTerrains; ++terrainIndex )
+  {
+    if ( !worldTerrains[terrainIndex]._Visible )
+      continue;
+
+    FpsCollisionRayResult hit;
+    if ( FpsTerrain::Raycast(worldTerrains[terrainIndex], worldRuntimes[terrainIndex], rayOrigin, rayDir, nearestDist, hit)
+      && ( hit._Distance < nearestDist ) )
+    {
+      nearestDist = hit._Distance;
+      oSelection._Kind = FpsEditableKind::Terrain;
+      oSelection._Index = static_cast<int>(terrainIndex);
+      oSelection._SceneInstanceID = iContext._SceneBinding.GetTerrainInstanceID(static_cast<int>(terrainIndex));
     }
   }
 
@@ -1733,6 +2154,134 @@ void FpsGameEditor::DrawScenePanel( FpsGameEditorContext & ioContext )
 
   }
 
+  if ( ImGui::CollapsingHeader("Terrains", ImGuiTreeNodeFlags_DefaultOpen) )
+  {
+    ImGui::InputText("New terrain name", _NewTerrainName, sizeof(_NewTerrainName));
+    if ( ImGui::Button("Refresh heightmap list") )
+    {
+      RefreshHeightmapAssets();
+      SetStatus("Found " + std::to_string(_HeightmapAssetPaths.size()) + " heightmap assets");
+    }
+
+    const bool hasHeightmapAssets = !_HeightmapAssetPaths.empty();
+    const bool hasSelectedHeightmapAsset = hasHeightmapAssets
+                                        && ( _NewTerrainAssetIndex >= 0 )
+                                        && ( _NewTerrainAssetIndex < static_cast<int>(_HeightmapAssetPaths.size()) );
+    if ( hasHeightmapAssets )
+    {
+      const char * preview = hasSelectedHeightmapAsset ? _HeightmapAssetPaths[_NewTerrainAssetIndex].c_str()
+                                                       : "<select heightmap>";
+      if ( ImGui::BeginCombo("Heightmap asset", preview) )
+      {
+        for ( int i = 0; i < static_cast<int>(_HeightmapAssetPaths.size()); ++i )
+        {
+          const bool selected = ( _NewTerrainAssetIndex == i );
+          if ( ImGui::Selectable(_HeightmapAssetPaths[i].c_str(), selected) )
+            _NewTerrainAssetIndex = i;
+          if ( selected )
+            ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+      }
+    }
+    else
+      ImGui::TextUnformatted("No heightmaps found in Assets/Heightmap");
+
+    if ( ImGui::Button("Import heightmap...") )
+      LoadHeightmapFromDialog(ioContext);
+
+    ImGui::BeginDisabled(!hasSelectedHeightmapAsset);
+    if ( ImGui::Button("Add terrain from heightmap") )
+    {
+      FpsGameMapLoader::SeedDefaultMaterials(ioContext._Map);
+
+      FpsMapTerrain terrain;
+      terrain._Name = ( std::strlen(_NewTerrainName) > 0 )
+                    ? _NewTerrainName
+                    : ( "Terrain " + std::to_string(static_cast<int>(ioContext._Map._Terrains.size())) );
+      terrain._HeightmapPath = _HeightmapAssetPaths[_NewTerrainAssetIndex];
+      const Vec3 pos = EditorNewPropPosition(ioContext);
+      terrain._Center = Vec3(pos.x, 0.f, pos.z);
+      terrain._Size = Vec2(96.f, 96.f);
+      terrain._MinElevation = -3.5f;
+      terrain._MaxElevation = 18.f;
+      terrain._GridResolution = Vec2i(129, 129);
+      terrain._SmoothPasses = 2;
+      terrain._IslandFalloff = false;
+      terrain._WaterEnabled = true;
+      terrain._WaterLevel = 0.f;
+      terrain._WaterMaterialName = "water";
+      terrain._Collidable = true;
+      terrain._Visible = true;
+      FpsTerrain::SeedDefaultLayers(terrain);
+
+      ioContext._Map._Terrains.push_back(terrain);
+      ioContext._MapLoaded = true;
+      _Selection._Kind = FpsEditableKind::Terrain;
+      _Selection._Index = static_cast<int>(ioContext._Map._Terrains.size()) - 1;
+      _Selection._SubIndex = -1;
+      MarkDirty();
+      ioContext._ReloadScene = true;
+    }
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+    if ( ImGui::Button("Add procedural terrain") )
+    {
+      FpsGameMapLoader::SeedDefaultMaterials(ioContext._Map);
+
+      FpsMapTerrain terrain;
+      terrain._Name = ( std::strlen(_NewTerrainName) > 0 )
+                    ? _NewTerrainName
+                    : ( "Terrain " + std::to_string(static_cast<int>(ioContext._Map._Terrains.size())) );
+      terrain._HeightmapPath = "";
+      const Vec3 pos = EditorNewPropPosition(ioContext);
+      terrain._Center = Vec3(pos.x, 0.f, pos.z);
+      terrain._Size = Vec2(96.f, 96.f);
+      terrain._MinElevation = -3.5f;
+      terrain._MaxElevation = 18.f;
+      terrain._GridResolution = Vec2i(129, 129);
+      terrain._SmoothPasses = 1;
+      terrain._IslandFalloff = true;
+      terrain._WaterEnabled = true;
+      terrain._WaterLevel = 0.f;
+      terrain._WaterMaterialName = "water";
+      terrain._Collidable = true;
+      terrain._Visible = true;
+      FpsTerrain::SeedDefaultLayers(terrain);
+
+      ioContext._Map._Terrains.push_back(terrain);
+      ioContext._MapLoaded = true;
+      _Selection._Kind = FpsEditableKind::Terrain;
+      _Selection._Index = static_cast<int>(ioContext._Map._Terrains.size()) - 1;
+      _Selection._SubIndex = -1;
+      MarkDirty();
+      ioContext._ReloadScene = true;
+    }
+
+    if ( ImGui::BeginListBox("Terrains", ImVec2(-FLT_MIN, 110.f)) )
+    {
+      for ( int i = 0; i < static_cast<int>(ioContext._Map._Terrains.size()); ++i )
+      {
+        const FpsMapTerrain & terrain = ioContext._Map._Terrains[i];
+        const bool selected = ( FpsEditableKind::Terrain == _Selection._Kind ) && ( _Selection._Index == i );
+        std::string label = "Terrain: " + terrain._Name;
+        if ( !terrain._Visible )
+          label += " (hidden)";
+        label += "##terrain" + std::to_string(i);
+        if ( ImGui::Selectable(label.c_str(), selected) )
+        {
+          _Selection._Kind = FpsEditableKind::Terrain;
+          _Selection._Index = i;
+          _Selection._SubIndex = -1;
+        }
+        if ( selected )
+          ImGui::SetItemDefaultFocus();
+      }
+      ImGui::EndListBox();
+    }
+  }
+
   if ( ImGui::CollapsingHeader("Boids") )
   {
     if ( ImGui::Button("Add boids") )
@@ -1870,18 +2419,19 @@ void FpsGameEditor::DrawInspectorPanel( FpsGameEditorContext & ioContext )
       objectDirty |= ImGui::DragFloat3("Half extents", &object._HalfExtents.x, 0.05f, 0.01f, 100.f, "%.3f");
       objectDirty |= ImGui::Checkbox("Collidable", &object._Collidable);
 
+      bool objectVisible = object._Visible;
+      if ( ImGui::Checkbox("Visible", &objectVisible) )
+      {
+        object._Visible = objectVisible;
+        _ObjectInstanceVisible[index] = objectVisible;
+        _Selection._Kind = objectVisible ? FpsEditableKind::Box : FpsEditableKind::Collider;
+        objectDirty = true;
+        if ( objectVisible )
+          ioContext._ReloadScene = true;
+      }
+
       if ( object._Visible )
       {
-        bool instanceVisible = _ObjectInstanceVisible[index];
-        if ( ImGui::Checkbox("Show instance", &instanceVisible) )
-        {
-          _ObjectInstanceVisible[index] = instanceVisible;
-          if ( ioContext._Scene )
-            ioContext._SceneBinding.SetObjectInstanceVisible(*ioContext._Scene, index, instanceVisible);
-          if ( ioContext._Renderer )
-            ioContext._Renderer -> Notify(DirtyState::SceneInstances);
-        }
-
         FpsGameMapLoader::SeedDefaultMaterials(ioContext._Map);
         int currentMaterial = 0;
         for ( int i = 0; i < static_cast<int>(ioContext._Map._Materials.size()); ++i )
@@ -2073,6 +2623,222 @@ void FpsGameEditor::DrawInspectorPanel( FpsGameEditorContext & ioContext )
           ioContext._ReloadScene = true;
         else
           SyncProp(ioContext, index);
+      }
+    }
+  }
+  else if ( FpsEditableKind::Terrain == _Selection._Kind )
+  {
+    const int index = _Selection._Index;
+    if ( ( index >= 0 ) && ( index < static_cast<int>(ioContext._Map._Terrains.size()) ) )
+    {
+      FpsGameMapLoader::SeedDefaultMaterials(ioContext._Map);
+      FpsMapTerrain & terrain = ioContext._Map._Terrains[index];
+      bool transformDirty = false;
+      bool rebuildGrid = false;
+      bool reloadHeightmap = false;
+      bool updateMesh = false;
+      bool updateTextures = false;
+
+      char nameBuffer[128];
+      std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", terrain._Name.c_str());
+      if ( ImGui::InputText("Terrain name", nameBuffer, sizeof(nameBuffer)) )
+      {
+        terrain._Name = nameBuffer;
+        transformDirty = true;
+      }
+
+      if ( !_HeightmapAssetPaths.empty() )
+      {
+        if ( EditorPropAssetCombo("Heightmap asset", _HeightmapAssetPaths, terrain._HeightmapPath) )
+        {
+          rebuildGrid = true;
+          reloadHeightmap = true;
+          updateMesh = true;
+          updateTextures = true;
+        }
+      }
+      char pathBuffer[512];
+      std::snprintf(pathBuffer, sizeof(pathBuffer), "%s", terrain._HeightmapPath.c_str());
+      if ( ImGui::InputText("Heightmap path", pathBuffer, sizeof(pathBuffer)) )
+        terrain._HeightmapPath = pathBuffer;
+      if ( ImGui::Button("Reload heightmap") )
+      {
+        rebuildGrid = true;
+        reloadHeightmap = true;
+        updateMesh = true;
+        updateTextures = true;
+      }
+      ImGui::SameLine();
+      if ( ImGui::Button("Save heightmap PNG...") )
+        SaveHeightmapAsDialog(ioContext, index);
+
+      transformDirty |= ImGui::Checkbox("Visible", &terrain._Visible);
+      ImGui::SameLine();
+      transformDirty |= ImGui::Checkbox("Collidable", &terrain._Collidable);
+
+      transformDirty |= ImGui::DragFloat3("Center", &terrain._Center.x, 0.25f, -2000.f, 2000.f, "%.2f");
+      if ( ImGui::DragFloat2("Size (X, Z)", &terrain._Size.x, 0.5f, 1.f, 4000.f, "%.2f") )
+      {
+        terrain._Size.x = std::max(1.f, terrain._Size.x);
+        terrain._Size.y = std::max(1.f, terrain._Size.y);
+        rebuildGrid = true;
+        updateMesh = true;
+        transformDirty = true;
+      }
+      if ( ImGui::DragFloat("Min elevation", &terrain._MinElevation, 0.1f, -200.f, 200.f, "%.2f") )
+      {
+        rebuildGrid = true;
+        updateMesh = true;
+        updateTextures = true;
+      }
+      if ( ImGui::DragFloat("Max elevation", &terrain._MaxElevation, 0.1f, -200.f, 500.f, "%.2f") )
+      {
+        rebuildGrid = true;
+        updateMesh = true;
+        updateTextures = true;
+      }
+      int gridRes[2] = { terrain._GridResolution.x, terrain._GridResolution.y };
+      if ( ImGui::SliderInt2("Grid resolution", gridRes, 17, 257) )
+      {
+        terrain._GridResolution = Vec2i(MathUtil::Clamp(gridRes[0], 9, 257), MathUtil::Clamp(gridRes[1], 9, 257));
+        rebuildGrid = true;
+        updateMesh = true;
+        updateTextures = true;
+      }
+      if ( ImGui::SliderInt("Smooth passes", &terrain._SmoothPasses, 0, 12) )
+      {
+        rebuildGrid = true;
+        updateMesh = true;
+        updateTextures = true;
+      }
+      if ( ImGui::Checkbox("Island border falloff", &terrain._IslandFalloff) )
+      {
+        rebuildGrid = true;
+        updateMesh = true;
+        updateTextures = true;
+      }
+
+      ImGui::Separator();
+      ImGui::TextUnformatted("Water Plane (Elevation < Water Level)");
+      transformDirty |= ImGui::Checkbox("Enable water plane", &terrain._WaterEnabled);
+      transformDirty |= ImGui::DragFloat("Water level", &terrain._WaterLevel, 0.05f, -100.f, 100.f, "%.2f");
+
+      int waterMatIndex = 0;
+      for ( int i = 0; i < static_cast<int>(ioContext._Map._Materials.size()); ++i )
+      {
+        if ( ioContext._Map._Materials[i]._Name == terrain._WaterMaterialName )
+          waterMatIndex = i;
+      }
+      const char * waterMatPreview = ioContext._Map._Materials.empty() ? "" : ioContext._Map._Materials[waterMatIndex]._Name.c_str();
+      if ( ImGui::BeginCombo("Water material", waterMatPreview) )
+      {
+        for ( int i = 0; i < static_cast<int>(ioContext._Map._Materials.size()); ++i )
+        {
+          const bool selected = ( i == waterMatIndex );
+          if ( ImGui::Selectable(ioContext._Map._Materials[i]._Name.c_str(), selected) )
+          {
+            terrain._WaterMaterialName = ioContext._Map._Materials[i]._Name;
+            transformDirty = true;
+          }
+          if ( selected )
+            ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+      }
+
+      ImGui::Separator();
+      ImGui::TextUnformatted("Elevation Material Layers");
+      if ( ImGui::Button("Add layer") )
+      {
+        FpsTerrainLayer layer;
+        layer._MaterialName = "grass";
+        layer._MinElevation = 0.f;
+        layer._MaxElevation = 10.f;
+        layer._Feather = 1.5f;
+        layer._SlopeWeight = 0.f;
+        layer._UVScale = 12.f;
+        terrain._Layers.push_back(layer);
+        updateTextures = true;
+      }
+      ImGui::SameLine();
+      if ( ImGui::Button("Reset default layers") )
+      {
+        FpsTerrain::SeedDefaultLayers(terrain);
+        updateTextures = true;
+      }
+
+      for ( int layerIdx = 0; layerIdx < static_cast<int>(terrain._Layers.size()); ++layerIdx )
+      {
+        ImGui::PushID(layerIdx);
+        FpsTerrainLayer & layer = terrain._Layers[layerIdx];
+        const std::string headerLabel = "Layer " + std::to_string(layerIdx) + ": " + layer._MaterialName + " [" + std::to_string(static_cast<int>(std::round(layer._MinElevation))) + " .. " + std::to_string(static_cast<int>(std::round(layer._MaxElevation))) + "]###terrainLayer" + std::to_string(layerIdx);
+        if ( ImGui::TreeNode(headerLabel.c_str()) )
+        {
+          int matIdx = 0;
+          for ( int m = 0; m < static_cast<int>(ioContext._Map._Materials.size()); ++m )
+          {
+            if ( ioContext._Map._Materials[m]._Name == layer._MaterialName )
+              matIdx = m;
+          }
+          const char * matPreview = ioContext._Map._Materials.empty() ? "" : ioContext._Map._Materials[matIdx]._Name.c_str();
+          if ( ImGui::BeginCombo("Layer material", matPreview) )
+          {
+            for ( int m = 0; m < static_cast<int>(ioContext._Map._Materials.size()); ++m )
+            {
+              const bool selected = ( m == matIdx );
+              if ( ImGui::Selectable(ioContext._Map._Materials[m]._Name.c_str(), selected) )
+              {
+                layer._MaterialName = ioContext._Map._Materials[m]._Name;
+                updateTextures = true;
+              }
+              if ( selected )
+                ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+          }
+
+          updateTextures |= ImGui::DragFloat("Min height", &layer._MinElevation, 0.1f, -200.f, 500.f, "%.2f");
+          updateTextures |= ImGui::DragFloat("Max height", &layer._MaxElevation, 0.1f, -200.f, 500.f, "%.2f");
+          updateTextures |= ImGui::DragFloat("Blend feather", &layer._Feather, 0.05f, 0.01f, 50.f, "%.2f");
+          updateTextures |= ImGui::SliderFloat("Slope weight (cliff)", &layer._SlopeWeight, 0.f, 1.f, "%.2f");
+          updateTextures |= ImGui::DragFloat("UV scale", &layer._UVScale, 0.25f, 0.1f, 128.f, "%.2f");
+
+          if ( ImGui::Button("Delete layer") && ( terrain._Layers.size() > 1 ) )
+          {
+            terrain._Layers.erase(terrain._Layers.begin() + layerIdx);
+            updateTextures = true;
+            ImGui::TreePop();
+            ImGui::PopID();
+            break;
+          }
+          ImGui::TreePop();
+        }
+        ImGui::PopID();
+      }
+
+      ImGui::Separator();
+      ImGui::TextUnformatted("3D Sculpt Brush (LMB on terrain in viewport)");
+      static const char * brushModes[] = { "Off (Transform Gizmo)", "Raise", "Lower", "Smooth", "Flatten" };
+      int brushMode = static_cast<int>(_TerrainBrushMode);
+      if ( ImGui::Combo("Brush mode", &brushMode, brushModes, 5) )
+        _TerrainBrushMode = static_cast<FpsTerrainBrushMode>(brushMode);
+
+      if ( FpsTerrainBrushMode::Off != _TerrainBrushMode )
+      {
+        ImGui::SliderFloat("Brush radius", &_TerrainBrushRadius, 0.5f, 40.f, "%.2f");
+        ImGui::SliderFloat("Brush strength", &_TerrainBrushStrength, 0.2f, 25.f, "%.2f");
+        if ( FpsTerrainBrushMode::Flatten == _TerrainBrushMode )
+        {
+          ImGui::DragFloat("Flatten height", &_TerrainBrushFlattenHeight, 0.1f, -100.f, 200.f, "%.2f");
+          if ( _HasTerrainBrushHover && ImGui::Button("Use hovered height") )
+            _TerrainBrushFlattenHeight = _TerrainBrushHoverPos.y - terrain._Center.y;
+        }
+      }
+
+      if ( transformDirty || rebuildGrid || updateMesh || updateTextures )
+      {
+        SyncTerrain(ioContext, index, rebuildGrid, reloadHeightmap, updateMesh, updateTextures);
+        MarkDirty();
       }
     }
   }
@@ -2334,6 +3100,8 @@ void FpsGameEditor::DrawMaterialsPanel( FpsGameEditorContext & ioContext )
         }
         if ( ioContext._Renderer )
           ioContext._Renderer -> Notify(DirtyState::SceneMaterials);
+        for ( int t = 0; t < static_cast<int>(ioContext._Map._Terrains.size()); ++t )
+          SyncTerrain(ioContext, t, false, false, false, true);
         MarkDirty();
       }
     }
@@ -2369,6 +3137,7 @@ void FpsGameEditor::DrawSettingsPanel( FpsGameEditorContext & ioContext )
   const bool hasEditableSelection = ( FpsEditableKind::Box == _Selection._Kind )
                                  || ( FpsEditableKind::Collider == _Selection._Kind )
                                  || ( FpsEditableKind::Prop == _Selection._Kind )
+                                 || ( FpsEditableKind::Terrain == _Selection._Kind )
                                  || ( FpsEditableKind::Light == _Selection._Kind )
                                  || ( FpsEditableKind::Boids == _Selection._Kind );
   ImGui::BeginDisabled(!hasEditableSelection);
@@ -2879,6 +3648,57 @@ int FpsGameEditor::DrawOverlays( FpsGameEditorContext & ioContext )
     EditorDrawTransformedBox(EditorBoidsTransform(boids), view, proj, drawList, color, selected ? 2.5f : 1.5f);
   }
 
+  if ( FpsEditableKind::Terrain == _Selection._Kind )
+  {
+    const int terrainIndex = _Selection._Index;
+    if ( ( terrainIndex >= 0 ) && ( terrainIndex < static_cast<int>(ioContext._Map._Terrains.size()) ) )
+    {
+      const FpsMapTerrain & terrain = ioContext._Map._Terrains[terrainIndex];
+      const float halfX = std::max(0.5f, terrain._Size.x * 0.5f);
+      const float halfZ = std::max(0.5f, terrain._Size.y * 0.5f);
+      const float minY = std::min(terrain._MinElevation, terrain._MaxElevation) - 0.1f;
+      const float maxY = std::max(terrain._MinElevation, terrain._MaxElevation) + 0.1f;
+      AABB<Vec3> box;
+      box.Insert(Vec3(-halfX, minY, -halfZ));
+      box.Insert(Vec3( halfX, maxY,  halfZ));
+      EditorDrawTransformedAABB(box, glm::translate(terrain._Center), view, proj, drawList, selectedColor, 2.2f);
+
+      if ( terrain._WaterEnabled )
+      {
+        AABB<Vec3> waterBox;
+        waterBox.Insert(Vec3(-halfX, terrain._WaterLevel - 0.02f, -halfZ));
+        waterBox.Insert(Vec3( halfX, terrain._WaterLevel + 0.02f,  halfZ));
+        EditorDrawTransformedAABB(waterBox, glm::translate(terrain._Center), view, proj, drawList, IM_COL32(64, 196, 255, 220), 1.8f);
+      }
+
+      if ( ( FpsTerrainBrushMode::Off != _TerrainBrushMode )
+        && _HasTerrainBrushHover
+        && ( terrainIndex < static_cast<int>(ioContext._GameWorld.GetTerrainRuntimes().size()) ) )
+      {
+        const FpsTerrainRuntime & runtime = ioContext._GameWorld.GetTerrainRuntimes()[terrainIndex];
+        const ImU32 brushColor = IM_COL32(96, 255, 128, 240);
+        const int segments = 36;
+        ImVec2 prevScreen;
+        bool hasPrev = false;
+        for ( int s = 0; s <= segments; ++s )
+        {
+          const float angle = ( static_cast<float>(s) / static_cast<float>(segments) ) * 2.f * static_cast<float>(M_PI);
+          const float wx = _TerrainBrushHoverPos.x + std::cos(angle) * _TerrainBrushRadius;
+          const float wz = _TerrainBrushHoverPos.z + std::sin(angle) * _TerrainBrushRadius;
+          float wy = _TerrainBrushHoverPos.y;
+          Vec3 wn(0.f, 1.f, 0.f);
+          FpsTerrain::SampleHeightAndNormal(terrain, runtime, wx, wz, wy, wn);
+          ImVec2 curScreen;
+          const bool visible = EditorProjectPoint(Vec3(wx, wy + 0.06f, wz), view, proj, io.DisplaySize, curScreen);
+          if ( visible && hasPrev )
+            drawList -> AddLine(prevScreen, curScreen, brushColor, 2.2f);
+          prevScreen = curScreen;
+          hasPrev = visible;
+        }
+      }
+    }
+  }
+
   return 0;
 }
 
@@ -3048,6 +3868,37 @@ int FpsGameEditor::DrawGizmo( FpsGameEditorContext & ioContext )
       }
       MarkDirty();
       ioContext._ReloadBoids = true;
+    }
+  }
+  else if ( ( FpsEditableKind::Terrain == _Selection._Kind ) && ( FpsTerrainBrushMode::Off == _TerrainBrushMode ) )
+  {
+    const int index = _Selection._Index;
+    if ( ( index < 0 ) || ( index >= static_cast<int>(ioContext._Map._Terrains.size()) ) )
+      return 0;
+    if ( rotateMode )
+      return 0;
+
+    FpsMapTerrain & terrain = ioContext._Map._Terrains[index];
+    Mat4x4 transform = glm::translate(terrain._Center);
+    if ( scaleMode )
+      transform = transform * glm::scale(Vec3(std::max(1.f, terrain._Size.x), std::max(0.5f, terrain._MaxElevation - terrain._MinElevation), std::max(1.f, terrain._Size.y)));
+
+    if ( ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj),
+                              scaleMode ? ImGuizmo::SCALE : ImGuizmo::TRANSLATE, ImGuizmo::WORLD,
+                              glm::value_ptr(transform)) )
+    {
+      terrain._Center = Vec3(transform[3]);
+      if ( scaleMode )
+      {
+        terrain._Size.x = std::max(1.f, glm::length(Vec3(transform[0])));
+        terrain._Size.y = std::max(1.f, glm::length(Vec3(transform[2])));
+        const float heightSpan = std::max(0.5f, glm::length(Vec3(transform[1])));
+        terrain._MaxElevation = terrain._MinElevation + heightSpan;
+        SyncTerrain(ioContext, index, true, false, true, true);
+      }
+      else
+        SyncTerrain(ioContext, index, false, false, false, false);
+      MarkDirty();
     }
   }
 

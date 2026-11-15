@@ -5,6 +5,7 @@
 #include "FpsDecals.h"
 #include "FpsHeadBob.h"
 #include "FpsProjectiles.h"
+#include "FpsTerrain.h"
 #include "MathUtil.h"
 
 #include <map>
@@ -238,6 +239,11 @@ public:
   const std::vector<FpsCollisionObb> & GetPropCollisionColliders() const { return _PropCollisionColliders; }
   void SetPropCollisionColliders( const std::vector<FpsCollisionObb> & iColliders ) { _PropCollisionColliders = iColliders; }
   void ClearPropCollisionColliders() { _PropCollisionColliders.clear(); }
+  const std::vector<FpsMapTerrain> & GetTerrains() const { return _Terrains; }
+  std::vector<FpsMapTerrain> & GetTerrains() { return _Terrains; }
+  const std::vector<FpsTerrainRuntime> & GetTerrainRuntimes() const { return _TerrainRuntimes; }
+  std::vector<FpsTerrainRuntime> & GetTerrainRuntimes() { return _TerrainRuntimes; }
+  void RebuildTerrainRuntime( int iTerrainIndex, bool iReloadHeightmap = false );
   const std::vector<FpsProjectile> & GetProjectiles() const { return _Projectiles.GetProjectiles(); }
   int GetActiveProjectileCount() const { return _Projectiles.GetActiveCount(); }
   int GetProjectileAmmo() const { return _Projectiles.GetAmmo(); }
@@ -275,6 +281,8 @@ protected:
   FpsPlayer                  _Player;
   std::vector<FpsSceneObject> _Objects;
   std::vector<FpsCollisionObb>     _PropCollisionColliders;
+  std::vector<FpsMapTerrain>       _Terrains;
+  std::vector<FpsTerrainRuntime>   _TerrainRuntimes;
   FpsProjectiles             _Projectiles;
   FpsDecals                  _Decals;
   Vec3                       _SpawnPosition = Vec3(0.f, 0.05f, -8.f);
@@ -305,6 +313,17 @@ struct FpsLoadedWeaponModel
   int                 _AnimCount = 0;
 };
 
+struct FpsLoadedTerrain
+{
+  int   _MeshID = -1;
+  int   _InstanceID = -1;
+  int   _MaterialID = -1;
+  int   _AlbedoTexID = -1;
+  int   _MetallicRoughnessTexID = -1;
+  int   _WaterInstanceID = -1;
+  Vec2i _BuiltGridResolution = Vec2i(0, 0);
+};
+
 class FpsGameSceneBinding
 {
 public:
@@ -316,6 +335,9 @@ public:
   void SetViewWeaponVisible( Scene & iScene, bool iVisible );
   int SyncProp( Scene & iScene, const FpsGameMap & iMap, int iPropIndex );
   int LoadProp( Scene & iScene, const FpsGameMap & iMap, int iPropIndex );
+  int LoadTerrain( Scene & iScene, const FpsGameMap & iMap, const FpsGameWorld & iWorld, int iTerrainIndex );
+  int SyncTerrain( Scene & iScene, const FpsGameMap & iMap, const FpsGameWorld & iWorld, int iTerrainIndex, bool iUpdateMesh = false, bool iUpdateTextures = false, bool * oTopologyChanged = nullptr );
+  int GetTerrainInstanceID( int iTerrainIndex ) const;
   int BuildPropCollisionColliders( Scene & iScene, const FpsGameMap & iMap, std::vector<FpsCollisionObb> & oColliders ) const;
   int BuildPropBoundsColliders( Scene & iScene, const FpsGameMap & iMap, int iPropIndex, std::vector<FpsMapPropCollider> & oColliders ) const;
   int SetObjectInstanceVisible( Scene & iScene, int iObjectIndex, bool iVisible );
@@ -327,12 +349,15 @@ protected:
   int EnsureResources( Scene & iScene, const FpsGameMap * iMap );
   int LoadViewWeaponSlot( Scene & iScene, int iSlotIndex, const std::string & iPath );
   int LoadProps( Scene & iScene, const FpsGameMap & iMap );
+  int LoadTerrains( Scene & iScene, const FpsGameMap & iMap, const FpsGameWorld & iWorld );
   int AddLights( Scene & iScene, const FpsGameMap * iMap );
   Mat4x4 BuildObjectTransform( const FpsSceneObject & iObject ) const;
   Mat4x4 BuildProjectileTransform( const FpsProjectile & iProjectile, const FpsGameSettings & iSettings ) const;
   Mat4x4 BuildDecalTransform( const FpsDecal & iDecal, const FpsGameSettings & iSettings ) const;
   Mat4x4 BuildViewWeaponTransform( const FpsGameWorld & iWorld, const FpsGameSettings & iSettings, int iSlotIndex ) const;
   Mat4x4 BuildPropTransform( const FpsMapProp & iProp ) const;
+  Mat4x4 BuildTerrainTransform( const FpsMapTerrain & iTerrain ) const;
+  Mat4x4 BuildTerrainWaterTransform( const FpsMapTerrain & iTerrain ) const;
   int MaterialID( FpsMaterialSlot iMaterial ) const;
   int MaterialID( const std::string & iMaterialName, FpsMaterialSlot iFallback ) const;
 
@@ -347,6 +372,7 @@ protected:
   std::vector<int> _ObjectInstanceIDs;
   std::vector<std::vector<int>> _PropInstanceIDs;
   std::vector<std::vector<Mat4x4>> _PropBaseTransforms;
+  std::vector<FpsLoadedTerrain> _Terrains;
   std::vector<int> _ProjectileInstanceIDs;
   std::vector<int> _DecalInstanceIDs;
   FpsLoadedWeaponModel _WeaponModels[(int)FpsWeaponId::Count];

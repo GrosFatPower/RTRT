@@ -21,6 +21,7 @@ public:
   virtual ~Texture();
 
   bool Load( const std::string & iFilename, int iNbComponents = 4, TexFormat iFormat = TexFormat::TEX_UNSIGNED_BYTE );
+  bool UpdateData( const unsigned char * iTexData, int iWidth, int iHeight, int iNbComponents );
 
   bool Resize( int iWidth, int iHeight );
 

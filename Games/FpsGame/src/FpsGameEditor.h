@@ -81,6 +81,7 @@ enum class FpsEditableKind
   Box,
   Collider,
   Prop,
+  Terrain,
   Light,
   Boids,
   PlayerSpawn,
@@ -108,11 +109,14 @@ public:
   void SetPathBuffers( const std::string & iMapPath );
   void SetStatus( const std::string & iMessage );
   void RefreshPropAssets();
+  void RefreshHeightmapAssets();
   void SyncMapFromRuntimeSettings( FpsGameEditorContext & ioContext );
   bool AddDroppedProp( FpsGameEditorContext & ioContext, const std::filesystem::path & iPath, const Vec3 & iPosition );
+  bool AddDroppedHeightmap( FpsGameEditorContext & ioContext, const std::filesystem::path & iPath, const Vec3 & iPosition );
 
   void SyncObject( FpsGameEditorContext & ioContext, int iObjectIndex );
   void SyncProp( FpsGameEditorContext & ioContext, int iPropIndex );
+  void SyncTerrain( FpsGameEditorContext & ioContext, int iTerrainIndex, bool iRebuildRuntime = false, bool iReloadHeightmap = false, bool iUpdateMesh = false, bool iUpdateTextures = false );
   void SyncLight( FpsGameEditorContext & ioContext, int iLightIndex );
 
   bool DeleteSelectedItem( FpsGameEditorContext & ioContext );
@@ -125,6 +129,7 @@ public:
   bool BuildPickingRay( const FpsGameEditorContext & iContext, double iMouseX, double iMouseY, Vec3 & oRayOrigin, Vec3 & oRayDir ) const;
   bool PickSelection( const FpsGameEditorContext & iContext, double iMouseX, double iMouseY, FpsEditorSelection & oSelection ) const;
   void HandleMousePick( const FpsGameEditorContext & iContext, double iMouseX, double iMouseY );
+  void UpdateViewportInteraction( FpsGameEditorContext & ioContext, double iMouseX, double iMouseY, bool iLeftMouseHeld, float iDeltaTime );
 
   void DrawDockspace();
   void DrawPanels( FpsGameEditorContext & ioContext );
@@ -140,6 +145,8 @@ public:
   void SaveMapAsDialog( FpsGameEditorContext & ioContext );
   void LoadMapFromDialog( FpsGameEditorContext & ioContext );
   void LoadPropFromDialog( FpsGameEditorContext & ioContext );
+  void LoadHeightmapFromDialog( FpsGameEditorContext & ioContext );
+  void SaveHeightmapAsDialog( FpsGameEditorContext & ioContext, int iTerrainIndex );
   int DrawRenderSettingsUI( FpsGameEditorContext & ioContext );
   int DrawPerformanceUI( FpsGameEditorContext & ioContext );
   int DrawOverlays( FpsGameEditorContext & ioContext );
@@ -168,9 +175,21 @@ protected:
   char               _NewPropName[128] = "New Prop";
   int                _NewPropAssetIndex = -1;
   std::vector<std::string> _PropAssetPaths;
+  char               _NewTerrainName[128] = "New Terrain";
+  int                _NewTerrainAssetIndex = -1;
+  std::vector<std::string> _HeightmapAssetPaths;
+  FpsTerrainBrushMode _TerrainBrushMode = FpsTerrainBrushMode::Off;
+  float              _TerrainBrushRadius = 8.f;
+  float              _TerrainBrushStrength = 4.f;
+  float              _TerrainBrushFlattenHeight = 0.f;
+  bool               _HasTerrainBrushHover = false;
+  bool               _TerrainStrokeActive = false;
+  Vec3               _TerrainBrushHoverPos = Vec3(0.f);
+  Vec3               _TerrainBrushHoverNormal = Vec3(0.f, 1.f, 0.f);
   std::vector<bool>  _ObjectInstanceVisible;
   std::filesystem::path _LastMapDialogDirectory;
   std::filesystem::path _LastPropDialogDirectory;
+  std::filesystem::path _LastHeightmapDialogDirectory;
   std::string        _StatusMessage;
 };
 

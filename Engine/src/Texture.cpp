@@ -122,6 +122,33 @@ bool Texture::Load( const std::string & iFilename, int iNbComponents, TexFormat 
 }
 
 // ----------------------------------------------------------------------------
+// UpdateData
+// ----------------------------------------------------------------------------
+bool Texture::UpdateData( const unsigned char * iTexData, int iWidth, int iHeight, int iNbComponents )
+{
+  if ( !iTexData || ( iWidth <= 0 ) || ( iHeight <= 0 ) || ( iNbComponents <= 0 ) )
+    return false;
+
+  const size_t byteCount = static_cast<size_t>(iWidth) * static_cast<size_t>(iHeight) * static_cast<size_t>(iNbComponents);
+  if ( !_TexData || ( _Width != iWidth ) || ( _Height != iHeight ) || ( _NbComponents != iNbComponents ) || ( _Format != TexFormat::TEX_UNSIGNED_BYTE ) )
+  {
+    if ( _TexData )
+      stbi_image_free(_TexData);
+    _TexData = new unsigned char[byteCount];
+    _Width = iWidth;
+    _Height = iHeight;
+    _NbComponents = iNbComponents;
+    _Format = TexFormat::TEX_UNSIGNED_BYTE;
+  }
+
+  std::memcpy(_TexData, iTexData, byteCount);
+  if ( _MipLevels > 0 )
+    GenerateMipMaps();
+
+  return true;
+}
+
+// ----------------------------------------------------------------------------
 // Resize
 // ----------------------------------------------------------------------------
 bool Texture::Resize( int iWidth, int iHeight )

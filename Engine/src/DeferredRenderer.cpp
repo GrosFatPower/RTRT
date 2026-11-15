@@ -1218,7 +1218,7 @@ int DeferredRenderer::ReloadScene()
     attrs.emplace_back(1u, 3, GL_FLOAT, GL_FALSE, stride, offsetof(GPUMeshVertex, _Normal));
     attrs.emplace_back(2u, 2, GL_FLOAT, GL_FALSE, stride, offsetof(GPUMeshVertex, _UV));
 
-    const GLenum vertexUsage = mesh -> IsSkinned() ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW;
+    const GLenum vertexUsage = mesh -> IsDynamic() ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW;
     GLUtil::CreateMeshBuffers( static_cast<GLsizeiptr>(outVertices.size() * sizeof(GPUMeshVertex)), outVertices.data(),
                                static_cast<GLsizeiptr>(outIndices.size() * sizeof(uint32_t)), outIndices.data(),
                                attrs,
@@ -1322,7 +1322,7 @@ int DeferredRenderer::UpdateDynamicMeshes()
   for ( size_t mi = 0; mi < meshCount; ++mi )
   {
     Mesh * mesh = meshes[mi];
-    if ( !mesh || !mesh -> IsSkinned() || !_MeshVBOs[mi] )
+    if ( !mesh || !mesh -> IsDynamic() || !_MeshVBOs[mi] )
       continue;
 
     const std::vector<Vec3> & srcPos  = mesh -> GetVertices();

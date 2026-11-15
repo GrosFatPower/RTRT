@@ -3,6 +3,7 @@
 
 #include "Boids.h"
 #include "FpsGame.h"
+#include "FpsTerrain.h"
 #include "Light.h"
 #include "Material.h"
 #include "MathUtil.h"
@@ -129,6 +130,7 @@ struct FpsGameMap
   std::vector<FpsMapMaterial> _Materials;
   std::vector<FpsSceneObject> _Objects;
   std::vector<FpsMapProp>     _Props;
+  std::vector<FpsMapTerrain>  _Terrains;
   std::vector<FpsMapBoids>    _Boids;
   std::vector<Light>          _Lights;
   int                         _MaxProjectiles = -1;

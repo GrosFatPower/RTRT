@@ -70,9 +70,39 @@ render {
   denoiser oidn
 }
 
-material "wall" {
-  albedo 0.340000 0.370000 0.420000
-  roughness 0.650000
+material "seabed" {
+  albedo 0.160000 0.190000 0.180000
+  roughness 0.900000
+  metallic 0.000000
+  reflectance 0.350000
+  emission 0.000000 0.000000 0.000000
+  opacity 1.000000
+  alphamode opaque
+}
+
+material "sand" {
+  albedo 0.760000 0.680000 0.480000
+  roughness 0.820000
+  metallic 0.000000
+  reflectance 0.450000
+  emission 0.000000 0.000000 0.000000
+  opacity 1.000000
+  alphamode opaque
+}
+
+material "grass" {
+  albedo 0.240000 0.440000 0.180000
+  roughness 0.780000
+  metallic 0.000000
+  reflectance 0.450000
+  emission 0.000000 0.000000 0.000000
+  opacity 1.000000
+  alphamode opaque
+}
+
+material "rock" {
+  albedo 0.420000 0.400000 0.380000
+  roughness 0.720000
   metallic 0.000000
   reflectance 0.500000
   emission 0.000000 0.000000 0.000000
@@ -80,44 +110,60 @@ material "wall" {
   alphamode opaque
 }
 
-box "Box 0" {
+material "snow" {
+  albedo 0.920000 0.940000 0.970000
+  roughness 0.350000
+  metallic 0.000000
+  reflectance 0.650000
+  emission 0.000000 0.000000 0.000000
+  opacity 1.000000
+  alphamode opaque
+}
+
+material "water" {
+  albedo 0.100000 0.360000 0.480000
+  roughness 0.060000
+  metallic 0.000000
+  reflectance 0.850000
+  emission 0.000000 0.000000 0.000000
+  opacity 0.680000
+  alphamode blend
+}
+
+collider "Box 0" {
   center -68.095139 2.000000 25.846018
   rotation 0.000000 0.000000 0.000000
   orientation 0.000000 0.000000 0.000000 1.000000
   half 262.307098 3.000000 0.500000
-  material "wall"
   collidable true
-  visible true
+  visible false
 }
 
-box "Box 0 Copy" {
+collider "Box 0 Copy" {
   center -67.095139 2.000000 -205.541016
   rotation 0.000000 0.000000 0.000000
   orientation 0.000000 0.000000 0.000000 1.000000
   half 262.307098 3.000000 0.500000
-  material "wall"
   collidable true
-  visible true
+  visible false
 }
 
-box "Box 0 Copy 2" {
+collider "Box 0 Copy 2" {
   center -329.626373 2.000000 -90.479301
   rotation 180.000000 90.000000 180.000000
   orientation 0.000000 0.707107 0.000000 0.707107
   half 118.699921 3.000000 0.010000
-  material "wall"
   collidable true
-  visible true
+  visible false
 }
 
-box "Box 0 Copy 2 Copy" {
+collider "Box 0 Copy 2 Copy" {
   center 192.031052 2.000000 -89.479301
   rotation 180.000000 90.000000 180.000000
   orientation 0.000000 0.707107 0.000000 0.707107
   half 118.699921 3.000000 0.010000
-  material "wall"
   collidable true
-  visible true
+  visible false
 }
 
 prop "City" {
@@ -8268,6 +8314,67 @@ prop "City" {
     center -6621.147949 207.265869 -15649.970703
     rotation 0.000000 0.000000 0.000000
     half 100.000000 187.265869 0.001000
+  }
+}
+
+terrain "New Terrain" {
+  heightmap "Heightmap/heightmap_20261115110046_JL3L.png"
+  center 22.918007 -9.155256 -43.317169
+  size 1000.000000 1000.000000
+  min_elevation -3.500000
+  max_elevation 18.000000
+  resolution 129 129
+  smooth_passes 2
+  island_falloff false
+  water_enabled true
+  water_level 0.000000
+  water_material "water"
+  collidable true
+  visible true
+
+  layer "seabed" {
+    material "seabed"
+    min_elevation -10.000000
+    max_elevation -0.150000
+    feather 0.800000
+    slope_weight 0.000000
+    uv_scale 16.000000
+  }
+
+  layer "sand" {
+    material "sand"
+    min_elevation -0.350000
+    max_elevation 1.600000
+    feather 0.900000
+    slope_weight -0.350000
+    uv_scale 20.000000
+  }
+
+  layer "grass" {
+    material "grass"
+    min_elevation 1.000000
+    max_elevation 9.500000
+    feather 1.800000
+    slope_weight -0.450000
+    uv_scale 18.000000
+  }
+
+  layer "rock" {
+    material "rock"
+    min_elevation 7.000000
+    max_elevation 17.500000
+    feather 2.200000
+    slope_weight 0.750000
+    uv_scale 14.000000
+  }
+
+  layer "snow" {
+    material "snow"
+    min_elevation 14.500000
+    max_elevation 40.000000
+    feather 2.500000
+    slope_weight -0.300000
+    uv_scale 16.000000
   }
 }
 

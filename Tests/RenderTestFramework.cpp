@@ -6,6 +6,8 @@
 #include "DroppedFileUtils.h"
 #include "FpsDecals.h"
 #include "FpsGame.h"
+#include "FpsGameMap.h"
+#include "FpsTerrain.h"
 #include "ProceduralMesh.h"
 #include "Camera.h"
 #include "RenderSettings.h"
@@ -1267,6 +1269,157 @@ int RunUnitTests( const std::filesystem::path & iArtifactsDir, bool iUseColor, b
         ++visibleDecalInstances;
     }
     return ( 1 == visibleDecalInstances );
+  }) )
+    return 1;
+
+  if ( !RunUnitTest("fps_terrain", [iQuiet]() {
+    ScopedOutputSilencer outputSilencer(iQuiet);
+
+    FPS::FpsGameMap map;
+    FPS::FpsGameMapLoader::SeedDefaultMaterials(map);
+
+    FPS::FpsMapTerrain terrain;
+    terrain._Name = "Island Terrain";
+    terrain._HeightmapPath = "Heightmap/heightmap_20261115110046_JL3L.png";
+    terrain._Center = Vec3(0.f, 0.f, 20.f);
+    terrain._Size = Vec2(64.f, 64.f);
+    terrain._MinElevation = -4.f;
+    terrain._MaxElevation = 18.f;
+    terrain._GridResolution = Vec2i(65, 65);
+    terrain._SmoothPasses = 2;
+    terrain._IslandFalloff = false;
+    terrain._WaterEnabled = true;
+    terrain._WaterLevel = 0.f;
+    terrain._WaterMaterialName = "water";
+    terrain._Collidable = true;
+    terrain._Visible = true;
+    FPS::FpsTerrain::SeedDefaultLayers(terrain);
+
+    FPS::FpsTerrainRuntime runtime;
+    if ( !FPS::FpsTerrain::LoadOrGenerateRuntime(terrain, runtime) )
+    {
+      std::cerr << "Unit test failed: FpsTerrain::LoadOrGenerateRuntime failed." << std::endl;
+      return false;
+    }
+    if ( ( runtime._GridResolution != Vec2i(65, 65) ) || ( runtime._GridHeights.size() != 65u * 65u ) )
+    {
+      std::cerr << "Unit test failed: FpsTerrain grid size mismatch." << std::endl;
+      return false;
+    }
+
+    float sampledY = 0.f;
+    Vec3 sampledNormal(0.f);
+    if ( !FPS::FpsTerrain::SampleHeightAndNormal(terrain, runtime, 0.f, 20.f, sampledY, sampledNormal) )
+    {
+      std::cerr << "Unit test failed: FpsTerrain::SampleHeightAndNormal failed inside bounds." << std::endl;
+      return false;
+    }
+    if ( ( sampledY < terrain._MinElevation - 0.01f ) || ( sampledY > terrain._MaxElevation + 0.01f ) || ( sampledNormal.y <= 0.f ) )
+    {
+      std::cerr << "Unit test failed: FpsTerrain sampled height/normal out of range." << std::endl;
+      return false;
+    }
+
+    std::vector<float> weightsLow;
+    std::vector<float> weightsHigh;
+    FPS::FpsTerrain::EvaluateLayerWeights(terrain, -3.f, Vec3(0.f, 1.f, 0.f), weightsLow);
+    FPS::FpsTerrain::EvaluateLayerWeights(terrain, 20.f, Vec3(0.f, 1.f, 0.f), weightsHigh);
+    if ( ( weightsLow.size() != terrain._Layers.size() ) || ( weightsLow[0] <= 0.5f ) || ( weightsHigh.back() <= 0.5f ) )
+    {
+      std::cerr << "Unit test failed: FpsTerrain::EvaluateLayerWeights elevation distribution." << std::endl;
+      return false;
+    }
+
+    FPS::FpsCollisionRayResult rayHit;
+    if ( !FPS::FpsTerrain::Raycast(terrain, runtime, Vec3(0.f, 40.f, 20.f), Vec3(0.f, -1.f, 0.f), 100.f, rayHit) || !rayHit._Hit )
+    {
+      std::cerr << "Unit test failed: FpsTerrain::Raycast vertical ray miss." << std::endl;
+      return false;
+    }
+    if ( std::abs(rayHit._Point.y - sampledY) > 0.05f )
+    {
+      std::cerr << "Unit test failed: FpsTerrain::Raycast height mismatch." << std::endl;
+      return false;
+    }
+
+    const float beforeBrushY = sampledY;
+    if ( !FPS::FpsTerrain::ApplyBrush(terrain, runtime, FPS::FpsTerrainBrushMode::Raise, Vec3(0.f, sampledY, 20.f), 6.f, 10.f, 0.1f, 0.f) )
+    {
+      std::cerr << "Unit test failed: FpsTerrain::ApplyBrush Raise failed." << std::endl;
+      return false;
+    }
+    float afterBrushY = 0.f;
+    FPS::FpsTerrain::SampleHeightAndNormal(terrain, runtime, 0.f, 20.f, afterBrushY, sampledNormal);
+    if ( afterBrushY <= beforeBrushY + 0.1f )
+    {
+      std::cerr << "Unit test failed: FpsTerrain::ApplyBrush Raise did not increase height." << std::endl;
+      return false;
+    }
+
+    map._Terrains.push_back(terrain);
+    map._Player._Position = Vec3(0.f, sampledY + 1.5f, 20.f);
+    map._Player._Yaw = 90.f;
+    map._Player._Pitch = -89.f;
+
+    const std::filesystem::path tempMapPath = std::filesystem::temp_directory_path() / "rtrt_unit_terrain_test.fpsmap";
+    if ( !FPS::FpsGameMapLoader::Save(tempMapPath.string(), map) )
+    {
+      std::cerr << "Unit test failed: FpsGameMapLoader::Save with terrain." << std::endl;
+      return false;
+    }
+    FPS::FpsGameMap loadedMap;
+    const bool loadOk = FPS::FpsGameMapLoader::Load(tempMapPath.string(), loadedMap);
+    std::error_code ec;
+    std::filesystem::remove(tempMapPath, ec);
+    if ( !loadOk || ( loadedMap._Terrains.size() != 1u ) || ( loadedMap._Terrains[0]._Layers.size() != terrain._Layers.size() ) )
+    {
+      std::cerr << "Unit test failed: FpsGameMapLoader::Load round-trip with terrain." << std::endl;
+      return false;
+    }
+
+    FPS::FpsGameSettings settings;
+    FPS::FpsGameWorld world;
+    if ( 0 != world.Initialize(settings, loadedMap) )
+      return false;
+
+    FPS::FpsGameInput idleInput;
+    for ( int step = 0; step < 30; ++step )
+      world.Update(0.03f, idleInput, settings);
+
+    if ( !world.GetPlayer()._Grounded )
+    {
+      std::cerr << "Unit test failed: player did not land on terrain." << std::endl;
+      return false;
+    }
+
+    world.SelectWeaponSlot((int)FPS::FpsWeaponId::Mark23Pistol, settings);
+    for ( int step = 0; step < 6; ++step )
+      world.Update(0.05f, idleInput, settings);
+
+    FPS::FpsGameInput fireInput;
+    fireInput._FirePressed = true;
+    fireInput._FireHeld = true;
+    world.Update(0.016f, fireInput, settings);
+    if ( world.GetActiveDecalCount() != 1 )
+    {
+      std::cerr << "Unit test failed: hitscan shot did not spawn decal on terrain." << std::endl;
+      return false;
+    }
+
+    Scene scene;
+    FPS::FpsGameSceneBinding binding;
+    if ( 0 != binding.Attach(scene, world, settings, loadedMap) )
+    {
+      std::cerr << "Unit test failed: FpsGameSceneBinding::Attach with terrain." << std::endl;
+      return false;
+    }
+    if ( binding.GetTerrainInstanceID(0) < 0 )
+    {
+      std::cerr << "Unit test failed: terrain instance was not added to Scene." << std::endl;
+      return false;
+    }
+
+    return true;
   }) )
     return 1;
 

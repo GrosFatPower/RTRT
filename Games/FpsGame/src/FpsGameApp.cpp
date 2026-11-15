@@ -492,14 +492,20 @@ void FpsGameApp::HandleDroppedFiles( int iCount, const char ** iPaths )
       continue;
 
     const std::filesystem::path filepath(DroppedFileUtils::NormalizeDroppedPath(iPaths[i]));
-    if ( !DroppedFileUtils::IsDroppedPropPath(filepath) )
+    if ( DroppedFileUtils::IsDroppedPropPath(filepath) )
     {
-      _Editor.SetStatus("Unsupported dropped file: " + DroppedFileUtils::DisplayName(filepath));
+      if ( _Editor.AddDroppedProp(editorContext, filepath, dropPosition) )
+        ++droppedProps;
       continue;
     }
 
-    if ( _Editor.AddDroppedProp(editorContext, filepath, dropPosition) )
-      ++droppedProps;
+    if ( DroppedFileUtils::IsDroppedHeightmapPath(filepath) )
+    {
+      _Editor.AddDroppedHeightmap(editorContext, filepath, dropPosition);
+      continue;
+    }
+
+    _Editor.SetStatus("Unsupported dropped file: " + DroppedFileUtils::DisplayName(filepath));
   }
 
   if ( droppedProps > 1 )
@@ -1496,6 +1502,7 @@ int FpsGameApp::InitializeScene()
   _Editor.ApplyObjectVisibility(editorContext);
   _Editor.SetPathBuffers(_MapPath);
   _Editor.RefreshPropAssets();
+  _Editor.RefreshHeightmapAssets();
 
   if ( FpsAppState::TitleScreen == _AppState )
   {
@@ -1935,6 +1942,9 @@ int FpsGameApp::ProcessInput()
 
     const bool rightMouseHeld = !ImGui::GetIO().WantCaptureMouse
                              && ( GLFW_PRESS == glfwGetMouseButton(_MainWindow.get(), GLFW_MOUSE_BUTTON_RIGHT) );
+    const bool leftMouseHeld = !ImGui::GetIO().WantCaptureMouse
+                            && !rightMouseHeld
+                            && ( GLFW_PRESS == glfwGetMouseButton(_MainWindow.get(), GLFW_MOUSE_BUTTON_LEFT) );
     double mouseX = 0., mouseY = 0.;
     if ( !ImGui::GetIO().WantCaptureMouse
       && !rightMouseHeld
@@ -1943,6 +1953,11 @@ int FpsGameApp::ProcessInput()
       && !ImGuizmo::IsUsing() )
     {
       _Editor.HandleMousePick(MakeEditorContext(), mouseX, mouseY);
+    }
+
+    {
+      FpsGameEditorContext editorContext = MakeEditorContext();
+      _Editor.UpdateViewportInteraction(editorContext, curMouseX, curMouseY, leftMouseHeld, static_cast<float>(_DeltaTime));
     }
 
     if ( rightMouseHeld )

@@ -1,6 +1,7 @@
 #include "FpsProjectiles.h"
 
 #include "FpsGame.h"
+#include "FpsTerrain.h"
 
 #include <algorithm>
 #include <cmath>
@@ -381,6 +382,45 @@ void FpsProjectiles::MoveProjectileAxis( FpsProjectile & ioProjectile, int iAxis
       ioProjectile._Velocity = Vec3(0.f);
 
     _Dirty = true;
+  }
+
+  if ( iContext._Terrains && iContext._TerrainRuntimes )
+  {
+    const size_t nbTerrains = std::min(iContext._Terrains->size(), iContext._TerrainRuntimes->size());
+    for ( size_t t = 0; t < nbTerrains; ++t )
+    {
+      const FpsMapTerrain & terrain = (*iContext._Terrains)[t];
+      const FpsTerrainRuntime & runtime = (*iContext._TerrainRuntimes)[t];
+      if ( !terrain._Collidable )
+        continue;
+
+      float terrainY = 0.f;
+      Vec3 terrainNormal(0.f, 1.f, 0.f);
+      if ( !FpsTerrain::SampleHeightAndNormal(terrain, runtime, ioProjectile._Position.x, ioProjectile._Position.z, terrainY, terrainNormal) )
+        continue;
+
+      if ( ioProjectile._Position.y - radius < terrainY )
+      {
+        ioProjectile._Position.y = terrainY + radius;
+
+        const float normalSpeed = glm::dot(ioProjectile._Velocity, terrainNormal);
+        if ( normalSpeed < 0.f )
+        {
+          if ( ( normalSpeed < -0.4f ) && ( ioProjectile._Age - ioProjectile._LastBounceAge >= 0.06f ) )
+          {
+            _BounceSoundEvents.push_back(ioProjectile._Position);
+            ioProjectile._LastBounceAge = ioProjectile._Age;
+          }
+          ioProjectile._Velocity -= ( 1.f + bounciness ) * normalSpeed * terrainNormal;
+        }
+
+        ioProjectile._Velocity *= 0.96f;
+        if ( glm::length(ioProjectile._Velocity) < 0.15f )
+          ioProjectile._Velocity = Vec3(0.f);
+
+        _Dirty = true;
+      }
+    }
   }
 }
 

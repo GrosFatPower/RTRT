@@ -37,8 +37,11 @@ public:
   void InitializeSkinningBindPose();
   void ResetToBindPose();
   void ApplySkinning( const std::vector<Mat4x4> & iJointMatrices );
+  bool UpdateGeometry( const std::vector<Vec3> & iVertices, const std::vector<Vec3> & iNormals );
 
   bool IsSkinned() const { return ( _SkinIndex >= 0 ) && !_Joints.empty() && ( _Joints.size() == _BindVertices.size() ); }
+  bool IsDynamic() const { return _Dynamic || IsSkinned(); }
+  void SetDynamic( bool iDynamic ) { _Dynamic = iDynamic; }
 
   void SetSkinIndex( int iSkinIndex ) { _SkinIndex = iSkinIndex; }
   int  GetSkinIndex() const { return _SkinIndex; }
@@ -69,6 +72,7 @@ private:
 
   // Skinning data
   int                      _SkinIndex = -1;
+  bool                     _Dynamic   = false;
   std::vector<Vec3>        _BindVertices;
   std::vector<Vec3>        _BindNormals;
   std::vector<Vec4i>       _Joints;

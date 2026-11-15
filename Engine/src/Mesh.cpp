@@ -264,4 +264,28 @@ void Mesh::ApplySkinning( const std::vector<Mat4x4> & iJointMatrices )
   _BoundingBox._High = bMax;
 }
 
+// ----------------------------------------------------------------------------
+bool Mesh::UpdateGeometry( const std::vector<Vec3> & iVertices, const std::vector<Vec3> & iNormals )
+{
+  if ( iVertices.empty() || ( iVertices.size() != _Vertices.size() ) )
+    return false;
+  if ( !iNormals.empty() && ( iNormals.size() != _Normals.size() ) )
+    return false;
+
+  _Vertices = iVertices;
+  if ( !iNormals.empty() )
+    _Normals = iNormals;
+
+  Vec3 bMin( MAX_FLOAT);
+  Vec3 bMax(-MAX_FLOAT);
+  for ( const Vec3 & v : _Vertices )
+  {
+    bMin = glm::min(bMin, v);
+    bMax = glm::max(bMax, v);
+  }
+  _BoundingBox._Low  = bMin;
+  _BoundingBox._High = bMax;
+  return true;
+}
+
 }

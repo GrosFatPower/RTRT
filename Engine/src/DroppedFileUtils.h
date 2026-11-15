@@ -13,6 +13,7 @@ namespace DroppedFileUtils
 std::filesystem::path NormalizeDroppedPath( const std::filesystem::path & iPath );
 bool IsDroppedScenePath( const std::filesystem::path & iPath );
 bool IsDroppedPropPath( const std::filesystem::path & iPath );
+bool IsDroppedHeightmapPath( const std::filesystem::path & iPath );
 std::string DisplayName( const std::filesystem::path & iPath );
 
 }

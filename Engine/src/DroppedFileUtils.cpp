@@ -37,6 +37,12 @@ bool IsDroppedPropPath( const std::filesystem::path & iPath )
   return ( ".obj" == ext ) || ( ".gltf" == ext ) || ( ".glb" == ext );
 }
 
+bool IsDroppedHeightmapPath( const std::filesystem::path & iPath )
+{
+  const std::string ext = LowerExtension(iPath);
+  return ( ".png" == ext ) || ( ".jpg" == ext ) || ( ".jpeg" == ext ) || ( ".bmp" == ext ) || ( ".tga" == ext );
+}
+
 std::string DisplayName( const std::filesystem::path & iPath )
 {
   const std::string filename = iPath.filename().string();

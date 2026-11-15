@@ -13,6 +13,8 @@ using namespace RTRT;
 struct FpsGameSettings;
 struct FpsPlayer;
 struct FpsSceneObject;
+struct FpsMapTerrain;
+struct FpsTerrainRuntime;
 
 struct FpsProjectile
 {
@@ -31,17 +33,23 @@ struct FpsProjectilesUpdateContext
   FpsProjectilesUpdateContext( const FpsGameSettings & iSettings,
                                const FpsPlayer & iPlayer,
                                const std::vector<FpsSceneObject> & iObjects,
-                               const std::vector<FpsCollisionObb> & iPropColliders )
+                               const std::vector<FpsCollisionObb> & iPropColliders,
+                               const std::vector<FpsMapTerrain> * iTerrains = nullptr,
+                               const std::vector<FpsTerrainRuntime> * iTerrainRuntimes = nullptr )
   : _Settings(iSettings)
   , _Player(iPlayer)
   , _Objects(iObjects)
   , _PropColliders(iPropColliders)
+  , _Terrains(iTerrains)
+  , _TerrainRuntimes(iTerrainRuntimes)
   {}
 
   const FpsGameSettings & _Settings;
   const FpsPlayer & _Player;
   const std::vector<FpsSceneObject> & _Objects;
   const std::vector<FpsCollisionObb> & _PropColliders;
+  const std::vector<FpsMapTerrain> * _Terrains = nullptr;
+  const std::vector<FpsTerrainRuntime> * _TerrainRuntimes = nullptr;
 };
 
 class FpsProjectiles

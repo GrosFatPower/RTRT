@@ -266,6 +266,9 @@ int SoftwareRasterizer::Update()
   if (_DirtyStates & (unsigned long)DirtyState::SceneEnvMap)
     this->ReloadEnvMap();
 
+  if (_DirtyStates & (unsigned long)DirtyState::Textures)
+    this->UpdateMipMaps();
+
   if (_DirtyStates & ( (unsigned long)DirtyState::SceneInstances | (unsigned long)DirtyState::SceneMeshData ))
   {
     const double refreshStartTime = glfwGetTime();
@@ -1072,7 +1075,7 @@ int SoftwareRasterizer::RefreshSceneInstanceTransforms()
     const MeshInstance & meshInst = meshInstances[instID];
     Mesh * curMesh = meshes[meshInst._MeshID];
     const bool transformChanged = 0 != std::memcmp(&instanceRange._Transform, &meshInst._Transform, sizeof(Mat4x4));
-    const bool meshDeformed = ( ( _DirtyStates & (unsigned long)DirtyState::SceneMeshData ) != 0 ) && curMesh && curMesh -> IsSkinned();
+    const bool meshDeformed = ( ( _DirtyStates & (unsigned long)DirtyState::SceneMeshData ) != 0 ) && curMesh && curMesh -> IsDynamic();
     const bool geometryChanged = transformChanged || meshDeformed;
     const bool materialChanged = instanceRange._MaterialID != meshInst._MaterialID;
     const bool visibilityChanged = instanceRange._Visible != meshInst._Visible;
