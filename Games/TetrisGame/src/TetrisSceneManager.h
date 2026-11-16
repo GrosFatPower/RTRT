@@ -86,6 +86,12 @@ public:
   void OrbitYawPitch( float iDeltaYaw, float iDeltaPitch );
   void OrbitZoom( float iDeltaRadius );
 
+  static constexpr float kCellPitch          = 0.96f;
+  static constexpr float kBlockScale         = 0.92f;
+  static constexpr float kBoardHalfWidth     = 5.0f * kCellPitch;
+  static constexpr float kBoardVisibleHeight = 20.0f * kCellPitch;
+  static constexpr float kBoardInnerTopY     = 21.4f * kCellPitch;
+
   static Vec3 GetBoardOrigin( int iPlayerIndex, int iNumPlayers );
   static Vec3 CellToWorld( int iX, int iY, const Vec3 & iBoardOrigin = Vec3(0.0f) );
 
