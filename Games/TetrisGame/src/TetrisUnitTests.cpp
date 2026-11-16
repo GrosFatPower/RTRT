@@ -2,8 +2,10 @@
 #include "AudioEngine.h"
 #include "GamepadInput.h"
 #include "Localization.h"
+#include "Mesh.h"
 #include "NetSession.h"
 #include "PathUtils.h"
+#include "ProceduralMesh.h"
 #include "RoomCode.h"
 #include "UpnpService.h"
 #include "TetrisGameApp.h"
@@ -17,10 +19,14 @@
 #include <GLFW/glfw3.h>
 #include <chrono>
 #include <cctype>
+#include <cmath>
 #include <cstring>
 #include <iostream>
+#include <map>
+#include <memory>
 #include <set>
 #include <thread>
+#include <tuple>
 
 namespace Tetris
 {
@@ -1181,6 +1187,106 @@ bool TetrisUnitTests::TestUserPreferencesPersistence()
 }
 
 // ----------------------------------------------------------------------------
+// TestBeveledCubeGeometry
+// ----------------------------------------------------------------------------
+bool TetrisUnitTests::TestBeveledCubeGeometry()
+{
+  using namespace RTRT;
+
+  std::unique_ptr<Mesh> mesh(ProceduralMesh::CreateBeveledCube("__TestBeveledCube", 0.085f, 4));
+  if ( !mesh )
+  {
+    std::cerr << "TestBeveledCubeGeometry: CreateBeveledCube returned null!" << std::endl;
+    return false;
+  }
+
+  const auto & verts   = mesh->GetVertices();
+  const auto & norms   = mesh->GetNormals();
+  const auto & indices = mesh->GetIndices();
+
+  if ( verts.empty() || indices.empty() || ( indices.size() % 3 != 0 ) )
+  {
+    std::cerr << "TestBeveledCubeGeometry: Invalid mesh buffers!" << std::endl;
+    return false;
+  }
+
+  // Verify unit cube bounds [-0.5, 0.5]^3
+  const AABB<Vec3> & box = mesh->GetBoundingBox();
+  if ( std::abs(box._Low.x + 0.5f) > 1e-4f || std::abs(box._High.x - 0.5f) > 1e-4f ||
+       std::abs(box._Low.y + 0.5f) > 1e-4f || std::abs(box._High.y - 0.5f) > 1e-4f ||
+       std::abs(box._Low.z + 0.5f) > 1e-4f || std::abs(box._High.z - 0.5f) > 1e-4f )
+  {
+    std::cerr << "TestBeveledCubeGeometry: Bounding box mismatch!" << std::endl;
+    return false;
+  }
+
+  using QPos = std::tuple<int, int, int>;
+  auto quantize = []( const Vec3 & iV ) -> QPos
+  {
+    return QPos(static_cast<int>(std::llround(iV.x * 10000.0f)),
+                static_cast<int>(std::llround(iV.y * 10000.0f)),
+                static_cast<int>(std::llround(iV.z * 10000.0f)));
+  };
+
+  std::map<std::pair<QPos, QPos>, int> halfEdgeCounts;
+  const size_t nbTris = indices.size() / 3;
+
+  for ( size_t t = 0; t < nbTris; ++t )
+  {
+    const Vec3i i0 = indices[t * 3 + 0];
+    const Vec3i i1 = indices[t * 3 + 1];
+    const Vec3i i2 = indices[t * 3 + 2];
+
+    const Vec3 & p0 = verts[i0.x];
+    const Vec3 & p1 = verts[i1.x];
+    const Vec3 & p2 = verts[i2.x];
+    const Vec3 & n0 = norms[i0.y];
+    const Vec3 & n1 = norms[i1.y];
+    const Vec3 & n2 = norms[i2.y];
+
+    const Vec3 crossN = glm::cross(p1 - p0, p2 - p0);
+    const float dblArea = glm::length(crossN);
+    if ( dblArea <= 1e-6f )
+    {
+      std::cerr << "TestBeveledCubeGeometry: Degenerate triangle #" << t << std::endl;
+      return false;
+    }
+
+    if ( glm::dot(crossN, n0 + n1 + n2) <= 0.0f || glm::dot(crossN, p0 + p1 + p2) <= 0.0f )
+    {
+      std::cerr << "TestBeveledCubeGeometry: Inward or inconsistent winding at triangle #" << t << std::endl;
+      return false;
+    }
+
+    const QPos q0 = quantize(p0);
+    const QPos q1 = quantize(p1);
+    const QPos q2 = quantize(p2);
+    halfEdgeCounts[{ q0, q1 }]++;
+    halfEdgeCounts[{ q1, q2 }]++;
+    halfEdgeCounts[{ q2, q0 }]++;
+  }
+
+  for ( const auto & kv : halfEdgeCounts )
+  {
+    if ( kv.second != 1 )
+    {
+      std::cerr << "TestBeveledCubeGeometry: Non-manifold half-edge count " << kv.second << std::endl;
+      return false;
+    }
+    const auto twin = std::make_pair(kv.first.second, kv.first.first);
+    auto it = halfEdgeCounts.find(twin);
+    if ( it == halfEdgeCounts.end() || it->second != 1 )
+    {
+      std::cerr << "TestBeveledCubeGeometry: Open boundary edge detected (mesh not watertight)!" << std::endl;
+      return false;
+    }
+  }
+
+  std::cout << "[PASS] Beveled cube geometry (" << nbTris << " tris, watertight outward manifold) verified." << std::endl;
+  return true;
+}
+
+// ----------------------------------------------------------------------------
 // RunAll
 // ----------------------------------------------------------------------------
 int TetrisUnitTests::RunAll()
@@ -1192,6 +1298,7 @@ int TetrisUnitTests::RunAll()
   bool ok = true;
   ok = ok && TestLocalizationCompletenessAndSwitching();
   ok = ok && TestUserPreferencesPersistence();
+  ok = ok && TestBeveledCubeGeometry();
   ok = ok && Test7BagRandomizer();
   ok = ok && TestSRSKicks();
   ok = ok && TestTSpinDetection();
@@ -1210,7 +1317,7 @@ int TetrisUnitTests::RunAll()
   std::cout << "==========================================" << std::endl;
   if ( ok )
   {
-    std::cout << "ALL TETRIS GUIDELINE, AUDIO, MULTIPLAYER, LOCALIZATION & PREFERENCES TESTS PASSED (16/16)" << std::endl;
+    std::cout << "ALL TETRIS GUIDELINE, AUDIO, MULTIPLAYER, LOCALIZATION & PREFERENCES TESTS PASSED (17/17)" << std::endl;
     std::cout << "==========================================" << std::endl;
     return 0;
   }

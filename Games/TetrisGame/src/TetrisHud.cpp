@@ -138,8 +138,9 @@ void DrawGarbageMeter3D( Scene & ioScene,
                          ImFont * iFont )
 {
   ImVec2 botPos, topPos;
-  if ( !ProjectWorldToScreen(ioScene, iBoardOrigin + Vec3(-5.55f, 0.0f, 0.2f), botPos) ||
-       !ProjectWorldToScreen(ioScene, iBoardOrigin + Vec3(-5.55f, 20.0f, 0.2f), topPos) )
+  const float meterX = -( TetrisSceneManager::kBoardHalfWidth + 0.55f );
+  if ( !ProjectWorldToScreen(ioScene, iBoardOrigin + Vec3(meterX, 0.0f, 0.2f), botPos) ||
+       !ProjectWorldToScreen(ioScene, iBoardOrigin + Vec3(meterX, TetrisSceneManager::kBoardVisibleHeight, 0.2f), topPos) )
   {
     return;
   }
@@ -204,7 +205,7 @@ void DrawBoardActionBanner3D( Scene & ioScene,
     return;
 
   ImVec2 center;
-  if ( !ProjectWorldToScreen(ioScene, iBoardOrigin + Vec3(0.0f, 12.5f, 0.5f), center) )
+  if ( !ProjectWorldToScreen(ioScene, iBoardOrigin + Vec3(0.0f, TetrisSceneManager::kBoardVisibleHeight * 0.625f, 0.5f), center) )
     return;
 
   ImDrawList * drawList = ImGui::GetForegroundDrawList();

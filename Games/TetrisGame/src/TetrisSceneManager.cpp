@@ -102,9 +102,11 @@ Vec3 TetrisSceneManager::GetBoardOrigin( int iPlayerIndex, int iNumPlayers )
 
 Vec3 TetrisSceneManager::CellToWorld( int iX, int iY, const Vec3 & iBoardOrigin )
 {
-  // 10x20 visible board centered horizontally around iBoardOrigin.x: x in [0..9] -> (x - 4.5f)
-  // Rows y in [0..19] -> (y + 0.5f) so row 0 base rests at Y = 0.f
-  return iBoardOrigin + Vec3(static_cast<float>(iX) - 4.5f, static_cast<float>(iY) + 0.5f, 0.0f);
+  // 10x20 visible board centered horizontally around iBoardOrigin.x with kCellPitch spacing
+  // Rows y in [0..19] -> (y + 0.5f) * kCellPitch so row 0 base rests just above Y = 0.f
+  return iBoardOrigin + Vec3(( static_cast<float>(iX) - 4.5f ) * kCellPitch,
+                             ( static_cast<float>(iY) + 0.5f ) * kCellPitch,
+                             0.0f);
 }
 
 // ----------------------------------------------------------------------------
@@ -282,23 +284,30 @@ Mesh * TetrisSceneManager::CreateGhostCageMesh( const std::string & iName, float
 Mesh * TetrisSceneManager::CreateEnclosureMesh( const std::string & iName )
 {
   MeshBuilder builder;
+  const float hw      = kBoardHalfWidth;
+  const float pillarW = 0.65f;
+  const float topY    = kBoardInnerTopY;
 
   // Left Pillar
-  builder.AddBox(Vec3(-5.65f, -0.6f, -0.8f), Vec3(-5.0f, 21.6f, 0.7f));
+  builder.AddBox(Vec3(-hw - pillarW, -0.6f, -0.8f), Vec3(-hw, topY + 0.2f, 0.7f));
   // Right Pillar
-  builder.AddBox(Vec3( 5.0f,  -0.6f, -0.8f), Vec3( 5.65f, 21.6f, 0.7f));
+  builder.AddBox(Vec3( hw,           -0.6f, -0.8f), Vec3( hw + pillarW, topY + 0.2f, 0.7f));
   // Bottom Base
-  builder.AddBox(Vec3(-5.65f, -1.2f, -0.8f), Vec3( 5.65f,  0.0f, 0.7f));
+  builder.AddBox(Vec3(-hw - pillarW, -1.2f, -0.8f), Vec3( hw + pillarW, 0.0f, 0.7f));
   // Top Cap
-  builder.AddBox(Vec3(-5.65f, 21.4f, -0.8f), Vec3( 5.65f, 22.0f, 0.7f));
+  builder.AddBox(Vec3(-hw - pillarW, topY,  -0.8f), Vec3( hw + pillarW, topY + 0.6f, 0.7f));
 
   // Hold queue top & lower shelf trims
-  builder.AddBox(Vec3(-10.2f, 13.3f, -0.7f), Vec3(-5.8f, 13.6f, 0.3f));
-  builder.AddBox(Vec3(-10.2f, 19.5f, -0.7f), Vec3(-5.8f, 19.8f, 0.3f));
+  const float holdOuterX = -hw - pillarW - 4.55f;
+  const float holdInnerX = -hw - pillarW - 0.15f;
+  builder.AddBox(Vec3(holdOuterX, 13.3f * kCellPitch, -0.7f), Vec3(holdInnerX, 13.3f * kCellPitch + 0.3f, 0.3f));
+  builder.AddBox(Vec3(holdOuterX, 19.5f * kCellPitch, -0.7f), Vec3(holdInnerX, 19.5f * kCellPitch + 0.3f, 0.3f));
 
   // Next queue top & lower shelf trims
-  builder.AddBox(Vec3( 5.8f,  4.2f, -0.7f),  Vec3(10.2f,  4.5f, 0.3f));
-  builder.AddBox(Vec3( 5.8f, 19.5f, -0.7f),  Vec3(10.2f, 19.8f, 0.3f));
+  const float nextInnerX = hw + pillarW + 0.15f;
+  const float nextOuterX = hw + pillarW + 4.55f;
+  builder.AddBox(Vec3(nextInnerX,  4.2f * kCellPitch, -0.7f), Vec3(nextOuterX,  4.2f * kCellPitch + 0.3f, 0.3f));
+  builder.AddBox(Vec3(nextInnerX, 19.5f * kCellPitch, -0.7f), Vec3(nextOuterX, 19.5f * kCellPitch + 0.3f, 0.3f));
 
   return new Mesh(iName, builder._Vertices, builder._Normals, builder._UVs, builder._Indices);
 }
@@ -309,17 +318,25 @@ Mesh * TetrisSceneManager::CreateEnclosureMesh( const std::string & iName )
 Mesh * TetrisSceneManager::CreateBackplateMesh( const std::string & iName )
 {
   MeshBuilder builder;
-  const float z = -0.56f;
+  const float z    = -0.56f;
+  const float hw   = kBoardHalfWidth;
+  const float topY = kBoardInnerTopY;
   const Vec3 norm(0.f, 0.f, 1.f);
 
   // Translucent backplane behind the 10x21 matrix
-  builder.AddQuad(Vec3(-5.0f, 0.0f, z), Vec3(5.0f, 0.0f, z), Vec3(5.0f, 21.4f, z), Vec3(-5.0f, 21.4f, z), norm);
+  builder.AddQuad(Vec3(-hw, 0.0f, z), Vec3(hw, 0.0f, z), Vec3(hw, topY, z), Vec3(-hw, topY, z), norm);
 
   // Hold queue backing plane
-  builder.AddQuad(Vec3(-10.1f, 13.5f, z), Vec3(-5.9f, 13.5f, z), Vec3(-5.9f, 19.5f, z), Vec3(-10.1f, 19.5f, z), norm);
+  const float holdOuterX = -hw - 5.10f;
+  const float holdInnerX = -hw - 0.90f;
+  builder.AddQuad(Vec3(holdOuterX, 13.5f * kCellPitch, z), Vec3(holdInnerX, 13.5f * kCellPitch, z),
+                  Vec3(holdInnerX, 19.5f * kCellPitch, z), Vec3(holdOuterX, 19.5f * kCellPitch, z), norm);
 
   // Next queue backing plane
-  builder.AddQuad(Vec3( 5.9f,  4.4f, z),  Vec3(10.1f, 4.4f, z), Vec3(10.1f, 19.5f, z), Vec3( 5.9f,  19.5f, z), norm);
+  const float nextInnerX = hw + 0.90f;
+  const float nextOuterX = hw + 5.10f;
+  builder.AddQuad(Vec3(nextInnerX,  4.4f * kCellPitch, z), Vec3(nextOuterX,  4.4f * kCellPitch, z),
+                  Vec3(nextOuterX, 19.5f * kCellPitch, z), Vec3(nextInnerX, 19.5f * kCellPitch, z), norm);
 
   return new Mesh(iName, builder._Vertices, builder._Normals, builder._UVs, builder._Indices);
 }
@@ -330,9 +347,11 @@ Mesh * TetrisSceneManager::CreateBackplateMesh( const std::string & iName )
 Mesh * TetrisSceneManager::CreateSkylineMesh( const std::string & iName )
 {
   MeshBuilder builder;
+  const float hw   = kBoardHalfWidth;
+  const float skyY = kBoardVisibleHeight;
 
   // Thin glowing Skyline indicator bar at row 20
-  builder.AddBox(Vec3(-5.0f, 19.95f, -0.2f), Vec3(5.0f, 20.05f, 0.45f));
+  builder.AddBox(Vec3(-hw, skyY - 0.05f, -0.2f), Vec3(hw, skyY + 0.05f, 0.45f));
 
   return new Mesh(iName, builder._Vertices, builder._Normals, builder._UVs, builder._Indices);
 }
@@ -657,7 +676,7 @@ int TetrisSceneManager::Initialize( Scene & ioScene )
   ioScene.Clear();
 
   // Create Procedural Meshes
-  Mesh * beveledCube = ProceduralMesh::CreateCube("__TetrisBlockCube");
+  Mesh * beveledCube = ProceduralMesh::CreateBeveledCube("__TetrisBlockCube", 0.085f, 4);
   _BeveledCubeMeshID = ioScene.AddMesh(beveledCube);
   if ( _BeveledCubeMeshID < 0 )
   {
@@ -790,7 +809,7 @@ void TetrisSceneManager::TriggerLineClearFx( int iPlayerIndex, const TetrisGameL
     const int droppedCells = srcY - dstY;
     if ( droppedCells > 0 )
     {
-      _RowVisualYOffset[p][dstY] += static_cast<float>(droppedCells);
+      _RowVisualYOffset[p][dstY] += static_cast<float>(droppedCells) * kCellPitch;
       _RowDropVelocity[p][dstY]   = 0.0f;
     }
   }
@@ -947,13 +966,13 @@ void TetrisSceneManager::UpdateAndSyncLineClearFx( int iPlayerIndex, const Vec3 
         const int blinkPhase = static_cast<int>(blk._Elapsed / 0.05f);
         const bool isWhite   = ( ( blinkPhase % 2 ) == 0 );
         matID      = isWhite ? _FlashMaterialID : MaterialIDForPiece(blk._PieceType);
-        blk._Scale = isWhite ? 0.98f : 0.92f;
+        blk._Scale = isWhite ? 0.955f : kBlockScale;
         blk._Pos   = CellToWorld(blk._GridX, blk._GridY, iBoardOrigin) + Vec3(0.f, 0.f, isWhite ? 0.14f : 0.0f);
       }
       else
       {
         const float shrinkT = MathUtil::Clamp(( blk._Elapsed - 0.30f ) / 0.08f, 0.0f, 1.0f);
-        blk._Scale = 0.92f * ( 1.0f - shrinkT );
+        blk._Scale = kBlockScale * ( 1.0f - shrinkT );
       }
     }
     else if ( TetrisLineClearAnimMode::BlockBurst == blk._Mode )
@@ -961,7 +980,7 @@ void TetrisSceneManager::UpdateAndSyncLineClearFx( int iPlayerIndex, const Vec3 
       if ( blk._Elapsed < 0.06f )
       {
         matID      = _FlashMaterialID;
-        blk._Scale = 0.98f;
+        blk._Scale = 0.955f;
       }
       else
       {
@@ -971,9 +990,9 @@ void TetrisSceneManager::UpdateAndSyncLineClearFx( int iPlayerIndex, const Vec3 
 
         const float rem = blk._Duration - blk._Elapsed;
         if ( rem < 0.25f )
-          blk._Scale = 0.92f * MathUtil::Clamp(rem / 0.25f, 0.0f, 1.0f);
+          blk._Scale = kBlockScale * MathUtil::Clamp(rem / 0.25f, 0.0f, 1.0f);
         else
-          blk._Scale = 0.92f;
+          blk._Scale = kBlockScale;
       }
     }
     else if ( TetrisLineClearAnimMode::EdgeCascade == blk._Mode )
@@ -982,7 +1001,7 @@ void TetrisSceneManager::UpdateAndSyncLineClearFx( int iPlayerIndex, const Vec3 
       {
         const bool preFlash = ( ( blk._Delay - blk._Elapsed ) < 0.045f );
         matID      = preFlash ? _FlashMaterialID : MaterialIDForPiece(blk._PieceType);
-        blk._Scale = preFlash ? 0.97f : 0.92f;
+        blk._Scale = preFlash ? 0.95f : kBlockScale;
       }
       else
       {
@@ -996,9 +1015,9 @@ void TetrisSceneManager::UpdateAndSyncLineClearFx( int iPlayerIndex, const Vec3 
 
         const float rem = blk._Duration - blk._Elapsed;
         if ( rem < 0.22f )
-          blk._Scale = 0.92f * MathUtil::Clamp(rem / 0.22f, 0.0f, 1.0f);
+          blk._Scale = kBlockScale * MathUtil::Clamp(rem / 0.22f, 0.0f, 1.0f);
         else
-          blk._Scale = 0.92f;
+          blk._Scale = kBlockScale;
       }
     }
     else // CenterWave
@@ -1013,7 +1032,7 @@ void TetrisSceneManager::UpdateAndSyncLineClearFx( int iPlayerIndex, const Vec3 
         const Vec3 basePos = CellToWorld(blk._GridX, blk._GridY, iBoardOrigin);
         blk._Pos         = basePos + Vec3(0.0f, 0.0f, std::sin(localT * static_cast<float>(M_PI)) * 1.15f);
         blk._EulerAngles = Vec3(localT * 3.14159f, localT * 6.28318f, 0.0f);
-        blk._Scale       = 0.96f * ( 1.0f - localT * localT );
+        blk._Scale       = 0.94f * ( 1.0f - localT * localT );
       }
     }
 
@@ -1130,7 +1149,7 @@ void TetrisSceneManager::SyncSingleBoard( int iPlayerIndex,
       {
         instances[instID]._Visible    = true;
         instances[instID]._MaterialID = MaterialIDForPiece(cellType);
-        instances[instID]._Transform  = glm::translate(CellToWorld(x, y, iBoardOrigin) + Vec3(0.0f, visualYOffset, 0.0f)) * glm::scale(Vec3(0.92f));
+        instances[instID]._Transform  = glm::translate(CellToWorld(x, y, iBoardOrigin) + Vec3(0.0f, visualYOffset, 0.0f)) * glm::scale(Vec3(kBlockScale));
       }
       else
       {
@@ -1159,7 +1178,7 @@ void TetrisSceneManager::SyncSingleBoard( int iPlayerIndex,
 
       instances[instID]._Visible    = true;
       instances[instID]._MaterialID = activeMatID;
-      instances[instID]._Transform  = glm::translate(CellToWorld(activeOrigin.x + minos[i].x, activeOrigin.y + minos[i].y, iBoardOrigin)) * glm::scale(Vec3(0.92f));
+      instances[instID]._Transform  = glm::translate(CellToWorld(activeOrigin.x + minos[i].x, activeOrigin.y + minos[i].y, iBoardOrigin)) * glm::scale(Vec3(kBlockScale));
     }
   }
   else
@@ -1200,14 +1219,15 @@ void TetrisSceneManager::SyncSingleBoard( int iPlayerIndex,
   }
 
   // 4. Synchronize Hold Piece
-  const float previewScale        = 0.85f;
-  const float minoFill            = 0.97f;
+  const float previewBlockScale   = 0.85f * 0.97f;
+  const float previewPitch        = 0.85f * 0.985f;
+  const float sideCenterOffset    = kBoardHalfWidth + 3.0f;
   const TetrisPieceType holdPiece = iLogic.GetHoldPiece();
   if ( TetrisPieceType::None != holdPiece )
   {
     const std::array<Vec2i, 4> & minos = TetrisPiece::GetMinos(holdPiece, TetrisRotation::Spawn);
     const int holdMatID                = MaterialIDForPiece(holdPiece);
-    const Vec3 holdCenter              = iBoardOrigin + Vec3(-8.0f, 16.5f, 0.0f);
+    const Vec3 holdCenter              = iBoardOrigin + Vec3(-sideCenterOffset, 16.5f * kCellPitch, 0.0f);
     const float xCenterOffset          = (TetrisPieceType::I == holdPiece) ? 1.5f : ((TetrisPieceType::O == holdPiece) ? 0.5f : 1.0f);
     const float yCenterOffset          = (TetrisPieceType::I == holdPiece) ? 2.5f : ((TetrisPieceType::O == holdPiece) ? 1.5f : 1.0f);
 
@@ -1218,15 +1238,15 @@ void TetrisSceneManager::SyncSingleBoard( int iPlayerIndex,
         continue;
 
       const Vec3 localOffset(
-        ( static_cast<float>(minos[i].x) - xCenterOffset ) * previewScale,
-        ( static_cast<float>(minos[i].y) - yCenterOffset ) * previewScale,
+        ( static_cast<float>(minos[i].x) - xCenterOffset ) * previewPitch,
+        ( static_cast<float>(minos[i].y) - yCenterOffset ) * previewPitch,
         0.0f
       );
 
       instances[instID]._Visible    = true;
       instances[instID]._MaterialID = holdMatID;
       instances[instID]._Transform  = glm::translate(holdCenter + localOffset)
-                                    * glm::scale(Vec3(previewScale * minoFill));
+                                    * glm::scale(Vec3(previewBlockScale));
     }
   }
   else
@@ -1243,7 +1263,7 @@ void TetrisSceneManager::SyncSingleBoard( int iPlayerIndex,
   }
 
   // 5. Synchronize Next Queue (5 previews)
-  const float nextBaseY[5] = { 17.2f, 14.3f, 11.4f, 8.5f, 5.6f };
+  const float nextBaseY[5] = { 17.2f * kCellPitch, 14.3f * kCellPitch, 11.4f * kCellPitch, 8.5f * kCellPitch, 5.6f * kCellPitch };
   for ( int queueIdx = 0; queueIdx < 5; ++queueIdx )
   {
     const TetrisPieceType nextPiece = iLogic.PeekNextPiece(queueIdx);
@@ -1251,7 +1271,7 @@ void TetrisSceneManager::SyncSingleBoard( int iPlayerIndex,
     {
       const std::array<Vec2i, 4> & minos = TetrisPiece::GetMinos(nextPiece, TetrisRotation::Spawn);
       const int nextMatID                = MaterialIDForPiece(nextPiece);
-      const Vec3 nextCenter              = iBoardOrigin + Vec3(8.0f, nextBaseY[queueIdx], 0.0f);
+      const Vec3 nextCenter              = iBoardOrigin + Vec3(sideCenterOffset, nextBaseY[queueIdx], 0.0f);
       const float xCenterOffset          = (TetrisPieceType::I == nextPiece) ? 1.5f : ((TetrisPieceType::O == nextPiece) ? 0.5f : 1.0f);
       const float yCenterOffset          = (TetrisPieceType::I == nextPiece) ? 2.5f : ((TetrisPieceType::O == nextPiece) ? 1.5f : 1.0f);
 
@@ -1262,15 +1282,15 @@ void TetrisSceneManager::SyncSingleBoard( int iPlayerIndex,
           continue;
 
         const Vec3 localOffset(
-          ( static_cast<float>(minos[m].x) - xCenterOffset ) * previewScale,
-          ( static_cast<float>(minos[m].y) - yCenterOffset ) * previewScale,
+          ( static_cast<float>(minos[m].x) - xCenterOffset ) * previewPitch,
+          ( static_cast<float>(minos[m].y) - yCenterOffset ) * previewPitch,
           0.0f
         );
 
         instances[instID]._Visible    = true;
         instances[instID]._MaterialID = nextMatID;
         instances[instID]._Transform  = glm::translate(nextCenter + localOffset)
-                                      * glm::scale(Vec3(previewScale * minoFill));
+                                      * glm::scale(Vec3(previewBlockScale));
       }
     }
     else
@@ -1312,7 +1332,7 @@ void TetrisSceneManager::SyncSingleBoard( int iPlayerIndex,
     {
       _FlashLightIntensity[p] = shake * 45.0f;
       flashLight->_Intensity  = _FlashLightIntensity[p];
-      flashLight->_Pos        = iBoardOrigin + Vec3(0.0f, 10.0f, 2.0f);
+      flashLight->_Pos        = iBoardOrigin + Vec3(0.0f, kBoardVisibleHeight * 0.5f, 2.0f);
     }
     else
     {
@@ -1376,7 +1396,7 @@ int TetrisSceneManager::SyncCamera( Scene & ioScene, const TetrisGameLogic * iLo
     return 1;
 
   Camera & camera = ioScene.GetCamera();
-  const Vec3 lookAtTarget(0.0f, 10.0f, 0.0f);
+  const Vec3 lookAtTarget(0.0f, kBoardVisibleHeight * 0.5f, 0.0f);
   const int numPlayers = MathUtil::Clamp(iNumPlayers, 1, 2);
 
   const float curTime = static_cast<float>(glfwGetTime());
@@ -1408,7 +1428,7 @@ int TetrisSceneManager::SyncCamera( Scene & ioScene, const TetrisGameLogic * iLo
 
   if ( TetrisCameraPreset::Isometric == _CameraPreset )
   {
-    camera.Initialize(Vec3(xDistIsometric, 13.5f, zDistIsometric) + motionOffset + shakeOffset, lookAtTarget, 74.0f);
+    camera.Initialize(Vec3(xDistIsometric, 13.5f * kCellPitch, zDistIsometric) + motionOffset + shakeOffset, lookAtTarget, 74.0f);
   }
   else if ( TetrisCameraPreset::FreeOrbit == _CameraPreset )
   {
@@ -1424,7 +1444,7 @@ int TetrisSceneManager::SyncCamera( Scene & ioScene, const TetrisGameLogic * iLo
   }
   else // Frontal3D
   {
-    camera.Initialize(Vec3(0.0f, 10.0f, zDistFrontal) + motionOffset + shakeOffset, lookAtTarget, 76.0f);
+    camera.Initialize(Vec3(0.0f, kBoardVisibleHeight * 0.5f, zDistFrontal) + motionOffset + shakeOffset, lookAtTarget, 76.0f);
   }
 
   camera.SetZNearFar(0.1f, 150.0f);
@@ -1485,15 +1505,15 @@ int TetrisSceneManager::SyncTitleShowcase( Scene & ioScene, float iTime )
         if ( !filled || ( poolCursor >= poolEnd ) || ( poolCursor >= static_cast<int>(instances.size()) ) )
           continue;
 
-        const float wx = letterX + static_cast<float>(col);
-        const float wy = baseY + static_cast<float>(row);
+        const float wx = letterX + static_cast<float>(col) * kCellPitch;
+        const float wy = baseY + static_cast<float>(row) * kCellPitch;
         const float waveY = std::sin(iTime * 2.2f + wx * 0.35f) * 0.35f;
         const float waveZ = std::cos(iTime * 1.8f + wx * 0.30f) * 0.30f - 1.5f;
 
         MeshInstance & inst = instances[poolCursor++];
         inst._Visible = true;
         inst._MaterialID = matID;
-        inst._Transform = glm::translate(Vec3(wx, wy + waveY, waveZ)) * glm::scale(Vec3(0.92f));
+        inst._Transform = glm::translate(Vec3(wx, wy + waveY, waveZ)) * glm::scale(Vec3(kBlockScale));
       }
     }
   }
@@ -1523,11 +1543,13 @@ int TetrisSceneManager::SyncTitleShowcase( Scene & ioScene, float iTime )
       if ( ( poolCursor >= poolEnd ) || ( poolCursor >= static_cast<int>(instances.size()) ) )
         break;
 
-      const Vec3 localOffset(static_cast<float>(minos[m].x) - 1.5f, static_cast<float>(minos[m].y) - 1.5f, 0.0f);
+      const Vec3 localOffset(( static_cast<float>(minos[m].x) - 1.5f ) * kCellPitch,
+                             ( static_cast<float>(minos[m].y) - 1.5f ) * kCellPitch,
+                             0.0f);
       MeshInstance & inst = instances[poolCursor++];
       inst._Visible = true;
       inst._MaterialID = matID;
-      inst._Transform = glm::translate(clusterCenter) * clusterRot * glm::translate(localOffset) * glm::scale(Vec3(0.90f));
+      inst._Transform = glm::translate(clusterCenter) * clusterRot * glm::translate(localOffset) * glm::scale(Vec3(0.91f));
     }
   }
 
